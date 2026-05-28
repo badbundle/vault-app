@@ -10,7 +10,12 @@ public import VaultFeed
 /// `VaultRoot.vaultStore`), so this type opens its own `PersistedLocalVaultStore`
 /// pointed at the same App Group container.
 public actor WidgetVaultLoader {
-    public typealias StoreFactory = @Sendable () throws -> any VaultStoreReader
+    /// The capabilities the widget process needs: reads, plus advancing an
+    /// HOTP counter. Deliberately narrower than `VaultStore` — the extension
+    /// can never insert, update, delete, reorder, or export.
+    public typealias WidgetStore = VaultStoreHOTPIncrementer & VaultStoreReader
+
+    public typealias StoreFactory = @Sendable () throws -> any WidgetStore
 
     /// Process-wide default instance. Widget timeline providers should reuse
     /// the same loader across calls so the underlying `ModelContainer` is
@@ -18,9 +23,9 @@ public actor WidgetVaultLoader {
     public static let shared = WidgetVaultLoader()
 
     private let makeStore: StoreFactory
-    private var store: (any VaultStoreReader)?
+    private var store: (any WidgetStore)?
 
-    public init(store: (any VaultStoreReader)? = nil) {
+    public init(store: (any WidgetStore)? = nil) {
         if let store {
             self.store = store
             makeStore = { store }
@@ -54,7 +59,40 @@ public actor WidgetVaultLoader {
         return VaultItemWidgetEligibility.isEligible(item) ? item : nil
     }
 
-    private static func makeSharedStore() throws -> any VaultStoreReader {
+    /// Renders the current TOTP value for an eligible item.
+    public func currentTOTPCode(id: UUID, date: Date = Date()) async throws -> String? {
+        guard let item = try await eligibleItem(id: id),
+              case let .otpCode(otp) = item.item,
+              case let .totp(period) = otp.type
+        else {
+            return nil
+        }
+
+        let code = TOTPAuthCode(period: period, data: otp.data)
+        return try code.renderCode(epochSeconds: UInt64(date.timeIntervalSince1970))
+    }
+
+    /// Advances an eligible HOTP item and returns the freshly generated code.
+    ///
+    /// This is the only write the widget process performs. The store is still
+    /// opened `.openOnly` so a transient open failure can never trigger the
+    /// recovery path from an extension (see #526).
+    public func incrementAndRenderHOTPCode(id: UUID) async throws -> String? {
+        guard let item = try await eligibleItem(id: id),
+              case let .otpCode(otp) = item.item,
+              case let .hotp(counter) = otp.type
+        else {
+            return nil
+        }
+
+        let currentStore = try store ?? openStore()
+        let nextCounter = counter + 1
+        let code = try HOTPAuthCode(counter: nextCounter, data: otp.data).renderCode()
+        try await currentStore.incrementCounter(id: item.id)
+        return code
+    }
+
+    private static func makeSharedStore() throws -> any WidgetStore {
         try PersistedLocalVaultStoreFactory(
             storageDirectory: VaultSharedStorage.directory(),
             recoveryMode: .openOnly,
@@ -71,7 +109,7 @@ public actor WidgetVaultLoader {
         }
     }
 
-    private func openStore() throws -> any VaultStoreReader {
+    private func openStore() throws -> any WidgetStore {
         let openedStore = try makeStore()
         store = openedStore
         return openedStore

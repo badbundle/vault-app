@@ -9,6 +9,7 @@ struct VaultMainNavigationView: View {
     @State var deviceAuthenticationService: DeviceAuthenticationService
     @State var vaultDataModel: VaultDataModel
     @State var injector: VaultInjector
+    @Binding var pendingOpenItemDetail: Identifier<VaultItem>?
     @Environment(\.presentToast) private var presentToast
 
     @Environment(\.scenePhase) private var scenePhase
@@ -22,6 +23,22 @@ struct VaultMainNavigationView: View {
         case settings
         case about
         case demos
+    }
+
+    init(
+        pasteboard: Pasteboard,
+        localSettings: LocalSettings,
+        deviceAuthenticationService: DeviceAuthenticationService,
+        vaultDataModel: VaultDataModel,
+        injector: VaultInjector,
+        pendingOpenItemDetail: Binding<Identifier<VaultItem>?> = .constant(nil),
+    ) {
+        _pasteboard = State(initialValue: pasteboard)
+        _localSettings = State(initialValue: localSettings)
+        _deviceAuthenticationService = State(initialValue: deviceAuthenticationService)
+        _vaultDataModel = State(initialValue: vaultDataModel)
+        _injector = State(initialValue: injector)
+        _pendingOpenItemDetail = pendingOpenItemDetail
     }
 
     var body: some View {
@@ -70,6 +87,7 @@ struct VaultMainNavigationView: View {
                     viewGenerator: VaultRoot.genericVaultItemPreviewViewGenerator,
                     copyActionHandler: VaultRoot.vaultItemCopyHandler,
                     previewActionHandler: VaultRoot.vaultItemPreviewActionHandler,
+                    pendingOpenItemDetail: $pendingOpenItemDetail,
                 )
                 .navigationBarTitleDisplayMode(.inline)
             case .tags:
@@ -116,6 +134,11 @@ struct VaultMainNavigationView: View {
         .environment(deviceAuthenticationService)
         .environment(vaultDataModel)
         .environment(injector)
+        .onChange(of: pendingOpenItemDetail) { _, newValue in
+            if newValue != nil {
+                selectedView = .items
+            }
+        }
         .onChange(of: scenePhase) { _, newValue in
             switch newValue {
             case .background:

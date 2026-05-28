@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 import VaultFeed
 import VaultiOSShared
@@ -6,6 +7,10 @@ import WidgetKit
 /// `systemSmall` layout. Mirrors `TOTPCodePreviewView` from the in-app
 /// preview tile — icon top-left, issuer/account stack, large monospaced
 /// chunked digits, horizontal progress bar at the bottom.
+///
+/// This is the only family with in-widget actions. The lock-screen accessory
+/// families stay non-interactive on purpose: their buttons would be reachable
+/// on a locked device, and advancing an HOTP counter is irreversible.
 struct OTPWidgetSmallView: View {
     let snapshot: OTPWidgetSnapshot
 
@@ -26,7 +31,6 @@ struct OTPWidgetSmallView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .widgetURL(deepLinkURL)
     }
 
     // MARK: - Pieces
@@ -37,8 +41,11 @@ struct OTPWidgetSmallView: View {
             .foregroundStyle(.secondary)
     }
 
+    /// Tapping the labels opens the item in the app. The code itself carries
+    /// the action, so this stays the route to the full detail screen.
+    @ViewBuilder
     private var labelsStack: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        let content = VStack(alignment: .leading, spacing: 2) {
             Text(displayIssuer)
                 .font(.title3.bold())
                 .minimumScaleFactor(0.7)
@@ -52,16 +59,45 @@ struct OTPWidgetSmallView: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+
+        switch snapshot {
+        case let .totp(state):
+            Link(destination: WidgetDeepLink.openItemDetail(itemID: state.itemID)) {
+                content
+            }
+        case let .hotp(state):
+            Link(destination: WidgetDeepLink.openItemDetail(itemID: state.itemID)) {
+                content
+            }
+        case .unavailable, .placeholder:
+            content
+        }
     }
 
+    @ViewBuilder
     private var codeSection: some View {
-        OTPCodeTextView(codeState: codeState)
+        let content = OTPCodeTextView(codeState: codeState)
             .font(.system(.largeTitle, design: .monospaced))
             .fontWeight(.heavy)
             .minimumScaleFactor(0.5)
             .lineLimit(1)
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
+
+        switch snapshot {
+        case let .totp(state):
+            Button(intent: CopyTOTPCodeIntent(itemID: state.itemID)) {
+                content
+            }
+            .buttonStyle(.plain)
+        case let .hotp(state):
+            Button(intent: IncrementAndCopyHOTPCodeIntent(itemID: state.itemID)) {
+                content
+            }
+            .buttonStyle(.plain)
+        case .unavailable, .placeholder:
+            content
+        }
     }
 
     @ViewBuilder
@@ -106,13 +142,6 @@ struct OTPWidgetSmallView: View {
         case let .hotp(state): state.accountName
         case .unavailable: "Open Vault to set up"
         case .placeholder: ""
-        }
-    }
-
-    private var deepLinkURL: URL? {
-        switch snapshot {
-        case let .hotp(state): WidgetDeepLink.hotpIncrement(itemID: state.itemID)
-        case .totp, .unavailable, .placeholder: nil
         }
     }
 }

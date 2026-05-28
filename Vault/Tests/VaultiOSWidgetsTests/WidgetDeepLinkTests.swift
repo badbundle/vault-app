@@ -12,6 +12,14 @@ struct WidgetDeepLinkTests {
     }
 
     @Test
+    func openItemDetail_roundTripsViaParse() {
+        let id = UUID(uuidString: "12345678-1234-1234-1234-123456789ABC").unsafelyUnwrapped
+        let url = WidgetDeepLink.openItemDetail(itemID: id)
+        let action = WidgetDeepLink.parse(url)
+        #expect(action == .openItemDetail(itemID: id))
+    }
+
+    @Test
     func parse_returnsNil_forUnknownScheme() {
         let url = URL(string: "https://example.com/otp/abc/increment").unsafelyUnwrapped
         #expect(WidgetDeepLink.parse(url) == nil)
@@ -38,6 +46,12 @@ struct WidgetDeepLinkTests {
     @Test
     func parse_returnsNil_forMalformedUUID() {
         let url = URL(string: "vault://otp/not-a-uuid/increment").unsafelyUnwrapped
+        #expect(WidgetDeepLink.parse(url) == nil)
+    }
+
+    @Test
+    func parse_returnsNil_forMalformedDetailUUID() {
+        let url = URL(string: "vault://otp/not-a-uuid/detail").unsafelyUnwrapped
         #expect(WidgetDeepLink.parse(url) == nil)
     }
 }

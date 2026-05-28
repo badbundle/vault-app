@@ -31,12 +31,12 @@ public enum OTPWidgetSnapshot: Sendable, Equatable {
     /// `[periodStart, periodEnd]` interval directly.
     case totp(TOTP)
 
-    /// HOTP code captured at the time the entry was built. The widget never
-    /// auto-increments — the user must tap the widget to open the app and
-    /// advance the counter.
+    /// HOTP item metadata. The code is intentionally not stored in the
+    /// snapshot because the persisted counter may already be stale.
     case hotp(HOTP)
 
     public struct TOTP: Sendable, Equatable {
+        public var itemID: UUID
         public var issuer: String
         public var accountName: String
         public var code: String
@@ -45,6 +45,7 @@ public enum OTPWidgetSnapshot: Sendable, Equatable {
         public var periodEnd: Date
 
         public init(
+            itemID: UUID,
             issuer: String,
             accountName: String,
             code: String,
@@ -52,6 +53,7 @@ public enum OTPWidgetSnapshot: Sendable, Equatable {
             periodStart: Date,
             periodEnd: Date,
         ) {
+            self.itemID = itemID
             self.issuer = issuer
             self.accountName = accountName
             self.code = code
@@ -65,20 +67,17 @@ public enum OTPWidgetSnapshot: Sendable, Equatable {
         public var itemID: UUID
         public var issuer: String
         public var accountName: String
-        public var code: String
         public var digits: Int
 
         public init(
             itemID: UUID,
             issuer: String,
             accountName: String,
-            code: String,
             digits: Int,
         ) {
             self.itemID = itemID
             self.issuer = issuer
             self.accountName = accountName
-            self.code = code
             self.digits = digits
         }
     }

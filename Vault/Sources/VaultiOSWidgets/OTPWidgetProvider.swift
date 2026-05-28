@@ -61,7 +61,7 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
 
         switch otp.type {
         case let .totp(period):
-            return totpTimeline(otp: otp, period: period)
+            return totpTimeline(itemID: item.id.rawValue, otp: otp, period: period)
         case let .hotp(counter):
             return hotpTimeline(itemID: item.id.rawValue, otp: otp, counter: counter)
         }
@@ -70,6 +70,7 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
     // MARK: - TOTP
 
     private func totpTimeline(
+        itemID: UUID,
         otp: OTPAuthCode,
         period: UInt64,
     ) -> Timeline<OTPWidgetEntry> {
@@ -79,9 +80,10 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
         let nextState = currentState.offset(time: Double(period))
 
         let entries: [OTPWidgetEntry] = [
-            makeTOTPEntry(at: now, otp: otp, period: period, state: currentState),
+            makeTOTPEntry(at: now, itemID: itemID, otp: otp, period: period, state: currentState),
             makeTOTPEntry(
                 at: Date(timeIntervalSince1970: currentState.endTime),
+                itemID: itemID,
                 otp: otp,
                 period: period,
                 state: nextState,
@@ -99,6 +101,7 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
 
     private func makeTOTPEntry(
         at date: Date,
+        itemID: UUID,
         otp: OTPAuthCode,
         period: UInt64,
         state: OTPCodeTimerState,
@@ -111,6 +114,7 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
         return OTPWidgetEntry(
             date: date,
             snapshot: .totp(.init(
+                itemID: itemID,
                 issuer: otp.data.issuer,
                 accountName: otp.data.accountName,
                 code: rendered,
@@ -126,19 +130,14 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
     private func hotpTimeline(
         itemID: UUID,
         otp: OTPAuthCode,
-        counter: UInt64,
+        counter _: UInt64,
     ) -> Timeline<OTPWidgetEntry> {
-        let hotp = HOTPAuthCode(counter: counter, data: otp.data)
-        guard let rendered = try? hotp.renderCode() else {
-            return unavailableTimeline()
-        }
         let entry = OTPWidgetEntry(
             date: Date(),
             snapshot: .hotp(.init(
                 itemID: itemID,
                 issuer: otp.data.issuer,
                 accountName: otp.data.accountName,
-                code: rendered,
                 digits: Int(otp.data.digits.value),
             )),
         )

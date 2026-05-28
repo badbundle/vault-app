@@ -16,6 +16,11 @@ public enum WidgetDeepLink {
         URL(string: "\(scheme)://otp/\(itemID.uuidString)/increment").unsafelyUnwrapped
     }
 
+    /// Opens the main app directly to an OTP item's detail screen.
+    public static func openItemDetail(itemID: UUID) -> URL {
+        URL(string: "\(scheme)://otp/\(itemID.uuidString)/detail").unsafelyUnwrapped
+    }
+
     /// Parses a URL produced by one of the constructors above. Returns nil
     /// if the URL does not match a known shape.
     public static func parse(_ url: URL) -> Action? {
@@ -25,6 +30,9 @@ public enum WidgetDeepLink {
         case let ("otp", components) where components.count == 2 && components[1] == "increment":
             guard let id = UUID(uuidString: components[0]) else { return nil }
             return .incrementHOTP(itemID: id)
+        case let ("otp", components) where components.count == 2 && components[1] == "detail":
+            guard let id = UUID(uuidString: components[0]) else { return nil }
+            return .openItemDetail(itemID: id)
         default:
             return nil
         }
@@ -32,5 +40,6 @@ public enum WidgetDeepLink {
 
     public enum Action: Equatable, Sendable {
         case incrementHOTP(itemID: UUID)
+        case openItemDetail(itemID: UUID)
     }
 }

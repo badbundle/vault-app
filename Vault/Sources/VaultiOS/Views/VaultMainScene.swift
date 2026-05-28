@@ -12,6 +12,7 @@ public struct VaultMainScene: Scene {
     @State private var deviceAuthenticationService = VaultRoot.deviceAuthenticationService
     @State private var vaultDataModel: VaultDataModel = VaultRoot.vaultDataModel
     @State private var injector: VaultInjector = VaultRoot.vaultInjector
+    @State private var pendingOpenItemDetail: Identifier<VaultItem>?
 
     public init() {
         // Don't wire auto-backup and widget reloads when the store failed
@@ -33,6 +34,7 @@ public struct VaultMainScene: Scene {
                     deviceAuthenticationService: deviceAuthenticationService,
                     vaultDataModel: vaultDataModel,
                     injector: injector,
+                    pendingOpenItemDetail: $pendingOpenItemDetail,
                 )
                 .installToast(position: .top)
                 .onOpenURL(perform: handle(url:))
@@ -47,6 +49,8 @@ public struct VaultMainScene: Scene {
             Task {
                 try? await vaultDataModel.incrementCounter(id: .init(id: itemID))
             }
+        case let .openItemDetail(itemID):
+            pendingOpenItemDetail = .init(id: itemID)
         }
     }
 }
