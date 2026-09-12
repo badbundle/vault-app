@@ -27,7 +27,7 @@ struct VaultDetailEncryptionEditView: View {
     ) {
         self.title = title
         self.description = description
-        encryptionIsEnabled = encryptionInitiallyEnabled
+        _encryptionIsEnabled = State(initialValue: encryptionInitiallyEnabled)
         self.didSetNewEncryptionPassword = didSetNewEncryptionPassword
         self.didRemoveEncryption = didRemoveEncryption
     }

@@ -20,7 +20,11 @@ public struct VaultItemOnTapDecoratorViewGenerator<
         behaviour: VaultItemViewBehaviour,
     ) -> some View {
         Button {
-            Task { try await onTap(metadata.id) }
+            Task {
+                // Fail closed. A thrown error means the tap action did not complete — most often a
+                // failed authentication gating a copy — so the tap must do nothing at all.
+                try? await onTap(metadata.id)
+            }
         } label: {
             generator.makeVaultPreviewView(item: item, metadata: metadata, behaviour: behaviour)
         }

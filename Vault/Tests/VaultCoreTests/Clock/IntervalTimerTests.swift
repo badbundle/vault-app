@@ -21,10 +21,14 @@ enum IntervalTimerTests {
             let pendingStart = Pending.signal()
             let completed = Pending.signal()
             Task {
-                try await confirmation(timeout: .seconds(1), expectedCount: 0) { _ in
-                    await pendingStart.fulfill()
-                    try await sut.wait(for: 0.1)
-                    await completed.fulfill()
+                do {
+                    try await confirmation(timeout: .seconds(1), expectedCount: 0) { _ in
+                        await pendingStart.fulfill()
+                        try await sut.wait(for: 0.1)
+                        await completed.fulfill()
+                    }
+                } catch {
+                    Issue.record(error)
                 }
             }
 
@@ -49,10 +53,14 @@ enum IntervalTimerTests {
             let pendingStart = Pending.signal()
             let completed = Pending.signal()
             Task {
-                try await confirmation(timeout: .seconds(1), expectedCount: 0) { _ in
-                    await pendingStart.fulfill()
-                    try await sut.wait(for: 0.1, tolerance: 0.1)
-                    await completed.fulfill()
+                do {
+                    try await confirmation(timeout: .seconds(1), expectedCount: 0) { _ in
+                        await pendingStart.fulfill()
+                        try await sut.wait(for: 0.1, tolerance: 0.1)
+                        await completed.fulfill()
+                    }
+                } catch {
+                    Issue.record(error)
                 }
             }
 

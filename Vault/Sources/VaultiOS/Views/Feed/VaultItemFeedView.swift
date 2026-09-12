@@ -231,7 +231,9 @@ public struct VaultItemFeedView<
                             dataModel.items.move(fromOffsets: [move.fromIndex], toOffset: move.toIndex)
                         }
                         Task {
-                            try await dataModel.reorder(items: [dropItem], to: move.reorderingPosition)
+                            // The list has already moved optimistically. A failed persist leaves the
+                            // stored order untouched and the next reload restores the on-disk order.
+                            try? await dataModel.reorder(items: [dropItem], to: move.reorderingPosition)
                         }
                         return true
                     }

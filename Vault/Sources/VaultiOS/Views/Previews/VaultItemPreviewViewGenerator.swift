@@ -20,11 +20,3 @@ public protocol VaultItemPreviewSceneResponder {
     func scenePhaseDidChange(to scene: ScenePhase)
     func didAppear()
 }
-
-// MARK: - Mock
-
-extension VaultItemPreviewViewGeneratorMock: VaultItemCopyActionHandler {
-    public func textToCopyForVaultItem(id _: Identifier<VaultItem>) -> VaultTextCopyAction? {
-        nil
-    }
-}

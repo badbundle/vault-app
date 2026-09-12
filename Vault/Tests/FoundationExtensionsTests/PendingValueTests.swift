@@ -166,7 +166,8 @@ struct PendingValueTests {
         let waitForTaskStart = Pending.signal()
         Task.detached(priority: .high) {
             await waitForTaskStart.fulfill()
-            _ = try await sut.wait()
+            // The wait is torn down by `sut.cancel()` at the end of the test, so a throw is expected.
+            _ = try? await sut.wait()
         }
 
         try await waitForTaskStart.wait()

@@ -38,7 +38,10 @@ struct AsyncButton<Label: View, Loading: View>: View {
                         isDisabled = false
                         showProgressView = false
                     }
-                    try await action()
+
+                    // Errors belong to the action: call sites either catch them inline or surface them
+                    // through their own view model state. The button only drives loading and disabled state.
+                    try? await action()
                 }
             },
             label: {
