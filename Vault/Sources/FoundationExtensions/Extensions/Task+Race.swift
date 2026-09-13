@@ -59,7 +59,9 @@ extension Task where Failure == any Error {
     ) async throws -> Success? {
         try await withThrowingTaskGroup(of: Success.self) { group -> Success? in
             try Task<Never, Never>.checkCancellation()
-            if tasks.isEmpty { throw TaskRaceError.noTasksScheduled }
+            if tasks.isEmpty {
+                throw TaskRaceError.noTasksScheduled
+            }
             for task in tasks {
                 group.addTask(priority: priority) {
                     try await task()

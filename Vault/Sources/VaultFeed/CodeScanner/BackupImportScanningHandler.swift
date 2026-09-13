@@ -38,7 +38,9 @@ public final class BackupImportScanningHandler: CodeScanningHandler {
         let shardData = Data(data.utf8)
         do {
             try shardDecoder.add(shardData: shardData)
-            if !shardDecoder.isReadyToDecode { return .continueScanning(.success) }
+            if !shardDecoder.isReadyToDecode {
+                return .continueScanning(.success)
+            }
         } catch let error as DataShardDecoder.AddShardError where error.canIgnoreError {
             return .continueScanning(.ignore)
         } catch {

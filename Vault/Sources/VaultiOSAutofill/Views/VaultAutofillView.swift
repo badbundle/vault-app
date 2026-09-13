@@ -19,30 +19,28 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
     }
 
     var body: some View {
-        Group {
-            switch viewModel.feature {
-            case .setupConfiguration:
-                NavigationStack {
-                    VaultAutofillConfigurationView(viewModel: .init(
-                        dismissSubject: viewModel
-                            .configurationDismissSubject,
-                    ))
-                }
-            case .showAllCodesSelector:
-                NavigationStack {
-                    VaultAutofillCodeSelectorView(
-                        localSettings: viewModel.localSettings,
-                        viewGenerator: generator,
-                        copyActionHandler: copyActionHandler,
-                        textToInsertSubject: viewModel.textToInsertSubject,
-                        cancelSubject: viewModel.cancelRequestSubject,
-                    )
-                }
-            case let .unimplemented(name):
-                Text("Unimplemented \(name)")
-            case nil:
-                ProgressView()
+        switch viewModel.feature {
+        case .setupConfiguration:
+            NavigationStack {
+                VaultAutofillConfigurationView(viewModel: .init(
+                    dismissSubject: viewModel
+                        .configurationDismissSubject,
+                ))
             }
+        case .showAllCodesSelector:
+            NavigationStack {
+                VaultAutofillCodeSelectorView(
+                    localSettings: viewModel.localSettings,
+                    viewGenerator: generator,
+                    copyActionHandler: copyActionHandler,
+                    textToInsertSubject: viewModel.textToInsertSubject,
+                    cancelSubject: viewModel.cancelRequestSubject,
+                )
+            }
+        case let .unimplemented(name):
+            Text("Unimplemented \(name)")
+        case nil:
+            ProgressView()
         }
     }
 }

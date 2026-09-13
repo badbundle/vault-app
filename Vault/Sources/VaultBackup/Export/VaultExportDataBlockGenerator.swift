@@ -43,7 +43,9 @@ extension VaultExportDataBlockGenerator {
         payload.userDescription
             .split(separator: "\n")
             .compactMap { text in
-                if text.isEmpty { return nil }
+                if text.isEmpty {
+                    return nil
+                }
                 return .init(
                     text: String(text),
                     font: .systemFont(ofSize: 10),
