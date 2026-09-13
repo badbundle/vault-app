@@ -162,19 +162,19 @@ struct BackupKeyChangeView: View {
 
     // MARK: - Warning Section
 
+    /// The historical-backup caution is a note, not an action.
+    ///
+    /// Rendered as a row it read as a tappable control, so it lives in a footer — the standard place
+    /// for explanatory copy — with no rows of its own.
     private var warningSection: some View {
         Section {
-            FormRow(
-                image: Image(systemName: "exclamationmark.triangle.fill"),
-                color: .orange,
-                alignment: .firstTextBaseline,
-            ) {
-                Text(
-                    "Changing your password will not update existing backups. To restore from a previous backup, you must use the password that was active when that backup was created.",
-                )
-            }
+            EmptyView()
         } header: {
             Text("Historical Backups")
+        } footer: {
+            Text(
+                "Changing your password will not update existing backups. To restore from a previous backup, you must use the password that was active when that backup was created.",
+            )
         }
     }
 
