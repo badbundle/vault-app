@@ -1,6 +1,6 @@
 # format options
 
---swiftversion 6.2
+--swiftversion 6.4
 
 --allman false
 --binarygrouping 4,8

@@ -318,20 +318,19 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
         }
     }
 
+    @ViewBuilder
     private var descriptionSection: some View {
-        Group {
-            if viewModel.editingModel.detail.description.isNotBlank {
-                Section {
-                    Text(viewModel.editingModel.detail.description)
-                        .foregroundStyle(.primary)
-                        .textSelection(.enabled)
-                        .font(.callout)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 8)
-                } header: {
-                    Text(viewModel.strings.descriptionTitle)
-                }
+        if viewModel.editingModel.detail.description.isNotBlank {
+            Section {
+                Text(viewModel.editingModel.detail.description)
+                    .foregroundStyle(.primary)
+                    .textSelection(.enabled)
+                    .font(.callout)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+            } header: {
+                Text(viewModel.strings.descriptionTitle)
             }
         }
     }

@@ -38,10 +38,14 @@ extension OTPCodeTimerState {
     ///
     /// This will only give an output `0...1`.
     public func fractionCompleted(at epoch: Double) -> Double {
-        if totalTime == 0 { return 1 }
+        if totalTime == 0 {
+            return 1
+        }
         let remainingTime = remainingTime(at: epoch)
         let remainingFraction = remainingTime / totalTime
-        if remainingFraction < 0 { return 0 }
+        if remainingFraction < 0 {
+            return 0
+        }
         let fractionCompleted = 1 - remainingFraction
         return fractionCompleted.clamped(to: 0 ... 1)
     }

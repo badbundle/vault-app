@@ -29,7 +29,9 @@ struct VaultItemFeedReorderer {
             return .noMove
         }
         // If we are moving this item further down the list than we started, advance it by 1 more position.
-        if to > from { to += 1 }
+        if to > from {
+            to += 1
+        }
         let targetPosition: VaultReorderingPosition = if to == 0 {
             .start
         } else {

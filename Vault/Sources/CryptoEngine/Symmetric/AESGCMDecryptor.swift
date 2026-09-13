@@ -19,7 +19,9 @@ public struct AESGCMDecryptor: Decryptor {
     public func decrypt(message: Message, iv: Data) throws -> Data {
         let gcm = GCM(iv: iv.byteArray, authenticationTag: message.authenticationTag.byteArray, mode: .detached)
         let aes = try AES(key: key.byteArray, blockMode: gcm, padding: .noPadding)
-        if message.ciphertext.isEmpty { return Data() }
+        if message.ciphertext.isEmpty {
+            return Data()
+        }
         let plaintextBytes = try aes.decrypt(message.ciphertext.byteArray)
         return Data(plaintextBytes)
     }

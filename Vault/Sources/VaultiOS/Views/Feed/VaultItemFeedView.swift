@@ -247,7 +247,9 @@ public struct VaultItemFeedView<
             }
         }
         .onChange(of: state.isEditing) { _, isEditing in
-            if !isEditing { targetedIds.removeAll() }
+            if !isEditing {
+                targetedIds.removeAll()
+            }
         }
     }
 

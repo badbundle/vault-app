@@ -108,7 +108,9 @@ extension KillphraseRehashServiceTests {
         }
 
         func record(itemID: UUID, digest: KillphraseDigest) throws {
-            if failingIDs.contains(itemID) { throw TestError.simulated }
+            if failingIDs.contains(itemID) {
+                throw TestError.simulated
+            }
             calls.append(.init(itemID: itemID, digest: digest))
         }
     }

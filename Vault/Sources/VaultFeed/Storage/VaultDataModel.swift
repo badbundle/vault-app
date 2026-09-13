@@ -184,7 +184,9 @@ public final class VaultDataModel {
     /// for the lifetime of the unlocked-device session. Safe to call
     /// multiple times — no-op if digester is already built.
     public func loadKillphraseDigester() async {
-        if killphraseDigester != nil { return }
+        if killphraseDigester != nil {
+            return
+        }
         do {
             let key = try await killphraseKeyStore.loadOrCreate()
             let digester = KillphraseDigester(key: key)
@@ -205,7 +207,9 @@ public final class VaultDataModel {
     /// shape as `loadKillphraseDigester`; failure leaves passphrase
     /// matching disabled until next launch.
     public func loadSearchPassphraseDigester() async {
-        if searchPassphraseDigester != nil { return }
+        if searchPassphraseDigester != nil {
+            return
+        }
         do {
             let key = try await searchPassphraseKeyStore.loadOrCreate()
             let digester = SearchPassphraseDigester(key: key)
@@ -272,7 +276,9 @@ extension VaultDataModel {
 extension VaultDataModel {
     public func loadBackupPassword() async {
         do {
-            if case .fetched = backupPassword { return }
+            if case .fetched = backupPassword {
+                return
+            }
             backupPasswordLoadingState = .loading
             defer { backupPasswordLoadingState = .notLoading }
             let password = try await backupPasswordStore.fetchPassword()

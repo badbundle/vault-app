@@ -283,8 +283,12 @@ struct AutoBackupSettingsView: View {
     }
 
     private var isBackingUp: Bool {
-        if case .backingUp = status { return true }
-        if case .cleaningUp = status { return true }
+        if case .backingUp = status {
+            return true
+        }
+        if case .cleaningUp = status {
+            return true
+        }
         return false
     }
 

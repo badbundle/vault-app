@@ -21,7 +21,7 @@ struct PDFPageViewerView: View {
                     if let image = pageImage(for: geometry.size) {
                         Image(uiImage: image)
                             .resizable()
-                            .aspectRatio(contentMode: .fit)
+                            .scaledToFit()
                             .scaleEffect(scale)
                             .offset(offset)
                             .gesture(magnificationGesture)

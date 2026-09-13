@@ -3,9 +3,9 @@
 import CompilerPluginSupport
 import PackageDescription
 
-let swiftLintVersion: Version = "0.63.3"
-let swiftFormatVersion: Version = "0.61.1"
-let swiftFormatChecksum: String = "47f7932f35c714b00430f56df1cfaf1bea0b4baae299bb2a09874cb52ee45350"
+let swiftLintVersion: Version = "0.65.1"
+let swiftFormatVersion: Version = "0.63.0"
+let swiftFormatChecksum: String = "d3c350a6655c0f687e2c23aac3e777b35345313a6428bb36b915fe7d9840ec78"
 
 let swiftSettings: [SwiftSetting] = [
     .enableUpcomingFeature("ExistentialAny"),
@@ -47,16 +47,16 @@ let package = Package(
         .plugin(name: "FormatLint", targets: ["FormatLint"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.2"),
-        .package(url: "https://github.com/attaswift/BigInt.git", exact: "5.7.0"),
+        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.4"),
+        .package(url: "https://github.com/attaswift/BigInt.git", exact: "6.0.1"),
         .package(url: "https://github.com/krzyzanowskim/CryptoSwift", exact: "1.10.0"),
         .package(url: "https://github.com/sunghyun-k/swiftui-toasts.git", exact: "1.1.1"),
-        .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.6.2"),
+        .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2"),
         .package(url: "https://github.com/twostraws/CodeScanner", exact: "2.5.2"),
         .package(url: "https://github.com/dm-zharov/swift-security.git", exact: "2.5.1"),
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", exact: "2.4.1"),
         .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", exact: swiftLintVersion),
-        .package(url: "https://github.com/swiftlang/swift-syntax", from: "600.0.0"),
+        .package(url: "https://github.com/swiftlang/swift-syntax", exact: "603.0.2"),
     ],
     targets: [
         .target(

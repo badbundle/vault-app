@@ -72,9 +72,13 @@ extension FloatingPoint {
     func rescaledAlmostEqual(to other: Self, tolerance: Self) -> Bool {
         // NaN is considered to be not approximately equal to anything, not even
         // itself.
-        if isNaN || other.isNaN { return false }
+        if isNaN || other.isNaN {
+            return false
+        }
         if isInfinite {
-            if other.isInfinite { return self == other }
+            if other.isInfinite {
+                return self == other
+            }
             // Self is infinite and other is finite. Replace self with the binade
             // of the greatestFiniteMagnitude, and reduce the exponent of other by
             // one to compensate.
