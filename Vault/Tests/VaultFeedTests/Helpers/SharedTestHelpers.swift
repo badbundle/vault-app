@@ -68,6 +68,9 @@ struct StubSearchPassphraseKeyStore: SearchPassphraseKeyStore {
 func anyPDFData() throws -> Data {
     let path = randomTmpPath()
     let pdf = PDFDocument()
+    // The document needs at least one page. A page-less PDF round-trips on iOS 26 but is rejected by
+    // `PDFDocument(data:)` on iOS 27, and real export documents always carry pages regardless.
+    pdf.insert(PDFPage(), at: 0)
     pdf.write(to: path)
     return try Data(contentsOf: path)
 }
