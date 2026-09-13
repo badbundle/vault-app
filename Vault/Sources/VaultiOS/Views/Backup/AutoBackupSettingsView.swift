@@ -19,21 +19,27 @@ struct AutoBackupSettingsView: View {
     @State private var configuration: AutoBackupConfiguration = .init()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            headerView
+        Section {
+            enabledToggle
 
             if configuration.isEnabled {
-                enabledContentView
-            } else {
-                disabledContentView
+                destinationRow
+
+                if selectedProviderIsConfigured {
+                    retentionPicker
+                }
+
+                if case let .error(error) = status {
+                    errorRow(error)
+                }
+
+                if selectedProviderIsConfigured {
+                    backupNowButton
+                }
             }
+        } footer: {
+            Text(footerText)
         }
-        .padding(16)
-        .modifier(VaultCardModifier(configuration: .init(
-            style: .secondary,
-            border: borderColor,
-            padding: .init(),
-        )))
         .sheet(isPresented: $isShowingFolderPicker) {
             FolderPickerView { url in
                 configureSelectedProvider(with: url)
@@ -57,59 +63,19 @@ struct AutoBackupSettingsView: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Rows
 
-    private var headerView: some View {
-        HStack(spacing: 12) {
-            Image(systemName: statusIconName)
-                .font(.title2)
-                .foregroundStyle(statusColor)
-                .frame(width: 40, height: 40)
-                .background(statusColor.opacity(0.1))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            VStack(alignment: .leading, spacing: 4) {
+    private var enabledToggle: some View {
+        Toggle(isOn: Binding(
+            get: { configuration.isEnabled },
+            set: { enabled in
+                Task {
+                    await autoBackupService.setEnabled(enabled)
+                }
+            },
+        )) {
+            FormRow(image: Image(systemName: statusIconName), color: statusColor) {
                 Text("Auto-Backup")
-                    .font(.headline.bold())
-                    .foregroundStyle(.primary)
-
-                Text(statusDescription)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Toggle("", isOn: Binding(
-                get: { configuration.isEnabled },
-                set: { enabled in
-                    Task {
-                        await autoBackupService.setEnabled(enabled)
-                    }
-                },
-            ))
-            .labelsHidden()
-        }
-    }
-
-    // MARK: - Enabled Content
-
-    private var enabledContentView: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Divider()
-
-            destinationRow
-
-            if selectedProviderIsConfigured {
-                retentionPickerView
-            }
-
-            if case let .error(error) = status {
-                errorView(error)
-            }
-
-            if selectedProviderIsConfigured {
-                backupNowButton
             }
         }
     }
@@ -124,117 +90,72 @@ struct AutoBackupSettingsView: View {
                 isShowingFolderPicker = true
             }
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "folder.fill")
-                    .foregroundStyle(.green)
-                    .frame(width: 24)
-
-                VStack(alignment: .leading, spacing: 2) {
+            LabeledContent {
+                Text(selectedProviderSummary ?? "Choose a folder")
+            } label: {
+                FormRow(image: Image(systemName: "folder.fill"), color: .green) {
                     Text("Destination")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    if let summary = selectedProviderSummary {
-                        Text(summary)
-                            .font(.body)
-                            .foregroundStyle(.primary)
-                    } else {
-                        Text("Choose a folder")
-                            .font(.body)
-                            .foregroundStyle(Color.accentColor)
-                    }
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(Color(uiColor: .tertiaryLabel))
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var retentionPickerView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Keep backups for")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-
-            Picker("Retention", selection: Binding(
-                get: { configuration.retentionDays },
-                set: { retention in
-                    Task {
-                        await autoBackupService.setRetention(retention)
-                    }
-                },
-            )) {
-                ForEach(AutoBackupRetention.allCases, id: \.self) { retention in
-                    Text(retention.localizedTitle).tag(retention)
                 }
             }
-            .pickerStyle(.segmented)
         }
     }
 
-    private func errorView(_ error: AutoBackupError) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(error.errorDescription ?? "An error occurred")
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-
-                if let recovery = error.recoverySuggestion {
-                    Text(recovery)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+    private var retentionPicker: some View {
+        Picker(selection: Binding(
+            get: { configuration.retentionDays },
+            set: { retention in
+                Task {
+                    await autoBackupService.setRetention(retention)
                 }
+            },
+        )) {
+            ForEach(AutoBackupRetention.allCases, id: \.self) { retention in
+                Text(retention.localizedTitle).tag(retention)
+            }
+        } label: {
+            FormRow(image: Image(systemName: "clock.arrow.circlepath"), color: .blue) {
+                Text("Keep Backups For")
             }
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func errorRow(_ error: AutoBackupError) -> some View {
+        FormRow(
+            image: Image(systemName: "exclamationmark.triangle.fill"),
+            color: .orange,
+            alignment: .firstTextBaseline,
+        ) {
+            TextAndSubtitle(
+                title: error.errorDescription ?? "An error occurred",
+                subtitle: error.recoverySuggestion,
+            )
+        }
     }
 
     private var backupNowButton: some View {
-        AsyncButton(progressAlignment: .center) {
+        AsyncButton {
             await autoBackupService.forceBackup()
         } label: {
-            Label("Backup Now", systemImage: "arrow.clockwise.icloud")
-                .frame(maxWidth: .infinity)
+            FormRow(image: Image(systemName: "arrow.clockwise.icloud"), color: .accentColor) {
+                Text("Backup Now")
+            }
         } loading: {
-            ProgressView()
-                .tint(.white)
+            FormRow(image: Image(systemName: "arrow.clockwise.icloud"), color: .accentColor) {
+                ProgressView()
+            }
         }
-        .modifier(ProminentButtonModifier())
         .disabled(isBackingUp)
-    }
-
-    // MARK: - Disabled Content
-
-    private var disabledContentView: some View {
-        Text("Enable to automatically back up your vault to cloud storage whenever changes are made.")
-            .font(.callout)
-            .foregroundStyle(.secondary)
     }
 
     // MARK: - Helpers
 
-    private var borderColor: Color {
-        switch status {
-        case .disabled:
-            .gray
-        case .idle, .completed:
-            .green
-        case .backingUp, .cleaningUp:
-            .accentColor
-        case .error:
-            .orange
+    /// When auto-backup is off the footer explains what the feature does; once it is on, the footer
+    /// carries the live status so the state is visible without a separate status row.
+    private var footerText: String {
+        guard configuration.isEnabled else {
+            return "Enable to automatically back up your vault to cloud storage whenever changes are made."
         }
+        return statusDescription
     }
 
     private var statusColor: Color {

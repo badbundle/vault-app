@@ -19,23 +19,20 @@ struct BackupCreateView: View {
     }
 
     var body: some View {
-        ScrollView(.vertical) {
-            VStack(spacing: 16) {
-                switch dataModel.backupPassword {
-                case .error:
-                    authenticateCard(isError: true)
-                case .notFetched:
-                    authenticateCard(isError: false)
-                case .notCreated:
-                    passwordNotCreatedCard
-                case let .fetched(password):
-                    passwordExistsCard
-                    AutoBackupSettingsView(autoBackupService: injector.autoBackupService)
-                    pdfBackupCard(password: password)
-                    deviceTransferCard(password: password)
-                }
+        Form {
+            switch dataModel.backupPassword {
+            case .error:
+                authenticateSection(isError: true)
+            case .notFetched:
+                authenticateSection(isError: false)
+            case .notCreated:
+                passwordNotCreatedSection
+            case let .fetched(password):
+                passwordExistsSection
+                AutoBackupSettingsView(autoBackupService: injector.autoBackupService)
+                pdfBackupSection(password: password)
+                deviceTransferSection(password: password)
             }
-            .padding(16)
         }
         .navigationTitle(Text(viewModel.strings.homeTitle))
         .task {
@@ -100,213 +97,112 @@ struct BackupCreateView: View {
         }
     }
 
-    // MARK: - Authenticate Card
+    // MARK: - Authenticate Section
 
-    private func authenticateCard(isError: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            PlaceholderView(
-                systemIcon: isError ? "key.slash.fill" : "lock.fill",
-                title: isError ? viewModel.strings.backupPasswordErrorTitle : viewModel.strings
-                    .backupPasswordLoadingTitle,
-                subtitle: isError ? viewModel.strings
-                    .backupPasswordErrorDetail : "Authenticate to access backup settings.",
-            )
-
-            AsyncButton(progressAlignment: .center) {
+    private func authenticateSection(isError: Bool) -> some View {
+        Section {
+            AsyncButton {
                 await dataModel.loadBackupPassword()
             } label: {
-                Label("Authenticate", systemImage: "key.horizontal.fill")
-                    .frame(maxWidth: .infinity)
+                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
+                    Text("Authenticate")
+                }
             } loading: {
-                ProgressView()
-                    .tint(.white)
+                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
+                    ProgressView()
+                }
             }
-            .modifier(ProminentButtonModifier())
+        } header: {
+            Text(
+                isError
+                    ? viewModel.strings.backupPasswordErrorTitle
+                    : viewModel.strings.backupPasswordLoadingTitle,
+            )
+        } footer: {
+            Text(
+                isError
+                    ? viewModel.strings.backupPasswordErrorDetail
+                    : "Authenticate to access backup settings.",
+            )
+            .foregroundStyle(isError ? Color.red : Color.secondary)
         }
-        .padding(16)
-        .modifier(VaultCardModifier(configuration: .init(
-            style: .secondary,
-            border: isError ? .red : .accentColor,
-            padding: .init(),
-        )))
-        .transition(.slide)
     }
 
-    // MARK: - Password Not Created Card
+    // MARK: - Password Not Created Section
 
-    private var passwordNotCreatedCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Image(systemName: "key.horizontal.fill")
-                    .font(.title2)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 40, height: 40)
-                    .background(Color.accentColor.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+    private var passwordNotCreatedSection: some View {
+        Section {
+            Button {
+                modal = .updatePassword
+            } label: {
+                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
+                    Text("Create Backup Password")
+                }
+            }
+        } header: {
+            Text("Backup Password")
+        } footer: {
+            Text("Create a backup password to protect your vault backups.")
+        }
+    }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Backup Password Not Set")
-                        .font(.title3.bold())
-                        .foregroundStyle(.primary)
+    // MARK: - Password Exists Section
 
-                    Text("Create a backup password to protect your vault backups.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+    private var passwordExistsSection: some View {
+        Section {
+            LabeledContent {
+                Text("Active")
+            } label: {
+                FormRow(image: Image(systemName: "checkmark.shield.fill"), color: .green) {
+                    Text("Backup Password")
                 }
             }
 
             Button {
                 modal = .updatePassword
             } label: {
-                Label("Create Backup Password", systemImage: "key.horizontal.fill")
-                    .frame(maxWidth: .infinity)
+                FormRow(image: Image(systemName: "key.2.on.ring.fill"), color: .gray) {
+                    Text("Change Password")
+                }
             }
-            .modifier(ProminentButtonModifier())
+        } footer: {
+            Text("Your backups are protected with encryption.")
         }
-        .padding(16)
-        .modifier(VaultCardModifier(configuration: .init(
-            style: .secondary,
-            border: Color.accentColor,
-            padding: .init(),
-        )))
-        .transition(.slide)
     }
 
-    // MARK: - Password Exists Card
+    // MARK: - PDF Backup Section
 
-    private var passwordExistsCard: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "checkmark.shield.fill")
-                    .font(.title2)
-                    .foregroundStyle(Color.green)
-                    .frame(width: 40, height: 40)
-                    .background(Color.green.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Backup Password Active")
-                        .font(.headline.bold())
-                        .foregroundStyle(.primary)
-
-                    Text("Your backups are protected with encryption.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-            }
-            .padding(16)
-
-            Divider()
-                .padding(.horizontal, 16)
-
-            Button {
-                modal = .updatePassword
-            } label: {
-                Label("Change Password", systemImage: "key.2.on.ring.fill")
-                    .frame(maxWidth: .infinity)
-            }
-            .modifier(ProminentButtonModifier(color: .gray))
-            .padding(16)
-        }
-        .modifier(VaultCardModifier(configuration: .init(
-            style: .secondary,
-            border: Color.green,
-            padding: .init(),
-        )))
-        .transition(.slide)
-    }
-
-    // MARK: - PDF Backup Card
-
-    private func pdfBackupCard(password: DerivedEncryptionKey) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "doc.richtext")
-                    .font(.title2)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 40, height: 40)
-                    .background(Color.accentColor.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("PDF Backup")
-                        .font(.headline.bold())
-                        .foregroundStyle(.primary)
-
-                    Text("Create an offline backup you can print or save.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-            }
-            .padding(16)
-
-            Divider()
-                .padding(.horizontal, 16)
-
+    private func pdfBackupSection(password: DerivedEncryptionKey) -> some View {
+        Section {
             Button {
                 modal = .pdfBackup(password)
             } label: {
-                Label("Create PDF Backup", systemImage: "printer.filled.and.paper")
-                    .frame(maxWidth: .infinity)
+                FormRow(image: Image(systemName: "printer.filled.and.paper"), color: .accentColor) {
+                    Text("Create PDF Backup")
+                }
             }
-            .modifier(ProminentButtonModifier())
-            .padding(16)
+        } header: {
+            Text("PDF Backup")
+        } footer: {
+            Text("Create an offline backup you can print or save.")
         }
-        .modifier(VaultCardModifier(configuration: .init(
-            style: .secondary,
-            border: Color.accentColor,
-            padding: .init(),
-        )))
-        .transition(.slide)
     }
 
-    // MARK: - Device Transfer Card
+    // MARK: - Device Transfer Section
 
-    private func deviceTransferCard(password: DerivedEncryptionKey) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 12) {
-                Image(systemName: "qrcode")
-                    .font(.title2)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 40, height: 40)
-                    .background(Color.accentColor.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Transfer to Another Device")
-                        .font(.headline.bold())
-                        .foregroundStyle(.primary)
-
-                    Text("Display QR codes to scan with another device.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-            }
-            .padding(16)
-
-            Divider()
-                .padding(.horizontal, 16)
-
+    private func deviceTransferSection(password: DerivedEncryptionKey) -> some View {
+        Section {
             Button {
                 modal = .deviceTransfer(password)
             } label: {
-                Label("Start Transfer", systemImage: "qrcode")
-                    .frame(maxWidth: .infinity)
+                FormRow(image: Image(systemName: "qrcode"), color: .accentColor) {
+                    Text("Start Transfer")
+                }
             }
-            .modifier(ProminentButtonModifier())
-            .padding(16)
+        } header: {
+            Text("Transfer to Another Device")
+        } footer: {
+            Text("Display QR codes to scan with another device.")
         }
-        .modifier(VaultCardModifier(configuration: .init(
-            style: .secondary,
-            border: Color.accentColor,
-            padding: .init(),
-        )))
-        .transition(.slide)
     }
 }
