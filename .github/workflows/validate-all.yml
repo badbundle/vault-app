@@ -104,7 +104,7 @@ jobs:
             -workspace Vault.xcworkspace \
             -scheme CI_iOS \
             -testPlan iOSAllTests \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
+            -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
             -derivedDataPath "$RUNNER_TEMP/ci-ios-derived-data" \
             -skipMacroValidation \
             -skipPackagePluginValidation
@@ -180,7 +180,7 @@ jobs:
 
           xcodebuild test-without-building \
             -xctestrun "$XCTESTRUN" \
-            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=27.0' \
+            -destination 'platform=iOS Simulator,name=iPhone 18 Pro Max,OS=27.0' \
             -only-testing:${{ matrix.only_testing }} \
             -parallel-testing-enabled NO
 
