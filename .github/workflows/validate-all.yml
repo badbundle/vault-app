@@ -1,11 +1,31 @@
 # These jobs are run on everything, including main and PRs.
+#
+# TEMPORARILY DISABLED — automatic triggers are commented out below.
+#
+# The project builds and tests against Xcode 27 / iOS 27.0, and the snapshot
+# references are recorded on that runtime. No GitHub-hosted GA image provides
+# Xcode 27 yet: `macos-26` tops out at Xcode 26.6 and carries no iOS 27.0
+# simulator runtime. The beta `xcode-27` image does have both, but its runner
+# pool could not absorb this 13-way test matrix — every shard sat queued
+# indefinitely.
+#
+# RE-ENABLE when Xcode 27 is available on the `macos-26` runner image (or a
+# `macos-27` GA image ships): uncomment the `pull_request` and `push` triggers
+# below. Everything else in this file is already configured for Xcode 27 and
+# iOS 27.0, so no other change should be needed.
+#
+# Track availability at https://github.com/actions/runner-images
+#
+# Until then the workflow can still be run on demand via `workflow_dispatch`
+# (Actions tab → Validate → Run workflow, or `gh workflow run validate-all.yml`).
 name: Validate
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+  workflow_dispatch:
+  # pull_request:
+  #   branches: [main]
+  # push:
+  #   branches: [main]
 
 env:
   XCODE_VERSION: "27.0"
@@ -36,7 +56,7 @@ jobs:
   lint:
     name: Lint
     timeout-minutes: 2
-    runs-on: xcode-27
+    runs-on: macos-26
     defaults:
       run:
         working-directory: ./Vault
@@ -61,7 +81,7 @@ jobs:
   ci-ios-build:
     name: CI_iOS Build
     timeout-minutes: 20
-    runs-on: xcode-27
+    runs-on: macos-26
 
     steps:
       - uses: actions/checkout@v6.0.3
@@ -103,7 +123,7 @@ jobs:
   ci-ios-tests:
     name: CI_iOS Tests (${{ matrix.suite }})
     timeout-minutes: 20
-    runs-on: xcode-27
+    runs-on: macos-26
     needs: ci-ios-build
     strategy:
       fail-fast: false
