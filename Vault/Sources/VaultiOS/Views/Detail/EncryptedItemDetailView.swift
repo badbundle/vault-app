@@ -98,7 +98,7 @@ struct EncryptedItemDetailView: View {
             .modifier(ProminentButtonModifier())
             .animation(.easeOut, value: viewModel.state)
             .padding()
-            .modifier(HorizontallyCenter())
+            .frame(maxWidth: .infinity)
             .disabled(!viewModel.canStartDecryption)
         }
         .onChange(of: viewModel.enteredEncryptionPassword) { _, _ in

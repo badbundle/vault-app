@@ -121,7 +121,7 @@ struct OTPCodeCreateView<
                 isImagePickerVisible: $isCodeImagePickerGalleryVisible,
             )
             .padding()
-            .modifier(HorizontallyCenter())
+            .frame(maxWidth: .infinity)
         }
     }
 }

@@ -300,7 +300,7 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
                 errorTitle: viewModel.strings.inputKeyErrorTitle,
             )
             .padding()
-            .modifier(HorizontallyCenter())
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -420,7 +420,7 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
             if viewModel.shouldShowDeleteButton {
                 deleteButton
                     .padding(.horizontal)
-                    .modifier(HorizontallyCenter())
+                    .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
             }
         }
