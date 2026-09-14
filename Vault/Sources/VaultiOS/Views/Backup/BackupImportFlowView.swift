@@ -31,7 +31,7 @@ struct BackupImportFlowView: View {
             rootContent
         }
         .interactiveDismissDisabled(!viewModel.importState.isFinished)
-        .sheet(item: $modal, onDismiss: nil) { item in
+        .sheet(item: $modal, onDismiss: { viewModel.cancelPasswordEntry() }, content: { item in
             switch item {
             case let .generateDecryptionKey(encryptedVault):
                 NavigationStack {
@@ -55,7 +55,7 @@ struct BackupImportFlowView: View {
                     .navigationBarTitleDisplayMode(.inline)
                 }
             }
-        }
+        })
         .onReceive(decryptedVaultSubject) { @MainActor vaultApplicationPayload in
             viewModel.handleVaultDecoded(payload: vaultApplicationPayload)
         }
@@ -63,7 +63,12 @@ struct BackupImportFlowView: View {
             switch newValue {
             case let .ready(payload, _):
                 navPath.append(payload)
-            case .none, .error, .needsPasswordEntry:
+            case let .needsPasswordEntry(encryptedVault):
+                // Go straight to password entry. There is nothing to decide at this point — the
+                // document is encrypted and the only way forward is the password — so an
+                // intermediate screen would just add a tap.
+                modal = .generateDecryptionKey(encryptedVault)
+            case .none, .error:
                 break
             }
         }
@@ -72,10 +77,8 @@ struct BackupImportFlowView: View {
     private var rootContent: some View {
         Form {
             switch viewModel.payloadState {
-            case .none, .ready:
+            case .none, .ready, .needsPasswordEntry:
                 EmptyView()
-            case let .needsPasswordEntry(vault):
-                passwordNeededSection(vault: vault)
             case let .error(presentationError):
                 errorSection(error: presentationError)
             }
@@ -99,24 +102,6 @@ struct BackupImportFlowView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: VaultApplicationPayload.self) { payload in
             readyToImportView(vaultApplicationPayload: payload)
-        }
-    }
-
-    // MARK: - Password Needed Section
-
-    private func passwordNeededSection(vault: EncryptedVault) -> some View {
-        Section {
-            Button {
-                modal = .generateDecryptionKey(vault)
-            } label: {
-                FormRow(image: Image(systemName: "square.and.pencil"), color: .accentColor) {
-                    Text("Enter Password")
-                }
-            }
-        } header: {
-            Text("Decryption Password Needed")
-        } footer: {
-            Text("You need to enter the password that was used to encrypt this export.")
         }
     }
 

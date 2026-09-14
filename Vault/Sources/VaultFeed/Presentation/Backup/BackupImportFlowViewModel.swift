@@ -132,6 +132,19 @@ public final class BackupImportFlowViewModel {
         payloadState = .ready(payload, UUID())
     }
 
+    /// Clears the pending password prompt when the user abandons it.
+    ///
+    /// `PayloadState` is `Equatable`, so leaving the state at `.needsPasswordEntry` would make a
+    /// second import of the same document compare equal to the first and produce no change for the
+    /// UI to react to — the prompt could never be re-presented. Resetting on cancel keeps that
+    /// transition observable.
+    ///
+    /// Guarded so a dismissal that follows a successful decode cannot clobber the `.ready` payload.
+    public func cancelPasswordEntry() {
+        guard case .needsPasswordEntry = payloadState else { return }
+        payloadState = .none
+    }
+
     public func importPayload(payload: VaultApplicationPayload) async {
         do {
             switch importContext {

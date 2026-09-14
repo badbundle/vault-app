@@ -94,6 +94,47 @@ struct BackupImportFlowViewModelTests {
     }
 
     @Test
+    func cancelPasswordEntry_clearsPendingPromptSoItCanBeShownAgain() async {
+        let encryptedVaultDecoder = EncryptedVaultDecoderMock()
+        encryptedVaultDecoder.decryptAndDecodeHandler = { _, _ in
+            anyVaultApplicationPayload()
+        }
+        let sut = makeSUT(
+            existingBackupPassword: nil,
+            encryptedVaultDecoder: encryptedVaultDecoder,
+        )
+        let encryptedVault = anyEncryptedVault()
+        await sut.handleImport(fromEncryptedVault: encryptedVault)
+        #expect(sut.payloadState == .needsPasswordEntry(encryptedVault))
+
+        sut.cancelPasswordEntry()
+
+        // Must not stay on `.needsPasswordEntry`. The state is `Equatable`, so importing the same
+        // document again would compare equal and the UI would see no change to react to.
+        #expect(sut.payloadState == .none)
+
+        await sut.handleImport(fromEncryptedVault: encryptedVault)
+
+        #expect(sut.payloadState == .needsPasswordEntry(encryptedVault))
+    }
+
+    @Test
+    func cancelPasswordEntry_doesNotDiscardAnAlreadyDecodedPayload() {
+        let sut = makeSUT()
+        let payload = anyVaultApplicationPayload()
+        sut.handleVaultDecoded(payload: payload)
+
+        sut.cancelPasswordEntry()
+
+        // A dismissal that follows a successful decode must leave the ready payload intact.
+        guard case let .ready(readyPayload, _) = sut.payloadState else {
+            Issue.record("Expected payload state to remain ready, got \(sut.payloadState)")
+            return
+        }
+        #expect(readyPayload == payload)
+    }
+
+    @Test
     func handleImportFromPDF_errorUpdatesPresentationError() async {
         let sut = makeSUT()
 
