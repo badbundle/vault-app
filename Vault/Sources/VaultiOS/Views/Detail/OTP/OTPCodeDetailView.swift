@@ -335,6 +335,7 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
         }
     }
 
+    @ViewBuilder
     private var editingActionsSection: some View {
         Section {
             Button {
@@ -416,12 +417,11 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
                     }
                 }
             }
-        } footer: {
-            if viewModel.shouldShowDeleteButton {
+        }
+
+        if viewModel.shouldShowDeleteButton {
+            Section {
                 deleteButton
-                    .padding(.horizontal)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
             }
         }
     }
@@ -430,9 +430,11 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
         Button {
             isShowingDeleteConfirmation = true
         } label: {
-            Label(localized(key: "action.delete.title"), systemImage: "trash.fill")
+            FormRow(image: Image(systemName: "trash.fill"), color: .red) {
+                Text(localized(key: "action.delete.title"))
+                    .foregroundStyle(Color.red)
+            }
         }
-        .modifier(ProminentButtonModifier(color: .red))
     }
 
     func copyableViewGenerator() -> VaultItemOnTapDecoratorViewGenerator<PreviewGenerator> {

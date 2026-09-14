@@ -51,6 +51,7 @@ struct VaultDetailEncryptionEditView: View {
         }
     }
 
+    @ViewBuilder
     private var createEncryptionSection: some View {
         Section {
             FormRow(image: Image(systemName: "lock.fill"), color: .primary, style: .standard) {
@@ -68,22 +69,25 @@ struct VaultDetailEncryptionEditView: View {
                     SecureField("Confirm Password", text: $newEncryptionPasswordConfirm)
                 }
             }
-        } footer: {
-            if newEncryptionPassword.isNotBlank {
+        }
+
+        if newEncryptionPassword.isNotBlank {
+            Section {
                 Button {
                     didSetNewEncryptionPassword(newEncryptionPassword)
                     dismiss()
                 } label: {
-                    Label("Encrypt", systemImage: "checkmark.circle.fill")
+                    FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
+                        Text("Encrypt")
+                            .foregroundStyle(Color.accentColor)
+                    }
                 }
-                .modifier(ProminentButtonModifier())
-                .padding()
-                .frame(maxWidth: .infinity)
                 .disabled(!doPasswordsMatch)
             }
         }
     }
 
+    @ViewBuilder
     private var removeEncryptionSection: some View {
         Section {
             Text("""
@@ -93,16 +97,18 @@ struct VaultDetailEncryptionEditView: View {
             """)
             .foregroundStyle(.secondary)
             .font(.caption)
-        } footer: {
+        }
+
+        Section {
             Button {
                 didRemoveEncryption()
                 dismiss()
             } label: {
-                Label("Remove Encryption", systemImage: "xmark.circle.fill")
+                FormRow(image: Image(systemName: "xmark.circle.fill"), color: .red) {
+                    Text("Remove Encryption")
+                        .foregroundStyle(Color.red)
+                }
             }
-            .modifier(ProminentButtonModifier(color: .red))
-            .padding()
-            .frame(maxWidth: .infinity)
         }
     }
 }
