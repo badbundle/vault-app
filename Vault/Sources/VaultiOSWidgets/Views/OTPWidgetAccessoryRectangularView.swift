@@ -39,7 +39,7 @@ struct OTPWidgetAccessoryRectangularView: View {
             )
             .progressViewStyle(.linear)
         case .hotp, .unavailable, .placeholder:
-            Color.gray.opacity(0.3).clipShape(Capsule())
+            Color(.quaternarySystemFill).clipShape(Capsule())
         }
     }
 

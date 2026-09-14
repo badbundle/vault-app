@@ -57,8 +57,8 @@ extension VaultItemColor {
         // Standard brightness components for each channel, based on the human eye.
         VaultItemColor(
             red: (red + amount * 0.299).clamped(to: 0 ... 1),
-            green: (blue + amount * 0.114).clamped(to: 0 ... 1),
-            blue: (green + amount * 0.587).clamped(to: 0 ... 1),
+            green: (green + amount * 0.587).clamped(to: 0 ... 1),
+            blue: (blue + amount * 0.114).clamped(to: 0 ... 1),
         )
     }
 }
