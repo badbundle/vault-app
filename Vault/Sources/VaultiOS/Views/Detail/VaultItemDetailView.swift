@@ -97,19 +97,22 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
                 )
                 .padding()
                 .containerRelativeFrame(.horizontal)
-            } footer: {
+            }
+
+            Section {
                 AsyncButton {
                     try await authenticationService.validateAuthentication(reason: "Unlock item")
                     viewModel.isLocked = false
                 } label: {
-                    Label("Unlock", systemImage: "key.horizontal.fill")
+                    unlockRow {
+                        Text("Unlock")
+                            .foregroundStyle(Color.accentColor)
+                    }
                 } loading: {
-                    ProgressView()
-                        .tint(.white)
+                    unlockRow {
+                        ProgressView()
+                    }
                 }
-                .modifier(ProminentButtonModifier())
-                .containerRelativeFrame(.horizontal)
-                .padding()
             }
         } else {
             Section {
@@ -128,17 +131,23 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
                         .foregroundStyle(.secondary)
                     }
                 }
-            } footer: {
+            }
+
+            Section {
                 Button {
                     viewModel.isLocked = false
                 } label: {
-                    Text("Dismiss")
+                    FormRow(image: Image(systemName: "xmark.circle.fill"), color: .accentColor) {
+                        Text("Dismiss")
+                            .foregroundStyle(Color.accentColor)
+                    }
                 }
-                .modifier(ProminentButtonModifier())
-                .containerRelativeFrame(.horizontal)
-                .padding()
             }
         }
+    }
+
+    private func unlockRow(@ViewBuilder content: @escaping () -> some View) -> some View {
+        FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor, content: content)
     }
 
     private var cancelCreationItem: some ToolbarContent {
