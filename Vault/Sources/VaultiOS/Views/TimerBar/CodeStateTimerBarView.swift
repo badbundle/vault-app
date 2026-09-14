@@ -17,7 +17,7 @@ struct CodeStateTimerBarView<Timer: View>: View {
                     .shimmering(active: isShimmering)
             }
         }
-        .animation(.easeOut, value: behaviour)
+        .animation(.snappy, value: behaviour)
     }
 
     private var isShimmering: Bool {

@@ -96,8 +96,8 @@ struct BackupImportFlowView: View {
                 .foregroundStyle(Color.red)
             }
         }
-        .animation(.easeOut, value: viewModel.importState)
-        .animation(.easeOut, value: viewModel.payloadState)
+        .animation(.snappy, value: viewModel.importState)
+        .animation(.snappy, value: viewModel.payloadState)
         .navigationTitle(Text("Import"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: VaultApplicationPayload.self) { payload in
@@ -177,8 +177,8 @@ struct BackupImportFlowView: View {
                 successSection
             }
         }
-        .animation(.easeOut, value: viewModel.importState)
-        .animation(.easeOut, value: viewModel.payloadState)
+        .animation(.snappy, value: viewModel.importState)
+        .animation(.snappy, value: viewModel.payloadState)
         .toolbar {
             if viewModel.importState.isFinished {
                 ToolbarItem(placement: .primaryAction) {

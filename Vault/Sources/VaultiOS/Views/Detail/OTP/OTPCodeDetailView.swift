@@ -99,7 +99,7 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
                 }
             }
         }
-        .animation(.easeOut, value: viewModel.editingModel.detail.viewConfig)
+        .animation(.snappy, value: viewModel.editingModel.detail.viewConfig)
         .sheet(item: $modal, onDismiss: nil, content: { item in
             switch item {
             case .editLock:

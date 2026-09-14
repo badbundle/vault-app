@@ -108,7 +108,7 @@ struct EncryptedItemDetailView: View {
             }
             .disabled(!viewModel.canStartDecryption)
         }
-        .animation(.easeOut, value: viewModel.state)
+        .animation(.snappy, value: viewModel.state)
     }
 
     private func decryptRow(@ViewBuilder content: @escaping () -> some View) -> some View {

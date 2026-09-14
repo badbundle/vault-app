@@ -20,7 +20,7 @@ struct VaultDetailNotePreviewEditView: View {
             titleSection
             optionSection
         }
-        .animation(.easeOut, value: previewMode)
+        .animation(.snappy, value: previewMode)
         .transition(.move(edge: .top))
         .onAppear {
             if !availableModes.contains(previewMode) {

@@ -67,7 +67,7 @@ public struct VaultItemFeedView<
                 .scrollTargetLayout()
                 .padding(.horizontal)
                 .padding(.bottom)
-                .animation(.easeOut(duration: 0.1), value: dataModel.itemsFilteringByTags)
+                .animation(.snappy, value: dataModel.itemsFilteringByTags)
             } else {
                 ContentUnavailableView {
                     Label(localized(key: "codeFeed.noCodes.title"), systemImage: "key.horizontal")

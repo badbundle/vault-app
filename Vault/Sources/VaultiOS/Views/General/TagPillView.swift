@@ -18,7 +18,7 @@ struct TagPillView: View {
                 .fill(tag.fillColor(isSelected: isSelected))
                 .stroke(tag.strokeColor(isSelected: isSelected), lineWidth: 1),
         )
-        .foregroundColor(tag.strokeColor(isSelected: isSelected))
+        .foregroundStyle(tag.strokeColor(isSelected: isSelected))
     }
 }
 

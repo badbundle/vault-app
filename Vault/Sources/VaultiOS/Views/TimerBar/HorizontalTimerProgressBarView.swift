@@ -4,7 +4,7 @@ import SwiftUI
 struct HorizontalTimerProgressBarView: View {
     var fractionCompleted: Double
     var color: Color
-    var backgroundColor: Color = .init(UIColor.systemGray6)
+    var backgroundColor: Color = .init(.quaternarySystemFill)
 
     @Environment(\.redactionReasons) private var redactionReasons
 

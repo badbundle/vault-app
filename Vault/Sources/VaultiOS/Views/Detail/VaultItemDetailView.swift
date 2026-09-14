@@ -30,7 +30,7 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
         .navigationTitle(viewModel.strings.title)
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(viewModel.editingModel.isDirty)
-        .animation(.easeOut, value: viewModel.isInEditMode)
+        .animation(.snappy, value: viewModel.isInEditMode)
         .onReceive(viewModel.isFinishedPublisher()) {
             dismiss()
         }

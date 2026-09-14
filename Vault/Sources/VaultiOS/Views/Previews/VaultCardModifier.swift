@@ -28,7 +28,7 @@ struct VaultCardModifier: ViewModifier {
 
     private var backgroundColor: Color {
         switch configuration.style {
-        case .prominent: Color.blue
+        case .prominent: Color.accentColor
         case .secondary: Color(UIColor.secondarySystemBackground)
         }
     }
