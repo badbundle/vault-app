@@ -17,5 +17,5 @@ public enum OpenSourceStrings {
         localized(key: "openSource.aboutLink")
     }
 
-    public static let openSourceLink = URL(string: "https://github.com/badbundle/vault-ios")!
+    public static let openSourceLink = URL(string: "https://github.com/badbundle/vault-app")!
 }
