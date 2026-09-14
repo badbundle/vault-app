@@ -68,7 +68,7 @@ struct VaultListView<
                         }
                     }
                 } label: {
-                    Image(systemName: "plus")
+                    Label("Add Item", systemImage: "plus")
                 }
             }
         }
