@@ -31,7 +31,7 @@ struct BackupImportFlowView: View {
             rootContent
         }
         .interactiveDismissDisabled(!viewModel.importState.isFinished)
-        .sheet(item: $modal, onDismiss: nil) { item in
+        .sheet(item: $modal, onDismiss: { viewModel.cancelPasswordEntry() }, content: { item in
             switch item {
             case let .generateDecryptionKey(encryptedVault):
                 NavigationStack {
@@ -55,7 +55,7 @@ struct BackupImportFlowView: View {
                     .navigationBarTitleDisplayMode(.inline)
                 }
             }
-        }
+        })
         .onReceive(decryptedVaultSubject) { @MainActor vaultApplicationPayload in
             viewModel.handleVaultDecoded(payload: vaultApplicationPayload)
         }
@@ -63,27 +63,28 @@ struct BackupImportFlowView: View {
             switch newValue {
             case let .ready(payload, _):
                 navPath.append(payload)
-            case .none, .error, .needsPasswordEntry:
+            case let .needsPasswordEntry(encryptedVault):
+                // Go straight to password entry. There is nothing to decide at this point — the
+                // document is encrypted and the only way forward is the password — so an
+                // intermediate screen would just add a tap.
+                modal = .generateDecryptionKey(encryptedVault)
+            case .none, .error:
                 break
             }
         }
     }
 
     private var rootContent: some View {
-        ScrollView(.vertical) {
-            VStack(spacing: 16) {
-                switch viewModel.payloadState {
-                case .none, .ready:
-                    EmptyView()
-                case let .needsPasswordEntry(vault):
-                    passwordNeededCard(vault: vault)
-                case let .error(presentationError):
-                    errorCard(error: presentationError)
-                }
-
-                filePickerCards
+        Form {
+            switch viewModel.payloadState {
+            case .none, .ready, .needsPasswordEntry:
+                EmptyView()
+            case let .error(presentationError):
+                errorSection(error: presentationError)
             }
-            .padding(16)
+
+            automaticImportSection
+            qrCodeImportSection
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -104,185 +105,77 @@ struct BackupImportFlowView: View {
         }
     }
 
-    // MARK: - Password Needed Card
+    // MARK: - Error Section
 
-    private func passwordNeededCard(vault: EncryptedVault) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Image(systemName: "lock.badge.clock.fill")
-                    .font(.title2)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 40, height: 40)
-                    .background(Color.accentColor.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+    private func errorSection(error: PresentationError) -> some View {
+        Section {
+            PlaceholderView(
+                systemIcon: "exclamationmark.triangle.fill",
+                title: error.userTitle,
+                subtitle: error.userDescription,
+            )
+            .padding()
+            .containerRelativeFrame(.horizontal)
+            .foregroundStyle(.red)
+        }
+    }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Decryption Password Needed")
-                        .font(.headline.bold())
-                        .foregroundStyle(.primary)
+    // MARK: - Import Source Sections
 
-                    Text("You need to enter the password that was used to encrypt this export.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-
+    private var automaticImportSection: some View {
+        Section {
             Button {
-                modal = .generateDecryptionKey(vault)
+                isImporting = true
             } label: {
-                Label("Enter Password", systemImage: "square.and.pencil")
-                    .frame(maxWidth: .infinity)
-            }
-            .modifier(ProminentButtonModifier())
-        }
-        .padding(16)
-        .modifier(VaultCardModifier(configuration: .init(
-            style: .secondary,
-            border: Color.accentColor,
-            padding: .init(),
-        )))
-    }
-
-    // MARK: - Error Card
-
-    private func errorCard(error: PresentationError) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.title2)
-                    .foregroundStyle(Color.red)
-                    .frame(width: 40, height: 40)
-                    .background(Color.red.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(error.userTitle)
-                        .font(.headline.bold())
-                        .foregroundStyle(.primary)
-
-                    if let description = error.userDescription {
-                        Text(description)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                FormRow(image: Image(systemName: "arrow.down.document.fill"), color: .accentColor) {
+                    Text("Select PDF File")
                 }
+            }
+        } header: {
+            Text("Automatic Import")
+        } footer: {
+            Text("Select your Vault Export PDF from your files.")
+        }
+        .fileImporter(isPresented: $isImporting, allowedContentTypes: [.pdf]) { result in
+            importTask = Task {
+                await viewModel.handleImport(fromPDF: result.tryMap { url in
+                    _ = url.startAccessingSecurityScopedResource()
+                    defer { url.stopAccessingSecurityScopedResource() }
+                    return try Data(contentsOf: url)
+                })
             }
         }
-        .padding(16)
-        .modifier(VaultCardModifier(configuration: .init(
-            style: .secondary,
-            border: Color.red,
-            padding: .init(),
-        )))
     }
 
-    // MARK: - File Picker Cards
-
-    private var filePickerCards: some View {
-        VStack(spacing: 16) {
-            // Automatic Import Card
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 12) {
-                    Image(systemName: "arrow.down.document.fill")
-                        .font(.title2)
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 40, height: 40)
-                        .background(Color.accentColor.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                    Text("Automatic Import")
-                        .font(.headline.bold())
-                        .foregroundStyle(.primary)
-
-                    Spacer()
-                }
-
-                Text("Select your Vault Export PDF from your files")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Button {
-                    isImporting = true
-                } label: {
-                    Label("Select PDF File", systemImage: "arrow.down.document.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .modifier(ProminentButtonModifier())
-            }
-            .padding(16)
-            .modifier(VaultCardModifier(configuration: .init(
-                style: .secondary,
-                border: Color.accentColor,
-                padding: .init(),
-            )))
-            .fileImporter(isPresented: $isImporting, allowedContentTypes: [.pdf]) { result in
-                importTask = Task {
-                    await viewModel.handleImport(fromPDF: result.tryMap { url in
-                        _ = url.startAccessingSecurityScopedResource()
-                        defer { url.stopAccessingSecurityScopedResource() }
-                        return try Data(contentsOf: url)
-                    })
+    private var qrCodeImportSection: some View {
+        Section {
+            Button {
+                modal = .cameraScanning
+            } label: {
+                FormRow(image: Image(systemName: "qrcode.viewfinder"), color: .accentColor) {
+                    Text("Start Scanning")
                 }
             }
-
-            // Manual Import Card
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 12) {
-                    Image(systemName: "qrcode.viewfinder")
-                        .font(.title2)
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 40, height: 40)
-                        .background(Color.accentColor.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                    Text("QR Code Import")
-                        .font(.headline.bold())
-                        .foregroundStyle(.primary)
-
-                    Spacer()
-                }
-
-                Text("Use your camera to scan the QR codes from a PDF backup or another device")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Button {
-                    modal = .cameraScanning
-                } label: {
-                    Label("Start Scanning", systemImage: "qrcode.viewfinder")
-                        .frame(maxWidth: .infinity)
-                }
-                .modifier(ProminentButtonModifier())
-            }
-            .padding(16)
-            .modifier(VaultCardModifier(configuration: .init(
-                style: .secondary,
-                border: Color.accentColor,
-                padding: .init(),
-            )))
+        } header: {
+            Text("QR Code Import")
+        } footer: {
+            Text("Use your camera to scan the QR codes from a PDF backup or another device.")
         }
     }
 
     // MARK: - Ready to Import View
 
     private func readyToImportView(vaultApplicationPayload: VaultApplicationPayload) -> some View {
-        ScrollView(.vertical) {
-            VStack(spacing: 16) {
-                switch viewModel.importState {
-                case .notStarted:
-                    readyToImportCard(payload: vaultApplicationPayload)
-                case let .error(error):
-                    importErrorCard(error: error)
-                    importButton(vault: vaultApplicationPayload)
-                case .success:
-                    successCard
-                }
+        Form {
+            switch viewModel.importState {
+            case .notStarted:
+                readyToImportSection(payload: vaultApplicationPayload)
+            case let .error(error):
+                errorSection(error: error)
+                importSection(vault: vaultApplicationPayload)
+            case .success:
+                successSection
             }
-            .padding(16)
         }
         .animation(.easeOut, value: viewModel.importState)
         .animation(.easeOut, value: viewModel.payloadState)
@@ -299,120 +192,51 @@ struct BackupImportFlowView: View {
         }
     }
 
-    // MARK: - Ready to Import Card
+    // MARK: - Ready to Import Section
 
-    private func readyToImportCard(payload: VaultApplicationPayload) -> some View {
-        VStack(spacing: 16) {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack(spacing: 12) {
-                    Image(systemName: "square.and.arrow.down.fill")
-                        .font(.title2)
-                        .foregroundStyle(Color.accentColor)
-                        .frame(width: 40, height: 40)
-                        .background(Color.accentColor.opacity(0.1))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(viewModel.importContext.readyToImportTitle)
-                            .font(.headline.bold())
-                            .foregroundStyle(.primary)
-
-                        Text(viewModel.importContext.readyToImportDescription)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
-            .padding(16)
-            .modifier(VaultCardModifier(configuration: .init(
-                style: .secondary,
-                border: Color.accentColor,
-                padding: .init(),
-            )))
-
-            importButton(vault: payload)
+    private func readyToImportSection(payload: VaultApplicationPayload) -> some View {
+        Section {
+            importRow(vault: payload)
+        } header: {
+            Text(viewModel.importContext.readyToImportTitle)
+        } footer: {
+            Text(viewModel.importContext.readyToImportDescription)
         }
     }
 
-    // MARK: - Import Error Card
-
-    private func importErrorCard(error: PresentationError) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.title2)
-                    .foregroundStyle(Color.red)
-                    .frame(width: 40, height: 40)
-                    .background(Color.red.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(error.userTitle)
-                        .font(.headline.bold())
-                        .foregroundStyle(.primary)
-
-                    if let description = error.userDescription {
-                        Text(description)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
+    private func importSection(vault: VaultApplicationPayload) -> some View {
+        Section {
+            importRow(vault: vault)
         }
-        .padding(16)
-        .modifier(VaultCardModifier(configuration: .init(
-            style: .secondary,
-            border: Color.red,
-            padding: .init(),
-        )))
     }
 
-    // MARK: - Success Card
+    // MARK: - Success Section
 
-    private var successCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(Color.green)
-                    .frame(width: 40, height: 40)
-                    .background(Color.green.opacity(0.1))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Imported")
-                        .font(.headline.bold())
-                        .foregroundStyle(.primary)
-
-                    Text("Your vault has been updated with the items from this backup.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+    private var successSection: some View {
+        Section {
+            PlaceholderView(
+                systemIcon: "checkmark.circle.fill",
+                title: "Imported",
+                subtitle: "Your vault has been updated with the items from this backup.",
+            )
+            .padding()
+            .containerRelativeFrame(.horizontal)
         }
-        .padding(16)
-        .modifier(VaultCardModifier(configuration: .init(
-            style: .secondary,
-            border: Color.green,
-            padding: .init(),
-        )))
     }
 
-    // MARK: - Import Button
+    // MARK: - Import Row
 
-    private func importButton(vault: VaultApplicationPayload) -> some View {
+    private func importRow(vault: VaultApplicationPayload) -> some View {
         AsyncButton {
             await viewModel.importPayload(payload: vault)
         } label: {
-            Label("Import Now", systemImage: "checkmark.circle.fill")
-                .frame(maxWidth: .infinity)
+            FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
+                Text("Import Now")
+            }
         } loading: {
-            ProgressView()
-                .tint(.white)
+            FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
+                ProgressView()
+            }
         }
-        .modifier(ProminentButtonModifier())
     }
 }

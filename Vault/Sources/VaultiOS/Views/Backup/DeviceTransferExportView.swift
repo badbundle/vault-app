@@ -123,10 +123,10 @@ struct DeviceTransferExportView: View {
                     await viewModel.generateShards()
                 }
             } label: {
-                Label("Try Again", systemImage: "arrow.clockwise")
-                    .frame(maxWidth: .infinity)
+                FormRow(image: Image(systemName: "arrow.clockwise"), color: .accentColor) {
+                    Text("Try Again")
+                }
             }
-            .modifier(ProminentButtonModifier())
         }
     }
 

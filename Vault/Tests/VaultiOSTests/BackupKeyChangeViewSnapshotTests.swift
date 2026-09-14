@@ -10,43 +10,47 @@ import VaultSettings
 final class BackupKeyChangeViewSnapshotTests {
     @Test
     func layout() {
-        let viewModel = BackupKeyChangeViewModel(
-            dataModel: anyVaultDataModel(),
-            authenticationService: DeviceAuthenticationService(policy: DeviceAuthenticationPolicyAlwaysAllow()),
-            deriverFactory: VaultKeyDeriverFactoryImpl(),
-        )
-        let sut = BackupKeyChangeView(viewModel: viewModel)
-
-        snapshotScenarios(view: sut)
+        snapshotScenarios {
+            BackupKeyChangeView(viewModel: makeViewModel())
+        }
     }
 
     @Test
     func layoutAuthenticated() {
-        let viewModel = BackupKeyChangeViewModel(
-            dataModel: anyVaultDataModel(),
-            authenticationService: DeviceAuthenticationService(policy: DeviceAuthenticationPolicyAlwaysAllow()),
-            deriverFactory: VaultKeyDeriverFactoryImpl(),
-        )
-        viewModel.permissionState = .allowed
-        let sut = BackupKeyChangeView(viewModel: viewModel)
-
-        snapshotScenarios(view: sut)
+        snapshotScenarios {
+            let viewModel = makeViewModel()
+            viewModel.permissionState = .allowed
+            return BackupKeyChangeView(viewModel: viewModel)
+        }
     }
 }
 
 // MARK: - Helpers
 
 extension BackupKeyChangeViewSnapshotTests {
+    private func makeViewModel() -> BackupKeyChangeViewModel {
+        BackupKeyChangeViewModel(
+            dataModel: anyVaultDataModel(),
+            authenticationService: DeviceAuthenticationService(policy: DeviceAuthenticationPolicyAlwaysAllow()),
+            deriverFactory: VaultKeyDeriverFactoryImpl(),
+        )
+    }
+
+    /// Builds a fresh view for every scenario.
+    ///
+    /// The view resets `permissionState` to `.undetermined` in `onDisappear`, so sharing one view —
+    /// and therefore one view model — across the loop let the first snapshot tear down the state that
+    /// the remaining five depended on. Every scenario now gets its own instance.
     private func snapshotScenarios(
-        view: some View,
         deviceAuthenticationPolicy: some DeviceAuthenticationPolicy = DeviceAuthenticationPolicyAlwaysAllow(),
         testName: String = #function,
+        makeView: () -> some View,
     ) {
         let colorSchemes: [ColorScheme] = [.light, .dark]
         let dynamicTypeSizes: [DynamicTypeSize] = [.xSmall, .medium, .xxLarge]
         for colorScheme in colorSchemes {
             for dynamicTypeSize in dynamicTypeSizes {
-                let snapshottingView = view
+                let snapshottingView = makeView()
                     .dynamicTypeSize(dynamicTypeSize)
                     .preferredColorScheme(colorScheme)
                     .framedForTest()

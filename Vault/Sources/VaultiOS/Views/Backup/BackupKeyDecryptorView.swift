@@ -16,6 +16,7 @@ struct BackupKeyDecryptorView: View {
         Form {
             informationSection
             entrySection
+            decryptSection
         }
         .navigationTitle(Text("Decrypt Backup"))
         .interactiveDismissDisabled(viewModel.isDecrypting)
@@ -56,21 +57,23 @@ struct BackupKeyDecryptorView: View {
                 SecureField("Enter decryption password...", text: $viewModel.enteredPassword)
             }
             .disabled(viewModel.isDecrypting)
-        } footer: {
-            VStack(alignment: .center) {
-                AsyncButton {
-                    await viewModel.attemptDecryption()
-                } label: {
-                    Label("Decrypt", systemImage: "checkmark.circle.fill")
-                } loading: {
+        }
+    }
+
+    private var decryptSection: some View {
+        Section {
+            AsyncButton {
+                await viewModel.attemptDecryption()
+            } label: {
+                FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
+                    Text("Decrypt")
+                }
+            } loading: {
+                FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
                     ProgressView()
                 }
-                .modifier(ProminentButtonModifier())
-                .transition(.opacity)
-                .disabled(!viewModel.canAttemptDecryption || viewModel.isDecrypting)
             }
-            .padding()
-            .modifier(HorizontallyCenter())
+            .disabled(!viewModel.canAttemptDecryption || viewModel.isDecrypting)
         }
         .animation(.easeOut, value: viewModel.canAttemptDecryption)
     }
