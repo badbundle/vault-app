@@ -30,23 +30,21 @@ public struct VaultItemFeedView<
     }
 
     public var body: some View {
-        VStack {
-            listOfCodesView
-        }
-        .navigationTitle(Text(dataModel.feedTitle))
-        .task {
-            await dataModel.reloadData()
-        }
-        .onChange(of: dataModel.itemsSearchQuery) { _, _ in
-            Task {
-                await dataModel.reloadItems()
+        listOfCodesView
+            .navigationTitle(Text(dataModel.feedTitle))
+            .task {
+                await dataModel.reloadData()
             }
-        }
-        .onChange(of: dataModel.itemsFilteringByTags) { _, _ in
-            Task {
-                await dataModel.reloadItems()
+            .onChange(of: dataModel.itemsSearchQuery) { _, _ in
+                Task {
+                    await dataModel.reloadItems()
+                }
             }
-        }
+            .onChange(of: dataModel.itemsFilteringByTags) { _, _ in
+                Task {
+                    await dataModel.reloadItems()
+                }
+            }
     }
 
     private var currentBehaviour: VaultItemViewBehaviour {
@@ -83,99 +81,68 @@ public struct VaultItemFeedView<
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 8) {
                 if dataModel.allTags.isNotEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack {
-                            ForEach(dataModel.allTags) { tag in
-                                TagPillView(tag: tag, isSelected: dataModel.itemsFilteringByTags.contains(tag.id))
-                                    .id(tag)
-                                    .onTapGesture {
-                                        dataModel.toggleFiltering(tag: tag.id)
-                                    }
-                            }
-                        }
-                        .font(.footnote)
-                    }
-                    .scrollClipDisabled()
-                    .padding(.horizontal)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    tagFilterBar
                 }
 
-                unifiedInfoSection
+                bottomBar
                     .padding(.horizontal)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .padding(.top, 8)
-            .padding(.bottom, 8)
-            .animation(.spring(response: 0.3, dampingFraction: 1.0), value: state.isEditing)
-            .animation(.spring(response: 0.3, dampingFraction: 1.0), value: dataModel.isSearching)
-            .animation(.spring(response: 0.3, dampingFraction: 1.0), value: dataModel.itemsFilteringByTags.count)
-            .animation(.spring(response: 0.3, dampingFraction: 1.0), value: dataModel.allTags.isEmpty)
+            .padding(.vertical, 8)
+            .animation(.snappy, value: state.isEditing)
+            .animation(.snappy, value: dataModel.isSearching)
+            .animation(.snappy, value: dataModel.itemsFilteringByTags)
+            .animation(.snappy, value: dataModel.allTags.isEmpty)
         }
     }
 
-    /// Unified bottom section with item count, filtering status, and action buttons
-    private var unifiedInfoSection: some View {
-        HStack {
-            // Left side: Item count or drag to reorder message
-            if state.isEditing {
-                Label {
-                    Text(localized(key: "codeFeed.editMode.dragToReorder"))
-                        .foregroundColor(.secondary)
-                        .font(.subheadline)
-                        .lineLimit(1)
-                } icon: {
-                    Image(systemName: "arrow.up.arrow.down")
-                        .foregroundColor(.secondary)
-                }
-            } else {
-                let count = dataModel.items.count
-                let itemText = count == 1 ? "item" : "items"
-                let filterCount = dataModel.itemsFilteringByTags.count
-
-                HStack(spacing: 4) {
-                    Image(systemName: "key.horizontal")
-                        .foregroundColor(.secondary)
-                    Text("\(count) \(itemText)")
-                        .foregroundColor(.secondary)
-
-                    if filterCount > 0 {
-                        Text("•")
-                            .foregroundColor(.secondary)
-                        Image(systemName: "tag.fill")
-                            .foregroundColor(.secondary)
-                            .font(.caption)
-                        Text("\(filterCount)")
-                            .foregroundColor(.secondary)
+    /// Horizontally scrolling row of tag filters, presented above the bottom bar.
+    private var tagFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack {
+                ForEach(dataModel.allTags) { tag in
+                    Toggle(isOn: filterBinding(for: tag)) {
+                        Label {
+                            Text(tag.name.isBlank ? "Tag" : tag.name)
+                        } icon: {
+                            TagIconView(iconName: tag.iconName)
+                        }
                     }
+                    .id(tag)
+                    .tint(tag.color.color)
                 }
-                .font(.subheadline)
-                .lineLimit(1)
             }
+            .toggleStyle(.button)
+            .buttonStyle(.bordered)
+            .buttonBorderShape(.capsule)
+            .controlSize(.small)
+            .font(.footnote)
+            .padding(.horizontal)
+        }
+        .scrollClipDisabled()
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    /// Item count and the feed-level actions.
+    private var bottomBar: some View {
+        HStack {
+            statusLabel
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
             Spacer()
 
-            // Right side: Action buttons
             if dataModel.items.isNotEmpty {
                 HStack(spacing: 8) {
-                    // Clear button when filtering by tags
                     if dataModel.itemsFilteringByTags.isNotEmpty, !state.isEditing {
                         Button {
                             dataModel.itemsFilteringByTags.removeAll()
                         } label: {
                             Label("Clear", systemImage: "tag.slash.fill")
-                                .lineLimit(1)
                         }
-                        .fontWeight(.semibold)
-                        .font(.footnote)
-                        .foregroundStyle(.white)
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 16)
-                        .background(Color.secondary)
-                        .clipShape(Capsule())
-                        .fixedSize()
+                        .buttonStyle(.bordered)
+                        .tint(.secondary)
                     }
 
-                    // Edit/Done button
                     Button {
                         state.isEditing.toggle()
                     } label: {
@@ -183,24 +150,54 @@ public struct VaultItemFeedView<
                             state.isEditing ? "Done" : "Edit",
                             systemImage: state.isEditing ? "checkmark" : "pencil",
                         )
-                        .lineLimit(1)
                     }
-                    .fontWeight(.semibold)
-                    .font(.footnote)
-                    .foregroundStyle(.white)
-                    .padding(.vertical, 8)
-                    .padding(.horizontal, 16)
-                    .background(Color.accentColor)
-                    .clipShape(Capsule())
-                    .fixedSize()
+                    .buttonStyle(.borderedProminent)
                 }
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .font(.footnote)
+                .lineLimit(1)
+                .fixedSize()
             }
         }
         .frame(minHeight: 44)
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(Color.primary.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    @ViewBuilder
+    private var statusLabel: some View {
+        if state.isEditing {
+            Label(
+                localized(key: "codeFeed.editMode.dragToReorder"),
+                systemImage: "arrow.up.arrow.down",
+            )
+            .lineLimit(1)
+        } else {
+            let count = dataModel.items.count
+            let itemText = count == 1 ? "item" : "items"
+            let filterCount = dataModel.itemsFilteringByTags.count
+
+            HStack(spacing: 4) {
+                Image(systemName: "key.horizontal")
+                Text("\(count) \(itemText)")
+
+                if filterCount > 0 {
+                    Text("•")
+                    Image(systemName: "tag.fill")
+                        .font(.caption)
+                    Text("\(filterCount)")
+                }
+            }
+            .lineLimit(1)
+        }
+    }
+
+    private func filterBinding(for tag: VaultItemTag) -> Binding<Bool> {
+        Binding {
+            dataModel.itemsFilteringByTags.contains(tag.id)
+        } set: { _ in
+            dataModel.toggleFiltering(tag: tag.id)
+        }
     }
 
     @State private var targetedIds = Set<Identifier<VaultItem>>()
