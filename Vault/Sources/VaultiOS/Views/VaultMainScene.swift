@@ -14,7 +14,6 @@ public struct VaultMainScene: Scene {
     @State private var injector: VaultInjector = VaultRoot.vaultInjector
 
     public init() {
-        UITextView.appearance().textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         VaultRoot.setup()
     }
 

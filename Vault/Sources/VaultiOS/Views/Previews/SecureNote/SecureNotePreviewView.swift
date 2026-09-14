@@ -17,6 +17,8 @@ struct SecureNotePreviewView: View {
 
             Text(title)
                 .font(titleFont)
+                .minimumScaleFactor(0.7)
+                .allowsTightening(true)
                 .foregroundStyle(isEditing ? .white : .primary)
                 .lineLimit(description != nil ? 3 : nil)
                 .multilineTextAlignment(.leading)
@@ -88,30 +90,9 @@ struct SecureNotePreviewView: View {
         }
     }
 
+    /// The title carries more weight when it is the only content in the card.
     private var titleFont: Font {
-        let length = title.count
-        let hasDescription = description != nil
-
-        // Base font size depends on whether there's a description
-        let baseFonts: (Font, Font, Font, Font) = hasDescription
-            ? (
-                .title3.weight(.bold),
-                .system(size: 18, weight: .bold),
-                .system(size: 16, weight: .bold),
-                .system(size: 14, weight: .bold),
-            )
-            : (.title.weight(.heavy), .title2.weight(.heavy), .title3.weight(.heavy), .system(size: 20, weight: .heavy))
-
-        switch length {
-        case 0 ... 25:
-            return baseFonts.0
-        case 26 ... 40:
-            return baseFonts.1
-        case 41 ... 55:
-            return baseFonts.2
-        default:
-            return baseFonts.3
-        }
+        description == nil ? .title.weight(.heavy) : .title3.weight(.bold)
     }
 }
 

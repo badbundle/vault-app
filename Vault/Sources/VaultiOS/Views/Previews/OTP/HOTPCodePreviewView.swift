@@ -63,7 +63,9 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
     private var labelsStack: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(previewViewModel.visibleIssuer)
-                .font(issuerFont)
+                .font(.title3.bold())
+                .minimumScaleFactor(0.7)
+                .allowsTightening(true)
                 .foregroundStyle(isEditing ? .white : .primary)
                 .lineLimit(2)
 
@@ -98,7 +100,7 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
 
     private var codeText: some View {
         OTPCodeTextView(codeState: behaviour != .normal ? .notReady : previewViewModel.code)
-            .font(.system(size: 36, design: .monospaced))
+            .font(.system(.largeTitle, design: .monospaced))
             .fontWeight(.heavy)
             .minimumScaleFactor(0.5)
             .lineLimit(1)
@@ -130,20 +132,6 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
         switch behaviour {
         case .normal: false
         case .editingState: true
-        }
-    }
-
-    private var issuerFont: Font {
-        let length = previewViewModel.visibleIssuer.count
-        switch length {
-        case 0 ... 20:
-            return .title3.weight(.bold)
-        case 21 ... 35:
-            return .system(size: 18, weight: .bold)
-        case 36 ... 50:
-            return .system(size: 16, weight: .bold)
-        default:
-            return .system(size: 14, weight: .bold)
         }
     }
 }

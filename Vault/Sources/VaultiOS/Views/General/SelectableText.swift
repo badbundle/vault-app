@@ -31,6 +31,7 @@ struct SelectableText: UIViewRepresentable {
         textView.isEditable = false
         textView.isSelectable = true
         textView.isScrollEnabled = false
+        textView.textContainerInset = UIEdgeInsets(top: 12, left: 12, bottom: 12, right: 12)
         textView.backgroundColor = .clear
         return textView
     }
@@ -51,15 +52,20 @@ struct SelectableText: UIViewRepresentable {
 }
 
 extension SelectableText.FontStyle {
-    fileprivate var uifont: UIFont {
-        switch self {
-        case .normal: .systemFont(ofSize: 16)
-        case .monospace: .monospacedSystemFont(ofSize: 16, weight: .regular)
-        }
-    }
-
+    /// Derives from the text style's own font, so weight and tracking match the
+    /// style rather than being scaled up from a fixed 16pt base.
+    ///
+    /// `preferredFont(forTextStyle:compatibleWith:)` is already scaled for the
+    /// given content size category, so it must not be passed through
+    /// `UIFontMetrics` as well.
     func makeFont(size: UIFont.TextStyle, dynamicTypeSize: DynamicTypeSize) -> UIFont {
         let traitCollection = UITraitCollection(preferredContentSizeCategory: dynamicTypeSize.contentSizeCategory)
-        return UIFontMetrics(forTextStyle: size).scaledFont(for: uifont, compatibleWith: traitCollection)
+        let preferred = UIFont.preferredFont(forTextStyle: size, compatibleWith: traitCollection)
+        switch self {
+        case .normal:
+            return preferred
+        case .monospace:
+            return .monospacedSystemFont(ofSize: preferred.pointSize, weight: .regular)
+        }
     }
 }
