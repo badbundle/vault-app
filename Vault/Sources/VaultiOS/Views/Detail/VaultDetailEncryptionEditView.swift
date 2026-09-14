@@ -78,7 +78,7 @@ struct VaultDetailEncryptionEditView: View {
                 }
                 .modifier(ProminentButtonModifier())
                 .padding()
-                .modifier(HorizontallyCenter())
+                .frame(maxWidth: .infinity)
                 .disabled(!doPasswordsMatch)
             }
         }
@@ -102,7 +102,7 @@ struct VaultDetailEncryptionEditView: View {
             }
             .modifier(ProminentButtonModifier(color: .red))
             .padding()
-            .modifier(HorizontallyCenter())
+            .frame(maxWidth: .infinity)
         }
     }
 }

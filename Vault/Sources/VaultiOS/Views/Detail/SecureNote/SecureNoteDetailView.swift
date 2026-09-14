@@ -386,7 +386,7 @@ struct SecureNoteDetailView: View {
             if viewModel.shouldShowDeleteButton {
                 deleteButton
                     .padding(.horizontal)
-                    .modifier(HorizontallyCenter())
+                    .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
             }
         }

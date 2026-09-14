@@ -16,16 +16,6 @@ extension Color {
         return 0.0
     }
 
-    /// Determine appropriate foreground color for contrast
-    var contrastingForegroundColor: Color {
-        isPercievedLight ? .black.opacity(0.8) : .white
-    }
-
-    /// Determine appropriate foreground color for contrast
-    var contrastingBackgroudColor: Color {
-        isPercievedLight ? .primary.opacity(0.8) : Color(UIColor.systemBackground).opacity(0.8)
-    }
-
     var isPercievedLight: Bool {
         percievedBrightness > 0.9
     }

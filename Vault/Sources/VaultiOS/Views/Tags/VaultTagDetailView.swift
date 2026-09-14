@@ -97,7 +97,7 @@ struct VaultTagDetailView: View {
                     .tint(.white)
             }
             .modifier(ProminentButtonModifier(color: .red))
-            .modifier(HorizontallyCenter())
+            .frame(maxWidth: .infinity)
         }
         .listRowBackground(EmptyView())
     }

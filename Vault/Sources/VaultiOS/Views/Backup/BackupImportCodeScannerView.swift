@@ -72,7 +72,7 @@ struct BackupImportCodeScannerView: View {
                 isImagePickerVisible: $isCodeImagePickerGalleryVisible,
             )
             .padding()
-            .modifier(HorizontallyCenter())
+            .frame(maxWidth: .infinity)
         }
     }
 }
