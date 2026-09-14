@@ -40,10 +40,14 @@ struct AutoBackupSettingsView: View {
         } footer: {
             Text(footerText)
         }
-        .sheet(isPresented: $isShowingFolderPicker) {
-            FolderPickerView { url in
-                configureSelectedProvider(with: url)
-            }
+        .fileImporter(
+            isPresented: $isShowingFolderPicker,
+            allowedContentTypes: [.folder],
+        ) { result in
+            // A cancelled picker is not an error worth surfacing; the provider
+            // reports any real configuration failure through its own status.
+            guard case let .success(url) = result else { return }
+            configureSelectedProvider(with: url)
         }
         .task {
             // Initialize with current values
@@ -248,38 +252,6 @@ struct AutoBackupSettingsView: View {
             } catch {
                 // Configuration failed - the provider will remain unconfigured
             }
-        }
-    }
-}
-
-// MARK: - Folder Picker
-
-private struct FolderPickerView: UIViewControllerRepresentable {
-    let onFolderSelected: (URL) -> Void
-
-    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.folder])
-        picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = false
-        return picker
-    }
-
-    func updateUIViewController(_: UIDocumentPickerViewController, context _: Context) {}
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onFolderSelected: onFolderSelected)
-    }
-
-    class Coordinator: NSObject, UIDocumentPickerDelegate {
-        let onFolderSelected: (URL) -> Void
-
-        init(onFolderSelected: @escaping (URL) -> Void) {
-            self.onFolderSelected = onFolderSelected
-        }
-
-        func documentPicker(_: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-            guard let url = urls.first else { return }
-            onFolderSelected(url)
         }
     }
 }
