@@ -57,10 +57,10 @@ struct VaultAutofillConfigurationView: View {
                 viewModel.dismiss()
             } label: {
                 Text("Continue")
-                    .font(.headline)
                     .frame(maxWidth: .infinity)
             }
-            .modifier(ProminentButtonModifier())
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
         }
         .multilineTextAlignment(.center)
     }

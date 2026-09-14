@@ -16,6 +16,7 @@ struct SettingsDangerView: View {
     var body: some View {
         Form {
             headerSection
+            deleteAllSection
         }
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(viewModel.isDeleting)
@@ -31,16 +32,11 @@ struct SettingsDangerView: View {
             .padding()
             .containerRelativeFrame(.horizontal)
             .foregroundStyle(.red)
-        } footer: {
-            VStack(alignment: .center, spacing: 16) {
-                deleteAllButton
-            }
-            .padding(16)
         }
     }
 
-    private var deleteAllButton: some View {
-        VStack(alignment: .center, spacing: 8) {
+    private var deleteAllSection: some View {
+        Section {
             AsyncButton {
                 do {
                     withAnimation {
@@ -56,21 +52,24 @@ struct SettingsDangerView: View {
                     }
                 }
             } label: {
-                Label("Delete All Data", systemImage: "trash.fill")
-            } loading: {
-                ProgressView()
-                    .tint(.white)
-            }
-            .modifier(ProminentButtonModifier(color: .red))
-
-            if let deleteError {
-                Group {
-                    Text(deleteError.userDescription ?? "Error deleting data.")
+                deleteAllRow {
+                    Text("Delete All Data")
+                        .foregroundStyle(Color.red)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            } loading: {
+                deleteAllRow {
+                    ProgressView()
+                }
+            }
+        } footer: {
+            if let deleteError {
+                Text(deleteError.userDescription ?? "Error deleting data.")
+                    .foregroundStyle(.red)
             }
         }
-        .frame(maxWidth: .infinity)
+    }
+
+    private func deleteAllRow(@ViewBuilder content: @escaping () -> some View) -> some View {
+        FormRow(image: Image(systemName: "trash.fill"), color: .red, content: content)
     }
 }

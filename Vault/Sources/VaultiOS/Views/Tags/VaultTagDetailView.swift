@@ -91,15 +91,20 @@ struct VaultTagDetailView: View {
                 await viewModel.delete()
                 dismiss()
             } label: {
-                Label("Delete Tag", systemImage: "trash.fill")
+                deleteRow {
+                    Text("Delete Tag")
+                        .foregroundStyle(Color.red)
+                }
             } loading: {
-                ProgressView()
-                    .tint(.white)
+                deleteRow {
+                    ProgressView()
+                }
             }
-            .modifier(ProminentButtonModifier(color: .red))
-            .frame(maxWidth: .infinity)
         }
-        .listRowBackground(EmptyView())
+    }
+
+    private func deleteRow(@ViewBuilder content: @escaping () -> some View) -> some View {
+        FormRow(image: Image(systemName: "trash.fill"), color: .red, content: content)
     }
 }
 

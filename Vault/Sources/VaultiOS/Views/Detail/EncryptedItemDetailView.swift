@@ -81,29 +81,37 @@ struct EncryptedItemDetailView: View {
         }
     }
 
+    @ViewBuilder
     private var passwordEntrySection: some View {
         Section {
             FormRow(image: Image(systemName: "lock.fill"), color: .primary, style: .standard) {
                 SecureField("Password...", text: $viewModel.enteredEncryptionPassword)
             }
-        } footer: {
-            AsyncButton {
-                await viewModel.startDecryption()
-            } label: {
-                Label("Decrypt", systemImage: "key.horizontal.fill")
-            } loading: {
-                ProgressView()
-                    .tint(.white)
-            }
-            .modifier(ProminentButtonModifier())
-            .animation(.easeOut, value: viewModel.state)
-            .padding()
-            .frame(maxWidth: .infinity)
-            .disabled(!viewModel.canStartDecryption)
         }
         .onChange(of: viewModel.enteredEncryptionPassword) { _, _ in
             // When the text changes, reset the state.
             viewModel.resetState()
         }
+
+        Section {
+            AsyncButton {
+                await viewModel.startDecryption()
+            } label: {
+                decryptRow {
+                    Text("Decrypt")
+                        .foregroundStyle(Color.accentColor)
+                }
+            } loading: {
+                decryptRow {
+                    ProgressView()
+                }
+            }
+            .disabled(!viewModel.canStartDecryption)
+        }
+        .animation(.easeOut, value: viewModel.state)
+    }
+
+    private func decryptRow(@ViewBuilder content: @escaping () -> some View) -> some View {
+        FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor, content: content)
     }
 }

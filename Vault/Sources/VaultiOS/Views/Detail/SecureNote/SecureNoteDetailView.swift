@@ -275,6 +275,7 @@ struct SecureNoteDetailView: View {
         }
     }
 
+    @ViewBuilder
     private var editingActionsSection: some View {
         Section {
             Picker(selection: $viewModel.editingModel.detail.textFormat) {
@@ -382,12 +383,11 @@ struct SecureNoteDetailView: View {
                     }
                 }
             }
-        } footer: {
-            if viewModel.shouldShowDeleteButton {
+        }
+
+        if viewModel.shouldShowDeleteButton {
+            Section {
                 deleteButton
-                    .padding(.horizontal)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
             }
         }
     }
@@ -396,9 +396,11 @@ struct SecureNoteDetailView: View {
         Button {
             isShowingDeleteConfirmation = true
         } label: {
-            Label(localized(key: "action.delete.title"), systemImage: "trash.fill")
+            FormRow(image: Image(systemName: "trash.fill"), color: .red) {
+                Text(localized(key: "action.delete.title"))
+                    .foregroundStyle(Color.red)
+            }
         }
-        .modifier(ProminentButtonModifier(color: .red))
     }
 }
 
