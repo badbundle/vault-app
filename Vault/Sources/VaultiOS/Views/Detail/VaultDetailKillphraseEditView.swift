@@ -34,7 +34,7 @@ struct VaultDetailKillphraseEditView: View {
             titleSection
             optionSection
         }
-        .animation(.easeOut, value: killphraseEnabled)
+        .animation(.snappy, value: killphraseEnabled)
         .transition(.move(edge: .top))
         .onChange(of: killphraseEnabled) { _, newValue in
             if !newValue {

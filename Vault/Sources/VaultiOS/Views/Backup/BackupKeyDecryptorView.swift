@@ -75,6 +75,6 @@ struct BackupKeyDecryptorView: View {
             }
             .disabled(!viewModel.canAttemptDecryption || viewModel.isDecrypting)
         }
-        .animation(.easeOut, value: viewModel.canAttemptDecryption)
+        .animation(.snappy, value: viewModel.canAttemptDecryption)
     }
 }

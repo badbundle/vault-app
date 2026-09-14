@@ -7,11 +7,11 @@ struct ThirdPartyLibraryRowView: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(library.name)
                 .font(.body)
-                .foregroundColor(.primary)
+                .foregroundStyle(.primary)
                 .lineLimit(1)
             Text(library.url.absoluteString)
                 .font(.caption)
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
     }

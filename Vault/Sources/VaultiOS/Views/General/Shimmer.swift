@@ -128,9 +128,29 @@ extension View {
         bandSize: CGFloat = 0.3,
     ) -> some View {
         if active {
-            modifier(Shimmer(animation: animation, gradient: gradient, bandSize: bandSize))
+            modifier(ShimmerIfMotionAllowed(animation: animation, gradient: gradient, bandSize: bandSize))
         } else {
             self
+        }
+    }
+}
+
+/// Applies ``Shimmer`` only when the system is not asking for reduced motion.
+///
+/// The shimmer repeats forever, and is applied to every card in the feed at once while
+/// editing, so it is exactly the kind of motion Reduce Motion exists to suppress.
+private struct ShimmerIfMotionAllowed: ViewModifier {
+    var animation: Animation
+    var gradient: Gradient
+    var bandSize: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        if reduceMotion {
+            content
+        } else {
+            content.modifier(Shimmer(animation: animation, gradient: gradient, bandSize: bandSize))
         }
     }
 }

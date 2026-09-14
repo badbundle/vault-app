@@ -11,7 +11,7 @@ struct VaultDetailLockEditView: View {
             titleSection
             optionSection
         }
-        .animation(.easeOut, value: lockState)
+        .animation(.snappy, value: lockState)
         .transition(.move(edge: .top))
     }
 

@@ -83,7 +83,7 @@ struct SecureNoteDetailView: View {
             }
         }
         .ignoresSafeArea(.keyboard)
-        .animation(.easeOut, value: viewModel.editingModel.detail.viewConfig)
+        .animation(.snappy, value: viewModel.editingModel.detail.viewConfig)
         .onChange(of: selectedColor.hashValue) { _, _ in
             viewModel.editingModel.detail.color = VaultItemColor(color: selectedColor)
         }

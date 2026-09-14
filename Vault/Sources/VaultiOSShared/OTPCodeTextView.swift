@@ -28,7 +28,7 @@ public struct OTPCodeTextView: View {
                 .transition(.blurReplace(.downUp))
         case let .error(_, digits):
             placeholderCode(digits: digits)
-                .foregroundColor(.red)
+                .foregroundStyle(.red)
                 .transition(.blurReplace(.downUp))
         case let .visible(code):
             makeCodeView(text: code)

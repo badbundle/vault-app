@@ -29,7 +29,7 @@ struct BackupKeyChangeView: View {
         .navigationTitle(Text("Backup Password"))
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(viewModel.newPassword.isLoading)
-        .animation(.easeOut, value: viewModel.newlyEnteredPassword.isNotEmpty)
+        .animation(.snappy, value: viewModel.newlyEnteredPassword.isNotEmpty)
         .task {
             await viewModel.onAppear()
         }
@@ -113,7 +113,7 @@ struct BackupKeyChangeView: View {
         } footer: {
             Text("Enter a new password to generate an encryption key.")
         }
-        .animation(.easeOut, value: viewModel.newlyEnteredPassword)
+        .animation(.snappy, value: viewModel.newlyEnteredPassword)
     }
 
     // MARK: - Generate Section

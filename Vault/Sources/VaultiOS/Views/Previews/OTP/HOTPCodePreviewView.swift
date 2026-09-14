@@ -27,8 +27,8 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
             timerSection
         }
         .padding(16)
-        .animation(.easeOut, value: behaviour)
-        .animation(.easeOut, value: canLoadNextCode)
+        .animation(.snappy, value: behaviour)
+        .animation(.snappy, value: canLoadNextCode)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .aspectRatio(1, contentMode: .fill)
         .shimmering(active: isEditing)
@@ -104,7 +104,7 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
             .fontWeight(.heavy)
             .minimumScaleFactor(0.5)
             .lineLimit(1)
-            .foregroundColor(isEditing ? .white : .primary)
+            .foregroundStyle(isEditing ? .white : .primary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -121,7 +121,7 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
             buttonView
                 .disabled(!canLoadNextCode)
         }
-        .animation(.easeOut, value: canLoadNextCode)
+        .animation(.snappy, value: canLoadNextCode)
     }
 
     private var canLoadNextCode: Bool {

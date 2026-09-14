@@ -14,7 +14,7 @@ struct VaultDetailPassphraseEditView: View {
             titleSection
             optionSection
         }
-        .animation(.easeOut, value: viewConfig.isEnabled)
+        .animation(.snappy, value: viewConfig.isEnabled)
         .transition(.move(edge: .top))
     }
 

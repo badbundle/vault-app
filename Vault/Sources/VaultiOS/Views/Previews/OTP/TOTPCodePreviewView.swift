@@ -35,7 +35,7 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
             .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .padding(16)
-        .animation(.easeOut, value: behaviour)
+        .animation(.snappy, value: behaviour)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .aspectRatio(1, contentMode: .fill)
         .shimmering(active: isEditing)
@@ -94,7 +94,7 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
             .fontWeight(.heavy)
             .minimumScaleFactor(0.5)
             .lineLimit(1)
-            .foregroundColor(isEditing ? .white : .primary)
+            .foregroundStyle(isEditing ? .white : .primary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 

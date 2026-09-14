@@ -18,7 +18,7 @@ struct OTPCodeButtonView: View {
         }
         .foregroundStyle(viewModel.incrementError != nil ? .red : .accentColor)
         .disabled(isDisabled)
-        .animation(.easeOut, value: isDisabled)
+        .animation(.snappy, value: isDisabled)
     }
 
     var isDisabled: Bool {

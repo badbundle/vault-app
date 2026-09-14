@@ -60,7 +60,7 @@ struct OTPWidgetSmallView: View {
             .fontWeight(.heavy)
             .minimumScaleFactor(0.5)
             .lineLimit(1)
-            .foregroundColor(.primary)
+            .foregroundStyle(.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 

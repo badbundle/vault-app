@@ -6,8 +6,8 @@ import VaultFeed
 @MainActor
 struct CodeTimerHorizontalBarView: View {
     var timerState: OTPCodeTimerPeriodState
-    var color: Color = .blue
-    var backgroundColor: Color = .init(UIColor.systemGray2).opacity(0.3)
+    var color: Color = .accentColor
+    var backgroundColor: Color = .init(.quaternarySystemFill)
 
     @State private var currentFractionCompleted = 1.0
     @Environment(\.scenePhase) private var scenePhase
