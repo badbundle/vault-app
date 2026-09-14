@@ -43,6 +43,7 @@ struct BackupCreatePDFView: View {
                 .font(.callout)
                 .frame(minHeight: 150)
                 .keyboardType(.default)
+                .contentMargins(12, for: .scrollContent)
                 .listRowInsets(EdgeInsets())
         } header: {
             Text("Options")

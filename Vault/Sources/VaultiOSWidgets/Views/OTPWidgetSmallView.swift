@@ -40,7 +40,9 @@ struct OTPWidgetSmallView: View {
     private var labelsStack: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(displayIssuer)
-                .font(issuerFont)
+                .font(.title3.bold())
+                .minimumScaleFactor(0.7)
+                .allowsTightening(true)
                 .foregroundStyle(.primary)
                 .lineLimit(2)
 
@@ -54,7 +56,7 @@ struct OTPWidgetSmallView: View {
 
     private var codeSection: some View {
         OTPCodeTextView(codeState: codeState)
-            .font(.system(size: 36, design: .monospaced))
+            .font(.system(.largeTitle, design: .monospaced))
             .fontWeight(.heavy)
             .minimumScaleFactor(0.5)
             .lineLimit(1)
@@ -111,16 +113,6 @@ struct OTPWidgetSmallView: View {
         switch snapshot {
         case let .hotp(state): WidgetDeepLink.hotpIncrement(itemID: state.itemID)
         case .totp, .unavailable, .placeholder: nil
-        }
-    }
-
-    private var issuerFont: Font {
-        let length = displayIssuer.count
-        switch length {
-        case 0 ... 20: return .title3.weight(.bold)
-        case 21 ... 35: return .system(size: 18, weight: .bold)
-        case 36 ... 50: return .system(size: 16, weight: .bold)
-        default: return .system(size: 14, weight: .bold)
         }
     }
 }

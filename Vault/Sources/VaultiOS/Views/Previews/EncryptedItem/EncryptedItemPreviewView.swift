@@ -18,7 +18,9 @@ struct EncryptedItemPreviewView: View {
 
             // Title - emphasized and large
             Text(viewModel.visibleTitle)
-                .font(titleFont)
+                .font(.title.weight(.heavy))
+                .minimumScaleFactor(0.7)
+                .allowsTightening(true)
                 .foregroundStyle(isEditing ? .white : .primary)
                 .lineLimit(nil)
                 .multilineTextAlignment(.leading)
@@ -28,7 +30,7 @@ struct EncryptedItemPreviewView: View {
 
             // Encrypted label at bottom
             Text("Encrypted")
-                .font(.system(size: 9, weight: .medium))
+                .font(.caption2.weight(.medium))
                 .foregroundStyle(isEditing ? .white.opacity(0.6) : .secondary.opacity(0.6))
                 .textCase(.uppercase)
                 .tracking(0.5)
@@ -53,20 +55,6 @@ struct EncryptedItemPreviewView: View {
         switch behaviour {
         case .normal: false
         case .editingState: true
-        }
-    }
-
-    private var titleFont: Font {
-        let length = viewModel.visibleTitle.count
-        switch length {
-        case 0 ... 25:
-            return .title.weight(.heavy)
-        case 26 ... 40:
-            return .title2.weight(.heavy)
-        case 41 ... 55:
-            return .title3.weight(.heavy)
-        default:
-            return .system(size: 20, weight: .heavy)
         }
     }
 }

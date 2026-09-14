@@ -266,6 +266,7 @@ struct SecureNoteDetailView: View {
                 .fontDesign(.monospaced)
                 .frame(minHeight: 400)
                 .keyboardType(.default)
+                .contentMargins(12, for: .scrollContent)
                 .listRowInsets(EdgeInsets())
         } header: {
             noteIconEditingHeader

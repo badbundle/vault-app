@@ -12,7 +12,7 @@ struct OTPCodeButtonView: View {
             try await viewModel.incrementCounter()
         } label: {
             OTPCodeButtonIcon(isError: viewModel.incrementError != nil)
-                .font(.system(size: 24, weight: isDisabled ? .light : .bold))
+                .font(.title2.weight(isDisabled ? .light : .bold))
         } loading: {
             ProgressView()
         }

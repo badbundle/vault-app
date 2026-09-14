@@ -102,7 +102,7 @@ struct VaultAboutView: View {
                 Image("bad-bundle-logo", bundle: VaultFeedAssets.bundle)
                     .resizable(resizingMode: .stretch)
                     .scaledToFit()
-                    .frame(height: 21.6)
+                    .frame(height: 22)
                 Text("free and open since 2024 ✌️")
                     .font(.caption2)
                 Text(appVersionText)

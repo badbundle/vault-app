@@ -237,6 +237,7 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
                 .font(.subheadline)
                 .frame(minHeight: 120)
                 .keyboardType(.default)
+                .contentMargins(12, for: .scrollContent)
                 .listRowInsets(EdgeInsets())
         } header: {
             Text(viewModel.strings.descriptionTitle)
@@ -311,7 +312,7 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
                 metadata: metadata,
                 behaviour: .normal,
             )
-            .frame(width: 180)
+            .frame(maxWidth: 240)
             .fixedSize(horizontal: false, vertical: true)
             .containerRelativeFrame(.horizontal)
             .padding(.vertical, 8)

@@ -8,7 +8,7 @@ struct FormRow<Content: View>: View {
     var alignment: VerticalAlignment
     var content: () -> Content
 
-    private let prominentIconSize: Double = 28
+    @ScaledMetric(relativeTo: .body) private var prominentIconSize: Double = 28
 
     enum Style {
         case prominent
@@ -45,7 +45,7 @@ struct FormRow<Content: View>: View {
         ZStack {
             color
             image
-                .font(.system(size: prominentIconSize / 2.0))
+                .font(.body)
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .frame(width: prominentIconSize, height: prominentIconSize)
