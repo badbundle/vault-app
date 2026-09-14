@@ -9,50 +9,11 @@ struct VaultAutofillConfigurationView: View {
     }
 
     var body: some View {
-        ScrollView {
-            container
-                .padding(.vertical, 16)
-                .padding(24)
-                .containerRelativeFrame([.horizontal, .vertical])
+        List {
+            headerSection
+            featuresSection
         }
-        .containerRelativeFrame([.horizontal, .vertical])
-    }
-
-    private var container: some View {
-        VStack(alignment: .center, spacing: 32) {
-            Spacer()
-
-            VStack(alignment: .center, spacing: 12) {
-                Image(systemName: "number.circle.fill")
-                    .font(.system(size: 64, weight: .medium))
-                    .foregroundStyle(.blue)
-                    .symbolRenderingMode(.hierarchical)
-
-                Text("OTP Autofill")
-                    .font(.system(size: 28, weight: .bold))
-            }
-
-            VStack(alignment: .center, spacing: 24) {
-                Text("Your OTP codes are now available for autofill")
-                    .font(.title3)
-                    .fontWeight(.semibold)
-
-                VStack(alignment: .leading, spacing: 16) {
-                    featureRow(
-                        icon: "network",
-                        text: "OTP codes appear on their configured domain names",
-                    )
-
-                    featureRow(
-                        icon: "arrow.triangle.2.circlepath",
-                        text: "Codes update automatically based on your vault items",
-                    )
-                }
-                .frame(maxWidth: 400)
-            }
-
-            Spacer()
-
+        .safeAreaInset(edge: .bottom) {
             Button {
                 viewModel.dismiss()
             } label: {
@@ -61,29 +22,53 @@ struct VaultAutofillConfigurationView: View {
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
+            .padding()
         }
-        .multilineTextAlignment(.center)
+    }
+
+    private var headerSection: some View {
+        Section {
+            VStack(alignment: .center, spacing: 12) {
+                Image(systemName: "number.circle.fill")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.tint)
+                    .symbolRenderingMode(.hierarchical)
+
+                Text("OTP Autofill")
+                    .font(.title.bold())
+
+                Text("Your OTP codes are now available for autofill")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical)
+            .listRowSeparator(.hidden)
+        }
+    }
+
+    private var featuresSection: some View {
+        Section {
+            featureRow(
+                icon: "network",
+                text: "OTP codes appear on their configured domain names",
+            )
+
+            featureRow(
+                icon: "arrow.triangle.2.circlepath",
+                text: "Codes update automatically based on your vault items",
+            )
+        }
     }
 
     private func featureRow(icon: String, text: String) -> some View {
-        HStack(alignment: .top, spacing: 16) {
-            Image(systemName: icon)
-                .font(.system(size: 24))
-                .foregroundStyle(.blue)
-                .symbolRenderingMode(.hierarchical)
-                .frame(width: 32, height: 32)
-
+        Label {
             Text(text)
-                .font(.body)
-                .foregroundStyle(.primary)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        } icon: {
+            Image(systemName: icon)
+                .foregroundStyle(.tint)
+                .symbolRenderingMode(.hierarchical)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(uiColor: .secondarySystemGroupedBackground)),
-        )
     }
 }
