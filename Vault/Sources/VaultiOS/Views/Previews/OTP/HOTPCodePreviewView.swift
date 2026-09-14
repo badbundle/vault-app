@@ -49,14 +49,14 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
         case .normal:
             switch previewViewModel.code {
             case .visible, .locked:
-                Color.blue
+                Color.accentColor
             case .notReady, .obfuscated:
-                Color.gray
+                Color(.quaternarySystemFill)
             case .error, .finished:
                 Color.red
             }
         case .editingState:
-            Color.blue
+            Color.accentColor
         }
     }
 

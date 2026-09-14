@@ -77,7 +77,7 @@ struct OTPWidgetSmallView: View {
             .progressViewStyle(.linear)
             .tint(.accentColor)
         case .hotp, .unavailable, .placeholder:
-            Color.gray.opacity(0.3)
+            Color(.quaternarySystemFill)
         }
     }
 
