@@ -17,6 +17,7 @@ struct BackupCreatePDFView: View {
     var body: some View {
         Form {
             optionsSection
+            createSection
         }
         .navigationTitle(Text("Create PDF"))
         .navigationBarTitleDisplayMode(.inline)
@@ -43,32 +44,31 @@ struct BackupCreatePDFView: View {
                 .frame(minHeight: 150)
                 .keyboardType(.default)
                 .listRowInsets(EdgeInsets())
+        } header: {
+            Text("Options")
         } footer: {
-            VStack(alignment: .center, spacing: 8) {
-                createPDFButton
-                if case let .error(presentationError) = viewModel.state {
-                    Label(
-                        presentationError.userDescription ?? presentationError.userTitle,
-                        systemImage: "exclamationmark.triangle.fill",
-                    )
-                    .foregroundStyle(.red)
-                    .font(.caption)
-                }
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity)
+            Text("An optional hint printed on the document to help you remember its password.")
         }
     }
 
-    private var createPDFButton: some View {
-        AsyncButton {
-            await viewModel.createPDF()
-        } label: {
-            Label("Make PDF", systemImage: "checkmark.circle.fill")
-        } loading: {
-            ProgressView()
-                .tint(.white)
+    private var createSection: some View {
+        Section {
+            AsyncButton {
+                await viewModel.createPDF()
+            } label: {
+                FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
+                    Text("Make PDF")
+                }
+            } loading: {
+                FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
+                    ProgressView()
+                }
+            }
+        } footer: {
+            if case let .error(presentationError) = viewModel.state {
+                Text(presentationError.userDescription ?? presentationError.userTitle)
+                    .foregroundStyle(.red)
+            }
         }
-        .modifier(ProminentButtonModifier())
     }
 }

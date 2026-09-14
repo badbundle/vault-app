@@ -21,6 +21,7 @@ struct BackupGeneratedPDFView: View {
     var body: some View {
         Form {
             pdfPreviewSection
+            exportSection
         }
         .navigationTitle(Text("PDF"))
         .navigationBarTitleDisplayMode(.inline)
@@ -90,39 +91,20 @@ struct BackupGeneratedPDFView: View {
             .listRowInsets(EdgeInsets())
         } header: {
             Text("Generated Document Preview")
-        } footer: {
-            VStack(alignment: .center, spacing: 16) {
-                exportButton
-
-                HStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.title3)
-                        .foregroundStyle(Color.red)
-
-                    Text("Make sure you export and save the PDF, or your data will not be backed up.")
-                        .font(.footnote)
-                        .foregroundStyle(Color.red)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .modifier(VaultCardModifier(configuration: .init(
-                    style: .secondary,
-                    border: .red,
-                    padding: .init(),
-                )))
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity)
         }
     }
 
-    private var exportButton: some View {
-        ShareLink(item: pdf.diskURL, subject: .init("Vault Export")) {
-            Label("Export & Save", systemImage: "square.and.arrow.up.fill")
+    private var exportSection: some View {
+        Section {
+            ShareLink(item: pdf.diskURL, subject: .init("Vault Export")) {
+                FormRow(image: Image(systemName: "square.and.arrow.up.fill"), color: .accentColor) {
+                    Text("Export & Save")
+                }
+            }
+        } footer: {
+            Text("Make sure you export and save the PDF, or your data will not be backed up.")
+                .foregroundStyle(.red)
         }
-        .modifier(ProminentButtonModifier())
     }
 
     private func thumbnail(pageIndex: Int) -> Image? {

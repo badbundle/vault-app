@@ -21,7 +21,6 @@ struct BackupKeyChangeView: View {
             case .allowed:
                 passwordSection
                 generateSection
-                warningSection
                 detailsSection
             case .denied:
                 authenticateSection(isError: true)
@@ -160,28 +159,20 @@ struct BackupKeyChangeView: View {
         }
     }
 
-    // MARK: - Warning Section
-
-    /// The historical-backup caution is a note, not an action.
-    ///
-    /// Rendered as a row it read as a tappable control, so it lives in a footer — the standard place
-    /// for explanatory copy — with no rows of its own.
-    private var warningSection: some View {
-        Section {
-            EmptyView()
-        } header: {
-            Text("Historical Backups")
-        } footer: {
-            Text(
-                "Changing your password will not update existing backups. To restore from a previous backup, you must use the password that was active when that backup was created.",
-            )
-        }
-    }
-
     // MARK: - Details Section
 
     private var detailsSection: some View {
         Section {
+            DisclosureGroup {
+                Text(
+                    "Changing your password will not update existing backups. To restore from a previous backup, you must use the password that was active when that backup was created.",
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            } label: {
+                Label("Historical Backups", systemImage: "clock.arrow.circlepath")
+            }
+
             DisclosureGroup {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Your password is used to generate an encryption key that is used to secure your vault.")
