@@ -64,6 +64,10 @@ public final class BackupKeyChangeViewModel {
 
     public func didDisappear() {
         permissionState = .undetermined
+        // Don't retain the plaintext password beyond the lifetime of the
+        // screen that collected it.
+        newlyEnteredPassword = ""
+        newlyEnteredPasswordConfirm = ""
     }
 
     private struct PasswordConfirmError: Error {}
@@ -79,16 +83,26 @@ public final class BackupKeyChangeViewModel {
             let createdBackupPassword = try await Task.background {
                 try self.encryptionKeyDeriver.createEncryptionKey(password: password)
             }
+            // The KDF body is synchronous, so cancellation cannot
+            // interrupt it mid-derivation — make it authoritative here,
+            // before the derived key replaces the stored password.
+            try Task.checkCancellation()
             try await dataModel.store(backupPassword: createdBackupPassword)
             newPassword = .success
             newlyEnteredPassword = ""
             newlyEnteredPasswordConfirm = ""
         } catch is PasswordConfirmError {
+            // Keep the entered passwords: the user is mid-correction and
+            // the view is still frontmost.
             newPassword = .passwordConfirmError
         } catch is CancellationError {
             newPassword = .keygenCancelled
+            newlyEnteredPassword = ""
+            newlyEnteredPasswordConfirm = ""
         } catch {
             newPassword = .keygenError
+            newlyEnteredPassword = ""
+            newlyEnteredPasswordConfirm = ""
         }
     }
 

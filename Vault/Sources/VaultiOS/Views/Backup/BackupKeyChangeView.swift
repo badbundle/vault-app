@@ -34,12 +34,18 @@ struct BackupKeyChangeView: View {
             await viewModel.onAppear()
         }
         .onDisappear {
+            // A dismissed view must never complete the key change in the
+            // background: cancel any in-flight keygen before resetting.
+            keyGenerationTask?.cancel()
             viewModel.didDisappear()
         }
         .toolbar {
             switch viewModel.newPassword {
             case .initial, .creating, .keygenCancelled, .keygenError, .passwordConfirmError:
                 ToolbarItem(placement: .cancellationAction) {
+                    // Deliberately enabled while the keygen runs: with
+                    // interactive dismissal disabled, this is the only
+                    // escape hatch from the up-to-3-minute derivation.
                     Button {
                         keyGenerationTask?.cancel()
                         dismiss()
@@ -47,7 +53,6 @@ struct BackupKeyChangeView: View {
                         Text("Cancel")
                             .tint(.red)
                     }
-                    .disabled(viewModel.newPassword.isLoading)
                 }
             case .success:
                 ToolbarItem(placement: .confirmationAction) {
