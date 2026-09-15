@@ -44,7 +44,7 @@ public final class BackupKeyChangeViewModel {
         newlyEnteredPassword == newlyEnteredPasswordConfirm
     }
 
-    public var canGenerateNewPassword: Bool {
+    public var canSetBackupPassword: Bool {
         !newPassword.isLoading && passwordConfirmMatches && newlyEnteredPassword.isNotBlank
     }
 
