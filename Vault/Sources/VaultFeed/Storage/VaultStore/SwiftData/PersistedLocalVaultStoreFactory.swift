@@ -122,6 +122,21 @@ public final class PersistedLocalVaultStoreFactory {
     }
 }
 
+extension PersistedLocalVaultStore {
+    /// An empty in-memory store, for use as a safe fallback when the
+    /// on-disk store cannot be opened: it keeps every consumer of the
+    /// composition graph valid (app, autofill extension, rehash
+    /// services) while guaranteeing nothing is written to the broken
+    /// on-disk store.
+    public static func inMemory() throws -> PersistedLocalVaultStore {
+        let container = try ModelContainer(
+            for: PersistedVaultItem.self, PersistedVaultTag.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+        )
+        return PersistedLocalVaultStore(modelContainer: container)
+    }
+}
+
 protocol PersistedLocalVaultStoreOpening {
     func open(storeURL: URL) throws -> PersistedLocalVaultStore
 }

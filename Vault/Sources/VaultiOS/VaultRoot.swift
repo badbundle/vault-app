@@ -38,10 +38,33 @@ public enum VaultRoot {
     @MainActor
     static let vaultStorageDirectory: URL = VaultSharedStorage.directory(fileManager: fileManager)
 
+    /// Non-nil when the on-disk vault store could not be opened (even
+    /// after recovery) and `vaultStore` is an empty in-memory fallback.
+    /// The main scene checks this before wiring `setup()` and shows a
+    /// failure screen instead of the vault.
     @MainActor
-    public static let vaultStore: PersistedLocalVaultStore =
-        PersistedLocalVaultStoreFactory(storageDirectory: vaultStorageDirectory)
-            .makeVaultStore()
+    public private(set) static var vaultStoreLoadFailureMessage: String?
+
+    @MainActor
+    public static let vaultStore: PersistedLocalVaultStore = {
+        do {
+            return try PersistedLocalVaultStoreFactory(storageDirectory: vaultStorageDirectory)
+                .makeVaultStoreOrThrow()
+        } catch {
+            // Fall back to an empty in-memory store instead of crashing at
+            // launch: the composition graph stays valid for every consumer
+            // and the scene shows a failure screen. The failed store files
+            // were archived beside the store by the factory's recovery.
+            vaultStoreLoadFailureMessage = error.localizedDescription
+            do {
+                return try .inMemory()
+            } catch {
+                // In-memory container creation has no external failure
+                // modes; if even this fails the process cannot run.
+                fatalError("Unable to create fallback in-memory store: \(error)")
+            }
+        }
+    }()
 
     public static let backupPasswordStore: some BackupPasswordStore =
         BackupPasswordStoreImpl(secureStorage: secureStorage)
