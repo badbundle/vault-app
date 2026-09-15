@@ -94,6 +94,34 @@ struct KillphraseDigesterTests {
 
         #expect(sut.matches(query: "", salt: digest.salt, digest: digest.digest) == false)
     }
+
+    @Test
+    func matches_trimsWhitespaceFromQuery() {
+        let sut = makeSUT()
+        let digest = sut.makeDigest(phrase: "phrase")
+
+        // The search bar delivers the query untrimmed; a trailing space
+        // from the keyboard must not stop the killphrase firing.
+        #expect(sut.matches(query: "phrase ", salt: digest.salt, digest: digest.digest))
+        #expect(sut.matches(query: " phrase\n", salt: digest.salt, digest: digest.digest))
+    }
+
+    @Test
+    func makeDigest_trimsWhitespaceFromPhrase() {
+        let sut = makeSUT()
+        let digest = sut.makeDigest(phrase: " phrase ")
+
+        #expect(sut.matches(query: "phrase", salt: digest.salt, digest: digest.digest))
+    }
+
+    @Test
+    func matches_doesNotTrimInteriorWhitespace() {
+        let sut = makeSUT()
+        let digest = sut.makeDigest(phrase: "two words")
+
+        #expect(sut.matches(query: "twowords", salt: digest.salt, digest: digest.digest) == false)
+        #expect(sut.matches(query: "two words", salt: digest.salt, digest: digest.digest))
+    }
 }
 
 extension KillphraseDigesterTests {

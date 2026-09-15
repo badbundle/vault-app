@@ -1732,6 +1732,25 @@ final class PersistedLocalVaultStoreTests {
     }
 
     @Test
+    func deleteItemsMatchingKillphrase_matchesQueryWithSurroundingWhitespace() async throws {
+        let item1 = uniqueVaultItem(killphrase: "phrase")
+        let item2 = uniqueVaultItem(killphrase: "other")
+        let payload = VaultApplicationPayload(
+            userDescription: "Hello world",
+            items: [item1, item2],
+            tags: [],
+        )
+        try await sut.importAndOverrideVault(payload: payload)
+
+        // The search bar delivers untrimmed text; a trailing space must
+        // not stop the killphrase firing.
+        let didDelete = await sut.deleteItems(matchingKillphrase: "phrase ", using: testDigester)
+
+        #expect(didDelete == true)
+        try await assertStoreContains(exactlyItems: [item2])
+    }
+
+    @Test
     func deleteItemsMatchingKillphrase_doesNotDeleteEmptyKillphraseItems() async throws {
         let item1 = uniqueVaultItem(killphrase: nil)
         let item2 = uniqueVaultItem(killphrase: "a")

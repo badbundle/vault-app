@@ -383,6 +383,68 @@ final class VaultDataModelTests {
     }
 
     @Test
+    func reloadItems_matchesKillphraseWhenSearchQueryHasTrailingWhitespace() async {
+        let store = VaultStoreStub()
+        let killphraseDeleter = VaultStoreKillphraseDeleterMock()
+        let keyStore = KillphraseKeyStoreMock()
+        keyStore.loadOrCreateHandler = {
+            (try? KeyData<32>(data: Data(repeating: 0xAA, count: 32))) ?? .zero()
+        }
+        let sut = makeSUT(
+            vaultStore: store,
+            vaultKillphraseDeleter: killphraseDeleter,
+            killphraseKeyStore: keyStore,
+        )
+        await sut.setup()
+        // Untrimmed query, as delivered by the search bar. The deleter
+        // must receive the same sanitized text the search predicate uses,
+        // since digests are built from trimmed phrases.
+        sut.itemsSearchQuery = " hello world \n"
+
+        await confirmation("Delete called", expectedCount: 1) { confirmDelete in
+            killphraseDeleter.deleteItemsHandler = { query, _ in
+                #expect(query == "hello world")
+                confirmDelete()
+                return false
+            }
+
+            await sut.reloadItems()
+        }
+    }
+
+    @Test
+    func reloadItems_doesNotInvokeKillphraseDeleterWhenDigesterNeverLoaded() async {
+        let killphraseDeleter = VaultStoreKillphraseDeleterMock()
+        let sut = makeSUT(vaultKillphraseDeleter: killphraseDeleter)
+        // No setup(): the digester is never loaded, matching the
+        // vault-still-locked state. The delete pass must be skipped.
+        sut.itemsSearchQuery = "hello world"
+
+        await sut.reloadItems()
+
+        #expect(killphraseDeleter.deleteItemsCallCount == 0)
+    }
+
+    @Test
+    func reloadItems_doesNotInvokeKillphraseDeleterWhenKeyStoreFails() async {
+        let killphraseDeleter = VaultStoreKillphraseDeleterMock()
+        let keyStore = KillphraseKeyStoreMock()
+        keyStore.loadOrCreateHandler = { throw TestError() }
+        let sut = makeSUT(
+            vaultKillphraseDeleter: killphraseDeleter,
+            killphraseKeyStore: keyStore,
+        )
+        // Setup runs, but the key load fails, so the digester stays nil
+        // and killphrase deletion must remain a no-op.
+        await sut.setup()
+        sut.itemsSearchQuery = "hello world"
+
+        await sut.reloadItems()
+
+        #expect(killphraseDeleter.deleteItemsCallCount == 0)
+    }
+
+    @Test
     func reloadItems_syncsAutofillAndNotifiesWhenKillphraseDeletesItems() async {
         let store = VaultStoreStub()
         let killphraseDeleter = VaultStoreKillphraseDeleterMock()

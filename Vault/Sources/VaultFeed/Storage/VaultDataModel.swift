@@ -322,9 +322,12 @@ extension VaultDataModel {
             // only available when the vault is unlocked. If we don't have
             // one yet (vault still locked, key load failed), skip the
             // delete pass — the search itself remains functional.
+            // Match on the same sanitized text the search predicate uses,
+            // so a phrase the user can see matching in the feed also fires
+            // the killphrase (digests are built from trimmed phrases).
             let didDeleteKillphraseItems: Bool = if let digester = killphraseDigester {
                 await vaultKillphraseDeleter
-                    .deleteItems(matchingKillphrase: itemsSearchQuery, using: digester)
+                    .deleteItems(matchingKillphrase: itemsSanitizedQuery ?? itemsSearchQuery, using: digester)
             } else {
                 false
             }
