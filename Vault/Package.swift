@@ -232,7 +232,7 @@ let package = Package(
         ),
         .testTarget(
             name: "VaultFeedTests",
-            dependencies: ["VaultFeed", "VaultCore", "FoundationExtensions", "TestHelpers"],
+            dependencies: ["VaultFeed", "VaultBackup", "VaultCore", "FoundationExtensions", "TestHelpers"],
             swiftSettings: swiftSettings,
             plugins: testTargetPlugins,
         ),
