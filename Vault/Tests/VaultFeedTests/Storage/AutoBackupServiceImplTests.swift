@@ -182,6 +182,38 @@ struct AutoBackupServiceImplTests {
         #expect(provider.writeCallCount == 0)
     }
 
+    @Test @LeakTracked
+    func triggerBackupIfNeeded_runsAfterKillphraseDeletionChangesHash() async throws {
+        let provider = BackupStorageProviderStub(id: "test")
+        let store = VaultStoreStub()
+        let killphraseDeleter = VaultStoreKillphraseDeleterMock()
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultKillphraseDeleter: killphraseDeleter)
+        try await dataModel.store(backupPassword: anyBackupPassword())
+        await dataModel.setup()
+        let sut = try makeSUT(providers: [provider], dataModel: dataModel)
+        await Task.yield()
+        await sut.setEnabled(true)
+        await sut.selectProvider(id: "test")
+        // Take a backup so lastBackupHash matches the current payload hash.
+        await sut.forceBackup()
+        #expect(provider.writeCallCount == 1)
+
+        // Killphrase fires: the store's contents change out from under
+        // the model, and the payload hash must be refreshed on that path
+        // or this trigger compares the stale hash and skips — leaving the
+        // killed items recoverable from the newest backup.
+        killphraseDeleter.deleteItemsHandler = { _, _ in true }
+        dataModel.itemsSearchQuery = "kill phrase"
+        store.exportVaultHandler = { userDescription in
+            .init(userDescription: userDescription, items: [uniqueVaultItem()], tags: [])
+        }
+        await dataModel.reloadItems()
+
+        await sut.triggerBackupIfNeeded()
+
+        #expect(provider.writeCallCount == 2)
+    }
+
     // MARK: - Force Backup
 
     @Test @LeakTracked

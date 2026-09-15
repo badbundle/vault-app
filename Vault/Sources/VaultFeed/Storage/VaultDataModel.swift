@@ -343,6 +343,11 @@ extension VaultDataModel {
             // If killphrase deletion occurred, sync OTP autofill store to remove deleted items
             if didDeleteKillphraseItems {
                 try? await syncAllToOTPAutofillStore()
+                // Refresh the payload hash before notifying, otherwise
+                // auto-backup compares its last-backup hash against the
+                // stale value and skips — leaving the deleted items
+                // recoverable from the newest backup.
+                await updateCurrentPayloadHash()
                 // Notify downstream observers (auto-backup, widget reload) that
                 // the item set changed silently from a killphrase match.
                 onDataChanged?()
@@ -385,6 +390,8 @@ extension VaultDataModel {
             searchableLevel: item.searchableLevel,
             showInQuickType: item.showInQuickType,
         )
+        await updateCurrentPayloadHash()
+        onDataChanged?()
     }
 
     public func update(itemID id: Identifier<VaultItem>, data: VaultItem.Write) async throws {
@@ -444,6 +451,7 @@ extension VaultDataModel: VaultStoreHOTPIncrementer {
     public func incrementCounter(id: Identifier<VaultItem>) async throws {
         try await vaultStore.incrementCounter(id: id)
         await reloadItems()
+        await updateCurrentPayloadHash()
         onDataChanged?()
     }
 }

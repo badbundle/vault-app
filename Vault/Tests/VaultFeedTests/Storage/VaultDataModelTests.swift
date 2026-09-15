@@ -493,6 +493,100 @@ final class VaultDataModelTests {
     }
 
     @Test
+    func reloadItems_refreshesPayloadHashWhenKillphraseDeletesItems() async throws {
+        let store = VaultStoreStub()
+        let killphraseDeleter = VaultStoreKillphraseDeleterMock()
+        let keyStore = KillphraseKeyStoreMock()
+        keyStore.loadOrCreateHandler = {
+            (try? KeyData<32>(data: Data(repeating: 0xAA, count: 32))) ?? .zero()
+        }
+        let sut = makeSUT(
+            vaultStore: store,
+            vaultKillphraseDeleter: killphraseDeleter,
+            killphraseKeyStore: keyStore,
+        )
+        await sut.setup()
+        let hashBeforeDeletion = try #require(sut.currentPayloadHash)
+        sut.itemsSearchQuery = "hello world"
+        killphraseDeleter.deleteItemsHandler = { _, _ in true }
+        // The store's contents change out from under the model when the
+        // killphrase fires; auto-backup relies on the refreshed hash to
+        // notice, otherwise the deleted items persist in the newest backup.
+        store.exportVaultHandler = { userDescription in
+            VaultApplicationPayload(
+                userDescription: userDescription,
+                items: [uniqueVaultItem()],
+                tags: [],
+            )
+        }
+
+        await sut.reloadItems()
+
+        #expect(sut.currentPayloadHash != nil)
+        #expect(sut.currentPayloadHash != hashBeforeDeletion)
+    }
+
+    @Test
+    func reloadItems_doesNotRefreshPayloadHashWhenNoKillphraseDeletionOccurs() async throws {
+        let store = VaultStoreStub()
+        let sut = makeSUT(vaultStore: store)
+        await sut.setup()
+        let exportsAfterSetup = store.exportVaultCallCount
+
+        await sut.reloadItems()
+
+        // Plain reloads (every search keystroke) must not trigger a full
+        // vault export just to recompute the hash.
+        #expect(store.exportVaultCallCount == exportsAfterSetup)
+    }
+
+    @Test
+    func insert_refreshesPayloadHashAndNotifiesDataChanged() async throws {
+        let store = VaultStoreStub()
+        let sut = makeSUT(vaultStore: store)
+        await sut.setup()
+        let hashBeforeInsert = try #require(sut.currentPayloadHash)
+        store.exportVaultHandler = { userDescription in
+            VaultApplicationPayload(
+                userDescription: userDescription,
+                items: [uniqueVaultItem()],
+                tags: [],
+            )
+        }
+
+        try await confirmation("Data change notified", expectedCount: 1) { confirmChange in
+            sut.onDataChanged = {
+                confirmChange()
+            }
+
+            try await sut.insert(item: uniqueVaultItem().makeWritable())
+        }
+
+        #expect(sut.currentPayloadHash != nil)
+        #expect(sut.currentPayloadHash != hashBeforeInsert)
+    }
+
+    @Test
+    func incrementCounter_refreshesPayloadHash() async throws {
+        let store = VaultStoreStub()
+        let sut = makeSUT(vaultStore: store)
+        await sut.setup()
+        let hashBeforeIncrement = try #require(sut.currentPayloadHash)
+        store.exportVaultHandler = { userDescription in
+            VaultApplicationPayload(
+                userDescription: userDescription,
+                items: [uniqueVaultItem()],
+                tags: [],
+            )
+        }
+
+        try await sut.incrementCounter(id: .new())
+
+        #expect(sut.currentPayloadHash != nil)
+        #expect(sut.currentPayloadHash != hashBeforeIncrement)
+    }
+
+    @Test
     func insert_createsItemInStoreAndReloads() async throws {
         let store = VaultStoreStub()
         let sut = makeSUT(vaultStore: store)
@@ -500,7 +594,11 @@ final class VaultDataModelTests {
 
         try await sut.insert(item: item)
 
-        #expect(store.calledMethods == [.insert, .retrieve])
+        #expect(store.calledMethods == [
+            .insert,
+            .retrieve, // reload items
+            .export, // export for payload hash
+        ])
     }
 
     @Test
@@ -789,7 +887,10 @@ final class VaultDataModelTests {
         }
 
         #expect(store.incrementCounterCallCount == 1)
-        #expect(store.calledMethods == [.retrieve])
+        #expect(store.calledMethods == [
+            .retrieve, // reload items
+            .export, // export for payload hash
+        ])
     }
 
     @Test
