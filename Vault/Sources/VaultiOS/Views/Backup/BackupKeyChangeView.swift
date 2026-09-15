@@ -20,7 +20,6 @@ struct BackupKeyChangeView: View {
                 authenticateSection(isError: false)
             case .allowed:
                 passwordSection
-                setPasswordSection
                 detailsSection
             case .denied:
                 authenticateSection(isError: true)
@@ -112,36 +111,32 @@ struct BackupKeyChangeView: View {
                     .foregroundStyle(viewModel.passwordConfirmMatches ? .green : .red)
                 }
                 .disabled(viewModel.newPassword.isLoading)
+
+                Button {
+                    keyGenerationTask?.cancel()
+                    keyGenerationTask = Task {
+                        await viewModel.saveEnteredPassword()
+                    }
+                } label: {
+                    FormRow(image: Image(systemName: "checkmark.shield.fill"), color: .accentColor) {
+                        Text("Set Backup Password")
+                    }
+                }
+                .animation(.none, value: viewModel.newPassword)
+                .disabled(!viewModel.canSetBackupPassword)
             }
         } header: {
             Text("Backup Password")
         } footer: {
-            Text(
-                "Backups are encrypted with this password. You will need it to restore a backup, so keep it somewhere safe.",
-            )
+            VStack(alignment: .leading, spacing: 8) {
+                Text(
+                    "Backups are encrypted with this password. You will need it to restore a backup, so keep it somewhere safe.",
+                )
+
+                setPasswordStatus
+            }
         }
         .animation(.snappy, value: viewModel.newlyEnteredPassword)
-    }
-
-    // MARK: - Set Password Section
-
-    private var setPasswordSection: some View {
-        Section {
-            Button {
-                keyGenerationTask?.cancel()
-                keyGenerationTask = Task {
-                    await viewModel.saveEnteredPassword()
-                }
-            } label: {
-                FormRow(image: Image(systemName: "checkmark.shield.fill"), color: .accentColor) {
-                    Text("Set Backup Password")
-                }
-            }
-            .animation(.none, value: viewModel.newPassword)
-            .disabled(!viewModel.canSetBackupPassword)
-        } footer: {
-            setPasswordStatus
-        }
     }
 
     @ViewBuilder
