@@ -14,20 +14,29 @@ public struct VaultMainScene: Scene {
     @State private var injector: VaultInjector = VaultRoot.vaultInjector
 
     public init() {
-        VaultRoot.setup()
+        // Don't wire auto-backup and widget reloads when the store failed
+        // to open: the fallback store is empty, and backing it up would
+        // replace a good backup with an empty vault.
+        if VaultRoot.vaultStoreLoadFailureMessage == nil {
+            VaultRoot.setup()
+        }
     }
 
     public var body: some Scene {
         WindowGroup {
-            VaultMainNavigationView(
-                pasteboard: pasteboard,
-                localSettings: localSettings,
-                deviceAuthenticationService: deviceAuthenticationService,
-                vaultDataModel: vaultDataModel,
-                injector: injector,
-            )
-            .installToast(position: .top)
-            .onOpenURL(perform: handle(url:))
+            if let failureMessage = VaultRoot.vaultStoreLoadFailureMessage {
+                VaultStoreFailureView(message: failureMessage)
+            } else {
+                VaultMainNavigationView(
+                    pasteboard: pasteboard,
+                    localSettings: localSettings,
+                    deviceAuthenticationService: deviceAuthenticationService,
+                    vaultDataModel: vaultDataModel,
+                    injector: injector,
+                )
+                .installToast(position: .top)
+                .onOpenURL(perform: handle(url:))
+            }
         }
     }
 
