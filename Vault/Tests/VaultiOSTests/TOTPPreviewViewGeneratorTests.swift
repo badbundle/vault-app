@@ -63,7 +63,7 @@ final class TOTPPreviewViewGeneratorTests {
     }
 
     @Test
-    func scenePhaseDidChange_activeRestartsAllTimers() {
+    func scenePhaseDidChange_activeUnobfuscatesAndRestartsAllTimers() {
         let factory = makeTOTPPreviewViewFactoryMock()
         let repository = TOTPPreviewViewRepositoryMock()
         let sut = makeSUT(factory: factory, repository: repository)
@@ -71,6 +71,7 @@ final class TOTPPreviewViewGeneratorTests {
         sut.scenePhaseDidChange(to: .active)
 
         #expect(repository.restartAllTimersCallCount == 1)
+        #expect(repository.unobfuscateForPrivacyCallCount == 1)
         #expect(repository.obfuscateForPrivacyCallCount == 0)
         #expect(repository.stopAllTimersCallCount == 0)
     }
@@ -85,6 +86,7 @@ final class TOTPPreviewViewGeneratorTests {
 
         #expect(repository.restartAllTimersCallCount == 0)
         #expect(repository.obfuscateForPrivacyCallCount == 1)
+        #expect(repository.unobfuscateForPrivacyCallCount == 0)
         #expect(repository.stopAllTimersCallCount == 1)
     }
 

@@ -44,6 +44,9 @@ public final class TOTPPreviewViewGenerator<Factory: TOTPPreviewViewFactory>: Va
             repository.obfuscateForPrivacy()
             repository.stopAllTimers()
         case .active:
+            // Unobfuscate before restarting so the codes reappear
+            // immediately rather than waiting for the next timer tick.
+            repository.unobfuscateForPrivacy()
             repository.restartAllTimers()
         @unknown default:
             break
