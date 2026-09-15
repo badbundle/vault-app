@@ -29,7 +29,7 @@ struct BackupCreateView: View {
                 passwordNotCreatedSection
             case let .fetched(password):
                 passwordExistsSection
-                AutoBackupSettingsView(autoBackupService: injector.autoBackupService)
+                autoBackupSection
                 pdfBackupSection(password: password)
                 deviceTransferSection(password: password)
             }
@@ -167,6 +167,24 @@ struct BackupCreateView: View {
             }
         } footer: {
             Text("Your backups are protected with encryption.")
+        }
+    }
+
+    // MARK: - Auto-Backup Section
+
+    private var autoBackupSection: some View {
+        Section {
+            NavigationLink {
+                AutoBackupView(viewModel: .init(service: injector.autoBackupService))
+            } label: {
+                FormRow(image: Image(systemName: "arrow.clockwise.icloud"), color: .accentColor) {
+                    Text("Auto-Backup")
+                }
+            }
+        } header: {
+            Text("Automatic Backup")
+        } footer: {
+            Text("Automatically back up your vault to cloud storage when changes are made.")
         }
     }
 
