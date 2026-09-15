@@ -151,6 +151,18 @@ struct TOTPPreviewViewRepositoryImplTests {
     }
 
     @Test
+    func unobfuscateForPrivacy_unobfuscatesCodesHiddenForPrivacy() {
+        let sut = makeSUT()
+        let viewModel = sut.previewViewModel(metadata: anyVaultItemMetadata(), code: anyTOTPCode())
+        viewModel.update(.visible("123456"))
+        viewModel.update(.obfuscated(.privacy))
+
+        sut.unobfuscateForPrivacy()
+
+        #expect(viewModel.code == .visible("123456"))
+    }
+
+    @Test
     func vaultItemCacheClear_removesItemsMatchingIDFromCache() async {
         let sut = makeSUT()
 

@@ -11,6 +11,7 @@ public protocol TOTPPreviewViewRepository: VaultItemCache, VaultItemCopyActionHa
     func restartAllTimers()
     func stopAllTimers()
     func obfuscateForPrivacy()
+    func unobfuscateForPrivacy()
 }
 
 public final class TOTPPreviewViewRepositoryImpl: TOTPPreviewViewRepository {
@@ -76,6 +77,12 @@ public final class TOTPPreviewViewRepositoryImpl: TOTPPreviewViewRepository {
     public func obfuscateForPrivacy() {
         for viewModel in viewModelCache.values {
             viewModel.update(.obfuscated(.privacy))
+        }
+    }
+
+    public func unobfuscateForPrivacy() {
+        for viewModel in viewModelCache.values {
+            viewModel.updateRemovePrivacyObfuscation()
         }
     }
 }
