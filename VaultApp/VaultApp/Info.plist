@@ -20,12 +20,12 @@
 		<dict>
 			<key>UTTypeConformsTo</key>
 			<array>
-				<string></string>
+				<string>public.data</string>
 			</array>
+			<key>UTTypeDescription</key>
+			<string>Vault item drag identifier</string>
 			<key>UTTypeIdentifier</key>
 			<string>vault.identifier.drop.id</string>
-			<key>UTTypeTagSpecification</key>
-			<dict/>
 		</dict>
 	</array>
 </dict>

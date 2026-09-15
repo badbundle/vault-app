@@ -66,5 +66,9 @@ extension Identifier: Transferable where T == VaultItem {
 }
 
 extension UTType {
-    static let vaultIdentifierItemType = UTType(exportedAs: "vault.identifier.drop.id")
+    /// importedAs, not exportedAs: this code is evaluated in every bundle
+    /// that links VaultiOS (main app AND the autofill extension), but only
+    /// the main app exports the type declaration. `exportedAs` raises a
+    /// runtime fault when the calling bundle does not declare the type.
+    static let vaultIdentifierItemType = UTType(importedAs: "vault.identifier.drop.id", conformingTo: .data)
 }
