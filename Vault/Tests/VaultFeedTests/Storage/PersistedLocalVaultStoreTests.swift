@@ -698,6 +698,50 @@ final class PersistedLocalVaultStoreTests {
     }
 
     @Test
+    func retrieveMatchingQuery_keepsOnlyPassphraseItemsHiddenWhenMatcherNil() async throws {
+        let digester = SearchPassphraseDigester(key: .zero())
+        // The hidden item's title matches the text query, so the text
+        // predicate alone would leak it if searchableLevel were
+        // mishandled. This is the state after a keychain key-load failure
+        // leaves the matcher nil — hidden items must fail closed.
+        let hiddenID = try await sut.insert(item: anySecureNote(title: "aaa").wrapInAnyVaultItem(
+            searchableLevel: .onlyPassphrase,
+            searchPassphrase: digester.makeDigest(phrase: "aaa"),
+        ).makeWritable())
+        let controlID = try await sut.insert(
+            item: anySecureNote(title: "aaa").wrapInAnyVaultItem(searchableLevel: .full).makeWritable(),
+        )
+
+        let query = VaultStoreQuery(filterText: "aaa")
+        let explicitNil = try await sut.retrieve(query: query, searchPassphraseMatcher: nil)
+        let convenience = try await sut.retrieve(query: query)
+
+        #expect(explicitNil.items.map(\.metadata.id) == [controlID])
+        #expect(convenience.items.map(\.metadata.id) == [controlID])
+        #expect(explicitNil.items.map(\.metadata.id).contains(hiddenID) == false)
+        #expect(explicitNil.errors == [])
+    }
+
+    @Test
+    func retrieveMatchingQuery_keepsOnlyPassphraseItemsHiddenForWrongPhrase() async throws {
+        let digester = SearchPassphraseDigester(key: .zero())
+        let hiddenID = try await sut.insert(item: anySecureNote(title: "bbb").wrapInAnyVaultItem(
+            searchableLevel: .onlyPassphrase,
+            searchPassphrase: digester.makeDigest(phrase: "secret phrase"),
+        ).makeWritable())
+        let controlID = try await sut.insert(
+            item: anySecureNote(title: "bbb").wrapInAnyVaultItem(searchableLevel: .full).makeWritable(),
+        )
+
+        let query = VaultStoreQuery(filterText: "bbb")
+        let result = try await sut.retrieve(query: query, searchPassphraseMatcher: digester)
+
+        #expect(result.items.map(\.metadata.id) == [controlID])
+        #expect(result.items.map(\.metadata.id).contains(hiddenID) == false)
+        #expect(result.errors == [])
+    }
+
+    @Test
     func retrieveMatchingQuery_returnsCorruptedItemsAsErrors() async throws {
         let codes: [VaultItem.Write] = [
             anyOTPAuthCode(accountName: "aaa").wrapInAnyVaultItem().makeWritable(),
