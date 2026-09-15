@@ -110,6 +110,86 @@ struct BackupKeyChangeViewModelTests {
         #expect(sut.newlyEnteredPassword == "")
         #expect(sut.newlyEnteredPasswordConfirm == "")
     }
+
+    @Test
+    func saveEnteredPassword_cancelledBeforeStore_setsKeygenCancelledAndDoesNotStore() async {
+        let store = BackupPasswordStoreMock()
+        let dataModel = anyVaultDataModel(backupPasswordStore: store)
+        let sut = makeSUT(dataModel: dataModel)
+
+        sut.newlyEnteredPassword = "hello"
+        sut.newlyEnteredPasswordConfirm = "hello"
+
+        let task = Task { await sut.saveEnteredPassword() }
+        // Cancel before the task body has had a chance to run: the save
+        // must observe the cancellation and never replace the stored
+        // backup password.
+        task.cancel()
+        await task.value
+
+        #expect(sut.newPassword == .keygenCancelled)
+        #expect(store.setCallCount == 0)
+    }
+
+    @Test
+    func saveEnteredPassword_cancelled_clearsEnteredPasswords() async {
+        let sut = makeSUT()
+
+        sut.newlyEnteredPassword = "hello"
+        sut.newlyEnteredPasswordConfirm = "hello"
+
+        let task = Task { await sut.saveEnteredPassword() }
+        task.cancel()
+        await task.value
+
+        #expect(sut.newlyEnteredPassword == "")
+        #expect(sut.newlyEnteredPasswordConfirm == "")
+    }
+
+    @Test
+    func saveEnteredPassword_keygenError_clearsEnteredPasswords() async {
+        let deriverFactory = VaultKeyDeriverFactoryMock()
+        deriverFactory.makeVaultBackupKeyDeriverHandler = {
+            VaultKeyDeriver(deriver: KeyDeriverErroring(), signature: .testing)
+        }
+        let sut = makeSUT(deriverFactory: deriverFactory)
+
+        sut.newlyEnteredPassword = "hello"
+        sut.newlyEnteredPasswordConfirm = "hello"
+
+        await sut.saveEnteredPassword()
+
+        #expect(sut.newlyEnteredPassword == "")
+        #expect(sut.newlyEnteredPasswordConfirm == "")
+    }
+
+    @Test
+    func saveEnteredPassword_passwordConfirmError_retainsEnteredPasswords() async {
+        let sut = makeSUT()
+
+        sut.newlyEnteredPassword = "hello"
+        sut.newlyEnteredPasswordConfirm = "world"
+
+        await sut.saveEnteredPassword()
+
+        // The user is mid-correction with the view still frontmost, so
+        // the entered text deliberately survives this error.
+        #expect(sut.newlyEnteredPassword == "hello")
+        #expect(sut.newlyEnteredPasswordConfirm == "world")
+    }
+
+    @Test
+    func didDisappear_clearsEnteredPasswords() {
+        let sut = makeSUT()
+
+        sut.newlyEnteredPassword = "hello"
+        sut.newlyEnteredPasswordConfirm = "hello"
+
+        sut.didDisappear()
+
+        #expect(sut.newlyEnteredPassword == "")
+        #expect(sut.newlyEnteredPasswordConfirm == "")
+    }
 }
 
 // MARK: - Helpers
