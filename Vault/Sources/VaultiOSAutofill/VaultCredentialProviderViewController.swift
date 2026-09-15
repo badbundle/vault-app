@@ -95,52 +95,22 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
 
     @MainActor
     private func provideOTPCredential(for request: any ASCredentialRequest) async {
-        // Extract the credential identity and record identifier
-        guard let identity = request.credentialIdentity as? ASOneTimeCodeCredentialIdentity,
-              let recordIdentifier = identity.recordIdentifier,
-              let itemUUID = UUID(uuidString: recordIdentifier)
-        else {
-            extensionContext.cancelRequest(withError: ASExtensionError(.credentialIdentityNotFound))
-            return
-        }
+        let identity = request.credentialIdentity as? ASOneTimeCodeCredentialIdentity
+        let resolver = AutofillOTPCredentialResolver(
+            retrieveItems: { try await VaultRoot.vaultStore.retrieve(query: .init()) },
+            copyActionHandler: VaultRoot.vaultItemCopyHandler,
+            clock: VaultRoot.clock,
+        )
 
-        do {
-            // Retrieve all items from the vault to find the matching OTP item
-            let result = try await VaultRoot.vaultStore.retrieve(query: .init())
-
-            guard let vaultItem = result.items.first(where: { $0.id.rawValue == itemUUID }),
-                  let otpCode = vaultItem.item.otpCode
-            else {
-                extensionContext.cancelRequest(withError: ASExtensionError(.credentialIdentityNotFound))
-                return
-            }
-
-            // Check if the item requires authentication to access
-            let copyAction = VaultRoot.vaultItemCopyHandler.textToCopyForVaultItem(id: vaultItem.id)
-            if copyAction?.requiresAuthenticationToCopy == true {
-                // Require user interaction for authentication
-                extensionContext.cancelRequest(withError: ASExtensionError(.userInteractionRequired))
-                return
-            }
-
-            // Generate the OTP code based on the type
-            let codeString: String
-            switch otpCode.type {
-            case let .totp(period):
-                let totpCode = TOTPAuthCode(period: period, data: otpCode.data)
-                let epochSeconds = UInt64(Date().timeIntervalSince1970)
-                codeString = try totpCode.renderCode(epochSeconds: epochSeconds)
-            case .hotp:
-                // HOTP codes require user interaction to increment counter
-                extensionContext.cancelRequest(withError: ASExtensionError(.userInteractionRequired))
-                return
-            }
-
-            // Complete the request with the generated code
+        switch await resolver.resolve(recordIdentifier: identity?.recordIdentifier) {
+        case let .code(codeString):
             let credential = ASOneTimeCodeCredential(code: codeString)
             extensionContext.completeOneTimeCodeRequest(using: credential, completionHandler: nil)
-
-        } catch {
+        case .userInteractionRequired:
+            extensionContext.cancelRequest(withError: ASExtensionError(.userInteractionRequired))
+        case .notFound:
+            extensionContext.cancelRequest(withError: ASExtensionError(.credentialIdentityNotFound))
+        case .failure:
             extensionContext.cancelRequest(withError: ASExtensionError(.failed))
         }
     }
