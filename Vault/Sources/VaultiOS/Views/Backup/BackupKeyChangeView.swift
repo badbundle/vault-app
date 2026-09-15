@@ -20,7 +20,6 @@ struct BackupKeyChangeView: View {
                 authenticateSection(isError: false)
             case .allowed:
                 passwordSection
-                generateSection
                 detailsSection
             case .denied:
                 authenticateSection(isError: true)
@@ -112,49 +111,50 @@ struct BackupKeyChangeView: View {
                     .foregroundStyle(viewModel.passwordConfirmMatches ? .green : .red)
                 }
                 .disabled(viewModel.newPassword.isLoading)
+
+                Button {
+                    keyGenerationTask?.cancel()
+                    keyGenerationTask = Task {
+                        await viewModel.saveEnteredPassword()
+                    }
+                } label: {
+                    FormRow(image: Image(systemName: "checkmark.shield.fill"), color: .accentColor) {
+                        Text("Set Backup Password")
+                    }
+                }
+                .animation(.none, value: viewModel.newPassword)
+                .disabled(!viewModel.canSetBackupPassword)
             }
         } header: {
-            Text("New Password")
+            Text("Backup Password")
         } footer: {
-            Text("Enter a new password to generate an encryption key.")
+            VStack(alignment: .leading, spacing: 8) {
+                Text(
+                    "Backups are encrypted with this password. You will need it to restore a backup, so keep it somewhere safe.",
+                )
+
+                setPasswordStatus
+            }
         }
         .animation(.snappy, value: viewModel.newlyEnteredPassword)
     }
 
-    // MARK: - Generate Section
-
-    private var generateSection: some View {
-        Section {
-            Button {
-                keyGenerationTask?.cancel()
-                keyGenerationTask = Task {
-                    await viewModel.saveEnteredPassword()
-                }
-            } label: {
-                FormRow(image: Image(systemName: "key.2.on.ring.fill"), color: .accentColor) {
-                    Text("Generate Key")
-                }
-            }
-            .animation(.none, value: viewModel.newPassword)
-            .disabled(!viewModel.canGenerateNewPassword)
-        } footer: {
-            generationStatus
-        }
-    }
-
     @ViewBuilder
-    private var generationStatus: some View {
+    private var setPasswordStatus: some View {
         switch viewModel.newPassword {
         case .success:
-            Label("Vault encryption key updated successfully", systemImage: "checkmark.circle.fill")
+            Label("Backup password set", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
-        case .keygenError, .keygenCancelled:
-            Label("Error generating encryption key", systemImage: "xmark.octagon.fill")
+        case .keygenError:
+            Label("Something went wrong. Your backup password was not changed.", systemImage: "xmark.octagon.fill")
+                .foregroundStyle(.red)
+        case .keygenCancelled:
+            Label("Cancelled. Your backup password was not changed.", systemImage: "xmark.octagon.fill")
                 .foregroundStyle(.red)
         case .creating:
             HStack(alignment: .center, spacing: 4) {
                 ProgressView()
-                Text("Generating encryption key")
+                Text("Securing your password. This can take up to 3 minutes.")
             }
         case .passwordConfirmError:
             Label("Passwords do not match", systemImage: "xmark")
@@ -169,6 +169,24 @@ struct BackupKeyChangeView: View {
     private var detailsSection: some View {
         Section {
             DisclosureGroup {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(
+                        "Your password is turned into an encryption key on this device. The password itself is never stored.",
+                    )
+                    Text(
+                        "Preparing the key is deliberately slow to resist guessing — up to 3 minutes, even on a fast device.",
+                    )
+                    Text(
+                        "Each device prepares its own key. Keys are never shared between devices.",
+                    )
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            } label: {
+                Label("About", systemImage: "questionmark.circle.fill")
+            }
+
+            DisclosureGroup {
                 Text(
                     "Changing your password will not update existing backups. To restore from a previous backup, you must use the password that was active when that backup was created.",
                 )
@@ -176,22 +194,6 @@ struct BackupKeyChangeView: View {
                 .foregroundStyle(.secondary)
             } label: {
                 Label("Historical Backups", systemImage: "clock.arrow.circlepath")
-            }
-
-            DisclosureGroup {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Your password is used to generate an encryption key that is used to secure your vault.")
-                    Text(
-                        "For security, this key generation process may take up to 3 minutes, even on a very fast device.",
-                    )
-                    Text(
-                        "Your encryption key is not shared between devices.",
-                    )
-                }
-                .font(.callout)
-                .foregroundStyle(.secondary)
-            } label: {
-                Label("About", systemImage: "questionmark.circle.fill")
             }
 
             DisclosureGroup {

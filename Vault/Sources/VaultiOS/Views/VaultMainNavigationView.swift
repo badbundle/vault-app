@@ -18,8 +18,7 @@ struct VaultMainNavigationView: View {
     enum SidebarItem: Hashable {
         case items
         case tags
-        case backup
-        case restore
+        case backups
         case settings
         case about
         case demos
@@ -38,11 +37,8 @@ struct VaultMainNavigationView: View {
                 }
 
                 Section {
-                    NavigationLink(value: SidebarItem.backup) {
-                        Label("Backup", systemImage: "arrow.up.doc.fill")
-                    }
-                    NavigationLink(value: SidebarItem.restore) {
-                        Label("Restore", systemImage: "arrow.down.doc.fill")
+                    NavigationLink(value: SidebarItem.backups) {
+                        Label("Backups", systemImage: "externaldrive.fill")
                     }
                 }
 
@@ -90,14 +86,9 @@ struct VaultMainNavigationView: View {
                     VaultAboutView(viewModel: SettingsViewModel())
                 }
                 .navigationBarTitleDisplayMode(.inline)
-            case .backup:
+            case .backups:
                 NavigationStack {
-                    BackupCreateView()
-                }
-                .navigationBarTitleDisplayMode(.inline)
-            case .restore:
-                NavigationStack {
-                    BackupRestoreView()
+                    BackupHomeView()
                 }
                 .navigationBarTitleDisplayMode(.inline)
             case .demos:

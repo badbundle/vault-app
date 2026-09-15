@@ -3,12 +3,12 @@ import SwiftUI
 import VaultFeed
 import VaultKeygen
 
+/// Screen for exporting the vault: PDF backup and device transfer.
 @MainActor
-struct BackupCreateView: View {
+struct BackupExportView: View {
     @Environment(VaultDataModel.self) var dataModel
     @Environment(DeviceAuthenticationService.self) var authenticationService
     @Environment(VaultInjector.self) var injector
-    @State private var viewModel = BackupCreateViewModel()
     @State private var modal: Modal?
     @State private var pdfNavigationPath = NavigationPath()
 
@@ -28,13 +28,12 @@ struct BackupCreateView: View {
             case .notCreated:
                 passwordNotCreatedSection
             case let .fetched(password):
-                passwordExistsSection
-                AutoBackupSettingsView(autoBackupService: injector.autoBackupService)
                 pdfBackupSection(password: password)
                 deviceTransferSection(password: password)
             }
         }
-        .navigationTitle(Text(viewModel.strings.homeTitle))
+        .navigationTitle(Text("Export"))
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             await dataModel.reloadItems()
         }
@@ -113,16 +112,12 @@ struct BackupCreateView: View {
                 }
             }
         } header: {
-            Text(
-                isError
-                    ? viewModel.strings.backupPasswordErrorTitle
-                    : viewModel.strings.backupPasswordLoadingTitle,
-            )
+            Text(isError ? "Authentication Failed" : "Locked")
         } footer: {
             Text(
                 isError
-                    ? viewModel.strings.backupPasswordErrorDetail
-                    : "Authenticate to access backup settings.",
+                    ? "Unable to verify your identity. Please try again."
+                    : "Authenticate to export your vault.",
             )
             .foregroundStyle(isError ? Color.red : Color.secondary)
         }
@@ -143,30 +138,6 @@ struct BackupCreateView: View {
             Text("Backup Password")
         } footer: {
             Text("Create a backup password to protect your vault backups.")
-        }
-    }
-
-    // MARK: - Password Exists Section
-
-    private var passwordExistsSection: some View {
-        Section {
-            LabeledContent {
-                Text("Active")
-            } label: {
-                FormRow(image: Image(systemName: "checkmark.shield.fill"), color: .green) {
-                    Text("Backup Password")
-                }
-            }
-
-            Button {
-                modal = .updatePassword
-            } label: {
-                FormRow(image: Image(systemName: "key.2.on.ring.fill"), color: .gray) {
-                    Text("Change Password")
-                }
-            }
-        } footer: {
-            Text("Your backups are protected with encryption.")
         }
     }
 

@@ -5,20 +5,6 @@ import Testing
 @MainActor
 struct LightweightViewModelCoverageTests {
     @Test
-    func backupCreateViewModel_exposesStrings() {
-        let sut = BackupCreateViewModel()
-
-        #expect(sut.strings.homeTitle.isEmpty == false)
-        #expect(sut.strings.backupPasswordSectionTitle.isEmpty == false)
-        #expect(sut.strings.backupPasswordCreateTitle.isEmpty == false)
-        #expect(sut.strings.backupPasswordUpdateTitle.isEmpty == false)
-        #expect(sut.strings.backupPasswordExportTitle.isEmpty == false)
-        #expect(sut.strings.backupPasswordLoadingTitle.isEmpty == false)
-        #expect(sut.strings.backupPasswordErrorTitle.isEmpty == false)
-        #expect(sut.strings.backupPasswordErrorDetail.isEmpty == false)
-    }
-
-    @Test
     func backupRestoreViewModel_exposesStrings() {
         let sut = BackupRestoreViewModel()
 

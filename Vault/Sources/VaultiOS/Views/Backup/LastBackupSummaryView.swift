@@ -5,6 +5,8 @@ import VaultFeed
 
 struct LastBackupSummaryView: View {
     var lastBackup: VaultBackupEvent?
+    /// Injectable so snapshots can pin the staleness calculation.
+    var now: Date = .init()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -56,7 +58,7 @@ struct LastBackupSummaryView: View {
     private var accentColor: Color {
         guard let lastBackup else { return Color.red }
 
-        let daysSinceBackup = Calendar.current.dateComponents([.day], from: lastBackup.backupDate, to: Date())
+        let daysSinceBackup = Calendar.current.dateComponents([.day], from: lastBackup.backupDate, to: now)
             .day ?? Int.max
 
         if daysSinceBackup < 7 {
