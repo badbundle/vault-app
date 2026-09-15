@@ -1,50 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "backupCreate.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Backup"
-          }
-        }
-      }
-    },
-    "backupHome.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Backups"
-          }
-        }
-      }
-    },
-    "backupPasswordState.create.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Create Backup Password"
-          }
-        }
-      }
-    },
-    "backupPasswordState.export.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Share Backup Password"
-          }
-        }
-      }
-    },
     "backupPasswordState.import.title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -52,61 +8,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Import Different Backup Password"
-          }
-        }
-      }
-    },
-    "backupPasswordState.loading.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Locked"
-          }
-        }
-      }
-    },
-    "backupPasswordState.retrieveError.detail" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unable to fetch backup password information"
-          }
-        }
-      }
-    },
-    "backupPasswordState.retrieveError.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Authentication Failure"
-          }
-        }
-      }
-    },
-    "backupPasswordState.section.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Encryption Key"
-          }
-        }
-      }
-    },
-    "backupPasswordState.update.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Change Backup Password"
           }
         }
       }
