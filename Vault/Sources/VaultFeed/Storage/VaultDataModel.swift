@@ -42,6 +42,15 @@ public final class VaultDataModel {
         }
     }
 
+    /// Pluralized count of the items the feed is currently showing.
+    ///
+    /// Counts only what the feed displays: items hidden behind a search
+    /// passphrase are excluded by the store query and must stay that way, so
+    /// this never reveals that hidden items exist.
+    public var itemsCountDescription: String {
+        localized(key: "feedViewModel.searching.title.\(items.count)")
+    }
+
     public var filteringByTagsDescription: String {
         localized(key: "feed.searching.filteringByTags.\(itemsFilteringByTags.count)")
     }
