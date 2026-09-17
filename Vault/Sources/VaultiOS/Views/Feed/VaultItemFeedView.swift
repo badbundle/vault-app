@@ -88,9 +88,6 @@ public struct VaultItemFeedView<
                     .padding(.horizontal)
             }
             .padding(.vertical, 8)
-            // The grid scrolls underneath this inset, so the bar needs a
-            // surface of its own to stay legible over passing content.
-            .background { Rectangle().fill(.bar) }
             .animation(.snappy, value: state.isEditing)
             .animation(.snappy, value: dataModel.isSearching)
             .animation(.snappy, value: dataModel.itemsFilteringByTags)
@@ -164,6 +161,12 @@ public struct VaultItemFeedView<
             }
         }
         .frame(minHeight: 44)
+        // The status row carries its own surface; the tag pills above stay
+        // outside it, sitting directly on the content.
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color.primary.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
@@ -194,29 +197,22 @@ public struct VaultItemFeedView<
     /// Describes the active tag filters, or `nil` when none are applied.
     ///
     /// The filter pills scroll horizontally, so an active tag can sit
-    /// off-screen. Naming it keeps that state visible. Only one name fits
-    /// beside the item count and the Clear/Edit buttons — two already
-    /// truncate mid-word — so past that this falls back to the count.
+    /// off-screen; naming it keeps that state visible. Only a single name
+    /// fits beside the item count and the Clear/Edit buttons, so past one
+    /// filter this falls back to the bare count.
     private var filterDescription: String? {
-        let maximumNamedFilters = 1
         let activeIDs = dataModel.itemsFilteringByTags
         guard activeIDs.isNotEmpty else { return nil }
-
-        guard activeIDs.count <= maximumNamedFilters else {
-            return dataModel.filteringByTagsDescription
+        guard activeIDs.count == 1, let activeID = activeIDs.first else {
+            return "\(activeIDs.count)"
         }
 
-        let names = dataModel.allTags
-            .filter { activeIDs.contains($0.id) }
-            .map { $0.name.isBlank ? "Tag" : $0.name }
-
-        // A filtered tag that is no longer in `allTags` would drop out of the
-        // list, so fall back rather than under-report the filter count.
-        guard names.count == activeIDs.count else {
-            return dataModel.filteringByTagsDescription
+        // A filter whose tag is no longer in `allTags` has no name to show.
+        guard let tag = dataModel.allTags.first(where: { $0.id == activeID }) else {
+            return "\(activeIDs.count)"
         }
 
-        return names.formatted(.list(type: .and, width: .narrow))
+        return tag.name.isBlank ? "Tag" : tag.name
     }
 
     private func filterBinding(for tag: VaultItemTag) -> Binding<Bool> {
