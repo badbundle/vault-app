@@ -80,9 +80,7 @@ public struct VaultItemFeedView<
         .autocorrectionDisabled()
         .textInputAutocapitalization(.never)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            // One container so the pills and the bar render as a single
-            // glass pass and can blend when they sit close together.
-            GlassEffectContainer {
+            Group {
                 if verticalSizeClass == .compact {
                     compactFeedBar
                 } else {
@@ -90,9 +88,11 @@ public struct VaultItemFeedView<
                 }
             }
             .padding(.vertical, 6)
+            // Filter changes deliberately don't animate here: fading the
+            // filter name and Clear button out while the glass capsule
+            // morphs reads as the bar lagging behind the tap.
             .animation(.snappy, value: state.isEditing)
             .animation(.snappy, value: dataModel.isSearching)
-            .animation(.snappy, value: dataModel.itemsFilteringByTags)
             .animation(.snappy, value: dataModel.allTags.isEmpty)
         }
     }
@@ -142,35 +142,44 @@ public struct VaultItemFeedView<
     /// Horizontally scrolling row of tag filters.
     private var tagFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack {
-                ForEach(dataModel.allTags) { tag in
-                    // `TagPillView` draws its own capsule — filled when
-                    // selected, outlined when not — which reads far more
-                    // clearly than tinting a bordered button both ways.
-                    // Glass beneath it keeps the pill legible over whatever
-                    // scrolls past. The toggle keeps the button trait and
-                    // selected state that a bare tap gesture would not expose.
-                    Toggle(isOn: filterBinding(for: tag)) {
-                        TagPillView(
-                            tag: tag,
-                            isSelected: dataModel.itemsFilteringByTags.contains(tag.id),
-                        )
-                        .glassEffect(.regular.interactive(), in: .capsule)
-                        .background(feedBarWash, in: .capsule)
-                    }
-                    .id(tag)
-                }
+            // The container lives inside the scroll view on purpose: glass
+            // renders at the container's level, so a container outside the
+            // scroll view would let pills draw past its clip.
+            GlassEffectContainer {
+                pillRow
             }
-            .toggleStyle(.button)
-            .buttonStyle(.plain)
-            .controlSize(.small)
-            .font(.footnote)
-            .padding(.horizontal, verticalSizeClass == .compact ? 0 : 16)
         }
         // Side by side with the bar the scroll view no longer spans the
         // screen, so it must clip or pills would slide underneath the bar.
         .scrollClipDisabled(verticalSizeClass != .compact)
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var pillRow: some View {
+        HStack {
+            ForEach(dataModel.allTags) { tag in
+                // `TagPillView` draws its own capsule — filled when
+                // selected, outlined when not — which reads far more
+                // clearly than tinting a bordered button both ways.
+                // Glass beneath it keeps the pill legible over whatever
+                // scrolls past. The toggle keeps the button trait and
+                // selected state that a bare tap gesture would not expose.
+                Toggle(isOn: filterBinding(for: tag)) {
+                    TagPillView(
+                        tag: tag,
+                        isSelected: dataModel.itemsFilteringByTags.contains(tag.id),
+                    )
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .background(feedBarWash, in: .capsule)
+                }
+                .id(tag)
+            }
+        }
+        .toggleStyle(.button)
+        .buttonStyle(.plain)
+        .controlSize(.small)
+        .font(.footnote)
+        .padding(.horizontal, verticalSizeClass == .compact ? 0 : 16)
     }
 
     /// Item count and the feed-level actions.
@@ -182,34 +191,32 @@ public struct VaultItemFeedView<
 
             Spacer()
 
-            if dataModel.items.isNotEmpty {
+            // The buttons are what give the row its height, so an invisible
+            // zero-width Edit button always sits behind them: the bar stays
+            // the same height whether the feed is empty, filtered to nothing,
+            // or full, without reserving any width when they are gone.
+            ZStack(alignment: .trailing) {
+                editButton
+                    .hidden()
+                    .frame(width: 0)
+
                 HStack(spacing: 8) {
+                    // Clear follows the filter, not the results, so a filter
+                    // that matches nothing can still be cleared from here.
                     if dataModel.itemsFilteringByTags.isNotEmpty, !state.isEditing {
-                        Button {
-                            dataModel.itemsFilteringByTags.removeAll()
-                        } label: {
-                            Label("Clear", systemImage: "tag.slash.fill")
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.secondary)
+                        clearButton
                     }
 
-                    Button {
-                        state.isEditing.toggle()
-                    } label: {
-                        Label(
-                            state.isEditing ? "Done" : "Edit",
-                            systemImage: state.isEditing ? "checkmark" : "pencil",
-                        )
+                    if dataModel.items.isNotEmpty {
+                        editButton
                     }
-                    .buttonStyle(.borderedProminent)
                 }
-                .buttonBorderShape(.capsule)
-                .controlSize(.small)
-                .font(.footnote)
-                .lineLimit(1)
-                .fixedSize()
             }
+            .buttonBorderShape(.capsule)
+            .controlSize(.small)
+            .font(.footnote)
+            .lineLimit(1)
+            .fixedSize()
         }
         // Glass keeps the row legible over the grid scrolling beneath it
         // without the heavy, opaque panel a flat fill would need.
@@ -218,6 +225,28 @@ public struct VaultItemFeedView<
         .glassEffect(.regular, in: .capsule)
         .background(feedBarWash, in: .capsule)
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var clearButton: some View {
+        Button {
+            dataModel.itemsFilteringByTags.removeAll()
+        } label: {
+            Label("Clear", systemImage: "tag.slash.fill")
+        }
+        .buttonStyle(.bordered)
+        .tint(.secondary)
+    }
+
+    private var editButton: some View {
+        Button {
+            state.isEditing.toggle()
+        } label: {
+            Label(
+                state.isEditing ? "Done" : "Edit",
+                systemImage: state.isEditing ? "checkmark" : "pencil",
+            )
+        }
+        .buttonStyle(.borderedProminent)
     }
 
     @ViewBuilder
