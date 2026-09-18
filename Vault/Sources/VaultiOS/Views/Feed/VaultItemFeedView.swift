@@ -110,7 +110,7 @@ public struct VaultItemFeedView<
 
     /// Tag filters stacked above the status bar, for regular-height layouts.
     private var regularFeedBar: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             if dataModel.allTags.isNotEmpty {
                 tagFilterBar
             }
@@ -147,6 +147,10 @@ public struct VaultItemFeedView<
             // scroll view would let pills draw past its clip.
             GlassEffectContainer {
                 pillRow
+                    // The container clips to its bounds, and the pill stroke
+                    // straddles the capsule edge, so give it room above and
+                    // below or the top and bottom of the border get shaved.
+                    .padding(.vertical, 2)
             }
         }
         // Side by side with the bar the scroll view no longer spans the
