@@ -11,6 +11,7 @@ struct VaultListView<
     var viewGenerator: Generator
     var copyActionHandler: any VaultItemCopyActionHandler
     var previewActionHandler: any VaultItemPreviewActionHandler
+    @Binding var pendingOpenItemDetail: Identifier<VaultItem>?
     let openDetailSubject = PassthroughSubject<VaultItemEncryptionPayload, Never>()
 
     init(
@@ -18,11 +19,13 @@ struct VaultListView<
         viewGenerator: Generator,
         copyActionHandler: any VaultItemCopyActionHandler,
         previewActionHandler: any VaultItemPreviewActionHandler,
+        pendingOpenItemDetail: Binding<Identifier<VaultItem>?> = .constant(nil),
     ) {
         self.localSettings = localSettings
         self.viewGenerator = viewGenerator
         self.copyActionHandler = copyActionHandler
         self.previewActionHandler = previewActionHandler
+        _pendingOpenItemDetail = pendingOpenItemDetail
     }
 
     @Environment(VaultDataModel.self) private var dataModel
@@ -112,6 +115,13 @@ struct VaultListView<
         }
         .onAppear {
             viewGenerator.didAppear()
+            openPendingItemDetailIfPossible()
+        }
+        .onChange(of: pendingOpenItemDetail) { _, _ in
+            openPendingItemDetailIfPossible()
+        }
+        .onChange(of: dataModel.items.map(\.id)) { _, _ in
+            openPendingItemDetailIfPossible()
         }
     }
 
@@ -137,5 +147,14 @@ struct VaultListView<
                 }
             }
         }
+    }
+
+    private func openPendingItemDetailIfPossible() {
+        guard let id = pendingOpenItemDetail,
+              let item = dataModel.code(id: id)
+        else { return }
+
+        pendingOpenItemDetail = nil
+        modal = .detail(id, item, nil)
     }
 }

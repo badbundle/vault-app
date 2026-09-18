@@ -12,7 +12,7 @@ import WidgetKit
 /// ```
 public struct OTPWidget: Widget {
     /// Stable kind identifier used by `WidgetCenter` to reload timelines.
-    public static let kind = "com.badbundle.vault.OTPWidget"
+    public nonisolated static let kind = "com.badbundle.vault.OTPWidget"
 
     public init() {}
 
