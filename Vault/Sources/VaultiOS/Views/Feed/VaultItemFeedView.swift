@@ -100,21 +100,22 @@ public struct VaultItemFeedView<
         ScrollView(.horizontal, showsIndicators: false) {
             HStack {
                 ForEach(dataModel.allTags) { tag in
+                    // `TagPillView` draws its own capsule — filled when
+                    // selected, outlined when not — which reads far more
+                    // clearly than tinting a bordered button both ways.
+                    // The toggle keeps the button trait and selected state
+                    // that a bare tap gesture would not expose.
                     Toggle(isOn: filterBinding(for: tag)) {
-                        Label {
-                            Text(tag.name.isBlank ? "Tag" : tag.name)
-                        } icon: {
-                            TagIconView(iconName: tag.iconName)
-                        }
+                        TagPillView(
+                            tag: tag,
+                            isSelected: dataModel.itemsFilteringByTags.contains(tag.id),
+                        )
                     }
                     .id(tag)
-                    .tint(tag.color.color)
                 }
             }
             .toggleStyle(.button)
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.capsule)
-            .controlSize(.small)
+            .buttonStyle(.plain)
             .font(.footnote)
             .padding(.horizontal)
         }
