@@ -243,6 +243,64 @@ final class VaultItemFeedViewSnapshotTests {
         assertSnapshot(of: sut, as: .image)
     }
 
+    /// A single active filter is named, so a tag scrolled out of the pill row
+    /// is still identifiable from the status label.
+    @Test
+    func unifiedBar_singleFilterIsNamed() async {
+        let store = VaultStoreStub()
+        let tagStore = VaultTagStoreStub()
+        let tag1Id = Identifier<VaultItemTag>()
+        tagStore.retrieveTagsHandler = {
+            [
+                VaultItemTag(id: tag1Id, name: "work"),
+                VaultItemTag(id: .init(), name: "personal", color: .tagDefault),
+                VaultItemTag(id: .init(), name: "archive", color: .gray),
+            ]
+        }
+        store.retrieveHandler = { _ in
+            .init(items: [uniqueVaultItem(), uniqueVaultItem()])
+        }
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: tagStore)
+        await dataModel.reloadData()
+
+        let sut = makeSUT(dataModel: dataModel)
+            .framedForTest()
+
+        dataModel.itemsFilteringByTags = [tag1Id]
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// Past one active filter the names would only truncate, so the label
+    /// falls back to the pluralized count.
+    @Test
+    func unifiedBar_multipleFiltersFallBackToCount() async {
+        let store = VaultStoreStub()
+        let tagStore = VaultTagStoreStub()
+        let tag1Id = Identifier<VaultItemTag>()
+        let tag2Id = Identifier<VaultItemTag>()
+        let tag3Id = Identifier<VaultItemTag>()
+        tagStore.retrieveTagsHandler = {
+            [
+                VaultItemTag(id: tag1Id, name: "work"),
+                VaultItemTag(id: tag2Id, name: "personal", color: .tagDefault),
+                VaultItemTag(id: tag3Id, name: "archive", color: .gray),
+            ]
+        }
+        store.retrieveHandler = { _ in
+            .init(items: [uniqueVaultItem(), uniqueVaultItem()])
+        }
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: tagStore)
+        await dataModel.reloadData()
+
+        let sut = makeSUT(dataModel: dataModel)
+            .framedForTest()
+
+        dataModel.itemsFilteringByTags = [tag1Id, tag2Id, tag3Id]
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
     @Test
     func unifiedBar_narrowWidth_buttonsDoNotWrap() async {
         let store = VaultStoreStub()

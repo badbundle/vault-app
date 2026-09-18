@@ -100,21 +100,22 @@ public struct VaultItemFeedView<
         ScrollView(.horizontal, showsIndicators: false) {
             HStack {
                 ForEach(dataModel.allTags) { tag in
+                    // `TagPillView` draws its own capsule — filled when
+                    // selected, outlined when not — which reads far more
+                    // clearly than tinting a bordered button both ways.
+                    // The toggle keeps the button trait and selected state
+                    // that a bare tap gesture would not expose.
                     Toggle(isOn: filterBinding(for: tag)) {
-                        Label {
-                            Text(tag.name.isBlank ? "Tag" : tag.name)
-                        } icon: {
-                            TagIconView(iconName: tag.iconName)
-                        }
+                        TagPillView(
+                            tag: tag,
+                            isSelected: dataModel.itemsFilteringByTags.contains(tag.id),
+                        )
                     }
                     .id(tag)
-                    .tint(tag.color.color)
                 }
             }
             .toggleStyle(.button)
-            .buttonStyle(.bordered)
-            .buttonBorderShape(.capsule)
-            .controlSize(.small)
+            .buttonStyle(.plain)
             .font(.footnote)
             .padding(.horizontal)
         }
@@ -161,6 +162,12 @@ public struct VaultItemFeedView<
             }
         }
         .frame(minHeight: 44)
+        // The status row carries its own surface; the tag pills above stay
+        // outside it, sitting directly on the content.
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color.primary.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
@@ -173,23 +180,40 @@ public struct VaultItemFeedView<
             )
             .lineLimit(1)
         } else {
-            let count = dataModel.items.count
-            let itemText = count == 1 ? "item" : "items"
-            let filterCount = dataModel.itemsFilteringByTags.count
-
             HStack(spacing: 4) {
                 Image(systemName: "key.horizontal")
-                Text("\(count) \(itemText)")
+                Text(dataModel.itemsCountDescription)
 
-                if filterCount > 0 {
+                if let filterDescription {
                     Text("•")
                     Image(systemName: "tag.fill")
                         .font(.caption)
-                    Text("\(filterCount)")
+                    Text(filterDescription)
                 }
             }
             .lineLimit(1)
         }
+    }
+
+    /// Describes the active tag filters, or `nil` when none are applied.
+    ///
+    /// The filter pills scroll horizontally, so an active tag can sit
+    /// off-screen; naming it keeps that state visible. Only a single name
+    /// fits beside the item count and the Clear/Edit buttons, so past one
+    /// filter this falls back to the bare count.
+    private var filterDescription: String? {
+        let activeIDs = dataModel.itemsFilteringByTags
+        guard activeIDs.isNotEmpty else { return nil }
+        guard activeIDs.count == 1, let activeID = activeIDs.first else {
+            return "\(activeIDs.count)"
+        }
+
+        // A filter whose tag is no longer in `allTags` has no name to show.
+        guard let tag = dataModel.allTags.first(where: { $0.id == activeID }) else {
+            return "\(activeIDs.count)"
+        }
+
+        return tag.name.isBlank ? "Tag" : tag.name
     }
 
     private func filterBinding(for tag: VaultItemTag) -> Binding<Bool> {
