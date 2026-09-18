@@ -88,11 +88,13 @@ public struct VaultItemFeedView<
                 }
             }
             .padding(.vertical, 6)
-            // Filter changes deliberately don't animate here: fading the
-            // filter name and Clear button out while the glass capsule
-            // morphs reads as the bar lagging behind the tap.
             .animation(.snappy, value: state.isEditing)
             .animation(.snappy, value: dataModel.isSearching)
+            // Filter changes get a much shorter spring than the rest: the
+            // default one fades the filter name and Clear button out over
+            // ~0.4s while the glass capsule morphs, which reads as the bar
+            // lagging behind the tap rather than animating with it.
+            .animation(.snappy(duration: 0.2), value: dataModel.itemsFilteringByTags)
             .animation(.snappy, value: dataModel.allTags.isEmpty)
         }
     }
@@ -183,7 +185,10 @@ public struct VaultItemFeedView<
         .buttonStyle(.plain)
         .controlSize(.small)
         .font(.footnote)
-        .padding(.horizontal, verticalSizeClass == .compact ? 0 : 16)
+        // Beside the bar the scroll view clips, so the row keeps a hair of
+        // inset or the first pill's stroke is shaved at the leading edge;
+        // stacked, it spans the screen and carries the normal margin.
+        .padding(.horizontal, verticalSizeClass == .compact ? 2 : 16)
     }
 
     /// Item count and the feed-level actions.
