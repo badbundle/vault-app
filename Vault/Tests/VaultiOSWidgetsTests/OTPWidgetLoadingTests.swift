@@ -137,7 +137,7 @@ private enum WidgetTestError: Error, Equatable {
 private final class StoreFactoryScript: @unchecked Sendable {
     enum Result {
         case failure(WidgetTestError)
-        case success(any VaultStoreReader)
+        case success(any WidgetVaultLoader.WidgetStore)
     }
 
     private var results: [Result]
@@ -147,7 +147,7 @@ private final class StoreFactoryScript: @unchecked Sendable {
         self.results = results
     }
 
-    func makeStore() throws -> any VaultStoreReader {
+    func makeStore() throws -> any WidgetVaultLoader.WidgetStore {
         openCallCount += 1
         let result = results.isEmpty ? .failure(.open) : results.removeFirst()
         switch result {
@@ -159,9 +159,10 @@ private final class StoreFactoryScript: @unchecked Sendable {
     }
 }
 
-private actor FakeVaultStoreReader: VaultStoreReader {
+private actor FakeVaultStoreReader: VaultStoreHOTPIncrementer, VaultStoreReader {
     private var results: [Result<VaultRetrievalResult<VaultItem>, WidgetTestError>]
     private(set) var retrieveCallCount = 0
+    private(set) var incrementedIDs = [Identifier<VaultItem>]()
 
     init(results: [Result<VaultRetrievalResult<VaultItem>, WidgetTestError>]) {
         self.results = results
@@ -179,6 +180,10 @@ private actor FakeVaultStoreReader: VaultStoreReader {
         case let .failure(error):
             throw error
         }
+    }
+
+    func incrementCounter(id: Identifier<VaultItem>) async throws {
+        incrementedIDs.append(id)
     }
 
     var hasAnyItems: Bool {

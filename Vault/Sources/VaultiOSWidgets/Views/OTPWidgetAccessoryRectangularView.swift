@@ -46,7 +46,9 @@ struct OTPWidgetAccessoryRectangularView: View {
     private var codeState: OTPCodeState {
         switch snapshot {
         case let .totp(state): .visible(state.code)
-        case let .hotp(state): .visible(state.code)
+        // The stored counter may already be stale, so the widget shows
+        // masked digits until the user advances it in the app.
+        case let .hotp(state): .locked(code: String(repeating: "0", count: state.digits))
         case .unavailable, .placeholder: .notReady
         }
     }

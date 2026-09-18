@@ -122,7 +122,9 @@ struct OTPWidgetSmallView: View {
     private var codeState: OTPCodeState {
         switch snapshot {
         case let .totp(state): .visible(state.code)
-        case let .hotp(state): .visible(state.code)
+        // The persisted counter may already be stale, so the widget masks the
+        // digits until the user taps to advance it.
+        case let .hotp(state): .locked(code: String(repeating: "0", count: state.digits))
         case .unavailable, .placeholder: .notReady
         }
     }
