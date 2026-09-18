@@ -328,6 +328,51 @@ final class VaultItemFeedViewSnapshotTests {
 
         assertSnapshot(of: sut, as: .image)
     }
+
+    /// In compact height the tag row and the status bar share one row so the
+    /// grid keeps as much of the short screen as possible.
+    @Test
+    func landscape_collapsesToSingleRow() async {
+        let store = VaultStoreStub()
+        let tagStore = VaultTagStoreStub()
+        let tag1Id = Identifier<VaultItemTag>()
+        tagStore.retrieveTagsHandler = {
+            [
+                VaultItemTag(id: tag1Id, name: "work"),
+                VaultItemTag(id: .init(), name: "personal", color: .tagDefault),
+                VaultItemTag(id: .init(), name: "archive", color: .gray),
+            ]
+        }
+        store.retrieveHandler = { _ in
+            .init(items: [uniqueVaultItem(), uniqueVaultItem()])
+        }
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: tagStore)
+        await dataModel.reloadData()
+
+        let sut = makeSUT(dataModel: dataModel)
+            .framedForLandscapeTest()
+
+        dataModel.itemsFilteringByTags = [tag1Id]
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// Without tags the compact row is just the status bar, hugging the
+    /// trailing edge where it sits when tags are present.
+    @Test
+    func landscape_noTags_barOnly() async {
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in
+            .init(items: [uniqueVaultItem()])
+        }
+        let dataModel = anyVaultDataModel(vaultStore: store)
+        await dataModel.reloadData()
+
+        let sut = makeSUT(dataModel: dataModel)
+            .framedForLandscapeTest()
+
+        assertSnapshot(of: sut, as: .image)
+    }
 }
 
 // MARK: - Helpers

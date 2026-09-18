@@ -6,13 +6,24 @@ struct TagPillView: View {
     var tag: VaultItemTag
     var isSelected: Bool = false
 
+    @Environment(\.controlSize) private var controlSize
+
+    /// Small controls get tighter insets so a row of pills sits level with
+    /// small capsule buttons.
+    private var isCompact: Bool {
+        switch controlSize {
+        case .mini, .small: true
+        default: false
+        }
+    }
+
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: isCompact ? 8 : 12) {
             TagIconView(iconName: tag.iconName)
             Text(tag.name.isBlank ? "Tag" : tag.name)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, isCompact ? 10 : 12)
+        .padding(.vertical, isCompact ? 5 : 8)
         .background(
             Capsule(style: .circular)
                 .fill(tag.fillColor(isSelected: isSelected))
