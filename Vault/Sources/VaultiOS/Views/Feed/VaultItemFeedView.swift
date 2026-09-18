@@ -15,6 +15,7 @@ public struct VaultItemFeedView<
 
     @Environment(VaultInjector.self) private var injector
     @Environment(VaultDataModel.self) private var dataModel
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var state: VaultItemFeedState
 
     public init(
@@ -79,48 +80,115 @@ public struct VaultItemFeedView<
         .autocorrectionDisabled()
         .textInputAutocapitalization(.never)
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            VStack(spacing: 8) {
-                if dataModel.allTags.isNotEmpty {
-                    tagFilterBar
+            Group {
+                if verticalSizeClass == .compact {
+                    compactFeedBar
+                } else {
+                    regularFeedBar
                 }
-
-                bottomBar
-                    .padding(.horizontal)
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
             .animation(.snappy, value: state.isEditing)
             .animation(.snappy, value: dataModel.isSearching)
-            .animation(.snappy, value: dataModel.itemsFilteringByTags)
+            // Filter changes get a much shorter spring than the rest: the
+            // default one fades the filter name and Clear button out over
+            // ~0.4s while the glass capsule morphs, which reads as the bar
+            // lagging behind the tap rather than animating with it.
+            .animation(.snappy(duration: 0.2), value: dataModel.itemsFilteringByTags)
             .animation(.snappy, value: dataModel.allTags.isEmpty)
         }
     }
 
-    /// Horizontally scrolling row of tag filters, presented above the bottom bar.
+    /// Plain regular glass lets tile text show straight through the bar, so
+    /// a wash of the background colour sits behind the glass to keep it
+    /// legible over busy content while keeping the glass edge and lensing.
+    ///
+    /// This is a backdrop rather than `Glass.tint` because a tinted glass
+    /// renders as an empty image under `CALayer.render(in:)`, which blanks
+    /// every snapshot test that includes the feed.
+    private var feedBarWash: Color {
+        Color(.systemBackground).opacity(0.85)
+    }
+
+    /// Tag filters stacked above the status bar, for regular-height layouts.
+    private var regularFeedBar: some View {
+        VStack(spacing: 8) {
+            if dataModel.allTags.isNotEmpty {
+                tagFilterBar
+            }
+
+            bottomBar
+                .padding(.horizontal)
+        }
+    }
+
+    /// Tag filters and the status bar side by side, for compact-height
+    /// layouts (iPhone landscape) where two rows would crowd out the grid.
+    private var compactFeedBar: some View {
+        HStack(spacing: 8) {
+            if dataModel.allTags.isNotEmpty {
+                tagFilterBar
+            } else {
+                // Keep the bar trailing where it sits when tags are present.
+                Spacer()
+            }
+
+            // Hugging its content collapses the bar's internal spacer so the
+            // tag row takes whatever width is left.
+            bottomBar
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.horizontal)
+    }
+
+    /// Horizontally scrolling row of tag filters.
     private var tagFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack {
-                ForEach(dataModel.allTags) { tag in
-                    // `TagPillView` draws its own capsule — filled when
-                    // selected, outlined when not — which reads far more
-                    // clearly than tinting a bordered button both ways.
-                    // The toggle keeps the button trait and selected state
-                    // that a bare tap gesture would not expose.
-                    Toggle(isOn: filterBinding(for: tag)) {
-                        TagPillView(
-                            tag: tag,
-                            isSelected: dataModel.itemsFilteringByTags.contains(tag.id),
-                        )
-                    }
-                    .id(tag)
-                }
+            // The container lives inside the scroll view on purpose: glass
+            // renders at the container's level, so a container outside the
+            // scroll view would let pills draw past its clip.
+            GlassEffectContainer {
+                pillRow
+                    // The container clips to its bounds, and the pill stroke
+                    // straddles the capsule edge, so give it room above and
+                    // below or the top and bottom of the border get shaved.
+                    .padding(.vertical, 2)
             }
-            .toggleStyle(.button)
-            .buttonStyle(.plain)
-            .font(.footnote)
-            .padding(.horizontal)
         }
-        .scrollClipDisabled()
+        // Side by side with the bar the scroll view no longer spans the
+        // screen, so it must clip or pills would slide underneath the bar.
+        .scrollClipDisabled(verticalSizeClass != .compact)
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var pillRow: some View {
+        HStack {
+            ForEach(dataModel.allTags) { tag in
+                // `TagPillView` draws its own capsule — filled when
+                // selected, outlined when not — which reads far more
+                // clearly than tinting a bordered button both ways.
+                // Glass beneath it keeps the pill legible over whatever
+                // scrolls past. The toggle keeps the button trait and
+                // selected state that a bare tap gesture would not expose.
+                Toggle(isOn: filterBinding(for: tag)) {
+                    TagPillView(
+                        tag: tag,
+                        isSelected: dataModel.itemsFilteringByTags.contains(tag.id),
+                    )
+                    .glassEffect(.regular.interactive(), in: .capsule)
+                    .background(feedBarWash, in: .capsule)
+                }
+                .id(tag)
+            }
+        }
+        .toggleStyle(.button)
+        .buttonStyle(.plain)
+        .controlSize(.small)
+        .font(.footnote)
+        // Beside the bar the scroll view clips, so the row keeps a hair of
+        // inset or the first pill's stroke is shaved at the leading edge;
+        // stacked, it spans the screen and carries the normal margin.
+        .padding(.horizontal, verticalSizeClass == .compact ? 2 : 16)
     }
 
     /// Item count and the feed-level actions.
@@ -132,43 +200,62 @@ public struct VaultItemFeedView<
 
             Spacer()
 
-            if dataModel.items.isNotEmpty {
+            // The buttons are what give the row its height, so an invisible
+            // zero-width Edit button always sits behind them: the bar stays
+            // the same height whether the feed is empty, filtered to nothing,
+            // or full, without reserving any width when they are gone.
+            ZStack(alignment: .trailing) {
+                editButton
+                    .hidden()
+                    .frame(width: 0)
+
                 HStack(spacing: 8) {
+                    // Clear follows the filter, not the results, so a filter
+                    // that matches nothing can still be cleared from here.
                     if dataModel.itemsFilteringByTags.isNotEmpty, !state.isEditing {
-                        Button {
-                            dataModel.itemsFilteringByTags.removeAll()
-                        } label: {
-                            Label("Clear", systemImage: "tag.slash.fill")
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.secondary)
+                        clearButton
                     }
 
-                    Button {
-                        state.isEditing.toggle()
-                    } label: {
-                        Label(
-                            state.isEditing ? "Done" : "Edit",
-                            systemImage: state.isEditing ? "checkmark" : "pencil",
-                        )
+                    if dataModel.items.isNotEmpty {
+                        editButton
                     }
-                    .buttonStyle(.borderedProminent)
                 }
-                .buttonBorderShape(.capsule)
-                .controlSize(.small)
-                .font(.footnote)
-                .lineLimit(1)
-                .fixedSize()
             }
+            .buttonBorderShape(.capsule)
+            .controlSize(.small)
+            .font(.footnote)
+            .lineLimit(1)
+            .fixedSize()
         }
-        .frame(minHeight: 44)
-        // The status row carries its own surface; the tag pills above stay
-        // outside it, sitting directly on the content.
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(Color.primary.opacity(0.05))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        // Glass keeps the row legible over the grid scrolling beneath it
+        // without the heavy, opaque panel a flat fill would need.
+        .padding(.vertical, 6)
+        .padding(.horizontal, 14)
+        .glassEffect(.regular, in: .capsule)
+        .background(feedBarWash, in: .capsule)
         .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    private var clearButton: some View {
+        Button {
+            dataModel.itemsFilteringByTags.removeAll()
+        } label: {
+            Label("Clear", systemImage: "tag.slash.fill")
+        }
+        .buttonStyle(.bordered)
+        .tint(.secondary)
+    }
+
+    private var editButton: some View {
+        Button {
+            state.isEditing.toggle()
+        } label: {
+            Label(
+                state.isEditing ? "Done" : "Edit",
+                systemImage: state.isEditing ? "checkmark" : "pencil",
+            )
+        }
+        .buttonStyle(.borderedProminent)
     }
 
     @ViewBuilder
@@ -289,9 +376,19 @@ public struct VaultItemFeedView<
 
 #Preview {
     let store = VaultStoreStub()
+    let tagStore = VaultTagStoreStub()
+    let workTag = Identifier<VaultItemTag>()
+    tagStore.retrieveTagsHandler = {
+        [
+            VaultItemTag(id: workTag, name: "work"),
+            VaultItemTag(id: .init(), name: "personal", color: .tagDefault),
+            VaultItemTag(id: .init(), name: "archive", color: .gray),
+            VaultItemTag(id: .init(), name: "family", color: .init(color: .purple)),
+        ]
+    }
     let dataModel = VaultDataModel(
         vaultStore: store,
-        vaultTagStore: VaultTagStoreStub(),
+        vaultTagStore: tagStore,
         vaultImporter: VaultStoreImporterMock(),
         vaultDeleter: VaultStoreDeleterMock(),
         vaultKillphraseDeleter: VaultStoreKillphraseDeleterMock(),
@@ -303,34 +400,37 @@ public struct VaultItemFeedView<
         searchPassphraseRehashService: nil,
         backupEventLogger: BackupEventLoggerMock(),
     )
-    store.retrieveHandler = { _ in .init(items: [
-        .init(
-            metadata: .init(
-                id: Identifier<VaultItem>(),
-                created: Date(),
-                updated: Date(),
-                relativeOrder: .min,
-                userDescription: "My Cool Code",
-                tags: [],
-                visibility: .always,
-                searchableLevel: .full,
-                searchPassphrase: nil,
-                killphrase: nil,
-                lockState: .notLocked,
-                color: VaultItemColor(color: .green),
-                showInQuickType: true,
-                previewMode: .titleAndFirstLine,
-            ),
-            item: .otpCode(.init(
-                type: .totp(),
-                data: .init(
-                    secret: .empty(),
-                    accountName: "example@example.com",
-                    issuer: "i",
+    // Enough tiles to scroll under the bar, so the glass has content behind it.
+    let colors: [Color] = [.green, .orange, .blue, .pink, .teal, .indigo, .red, .mint, .brown, .cyan]
+    store.retrieveHandler = { _ in
+        .init(items: colors.enumerated().map { index, color in
+            .init(
+                metadata: .init(
+                    id: Identifier<VaultItem>(),
+                    created: Date(),
+                    updated: Date(),
+                    relativeOrder: .min,
+                    userDescription: "My Cool Code \(index + 1)",
+                    tags: index.isMultiple(of: 2) ? [workTag] : [],
+                    visibility: .always,
+                    searchableLevel: .full,
+                    searchPassphrase: nil,
+                    killphrase: nil,
+                    lockState: .notLocked,
+                    color: VaultItemColor(color: color),
+                    showInQuickType: true,
+                    previewMode: .titleAndFirstLine,
                 ),
-            )),
-        ),
-    ])
+                item: .otpCode(.init(
+                    type: .totp(),
+                    data: .init(
+                        secret: .empty(),
+                        accountName: "example@example.com",
+                        issuer: "i",
+                    ),
+                )),
+            )
+        })
     }
     return VaultItemFeedView(
         localSettings: .init(defaults: .init(userDefaults: .standard)),
@@ -338,15 +438,29 @@ public struct VaultItemFeedView<
         state: VaultItemFeedState(),
     )
     .environment(dataModel)
+    .environment(VaultInjector(
+        clock: EpochClockMock(currentTime: 30),
+        intervalTimer: IntervalTimerImpl(),
+        backupEventLogger: BackupEventLoggerMock(),
+        vaultKeyDeriverFactory: VaultKeyDeriverFactoryImpl(),
+        encryptedVaultDecoder: EncryptedVaultDecoderMock(),
+        autoBackupService: AutoBackupServiceMock(status: .disabled, configuration: .init()),
+        defaults: Defaults(userDefaults: .standard),
+        fileManager: .default,
+    ))
 }
 
 private struct GenericGenerator: VaultItemPreviewViewGenerator {
     func makeVaultPreviewView(
         item _: VaultItem.Payload,
-        metadata _: VaultItem.Metadata,
+        metadata: VaultItem.Metadata,
         behaviour _: VaultItemViewBehaviour,
     ) -> some View {
-        Text("Code")
+        // Solid tiles so the glass bar has something to blur behind it.
+        Text(metadata.userDescription)
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, minHeight: 160)
+            .background(metadata.color?.color ?? .gray, in: .rect(cornerRadius: 12))
     }
 
     func clearViewCache() async {

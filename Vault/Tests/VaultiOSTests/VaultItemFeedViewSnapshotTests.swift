@@ -328,11 +328,162 @@ final class VaultItemFeedViewSnapshotTests {
 
         assertSnapshot(of: sut, as: .image)
     }
+
+    /// In compact height the tag row and the status bar share one row so the
+    /// grid keeps as much of the short screen as possible.
+    @Test
+    func landscape_collapsesToSingleRow() async {
+        let store = VaultStoreStub()
+        let tagStore = VaultTagStoreStub()
+        let tag1Id = Identifier<VaultItemTag>()
+        tagStore.retrieveTagsHandler = {
+            [
+                VaultItemTag(id: tag1Id, name: "work"),
+                VaultItemTag(id: .init(), name: "personal", color: .tagDefault),
+                VaultItemTag(id: .init(), name: "archive", color: .gray),
+            ]
+        }
+        store.retrieveHandler = { _ in
+            .init(items: [uniqueVaultItem(), uniqueVaultItem()])
+        }
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: tagStore)
+        await dataModel.reloadData()
+
+        let sut = makeSUT(dataModel: dataModel)
+            .framedForLandscapeTest()
+
+        dataModel.itemsFilteringByTags = [tag1Id]
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// Without tags the compact row is just the status bar, hugging the
+    /// trailing edge where it sits when tags are present.
+    @Test
+    func landscape_noTags_barOnly() async {
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in
+            .init(items: [uniqueVaultItem()])
+        }
+        let dataModel = anyVaultDataModel(vaultStore: store)
+        await dataModel.reloadData()
+
+        let sut = makeSUT(dataModel: dataModel)
+            .framedForLandscapeTest()
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// With more pills than fit beside the bar, the row must clip at its own
+    /// edge rather than let pills run on underneath the bar.
+    @Test
+    func landscape_overflowingTagsClipBeforeBar() async {
+        let store = VaultStoreStub()
+        let tagStore = VaultTagStoreStub()
+        tagStore.retrieveTagsHandler = {
+            ["work", "personal", "archive", "family", "finance", "travel", "health", "projects"]
+                .map { VaultItemTag(id: .init(), name: $0) }
+        }
+        store.retrieveHandler = { _ in
+            .init(items: [uniqueVaultItem()])
+        }
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: tagStore)
+        await dataModel.reloadData()
+
+        let sut = makeSUT(dataModel: dataModel)
+            .framedForLandscapeTest()
+            .background(Color.gray)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// The buttons size the bar, so hiding them on an empty feed must not
+    /// change its height. Compare the bar's top edge across the pair.
+    @Test
+    func bar_keepsHeightWithoutEditButton() async {
+        let (empty, populated) = await makeEmptyAndPopulatedDataModels()
+
+        assertSnapshot(
+            of: makeSUT(dataModel: empty).framedForTest(height: 240).background(Color.gray),
+            as: .image,
+            named: "noItems",
+        )
+        assertSnapshot(
+            of: makeSUT(dataModel: populated).framedForTest(height: 240).background(Color.gray),
+            as: .image,
+            named: "withItems",
+        )
+    }
+
+    /// A filter that matches nothing hides Edit but must keep Clear, or the
+    /// only way out is scrolling back to the pill; the bar keeps its height.
+    @Test
+    func bar_filterWithNoResultsKeepsClear() async {
+        let store = VaultStoreStub()
+        let tagStore = VaultTagStoreStub()
+        let tag1Id = Identifier<VaultItemTag>()
+        tagStore.retrieveTagsHandler = {
+            [VaultItemTag(id: tag1Id, name: "work"), VaultItemTag(id: .init(), name: "personal")]
+        }
+        store.retrieveHandler = { query in
+            query.filterTags.isEmpty ? .init(items: [uniqueVaultItem()]) : .init(items: [])
+        }
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: tagStore)
+        await dataModel.reloadData()
+
+        dataModel.itemsFilteringByTags = [tag1Id]
+        await dataModel.reloadItems()
+
+        let sut = makeSUT(dataModel: dataModel)
+            .framedForTest(height: 240)
+            .background(Color.gray)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// Same guarantee for the single-row landscape layout, where the pills
+    /// sit beside the bar and would show any height change.
+    @Test
+    func landscape_barKeepsHeightWithoutEditButton() async {
+        let (empty, populated) = await makeEmptyAndPopulatedDataModels()
+
+        assertSnapshot(
+            of: makeSUT(dataModel: empty).framedForLandscapeTest().background(Color.gray),
+            as: .image,
+            named: "noItems",
+        )
+        assertSnapshot(
+            of: makeSUT(dataModel: populated).framedForLandscapeTest().background(Color.gray),
+            as: .image,
+            named: "withItems",
+        )
+    }
 }
 
 // MARK: - Helpers
 
 extension VaultItemFeedViewSnapshotTests {
+    /// Two feeds sharing one tag, one with nothing to edit and one with an
+    /// item, so a pair of snapshots differs only by the bar's buttons.
+    private func makeEmptyAndPopulatedDataModels() async -> (empty: VaultDataModel, populated: VaultDataModel) {
+        let tagStore = VaultTagStoreStub()
+        tagStore.retrieveTagsHandler = {
+            [VaultItemTag(id: .init(), name: "work"), VaultItemTag(id: .init(), name: "personal")]
+        }
+
+        let emptyStore = VaultStoreStub()
+        emptyStore.retrieveHandler = { _ in .init(items: []) }
+        let empty = anyVaultDataModel(vaultStore: emptyStore, vaultTagStore: tagStore)
+        await empty.reloadData()
+
+        let populatedStore = VaultStoreStub()
+        populatedStore.retrieveHandler = { _ in .init(items: [uniqueVaultItem()]) }
+        let populated = anyVaultDataModel(vaultStore: populatedStore, vaultTagStore: tagStore)
+        await populated.reloadData()
+
+        return (empty, populated)
+    }
+
     private func makeSUT(
         dataModel: VaultDataModel,
         state: VaultItemFeedState = VaultItemFeedState(),
