@@ -152,6 +152,9 @@ public struct VaultTagDetailViewModelStrings: Sendable {
     fileprivate init() {}
 
     public let title = localized(key: "tagDetail.title")
+    public let deleteConfirmTitle = localized(key: "tagDetail.action.delete.confirm.title")
+    public let deleteConfirmSubtitle = localized(key: "tagDetail.action.delete.confirm.subtitle")
+    public let deleteItemTitle = localized(key: "tagDetail.action.delete.entity.title")
     public let saveErrorTitle = localized(key: "tagDetail.saveError.title")
     public let deleteErrorTitle = localized(key: "tagDetail.deleteError.title")
     public let genericErrorDetail = localized(key: "tagDetail.genericError.detail")

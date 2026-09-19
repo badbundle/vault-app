@@ -863,6 +863,39 @@
         }
       }
     },
+    "tagDetail.action.delete.confirm.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This will permanently delete this tag. Items using it will no longer be tagged with it."
+          }
+        }
+      }
+    },
+    "tagDetail.action.delete.confirm.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Tag?"
+          }
+        }
+      }
+    },
+    "tagDetail.action.delete.entity.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete This Tag Forever"
+          }
+        }
+      }
+    },
     "tagDetail.deleteError.title" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -24,6 +24,7 @@ final class VaultTagFeedViewSnapshotTests {
                 anyVaultItemTag(name: "Barcellos", color: .tagDefault, iconName: "person.fill"),
                 anyVaultItemTag(name: "Zoo", color: .gray, iconName: "tag.fill"),
                 anyVaultItemTag(name: "Crayfish", color: .gray, iconName: "tag.fill"),
+                anyVaultItemTag(name: "Snow", color: .white, iconName: "snowflake"),
             ]
         }
         let sut = await makeSUT(vaultTagStore: vaultTagStore)
