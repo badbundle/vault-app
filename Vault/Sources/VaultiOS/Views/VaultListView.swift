@@ -38,6 +38,7 @@ struct VaultListView<
 
     enum Modal: Hashable, IdentifiableSelf {
         case detail(Identifier<VaultItem>, VaultItem, DerivedEncryptionKey?)
+        case choosingItemType
         case creatingItem(CreatingItem)
     }
 
@@ -50,26 +51,8 @@ struct VaultListView<
         )
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        modal = .creatingItem(.otpCode)
-                    } label: {
-                        LabeledContent {
-                            Text("Code")
-                        } label: {
-                            Image(systemName: "qrcode")
-                        }
-                    }
-
-                    Button {
-                        modal = .creatingItem(.secureNote)
-                    } label: {
-                        LabeledContent {
-                            Text("Note")
-                        } label: {
-                            Image(systemName: "text.alignleft")
-                        }
-                    }
+                Button {
+                    modal = .choosingItemType
                 } label: {
                     Label("Add Item", systemImage: "plus")
                 }
@@ -89,6 +72,14 @@ struct VaultListView<
                         navigationPath: $navigationPath,
                     )
                 }
+            case .choosingItemType:
+                // A `Modal` case rather than its own `.sheet`: presenting
+                // the create flow from the picker's `onDismiss` is dropped
+                // by SwiftUI often enough to be unusable, whereas changing
+                // the item lets it sequence the dismiss and present itself.
+                CreateItemPickerView { creatingItem in
+                    modal = .creatingItem(creatingItem)
+                }
             case let .creatingItem(creatingItem):
                 NavigationStack(path: $navigationPath) {
                     VaultDetailCreateView(
@@ -98,6 +89,10 @@ struct VaultListView<
                         navigationPath: $navigationPath,
                     )
                 }
+                // Explicit because this sheet follows the picker: without
+                // it the picker's fitted detent leaks into this presentation
+                // and a tap on the sheet's empty space dismisses it.
+                .presentationDetents([.large])
             }
         }
         .onReceive(openDetailSubject, perform: { vaultItemEncryptedPayload in
