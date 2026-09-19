@@ -31,20 +31,11 @@ struct VaultDetailTagEditView: View {
                         didRemove(tag)
                     }
                 } label: {
-                    HStack {
-                        Label {
-                            Text(tag.name)
-                        } icon: {
-                            Image(systemName: tag.iconName)
-                        }
-                        Spacer()
+                    tagRow(tag) {
                         Image(systemName: "minus.circle.fill")
                             .foregroundStyle(.red)
                     }
-                    .foregroundStyle(tag.listRowForegroundColor())
-                    .contentShape(Rectangle())
                 }
-                .listRowBackground(tag.listRowBackgroundColor())
                 .id(tag.id)
             }
 
@@ -70,20 +61,11 @@ struct VaultDetailTagEditView: View {
                         didAdd(tag)
                     }
                 } label: {
-                    HStack {
-                        Label {
-                            Text(tag.name)
-                        } icon: {
-                            Image(systemName: tag.iconName)
-                        }
-                        Spacer()
+                    tagRow(tag) {
                         Image(systemName: "plus.circle.fill")
                             .foregroundStyle(.green)
                     }
-                    .foregroundStyle(tag.listRowForegroundColor())
-                    .contentShape(Rectangle())
                 }
-                .listRowBackground(tag.listRowBackgroundColor())
                 .id(tag.id)
             }
 
@@ -99,5 +81,15 @@ struct VaultDetailTagEditView: View {
         } header: {
             Text("Available Tags")
         }
+    }
+
+    private func tagRow(_ tag: VaultItemTag, @ViewBuilder accessory: @escaping () -> some View) -> some View {
+        FormRow(image: Image(systemName: tag.iconName), color: tag.prominentIconColor()) {
+            Text(tag.name)
+                .foregroundStyle(Color.primary)
+            Spacer()
+            accessory()
+        }
+        .contentShape(Rectangle())
     }
 }

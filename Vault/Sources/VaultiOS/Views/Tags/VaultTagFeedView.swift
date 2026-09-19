@@ -28,6 +28,8 @@ struct VaultTagFeedView: View {
                 if dataModel.allTags.isEmpty {
                     ContentUnavailableView {
                         Label(viewModel.strings.noTagsTitle, systemImage: "tag")
+                    } description: {
+                        Text(viewModel.strings.noTagsDescription)
                     }
                 } else {
                     list
@@ -74,16 +76,12 @@ struct VaultTagFeedView: View {
                 Button {
                     modal = .editingTag(tag)
                 } label: {
-                    Label {
+                    FormRow(image: Image(systemName: tag.iconName), color: tag.prominentIconColor()) {
                         Text(tag.name)
-                            .foregroundStyle(tag.listRowForegroundColor())
-                    } icon: {
-                        Image(systemName: tag.iconName)
-                            .foregroundStyle(tag.listRowForegroundColor())
+                            .foregroundStyle(Color.primary)
                     }
                     .contentShape(Rectangle())
                 }
-                .listRowBackground(tag.listRowBackgroundColor())
             }
             .onDelete { indexSet in
                 deleteTag(at: indexSet)

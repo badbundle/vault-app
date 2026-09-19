@@ -35,28 +35,16 @@ extension VaultItemTag {
         readableForegroundColor()
     }
 
-    /// Returns the background color for list row display (subtle tint)
-    func listRowBackgroundColor() -> Color? {
+    /// Returns the fill color for the prominent `FormRow` icon square, which
+    /// draws a white glyph on top.
+    func prominentIconColor() -> Color {
         let baseColor = color.color
-        let brightness = baseColor.percievedBrightness
 
-        // For very light colors (near white), use a neutral gray background instead
-        if brightness > 0.9 {
-            return Color.primary.opacity(0.08)
+        // Near-white fills would hide the white glyph, so fall back to a neutral gray
+        if baseColor.percievedBrightness > 0.9 {
+            return .gray
         }
-        // For very dark colors, use very subtle adaptive tint
-        else if brightness < 0.15 {
-            return Color.primary.opacity(0.06)
-        }
-        // For normal colors, use subtle tint
-        else {
-            return baseColor.opacity(0.12)
-        }
-    }
-
-    /// Returns the foreground color for list row display
-    func listRowForegroundColor() -> Color {
-        readableForegroundColor()
+        return baseColor
     }
 
     /// Returns a foreground color that's guaranteed to be readable
