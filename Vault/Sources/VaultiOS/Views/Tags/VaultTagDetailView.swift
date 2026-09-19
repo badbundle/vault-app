@@ -6,6 +6,7 @@ import VaultFeed
 struct VaultTagDetailView: View {
     @State private var viewModel: VaultTagDetailViewModel
     @State private var selectedColor: Color
+    @State private var isShowingDeleteConfirmation = false
 
     @Environment(\.dismiss) private var dismiss
 
@@ -16,8 +17,8 @@ struct VaultTagDetailView: View {
 
     var body: some View {
         Form {
-            tagNameSection
-            styleSection
+            nameSection
+            iconSection
 
             if viewModel.isExistingItem {
                 deleteSection
@@ -25,12 +26,15 @@ struct VaultTagDetailView: View {
         }
         .navigationTitle(viewModel.strings.title)
         .navigationBarTitleDisplayMode(.inline)
+        .interactiveDismissDisabled(viewModel.isDirty)
         .toolbar {
             if viewModel.isDirty {
                 ToolbarItem(placement: .confirmationAction) {
                     AsyncButton {
                         await viewModel.save()
-                        dismiss()
+                        if viewModel.saveError == nil {
+                            dismiss()
+                        }
                     } label: {
                         Text("Save")
                     } loading: {
@@ -49,94 +53,135 @@ struct VaultTagDetailView: View {
                 }
             }
         }
+        .confirmationDialog(
+            viewModel.strings.deleteConfirmTitle,
+            isPresented: $isShowingDeleteConfirmation,
+            titleVisibility: .visible,
+        ) {
+            Button(viewModel.strings.deleteItemTitle, role: .destructive) {
+                Task {
+                    await viewModel.delete()
+                    if viewModel.deleteError == nil {
+                        dismiss()
+                    }
+                }
+            }
+        } message: {
+            Text(viewModel.strings.deleteConfirmSubtitle)
+        }
+        .alert(
+            currentError?.userTitle ?? localized(key: "action.error.title"),
+            isPresented: isShowingError,
+            presenting: currentError,
+        ) { _ in
+            Button(localized(key: "action.error.confirm.title"), role: .cancel) {}
+        } message: { error in
+            if let description = error.userDescription {
+                Text(description)
+            }
+        }
         .onChange(of: selectedColor.hashValue) { _, _ in
             viewModel.currentTag.color = VaultItemColor(color: selectedColor)
         }
     }
 
-    private var tagNameSection: some View {
-        Section {
-            TextField("My Tag", text: $viewModel.currentTag.name)
-        } header: {
-            Text("Name")
+    private var currentError: PresentationError? {
+        viewModel.saveError ?? viewModel.deleteError
+    }
+
+    private var isShowingError: Binding<Bool> {
+        Binding {
+            currentError != nil
+        } set: { isShowing in
+            if !isShowing {
+                viewModel.clearErrors()
+            }
         }
     }
 
-    private var styleSection: some View {
-        Section {
-            ColorPicker("Color", selection: $selectedColor)
+    /// Mirrors the icon-and-colour header used by the item detail editors.
+    private var iconEditingHeader: some View {
+        VStack(spacing: 6) {
+            Image(systemName: viewModel.currentTag.iconName)
+                .font(.title)
+                .foregroundStyle(selectedColor)
 
-            NavigationLink {
-                IconPickerView(
-                    selectedIcon: $viewModel.currentTag.iconName,
-                    iconOptions: viewModel.systemIconOptions,
-                    selectedColor: selectedColor,
-                )
-            } label: {
-                HStack {
-                    Text("Icon")
-                    Spacer()
-                    Image(systemName: viewModel.currentTag.iconName)
-                        .foregroundStyle(selectedColor)
-                }
-            }
+            ColorPicker(selection: $selectedColor, supportsOpacity: false, label: {
+                EmptyView()
+            })
+            .labelsHidden()
+        }
+    }
+
+    private var nameSection: some View {
+        Section {
+            TextField("My Tag", text: $viewModel.currentTag.name)
         } header: {
-            Text("Style")
+            iconEditingHeader
+                .containerRelativeFrame(.horizontal)
+                .padding(.vertical, 2)
+                .padding(.bottom, 4)
+        }
+    }
+
+    private var iconSection: some View {
+        Section {
+            IconGridPicker(
+                selectedIcon: $viewModel.currentTag.iconName,
+                iconOptions: viewModel.systemIconOptions,
+                selectedColor: viewModel.currentTag.color.prominentIconColor,
+            )
+        } header: {
+            Text("Icon")
         }
     }
 
     private var deleteSection: some View {
         Section {
-            AsyncButton {
-                await viewModel.delete()
-                dismiss()
+            Button {
+                isShowingDeleteConfirmation = true
             } label: {
-                deleteRow {
-                    Text("Delete Tag")
+                FormRow(image: Image(systemName: "trash.fill"), color: .red) {
+                    Text(localized(key: "action.delete.title"))
                         .foregroundStyle(Color.red)
-                }
-            } loading: {
-                deleteRow {
-                    ProgressView()
                 }
             }
         }
     }
-
-    private func deleteRow(@ViewBuilder content: @escaping () -> some View) -> some View {
-        FormRow(image: Image(systemName: "trash.fill"), color: .red, content: content)
-    }
 }
 
-// MARK: - Icon Picker View
+// MARK: - Icon Grid Picker
 
-@MainActor
-private struct IconPickerView: View {
+/// Inline grid of selectable SF Symbols. The selected icon is drawn the same
+/// way as a prominent `FormRow` icon so it matches how the tag appears in lists.
+private struct IconGridPicker: View {
     @Binding var selectedIcon: String
     let iconOptions: [String]
     let selectedColor: Color
 
+    @ScaledMetric(relativeTo: .body) private var cellSize: Double = 44
+
     var body: some View {
-        List {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: cellSize), spacing: 8)], spacing: 8) {
             ForEach(iconOptions, id: \.self) { icon in
+                let isSelected = selectedIcon == icon
                 Button {
                     selectedIcon = icon
                 } label: {
-                    HStack {
-                        Image(systemName: icon)
-                            .foregroundStyle(selectedIcon == icon ? selectedColor : .secondary)
-                            .frame(width: 30)
-                        Spacer()
-                        if selectedIcon == icon {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(selectedColor)
-                        }
-                    }
+                    Image(systemName: icon)
+                        .font(.body)
+                        .foregroundStyle(isSelected ? Color.white : Color.secondary)
+                        .frame(width: cellSize, height: cellSize)
+                        .background(
+                            isSelected ? selectedColor : Color(.tertiarySystemFill),
+                            in: RoundedRectangle(cornerRadius: 8),
+                        )
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(icon)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
             }
         }
-        .navigationTitle("Choose Icon")
-        .navigationBarTitleDisplayMode(.inline)
+        .padding(.vertical, 4)
     }
 }

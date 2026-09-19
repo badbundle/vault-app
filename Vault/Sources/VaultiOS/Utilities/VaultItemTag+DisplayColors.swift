@@ -38,13 +38,7 @@ extension VaultItemTag {
     /// Returns the fill color for the prominent `FormRow` icon square, which
     /// draws a white glyph on top.
     func prominentIconColor() -> Color {
-        let baseColor = color.color
-
-        // Near-white fills would hide the white glyph, so fall back to a neutral gray
-        if baseColor.percievedBrightness > 0.9 {
-            return .gray
-        }
-        return baseColor
+        color.prominentIconColor
     }
 
     /// Returns a foreground color that's guaranteed to be readable
@@ -72,5 +66,18 @@ extension VaultItemTag {
         else {
             return baseColor
         }
+    }
+}
+
+extension VaultItemColor {
+    /// Fill color for a prominent icon square that draws a white glyph on top.
+    var prominentIconColor: Color {
+        let baseColor = color
+
+        // Near-white fills would hide the white glyph, so fall back to a neutral gray
+        if baseColor.percievedBrightness > 0.9 {
+            return .gray
+        }
+        return baseColor
     }
 }
