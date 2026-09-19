@@ -1,5 +1,5 @@
 {
-  "originHash" : "ea1e5803d89e94cebc061b30e19ef87b76102dd1c8d9e5f6636e26eefb6c378d",
+  "originHash" : "08fdd6334a64ba88000f220c86e3912ba966687c4877226488f32e7bdd65c7aa",
   "pins" : [
     {
       "identity" : "bigint",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "f2a627b84c1ff96f21ac2fcb623ab36142dd5512",
         "version" : "1.10.0"
+      }
+    },
+    {
+      "identity" : "device-screenshot-framer",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/badbundle/device-screenshot-framer",
+      "state" : {
+        "branch" : "main",
+        "revision" : "760a2ded0da0d49fc4cb44bfff55351cba0df639"
       }
     },
     {

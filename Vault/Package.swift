@@ -57,6 +57,10 @@ let package = Package(
         .package(url: "https://github.com/gonzalezreal/swift-markdown-ui", exact: "2.4.1"),
         .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", exact: swiftLintVersion),
         .package(url: "https://github.com/swiftlang/swift-syntax", exact: "603.0.2"),
+        // Tooling only: `make screenshots` runs its `framer` executable to put
+        // marketing screenshots in device frames. Untagged upstream, so tracks
+        // its main branch.
+        .package(url: "https://github.com/badbundle/device-screenshot-framer", branch: "main"),
     ],
     targets: [
         .target(

@@ -1,0 +1,54 @@
+{
+  "outputDirectory": "../../fastlane/screenshots/en-US",
+  "output": { "width": 1320, "height": 2868, "format": "png" },
+  "mode": "inset",
+  "frameColor": "Deep Blue",
+  "background": { "colors": ["#0F172A", "#1E40AF"], "angle": 160 },
+  "text": {
+    "position": "top",
+    "title": { "font": "system", "size": 96, "weight": "bold", "color": "#FFFFFF" },
+    "subtitle": { "font": "system", "size": 52, "weight": "regular", "color": "#FFFFFFCC" },
+    "spacing": 24
+  },
+  "padding": 96,
+  "gap": 64,
+  "deviceScale": 1.0,
+  "screenshots": [
+    {
+      "path": "../.build/screenshots/raw/iphone/01-feed.png",
+      "output": "iphone-01-feed",
+      "title": "Every code.\nEvery secret.",
+      "subtitle": "2FA codes and encrypted notes, together."
+    },
+    {
+      "path": "../.build/screenshots/raw/iphone/02-detail.png",
+      "output": "iphone-02-detail",
+      "title": "Tap. Copy. Done.",
+      "subtitle": "Codes ready to paste the moment you need them."
+    },
+    {
+      "path": "../.build/screenshots/raw/iphone/03-tags.png",
+      "output": "iphone-03-tags",
+      "title": "Tidy by design",
+      "subtitle": "Tag items to find them fast."
+    },
+    {
+      "path": "../.build/screenshots/raw/iphone/04-backups.png",
+      "output": "iphone-04-backups",
+      "title": "Backups you can hold",
+      "subtitle": "Print to paper or save an encrypted file."
+    },
+    {
+      "path": "../.build/screenshots/raw/iphone/05-settings.png",
+      "output": "iphone-05-settings",
+      "title": "Private by default",
+      "subtitle": "No account needed. Fully open source."
+    },
+    {
+      "path": "../.build/screenshots/raw/iphone/01-feed-dark.png",
+      "output": "iphone-06-feed-dark",
+      "title": "Easy on the eyes",
+      "subtitle": "Looks right in light and dark."
+    }
+  ]
+}

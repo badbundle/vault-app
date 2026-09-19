@@ -129,4 +129,8 @@ You shouldn't need to manually change the locale or any other simulator setting 
 	<td>Force clean existing build artifacts</td>
 	<td><b>make clean</b></td>
   </tr>
+  <tr>
+	<td>Generate App Store screenshots (see <a href="./Screenshots/README.md">Screenshots/</a>)</td>
+	<td><b>make screenshots</b></td>
+  </tr>
 </table>
