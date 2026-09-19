@@ -14,7 +14,16 @@ public enum VaultRoot {
     // MARK: - Primitives
 
     @MainActor
-    public static let defaults: Defaults = .init(userDefaults: .standard)
+    public static let defaults: Defaults = {
+        #if DEBUG
+        // Marketing screenshots start from clean settings and leave the
+        // real ones untouched.
+        if ScreenshotMode.isEnabled {
+            return ScreenshotMode.makeDefaults()
+        }
+        #endif
+        return .init(userDefaults: .standard)
+    }()
 
     @MainActor
     public static let localSettings: LocalSettings = .init(defaults: defaults)
@@ -47,6 +56,17 @@ public enum VaultRoot {
 
     @MainActor
     public static let vaultStore: PersistedLocalVaultStore = {
+        #if DEBUG
+        // Likewise the vault: an in-memory one, so the simulator's stored
+        // vault is never shown or modified.
+        if ScreenshotMode.isEnabled {
+            do {
+                return try .inMemory()
+            } catch {
+                fatalError("Unable to create screenshot store: \(error)")
+            }
+        }
+        #endif
         do {
             return try PersistedLocalVaultStoreFactory(storageDirectory: vaultStorageDirectory)
                 .makeVaultStoreOrThrow()

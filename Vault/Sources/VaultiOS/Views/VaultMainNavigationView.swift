@@ -14,7 +14,7 @@ struct VaultMainNavigationView: View {
 
     @Environment(\.scenePhase) private var scenePhase
     @State private var isShowingCopyPaste = false
-    @State private var selectedView: SidebarItem? = .items
+    @State private var selectedView: SidebarItem?
 
     enum SidebarItem: Hashable {
         case items
@@ -32,6 +32,7 @@ struct VaultMainNavigationView: View {
         vaultDataModel: VaultDataModel,
         injector: VaultInjector,
         pendingOpenItemDetail: Binding<Identifier<VaultItem>?> = .constant(nil),
+        initialSelection: SidebarItem? = .items,
     ) {
         _pasteboard = State(initialValue: pasteboard)
         _localSettings = State(initialValue: localSettings)
@@ -39,6 +40,7 @@ struct VaultMainNavigationView: View {
         _vaultDataModel = State(initialValue: vaultDataModel)
         _injector = State(initialValue: injector)
         _pendingOpenItemDetail = pendingOpenItemDetail
+        _selectedView = State(initialValue: initialSelection)
     }
 
     var body: some View {
@@ -69,10 +71,13 @@ struct VaultMainNavigationView: View {
                     }
 
                     #if DEBUG
-                    NavigationLink(value: SidebarItem.demos) {
-                        Label("Developer", systemImage: "hammer.fill")
+                    // Debug-only, and kept out of marketing screenshots.
+                    if !ScreenshotMode.isEnabled {
+                        NavigationLink(value: SidebarItem.demos) {
+                            Label("Developer", systemImage: "hammer.fill")
+                        }
+                        .tint(.purple)
                     }
-                    .tint(.purple)
                     #endif
                 }
             }
