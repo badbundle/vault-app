@@ -66,6 +66,50 @@ struct AutoBackupViewSnapshotTests {
     }
 
     @Test
+    func backingUp() async {
+        let sut = makeSUT(
+            dataModel: await passwordFetchedDataModel(),
+            viewModel: makeViewModel(
+                status: .backingUp(.init(phase: .rendering, phaseFraction: 0.4)),
+                configuration: enabledConfiguration(providerID: "icloud-drive"),
+                providerStates: [configuredProviderState()],
+            ),
+        )
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
+    func cleaningUp() async {
+        let sut = makeSUT(
+            dataModel: await passwordFetchedDataModel(),
+            viewModel: makeViewModel(
+                status: .cleaningUp,
+                configuration: enabledConfiguration(providerID: "icloud-drive"),
+                providerStates: [configuredProviderState()],
+            ),
+        )
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
+    func backupComplete() async {
+        let viewModel = makeViewModel(
+            status: .completed(Date(timeIntervalSince1970: 1_700_000_000)),
+            configuration: enabledConfiguration(providerID: "icloud-drive"),
+            providerStates: [configuredProviderState()],
+        )
+        viewModel.showsBackupCompleteNotice = true
+        let sut = makeSUT(
+            dataModel: await passwordFetchedDataModel(),
+            viewModel: viewModel,
+        )
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
     func statusError() async {
         let sut = makeSUT(
             dataModel: await passwordFetchedDataModel(),

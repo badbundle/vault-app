@@ -204,21 +204,49 @@ struct AutoBackupView: View {
 
     // MARK: - Backup Now Section
 
+    /// The row is driven by the service status so that auto-triggered backups show the same
+    /// progress as a tap on the button: both are the same operation on the same screen.
     private var backupNowSection: some View {
         Section {
-            AsyncButton {
-                await viewModel.backupNow()
-            } label: {
+            if let progress = viewModel.backupProgress {
                 FormRow(image: Image(systemName: "arrow.clockwise.icloud"), color: .accentColor) {
-                    Text("Backup Now")
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(progress.phase.localizedTitle)
+                        ProgressView(value: progress.fractionCompleted)
+                            .animation(.linear(duration: 0.2), value: progress.fractionCompleted)
+                    }
                 }
-            } loading: {
+            } else if case .cleaningUp = viewModel.status {
                 FormRow(image: Image(systemName: "arrow.clockwise.icloud"), color: .accentColor) {
-                    ProgressView()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Cleaning up old backups…")
+                        ProgressView(value: 1)
+                    }
                 }
+            } else if viewModel.showsBackupCompleteNotice {
+                FormRow(image: Image(systemName: "checkmark.icloud"), color: .green) {
+                    Text("Backup Complete")
+                }
+            } else {
+                // Only disable while the tap is in flight: the status row replaces this button as soon as
+                // the service reports progress, so the button's own spinner would only flash.
+                AsyncButton(
+                    action: {
+                        await viewModel.backupNow()
+                    },
+                    actionOptions: [.disableButton],
+                    label: {
+                        FormRow(image: Image(systemName: "arrow.clockwise.icloud"), color: .accentColor) {
+                            Text("Backup Now")
+                        }
+                    },
+                    loading: {
+                        EmptyView()
+                    },
+                )
             }
-            .disabled(viewModel.isBackingUp)
         }
+        .animation(.default, value: viewModel.showsBackupCompleteNotice)
     }
 
     // MARK: - Helpers
