@@ -32,17 +32,27 @@ public final class AutoBackupViewModel {
     public private(set) var configuration: AutoBackupConfiguration
     public private(set) var providerStates: [ProviderDisplayState]
     public internal(set) var configureError: AutoBackupError?
+    /// Briefly true after a backup finishes, so the screen can confirm it rather than silently
+    /// re-enabling the button. Driven by the transition into `.completed`, not by the sticky
+    /// `.completed` status itself, which is what the service rests on between backups.
+    public internal(set) var showsBackupCompleteNotice = false
 
     private let service: any AutoBackupService
     private let providerStatesWereSeeded: Bool
+    private let completionNoticeDuration: Duration
     @ObservationIgnored private var cancellables = Set<AnyCancellable>()
+    @ObservationIgnored private var completionNoticeTask: Task<Void, Never>?
+    /// Set when a backup starts and cleared when it completes, so only a real backup earns the notice.
+    @ObservationIgnored private var isAwaitingBackupCompletion = false
 
     public init(
         service: any AutoBackupService,
         initialProviderStates: [ProviderDisplayState] = [],
+        completionNoticeDuration: Duration = .seconds(2),
     ) {
         self.service = service
         providerStatesWereSeeded = !initialProviderStates.isEmpty
+        self.completionNoticeDuration = completionNoticeDuration
         // Seed synchronously: the service's publishers do not replay, so
         // waiting for an emission would leave the screen stuck on defaults.
         status = service.status
@@ -51,7 +61,7 @@ public final class AutoBackupViewModel {
 
         service.statusPublisher
             .sink { [weak self] newStatus in
-                self?.status = newStatus
+                self?.apply(newStatus)
             }
             .store(in: &cancellables)
 
@@ -148,6 +158,49 @@ public final class AutoBackupViewModel {
         case .backingUp, .cleaningUp: true
         case .disabled, .idle, .error, .completed: false
         }
+    }
+
+    /// Progress of the in-flight backup, or nil when none is running.
+    public var backupProgress: AutoBackupProgress? {
+        if case let .backingUp(progress) = status {
+            progress
+        } else {
+            nil
+        }
+    }
+
+    private func apply(_ newStatus: AutoBackupStatus) {
+        status = newStatus
+        switch newStatus {
+        case .backingUp:
+            isAwaitingBackupCompletion = true
+            hideCompletionNotice()
+        case .completed where isAwaitingBackupCompletion:
+            isAwaitingBackupCompletion = false
+            showCompletionNotice()
+        case .error, .disabled, .idle:
+            isAwaitingBackupCompletion = false
+            hideCompletionNotice()
+        case .completed, .cleaningUp:
+            // A retention change alone cleans up and re-emits `.completed`; that is not a backup.
+            break
+        }
+    }
+
+    private func showCompletionNotice() {
+        completionNoticeTask?.cancel()
+        showsBackupCompleteNotice = true
+        completionNoticeTask = Task { [weak self, completionNoticeDuration] in
+            try? await Task.sleep(for: completionNoticeDuration)
+            guard !Task.isCancelled else { return }
+            self?.showsBackupCompleteNotice = false
+        }
+    }
+
+    private func hideCompletionNotice() {
+        completionNoticeTask?.cancel()
+        completionNoticeTask = nil
+        showsBackupCompleteNotice = false
     }
 
     public var statusIconName: String {

@@ -307,6 +307,118 @@ struct AutoBackupServiceImplTests {
         #expect(exportDescriptions == ["", "Auto-backup"])
     }
 
+    @Test @LeakTracked
+    func forceBackup_publishesOrderedProgressEndingInCompleted() async throws {
+        let clock = EpochClockMock(currentTime: 100)
+        let provider = BackupStorageProviderStub(id: "test")
+        let dataModel = anyVaultDataModel()
+        try await dataModel.store(backupPassword: anyBackupPassword())
+        await dataModel.setup()
+        let sut = try makeSUT(clock: clock, providers: [provider], dataModel: dataModel)
+        await Task.yield()
+        await sut.setRetention(.forever)
+        await sut.selectProvider(id: "test")
+        var statuses = [AutoBackupStatus]()
+        var bag = Set<AnyCancellable>()
+        sut.statusPublisher.sink { statuses.append($0) }.store(in: &bag)
+
+        await sut.forceBackup()
+
+        let progress = statuses.compactMap { status -> AutoBackupProgress? in
+            if case let .backingUp(progress) = status {
+                progress
+            } else {
+                nil
+            }
+        }
+        #expect(statuses.first == .backingUp(.starting))
+        #expect(statuses.last == .completed(clock.currentDate))
+        #expect(statuses.count == progress.count + 1, "Only progress precedes completion")
+        let fractions = progress.map(\.fractionCompleted)
+        #expect(fractions == fractions.sorted(), "Progress never goes backwards")
+        #expect(progress.contains(.init(phase: .rendering, phaseFraction: 1)), "Rendering is reported complete")
+        #expect(progress.last == .init(phase: .saving), "Saving is the final phase")
+    }
+
+    @Test @LeakTracked
+    func forceBackup_whileBackupInFlight_runsSequentially() async throws {
+        let provider = BackupStorageProviderStub(id: "test")
+        let dataModel = anyVaultDataModel()
+        try await dataModel.store(backupPassword: anyBackupPassword())
+        await dataModel.setup()
+        let sut = try makeSUT(providers: [provider], dataModel: dataModel)
+        await Task.yield()
+        await sut.setRetention(.forever)
+        await sut.selectProvider(id: "test")
+        let firstWriteStarted = Pending<Void>.signal()
+        let releaseFirstWrite = Pending<Void>.signal()
+        provider.writeHandler = { _, _ in
+            await firstWriteStarted.fulfill()
+            try await releaseFirstWrite.wait()
+        }
+
+        var statuses = [AutoBackupStatus]()
+        var bag = Set<AnyCancellable>()
+        sut.statusPublisher.sink { statuses.append($0) }.store(in: &bag)
+
+        let first = Task { await sut.forceBackup() }
+        try await firstWriteStarted.wait()
+        provider.writeHandler = nil
+        let second = Task { await sut.forceBackup() }
+        // Give the second backup every chance to run ahead of the first if it were allowed to.
+        try await Task.sleep(for: .milliseconds(100))
+        await releaseFirstWrite.fulfill()
+        await first.value
+        await second.value
+
+        #expect(provider.writeCallCount == 2)
+        let starts = statuses.indices.filter { statuses[$0] == .backingUp(.starting) }
+        let completions = statuses.indices.filter {
+            if case .completed = statuses[$0] {
+                true
+            } else {
+                false
+            }
+        }
+        #expect(starts.count == 2)
+        #expect(completions.count == 2)
+        #expect(
+            try #require(completions.first) < #require(starts.last),
+            "Second backup starts only after the first completes",
+        )
+    }
+
+    @Test @LeakTracked
+    func triggerBackupIfNeeded_whileBackupInFlight_rechecksHashAfterItFinishes() async throws {
+        let provider = BackupStorageProviderStub(id: "test")
+        let dataModel = anyVaultDataModel()
+        try await dataModel.store(backupPassword: anyBackupPassword())
+        await dataModel.setup()
+        let sut = try makeSUT(providers: [provider], dataModel: dataModel)
+        await Task.yield()
+        await sut.setEnabled(true)
+        await sut.setRetention(.forever)
+        await sut.selectProvider(id: "test")
+        let firstWriteStarted = Pending<Void>.signal()
+        let releaseFirstWrite = Pending<Void>.signal()
+        provider.writeHandler = { _, _ in
+            await firstWriteStarted.fulfill()
+            try await releaseFirstWrite.wait()
+        }
+
+        let first = Task { await sut.forceBackup() }
+        try await firstWriteStarted.wait()
+        provider.writeHandler = nil
+        let second = Task { await sut.triggerBackupIfNeeded() }
+        // Give the trigger every chance to run ahead of the first backup if it were allowed to.
+        try await Task.sleep(for: .milliseconds(100))
+        await releaseFirstWrite.fulfill()
+        await first.value
+        await second.value
+
+        #expect(provider.writeCallCount == 1, "Nothing changed while the first backup ran, so no second backup")
+    }
+
     // MARK: - Cleanup Old Backups
 
     @Test @LeakTracked
@@ -547,9 +659,13 @@ final class BackupStorageProviderStub: BackupStorageProvider, Sendable {
 
     func configure(with _: URL) async throws {}
 
+    /// Awaited after the write is recorded; lets a test hold a backup mid-flight.
+    var writeHandler: ((Data, String) async throws -> Void)?
+
     func write(data: Data, filename: String) async throws {
         writeCallCount += 1
         writtenData.append((data: data, filename: filename))
+        try await writeHandler?(data, filename)
     }
 
     func listBackups() async throws -> [BackupFileInfo] {

@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import TestHelpers
 import Testing
 @testable import VaultFeed
 
@@ -35,9 +36,9 @@ struct AutoBackupViewModelTests {
         let service = AutoBackupServiceMock(status: .disabled, configuration: .init())
         let sut = makeSUT(service: service)
 
-        service.statusPublisherSubject.send(.backingUp)
+        service.statusPublisherSubject.send(.backingUp(.starting))
 
-        #expect(sut.status == .backingUp)
+        #expect(sut.status == .backingUp(.starting))
     }
 
     @Test
@@ -237,7 +238,7 @@ struct AutoBackupViewModelTests {
         let service = AutoBackupServiceMock(status: .disabled, configuration: .init())
         let sut = makeSUT(service: service)
 
-        service.statusPublisherSubject.send(.backingUp)
+        service.statusPublisherSubject.send(.backingUp(.starting))
         #expect(sut.isBackingUp)
 
         service.statusPublisherSubject.send(.cleaningUp)
@@ -245,6 +246,110 @@ struct AutoBackupViewModelTests {
 
         service.statusPublisherSubject.send(.idle)
         #expect(!sut.isBackingUp)
+    }
+
+    @Test
+    func backupProgress_isNilUnlessBackingUp() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: .init())
+        let sut = makeSUT(service: service)
+
+        #expect(sut.backupProgress == nil)
+
+        service.statusPublisherSubject.send(.cleaningUp)
+        #expect(sut.backupProgress == nil)
+
+        service.statusPublisherSubject.send(.completed(Date()))
+        #expect(sut.backupProgress == nil)
+    }
+
+    @Test
+    func backupProgress_reflectsPublishedProgress() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: .init())
+        let sut = makeSUT(service: service)
+        let progress = AutoBackupProgress(phase: .rendering, phaseFraction: 0.4)
+
+        service.statusPublisherSubject.send(.backingUp(progress))
+
+        #expect(sut.backupProgress == progress)
+    }
+
+    @Test
+    func statusPublisher_showsCompletionNoticeWhenBackupCompletes() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: .init())
+        let sut = makeSUT(service: service)
+
+        service.statusPublisherSubject.send(.backingUp(.starting))
+        #expect(!sut.showsBackupCompleteNotice)
+
+        service.statusPublisherSubject.send(.completed(Date()))
+        #expect(sut.showsBackupCompleteNotice)
+    }
+
+    @Test
+    func statusPublisher_keepsCompletionNoticeThroughCleanup() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: .init())
+        let sut = makeSUT(service: service)
+
+        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.completed(Date()))
+        service.statusPublisherSubject.send(.cleaningUp)
+        service.statusPublisherSubject.send(.completed(Date()))
+
+        #expect(sut.showsBackupCompleteNotice)
+    }
+
+    @Test
+    func statusPublisher_doesNotShowCompletionNoticeWithoutABackup() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: .init())
+        let sut = makeSUT(service: service)
+
+        // Enabling the feature rests on the last backup date; changing retention cleans up and re-emits it.
+        service.statusPublisherSubject.send(.completed(Date()))
+        #expect(!sut.showsBackupCompleteNotice)
+
+        service.statusPublisherSubject.send(.cleaningUp)
+        service.statusPublisherSubject.send(.completed(Date()))
+        #expect(!sut.showsBackupCompleteNotice)
+    }
+
+    @Test
+    func statusPublisher_doesNotShowCompletionNoticeWhenBackupFails() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: .init())
+        let sut = makeSUT(service: service)
+
+        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.error(.writeFailed(reason: "disk full")))
+        #expect(!sut.showsBackupCompleteNotice)
+
+        // The failed attempt must not be credited to a later, unrelated `.completed`.
+        service.statusPublisherSubject.send(.completed(Date()))
+        #expect(!sut.showsBackupCompleteNotice)
+    }
+
+    @Test
+    func statusPublisher_hidesCompletionNoticeWhenNewBackupStarts() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: .init())
+        let sut = makeSUT(service: service)
+        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.completed(Date()))
+        #expect(sut.showsBackupCompleteNotice)
+
+        service.statusPublisherSubject.send(.backingUp(.starting))
+
+        #expect(!sut.showsBackupCompleteNotice)
+    }
+
+    @Test
+    func statusPublisher_hidesCompletionNoticeAfterDuration() async throws {
+        let service = AutoBackupServiceMock(status: .idle, configuration: .init())
+        let sut = makeSUT(service: service, completionNoticeDuration: .milliseconds(1))
+        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.completed(Date()))
+        #expect(sut.showsBackupCompleteNotice)
+
+        try await sut.waitForChange(to: \.showsBackupCompleteNotice, timeout: .seconds(5)) {}
+
+        #expect(!sut.showsBackupCompleteNotice)
     }
 
     @Test
@@ -259,7 +364,7 @@ struct AutoBackupViewModelTests {
     func footerText_carriesLiveStatusWhenEnabled() {
         var configuration = AutoBackupConfiguration()
         configuration.isEnabled = true
-        let service = AutoBackupServiceMock(status: .backingUp, configuration: configuration)
+        let service = AutoBackupServiceMock(status: .backingUp(.starting), configuration: configuration)
         let sut = makeSUT(service: service)
 
         #expect(sut.footerText == sut.statusDescription)
@@ -272,8 +377,13 @@ extension AutoBackupViewModelTests {
     private func makeSUT(
         service: AutoBackupServiceMock,
         initialProviderStates: [AutoBackupViewModel.ProviderDisplayState] = [],
+        completionNoticeDuration: Duration = .seconds(2),
     ) -> AutoBackupViewModel {
-        AutoBackupViewModel(service: service, initialProviderStates: initialProviderStates)
+        AutoBackupViewModel(
+            service: service,
+            initialProviderStates: initialProviderStates,
+            completionNoticeDuration: completionNoticeDuration,
+        )
     }
 
     private func anyProviderState(
