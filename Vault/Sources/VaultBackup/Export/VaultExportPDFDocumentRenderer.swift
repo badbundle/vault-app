@@ -22,18 +22,22 @@ struct VaultExportPDFDocumentRenderer<Renderer: PDFDocumentRenderer>: PDFDocumen
         self.attacher = attacher
     }
 
-    func render(document: VaultExportPayload) throws -> PDFDocument {
+    func render(document: VaultExportPayload, progress: @escaping (Double) -> Void) throws -> PDFDocument {
         let generator = VaultExportDataBlockGenerator(payload: document, dataShardBuilder: dataShardBuilder)
 
-        func render(totalPageCount: Int?) throws -> PDFDocument {
+        /// Each pass renders every code, so each pass owns half of the overall progress.
+        func render(totalPageCount: Int?, progressRange: ClosedRange<Double>) throws -> PDFDocument {
             let finalPageCount = totalPageCount ?? 0
             let document = try generator.makeDocument(knownPageCount: finalPageCount)
-            return try renderer.render(document: document)
+            return try renderer.render(document: document) { fraction in
+                let span = progressRange.upperBound - progressRange.lowerBound
+                progress(progressRange.lowerBound + span * fraction)
+            }
         }
 
         // The first pass render determines how many pages there actually are.
-        let firstPassRender = try render(totalPageCount: nil)
-        var finalRender = try render(totalPageCount: firstPassRender.pageCount)
+        let firstPassRender = try render(totalPageCount: nil, progressRange: 0 ... 0.5)
+        var finalRender = try render(totalPageCount: firstPassRender.pageCount, progressRange: 0.5 ... 1)
 
         // Attach the encrypted vault as well, so we can read it easily and automatically.
         try attacher.attach(vault: document.encryptedVault, to: &finalRender)

@@ -56,6 +56,52 @@ struct PDFDataBlockDocumentRendererUnitTests {
             try sut.render(document: anyDataBlockExportDocument())
         }
     }
+
+    @Test
+    func render_reportsProgressAfterEachImage() throws {
+        let rendererFactory = makeRendererFactory(renderer: UIGraphicsPDFRenderer(bounds: .init()))
+        let sut = makeSUT(rendererFactory: rendererFactory)
+        var reported = [Double]()
+
+        _ = try sut.render(document: documentWithImages(counts: [3])) { reported.append($0) }
+
+        #expect(reported == [1 / 3, 2 / 3, 1])
+    }
+
+    @Test
+    func render_reportsProgressAcrossMultipleDataBlocks() throws {
+        let rendererFactory = makeRendererFactory(renderer: UIGraphicsPDFRenderer(bounds: .init()))
+        let sut = makeSUT(rendererFactory: rendererFactory)
+        var reported = [Double]()
+
+        _ = try sut.render(document: documentWithImages(counts: [2, 2])) { reported.append($0) }
+
+        #expect(reported == [0.25, 0.5, 0.75, 1])
+    }
+
+    @Test
+    func render_reportsCompleteProgressForDocumentWithoutImages() throws {
+        let rendererFactory = makeRendererFactory(renderer: UIGraphicsPDFRenderer(bounds: .init()))
+        let sut = makeSUT(rendererFactory: rendererFactory)
+        var reported = [Double]()
+
+        _ = try sut.render(document: anyDataBlockExportDocument()) { reported.append($0) }
+
+        #expect(reported == [1])
+    }
+
+    @Test
+    func render_doesNotReportProgressWhenRenderingFails() {
+        let renderer = UIGraphicsPDFRendererStub()
+        renderer.pdfDataValue = makeInvalidPDFData()
+        let rendererFactory = makeRendererFactory(renderer: renderer)
+        let sut = makeSUT(rendererFactory: rendererFactory)
+        var reported = [Double]()
+
+        _ = try? sut.render(document: documentWithImages(counts: [2])) { reported.append($0) }
+
+        #expect(reported.isEmpty)
+    }
 }
 
 // MARK: - Helpers
@@ -78,6 +124,16 @@ extension PDFDataBlockDocumentRendererUnitTests {
         DataBlockDocument(
             headerGenerator: DataBlockHeaderGeneratorMock(),
             content: [],
+        )
+    }
+
+    /// One `.dataBlock` per entry in `counts`, each holding that many images.
+    private func documentWithImages(counts: [Int]) -> DataBlockDocument {
+        DataBlockDocument(
+            headerGenerator: DataBlockHeaderGeneratorMock(),
+            content: counts.map { count in
+                .dataBlock(Array(repeating: Data([0xFF]), count: count))
+            },
         )
     }
 

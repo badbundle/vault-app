@@ -26,8 +26,11 @@ public struct PDFDataBlockDocumentRenderer<
         self.blockLayout = blockLayout
     }
 
-    public func render(document: DataBlockDocument) throws -> PDFDocument {
+    public func render(document: DataBlockDocument, progress: @escaping (Double) -> Void) throws -> PDFDocument {
         let renderer = rendererFactory.makeRenderer()
+        // Images dominate rendering time, so progress is measured in images processed.
+        let totalImages = document.totalImageCount
+        var processedImages = 0
         var renderingError: (any Error)?
         let data = renderer.pdfData { context in
             let drawer = PDFDocumentDrawerHelper(
@@ -48,7 +51,10 @@ public struct PDFDataBlockDocumentRenderer<
                             images: imageData,
                             imageRenderer: imageRenderer,
                             rectSeriesLayout: blockLayout,
-                        )
+                        ) {
+                            processedImages += 1
+                            progress(Double(processedImages) / Double(totalImages))
+                        }
                     }
                 }
             } catch {
@@ -58,6 +64,9 @@ public struct PDFDataBlockDocumentRenderer<
         if let renderingError {
             throw renderingError
         } else if let document = PDFDocument(data: data) {
+            if totalImages == 0 {
+                progress(1)
+            }
             return document
         } else {
             throw PDFRenderingError.invalidData
@@ -122,10 +131,13 @@ private final class PDFDocumentDrawerHelper<Layout: PageLayout> {
     }
 
     /// Throws if unable to draw.
+    ///
+    /// `onImageProcessed` is called after each image is dealt with, whether it was drawn or skipped.
     func draw(
         images: [Data],
         imageRenderer: some ImageDataRenderer,
         rectSeriesLayout: @escaping (CGRect) -> some RectSeriesLayout,
+        onImageProcessed: () -> Void,
     ) throws(PDFContentDrawerer.DrawError) {
         var currentImageNumberOnPage: UInt = 0
         var currentLayoutEngine = rectSeriesLayout(contentArea.currentBounds)
@@ -150,6 +162,7 @@ private final class PDFDocumentDrawerHelper<Layout: PageLayout> {
             }
 
             try drawerer.drawContent()
+            onImageProcessed()
         }
     }
 
@@ -182,6 +195,19 @@ private final class PDFDocumentDrawerHelper<Layout: PageLayout> {
             )
             attributedString.draw(in: rect)
             contentArea.didDrawContent(at: rect)
+        }
+    }
+}
+
+// MARK: - Progress
+
+extension DataBlockDocument {
+    fileprivate var totalImageCount: Int {
+        content.reduce(0) { count, item in
+            switch item {
+            case .title: count
+            case let .dataBlock(images): count + images.count
+            }
         }
     }
 }

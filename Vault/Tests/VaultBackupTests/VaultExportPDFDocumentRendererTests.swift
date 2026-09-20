@@ -64,6 +64,22 @@ struct VaultExportPDFDocumentRendererTests {
 
         #expect(attacher.attachCallCount == 1)
     }
+
+    @Test
+    func render_mapsFirstPassToFirstHalfAndSecondPassToSecondHalf() throws {
+        let renderer = PDFDocumentRendererMock()
+        renderer.renderHandler = { _, progress in
+            progress(0.5)
+            progress(1)
+            return PDFDocument()
+        }
+        let sut = makeSUT(documentRenderer: renderer)
+        var reported = [Double]()
+
+        _ = try sut.render(document: anyExportPayload()) { reported.append($0) }
+
+        #expect(reported == [0.25, 0.5, 0.75, 1])
+    }
 }
 
 // MARK: - Helpers
@@ -81,10 +97,25 @@ extension VaultExportPDFDocumentRendererTests {
             attacher: attacher,
         )
     }
+
+    private func anyExportPayload() -> VaultExportPayload {
+        VaultExportPayload(
+            encryptedVault: EncryptedVault(
+                version: "1.0.0",
+                data: Data(),
+                authentication: Data(),
+                encryptionIV: Data(),
+                keygenSalt: Data(),
+                keygenSignature: "my-signature",
+            ),
+            userDescription: "my vault",
+            created: Date(timeIntervalSince1970: 2000),
+        )
+    }
 }
 
 private func makeRendererMock(pdfDocument: PDFDocument = PDFDocument()) -> PDFDocumentRendererMock {
     let renderer = PDFDocumentRendererMock()
-    renderer.renderHandler = { _ in pdfDocument }
+    renderer.renderHandler = { _, _ in pdfDocument }
     return renderer
 }

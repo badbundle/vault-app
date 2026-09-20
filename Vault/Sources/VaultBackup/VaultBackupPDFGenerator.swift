@@ -17,7 +17,13 @@ public struct VaultBackupPDFGenerator {
         self.authorName = authorName
     }
 
-    public func makePDF(payload: VaultExportPayload) throws -> PDFDocument {
+    /// Renders the payload to a PDF.
+    ///
+    /// `progress` is called synchronously on the rendering thread with values in `0...1`, ending at `1`.
+    public func makePDF(
+        payload: VaultExportPayload,
+        progress: @escaping (Double) -> Void = { _ in },
+    ) throws -> PDFDocument {
         let blockDocumentRenderer = PDFDataBlockDocumentRenderer(
             documentSize: size,
             rendererFactory: PDFDocumentPageRendererFactory(
@@ -40,7 +46,7 @@ public struct VaultBackupPDFGenerator {
             dataShardBuilder: dataShardBuilder,
             attacher: VaultBackupPDFAttacherImpl(),
         )
-        return try documentRenderer.render(document: payload)
+        return try documentRenderer.render(document: payload, progress: progress)
     }
 
     private var dataShardBuilder: DataShardBuilder {
