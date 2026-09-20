@@ -31,10 +31,6 @@ struct AppIconCatalog: Sendable {
 
     var directory: URL
 
-    init(directory: URL) {
-        self.directory = directory
-    }
-
     func imageURL(for entry: Entry) -> URL {
         directory.appending(path: entry.filename)
     }
