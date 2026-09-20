@@ -19,7 +19,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Backup export
 - Backup encryption
 - App icon generated from a SwiftUI view (`VaultAppIcon`) with light, dark and tinted variants, via `make app-icon`
-- Full-screen lock animation when an item's lock state is saved or a locked item is unlocked
+- Locked items show the vault door from the app icon, which spins open when the item is unlocked
 
 ### Fixed
 

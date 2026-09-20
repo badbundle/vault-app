@@ -80,7 +80,6 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
             isShowingDeleteConfirmation: $isShowingDeleteConfirmation,
             navigationPath: $navigationPath,
             presentationMode: presentationMode,
-            persistedLockState: viewModel.editingModel.initialDetail.lockState,
         ) {
             if viewModel.isInEditMode {
                 if viewModel.showsKeyEditingFields {

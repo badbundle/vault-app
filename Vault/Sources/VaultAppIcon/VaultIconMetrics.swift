@@ -27,7 +27,7 @@ public struct VaultIconMetrics: Sendable {
     public var knobRadius: CGFloat = 0.046
     /// Width of the rim-light stroke along the edges.
     public var highlightWidth: CGFloat = 0.008
-    /// Radius of the soft shadow pooled beneath the wheel.
+    /// Radius of the soft shadow pooled beneath the wheel; 0 draws no shadow.
     public var wheelShadowRadius: CGFloat = 0.24
     /// How far below the wheel's centre the shadow pool sits.
     public var wheelShadowOffset: CGFloat = 0.025
@@ -37,4 +37,32 @@ public struct VaultIconMetrics: Sendable {
     public init() {}
 
     public static let standard = VaultIconMetrics()
+
+    /// The same drawing with the door filling most of the canvas: for an in-app
+    /// glyph the size of an SF Symbol, where the icon's generous margins would
+    /// leave nothing visible. No shadow under the wheel: at that size it only
+    /// muddies the door, and it belongs to the icon's rendering, not the UI's.
+    public static let compact: VaultIconMetrics = {
+        var metrics = standard.scaled(by: 0.9 / standard.doorSide)
+        metrics.wheelShadowRadius = 0
+        return metrics
+    }()
+
+    /// Every length multiplied by `factor`, so the proportions are unchanged.
+    public func scaled(by factor: CGFloat) -> VaultIconMetrics {
+        var scaled = self
+        scaled.doorSide *= factor
+        scaled.doorStroke *= factor
+        scaled.doorCornerRadius *= factor
+        scaled.hubRadius *= factor
+        scaled.holeRadius *= factor
+        scaled.spokeThickness *= factor
+        scaled.spokeInnerStart *= factor
+        scaled.spokeReach *= factor
+        scaled.knobRadius *= factor
+        scaled.highlightWidth *= factor
+        scaled.wheelShadowRadius *= factor
+        scaled.wheelShadowOffset *= factor
+        return scaled
+    }
 }

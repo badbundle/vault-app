@@ -239,9 +239,6 @@ public enum VaultRoot {
     @MainActor
     public static let deviceAuthenticationService: DeviceAuthenticationService = .init(policy: .default)
 
-    @MainActor
-    static let lockAnimationPresenter = LockAnimationPresenter()
-
     // MARK: - Auto-Backup
 
     @MainActor

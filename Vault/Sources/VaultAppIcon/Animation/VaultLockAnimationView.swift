@@ -6,10 +6,11 @@ import SwiftUI
 /// then spins round and seats on a spring so it overshoots and settles. Unlock: the
 /// wheel spins back the other way and the door pops open a crack, bouncing on its
 /// hinge. With Reduce Motion on, the glyph is shown static in its final state and
-/// the presenter's fade is the only movement.
+/// only the callbacks happen, sooner.
 public struct VaultLockAnimationView: View {
     public var transition: VaultLockTransition
     public var appearance: VaultAppIconAppearance
+    public var metrics: VaultIconMetrics
     /// Called when the mechanism seats: the moment for a haptic.
     public var onClick: () -> Void
     /// Called once the animation has settled.
@@ -21,11 +22,13 @@ public struct VaultLockAnimationView: View {
     public init(
         transition: VaultLockTransition,
         appearance: VaultAppIconAppearance = .dark,
+        metrics: VaultIconMetrics = .standard,
         onClick: @escaping () -> Void = {},
         onFinished: @escaping () -> Void = {},
     ) {
         self.transition = transition
         self.appearance = appearance
+        self.metrics = metrics
         self.onClick = onClick
         self.onFinished = onFinished
     }
@@ -110,6 +113,7 @@ public struct VaultLockAnimationView: View {
             wheelRotation: .degrees(values.wheelRotation),
             doorOpening: values.doorOpening,
             appearance: appearance,
+            metrics: metrics,
         )
         .scaleEffect(values.doorScale)
     }

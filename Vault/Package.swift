@@ -56,9 +56,6 @@ let package = Package(
         .package(url: "https://github.com/attaswift/BigInt.git", exact: "6.0.1"),
         .package(url: "https://github.com/krzyzanowskim/CryptoSwift", exact: "1.10.0"),
         .package(url: "https://github.com/sunghyun-k/swiftui-toasts.git", exact: "1.1.1"),
-        // Already in the graph through swiftui-toasts; used directly for the
-        // full-screen lock animation, which has to draw above presented sheets.
-        .package(url: "https://github.com/sunghyun-k/swiftui-window-overlay.git", exact: "1.0.2"),
         .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2"),
         .package(url: "https://github.com/twostraws/CodeScanner", exact: "2.5.2"),
         .package(url: "https://github.com/dm-zharov/swift-security.git", exact: "2.5.1"),
@@ -90,7 +87,6 @@ let package = Package(
                 "FoundationExtensions",
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
                 .product(name: "Toasts", package: "swiftui-toasts"),
-                .product(name: "WindowOverlay", package: "swiftui-window-overlay"),
             ],
             resources: [
                 .process("Resources/Feed.xcstrings"),
@@ -291,7 +287,7 @@ let package = Package(
 
         // MARK: - APP ICON
 
-        // The app icon as a SwiftUI view, plus the lock animation built from the
+        // The app icon as a SwiftUI view, plus the unlock animation built from the
         // same artwork. Deliberately a leaf (SwiftUI + Foundation only) so the
         // generator below can build it for the macOS host with `swift run`.
         .target(

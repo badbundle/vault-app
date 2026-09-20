@@ -158,6 +158,6 @@ look without touching the catalog, point it elsewhere and shrink it:
 swift run -c release vault-app-icon-generator --output /tmp/icon-preview --size 256
 ```
 
-The same view drives the full-screen animation shown when an item is locked or
-unlocked, so the icon on the Home Screen and the door that spins in the app never
-drift apart.
+The same drawing is the padlock on a locked item's detail screen, where it spins
+open once the user authenticates, so the icon on the Home Screen and the door in
+the app never drift apart.

@@ -56,17 +56,19 @@ public struct VaultLockGlyphView: View {
             door
                 .stroke(palette.highlightGradient, lineWidth: highlightWidth)
                 .clipShape(door)
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [palette.shadow, palette.shadow.opacity(0)],
-                        center: .center,
-                        startRadius: 0,
-                        endRadius: side * metrics.wheelShadowRadius,
-                    ),
-                )
-                .frame(width: shadowDiameter, height: shadowDiameter)
-                .offset(y: side * metrics.wheelShadowOffset)
+            if metrics.wheelShadowRadius > 0 {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [palette.shadow, palette.shadow.opacity(0)],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: side * metrics.wheelShadowRadius,
+                        ),
+                    )
+                    .frame(width: shadowDiameter, height: shadowDiameter)
+                    .offset(y: side * metrics.wheelShadowOffset)
+            }
             wheel.fill(palette.metalGradient)
             wheel
                 .stroke(palette.highlightGradient, lineWidth: highlightWidth)

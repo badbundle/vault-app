@@ -2,9 +2,9 @@ import Foundation
 
 /// The timing of one lock or unlock animation.
 ///
-/// Shared between the keyframes in `VaultLockAnimationView` and whoever presents it
-/// full screen, so a haptic can land exactly when the mechanism seats and the
-/// presentation can leave once the spring has settled.
+/// Shared between the keyframes in `VaultLockAnimationView` and whoever shows it,
+/// so a haptic can land exactly when the mechanism seats and what follows can wait
+/// until the spring has settled.
 public struct VaultLockChoreography: Sendable {
     public var transition: VaultLockTransition
     public var reduceMotion: Bool
