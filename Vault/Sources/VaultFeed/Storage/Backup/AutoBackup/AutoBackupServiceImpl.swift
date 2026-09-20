@@ -48,6 +48,8 @@ public final class AutoBackupServiceImpl: AutoBackupService {
 
     private var debounceTask: Task<Void, Never>?
     private var restoreTask: Task<Void, Never>?
+    /// The most recently queued backup; the next one waits on it. See `enqueueBackup`.
+    private var backupChain: Task<Void, Never>?
 
     private static let configKey = Key<AutoBackupConfiguration>(VaultIdentifiers.AutoBackup.configuration)
     private static let debounceSeconds: UInt64 = 5
@@ -110,23 +112,22 @@ public final class AutoBackupServiceImpl: AutoBackupService {
 
     public func triggerBackupIfNeeded() async {
         guard configuration.isEnabled else { return }
-        guard let provider = selectedProvider else { return }
-        guard await provider.isConfigured else { return }
 
-        // Check if hash has changed since last backup
-        if let currentHash = dataModel.currentPayloadHash?.value.base64EncodedString(),
-           let lastHash = configuration.lastBackupHash,
-           currentHash == lastHash
-        {
-            // No changes since last backup
-            return
+        // The checks run once any in-flight backup has finished, so a change made during that backup
+        // is still picked up rather than compared against a stale hash.
+        await enqueueBackup { [weak self] in
+            guard let self else { return }
+            guard let provider = selectedProvider else { return }
+            guard await provider.isConfigured else { return }
+            guard hasChangesSinceLastBackup else { return }
+            await performBackup()
         }
-
-        await performBackup()
     }
 
     public func forceBackup() async {
-        await performBackup()
+        await enqueueBackup { [weak self] in
+            await self?.performBackup()
+        }
     }
 
     public func saveProviderConfiguration() async {
@@ -174,6 +175,30 @@ public final class AutoBackupServiceImpl: AutoBackupService {
     }
 
     // MARK: - Private
+
+    private var hasChangesSinceLastBackup: Bool {
+        guard let currentHash = dataModel.currentPayloadHash?.value.base64EncodedString(),
+              let lastHash = configuration.lastBackupHash
+        else { return true }
+        return currentHash != lastHash
+    }
+
+    /// Backups run one at a time, in the order requested. `performBackup` suspends several times, so
+    /// without this a debounced auto-backup could interleave with a manual one: two files written and
+    /// the two progress sequences fighting over `status`.
+    private func enqueueBackup(_ operation: @escaping @MainActor () async -> Void) async {
+        let previous = backupChain
+        let task = Task { @MainActor in
+            await previous?.value
+            await operation()
+        }
+        backupChain = task
+        await task.value
+        // Don't hold on to a finished task; a later caller would only wait on it needlessly.
+        if backupChain == task {
+            backupChain = nil
+        }
+    }
 
     private func performBackup() async {
         guard let provider = selectedProvider else {
