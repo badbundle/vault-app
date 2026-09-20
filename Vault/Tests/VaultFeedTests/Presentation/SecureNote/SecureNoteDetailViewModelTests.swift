@@ -166,6 +166,51 @@ struct SecureNoteDetailViewModelTests {
     }
 
     @Test
+    func saveChanges_locksItemWhenLockStateTurnsOn() async {
+        let sut = makeSUTEditing(storedMetadata: anyVaultItemMetadata(lockState: .notLocked))
+        sut.editingModel.detail.lockState = .lockedWithNativeSecurity
+
+        await sut.saveChanges()
+
+        #expect(sut.isLocked)
+    }
+
+    @Test
+    func saveChanges_doesNotLockItemWhenLockStateStaysOff() async {
+        let sut = makeSUTEditing(storedMetadata: anyVaultItemMetadata(lockState: .notLocked))
+        makeDirty(sut: sut)
+
+        await sut.saveChanges()
+
+        #expect(sut.isLocked == false)
+    }
+
+    @Test
+    func saveChanges_doesNotRelockUnlockedItemWhenLockStateStaysOn() async {
+        let sut = makeSUTEditing(storedMetadata: anyVaultItemMetadata(lockState: .lockedWithNativeSecurity))
+        sut.isLocked = false
+        makeDirty(sut: sut)
+
+        await sut.saveChanges()
+
+        #expect(sut.isLocked == false)
+    }
+
+    @Test
+    func saveChanges_doesNotLockItemIfSaveFailed() async {
+        let editor = SecureNoteDetailEditorMock()
+        editor.updateNoteHandler = { _, _, _ in
+            throw TestError()
+        }
+        let sut = makeSUTEditing(storedMetadata: anyVaultItemMetadata(lockState: .notLocked), editor: editor)
+        sut.editingModel.detail.lockState = .lockedWithNativeSecurity
+
+        await sut.saveChanges()
+
+        #expect(sut.isLocked == false)
+    }
+
+    @Test
     func saveChanges_setsSavingToFalseAfterSaveError() async {
         let editor = SecureNoteDetailEditorMock()
         editor.updateNoteHandler = { _, _, _ in

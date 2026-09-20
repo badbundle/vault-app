@@ -106,7 +106,14 @@ public final class SecureNoteDetailViewModel: DetailViewModel {
                     isFinishedSubject.send()
                 case let .editing(note, metadata, _):
                     try await editor.updateNote(id: metadata.id, item: note, edits: editingModel.detail)
+                    // Locking takes effect on this very screen, so the user sees
+                    // the lock work and has to unlock to get back in.
+                    let didLock = !editingModel.initialDetail.lockState.isLocked && editingModel.detail.lockState
+                        .isLocked
                     editingModel.didPersist()
+                    if didLock {
+                        isLocked = true
+                    }
                 }
             }
         } catch {
