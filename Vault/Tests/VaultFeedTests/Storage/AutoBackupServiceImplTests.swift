@@ -307,6 +307,39 @@ struct AutoBackupServiceImplTests {
         #expect(exportDescriptions == ["", "Auto-backup"])
     }
 
+    @Test @LeakTracked
+    func forceBackup_publishesOrderedProgressEndingInCompleted() async throws {
+        let clock = EpochClockMock(currentTime: 100)
+        let provider = BackupStorageProviderStub(id: "test")
+        let dataModel = anyVaultDataModel()
+        try await dataModel.store(backupPassword: anyBackupPassword())
+        await dataModel.setup()
+        let sut = try makeSUT(clock: clock, providers: [provider], dataModel: dataModel)
+        await Task.yield()
+        await sut.setRetention(.forever)
+        await sut.selectProvider(id: "test")
+        var statuses = [AutoBackupStatus]()
+        var bag = Set<AnyCancellable>()
+        sut.statusPublisher.sink { statuses.append($0) }.store(in: &bag)
+
+        await sut.forceBackup()
+
+        let progress = statuses.compactMap { status -> AutoBackupProgress? in
+            if case let .backingUp(progress) = status {
+                progress
+            } else {
+                nil
+            }
+        }
+        #expect(statuses.first == .backingUp(.starting))
+        #expect(statuses.last == .completed(clock.currentDate))
+        #expect(statuses.count == progress.count + 1, "Only progress precedes completion")
+        let fractions = progress.map(\.fractionCompleted)
+        #expect(fractions == fractions.sorted(), "Progress never goes backwards")
+        #expect(progress.contains(.init(phase: .rendering, phaseFraction: 1)), "Rendering is reported complete")
+        #expect(progress.last == .init(phase: .saving), "Saving is the final phase")
+    }
+
     // MARK: - Cleanup Old Backups
 
     @Test @LeakTracked

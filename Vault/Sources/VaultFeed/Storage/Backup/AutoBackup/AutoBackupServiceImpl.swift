@@ -196,17 +196,21 @@ public final class AutoBackupServiceImpl: AutoBackupService {
             return
         }
 
-        setStatus(.backingUp)
+        setStatus(.backingUp(.starting))
 
         do {
+            // Export on the main actor; it is an in-memory read of the current vault.
+            let payload = try await dataModel.makeExport(userDescription: "Auto-backup")
+
             // Generate PDF
-            let pdfData = try await generateBackupPDF(backupPassword: backupPassword)
+            let pdfData = try await renderBackupPDF(payload: payload, backupPassword: backupPassword)
 
             // Create filename with timestamp
             let timestamp = VaultDateFormatter(timezone: .current).formatForFileName(date: clock.currentDate)
             let filename = "vault-auto-backup-\(timestamp).pdf"
 
             // Write to provider
+            setStatus(.backingUp(.init(phase: .saving)))
             try await provider.write(data: pdfData, filename: filename)
 
             // Update configuration with last backup info
@@ -237,11 +241,35 @@ public final class AutoBackupServiceImpl: AutoBackupService {
         }
     }
 
-    private func generateBackupPDF(backupPassword: DerivedEncryptionKey) async throws -> Data {
-        // Get vault payload
-        let payload = try await dataModel.makeExport(userDescription: "Auto-backup")
+    /// Encrypts and renders the backup off the main actor, mirroring each progress update into `status`.
+    ///
+    /// Progress goes through a stream rather than ad-hoc main-actor hops so that updates land in order and
+    /// every one of them is applied before this returns; a late `.backingUp` must never overwrite `.completed`.
+    private func renderBackupPDF(
+        payload: VaultApplicationPayload,
+        backupPassword: DerivedEncryptionKey,
+    ) async throws -> Data {
+        let (progress, continuation) = AsyncStream.makeStream(
+            of: AutoBackupProgress.self,
+            bufferingPolicy: .bufferingNewest(1),
+        )
+        async let pdfData = encryptAndRender(payload: payload, backupPassword: backupPassword, progress: continuation)
+        for await update in progress {
+            setStatus(.backingUp(update))
+        }
+        return try await pdfData
+    }
+
+    /// Runs off the main actor: rendering every QR code twice is slow and would otherwise freeze the UI.
+    private nonisolated func encryptAndRender(
+        payload: VaultApplicationPayload,
+        backupPassword: DerivedEncryptionKey,
+        progress: AsyncStream<AutoBackupProgress>.Continuation,
+    ) async throws -> Data {
+        defer { progress.finish() }
 
         // Encrypt the payload
+        progress.yield(.init(phase: .encrypting))
         let encoder = EncryptedVaultEncoder(clock: clock, backupPassword: backupPassword)
         let encryptedVault = try encoder.encryptAndEncode(payload: payload)
 
@@ -260,7 +288,10 @@ public final class AutoBackupServiceImpl: AutoBackupService {
             authorName: "Vault",
         )
 
-        let pdfDocument = try pdfGenerator.makePDF(payload: exportPayload)
+        progress.yield(.init(phase: .rendering))
+        let pdfDocument = try pdfGenerator.makePDF(payload: exportPayload) { fraction in
+            progress.yield(.init(phase: .rendering, phaseFraction: fraction))
+        }
 
         guard let pdfData = pdfDocument.dataRepresentation() else {
             throw AutoBackupError.pdfGenerationFailed(reason: "Failed to get PDF data")

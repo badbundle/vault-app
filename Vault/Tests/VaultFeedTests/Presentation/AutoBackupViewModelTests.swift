@@ -35,9 +35,9 @@ struct AutoBackupViewModelTests {
         let service = AutoBackupServiceMock(status: .disabled, configuration: .init())
         let sut = makeSUT(service: service)
 
-        service.statusPublisherSubject.send(.backingUp)
+        service.statusPublisherSubject.send(.backingUp(.starting))
 
-        #expect(sut.status == .backingUp)
+        #expect(sut.status == .backingUp(.starting))
     }
 
     @Test
@@ -237,7 +237,7 @@ struct AutoBackupViewModelTests {
         let service = AutoBackupServiceMock(status: .disabled, configuration: .init())
         let sut = makeSUT(service: service)
 
-        service.statusPublisherSubject.send(.backingUp)
+        service.statusPublisherSubject.send(.backingUp(.starting))
         #expect(sut.isBackingUp)
 
         service.statusPublisherSubject.send(.cleaningUp)
@@ -259,7 +259,7 @@ struct AutoBackupViewModelTests {
     func footerText_carriesLiveStatusWhenEnabled() {
         var configuration = AutoBackupConfiguration()
         configuration.isEnabled = true
-        let service = AutoBackupServiceMock(status: .backingUp, configuration: configuration)
+        let service = AutoBackupServiceMock(status: .backingUp(.starting), configuration: configuration)
         let sut = makeSUT(service: service)
 
         #expect(sut.footerText == sut.statusDescription)
