@@ -12,6 +12,7 @@ public struct VaultMainScene: Scene {
     @State private var deviceAuthenticationService = VaultRoot.deviceAuthenticationService
     @State private var vaultDataModel: VaultDataModel = VaultRoot.vaultDataModel
     @State private var injector: VaultInjector = VaultRoot.vaultInjector
+    @State private var lockAnimationPresenter: LockAnimationPresenter = VaultRoot.lockAnimationPresenter
     @State private var pendingOpenItemDetail: Identifier<VaultItem>?
     #if DEBUG
     @State private var isSeedingScreenshotVault = ScreenshotMode.isEnabled
@@ -57,6 +58,7 @@ public struct VaultMainScene: Scene {
             initialSelection: initialSelection,
         )
         .installToast(position: .top)
+        .installLockAnimation(lockAnimationPresenter)
         .onOpenURL(perform: handle(url:))
     }
 

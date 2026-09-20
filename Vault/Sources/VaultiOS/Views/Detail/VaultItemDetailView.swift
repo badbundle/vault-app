@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import VaultAppIcon
 import VaultFeed
 
 /// The basis of a detail view with some of the editing state already bound to buttons etc.
@@ -10,9 +11,15 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
     @Binding var isShowingDeleteConfirmation: Bool
     @Binding var navigationPath: NavigationPath
     var presentationMode: Binding<PresentationMode>?
+    /// The lock state as last saved (`editingModel.initialDetail.lockState`). It
+    /// changes exactly when a save persists a different lock state, which is the
+    /// cue for the lock animation.
+    var persistedLockState: VaultItemLockState
     @ViewBuilder var contents: () -> ContentsView
 
     @Environment(DeviceAuthenticationService.self) private var authenticationService: DeviceAuthenticationService
+    /// Optional: previews and snapshot tests build the detail without a presenter.
+    @Environment(LockAnimationPresenter.self) private var lockAnimationPresenter: LockAnimationPresenter?
     @State private var isError = false
 
     private func dismiss() {
@@ -31,6 +38,9 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(viewModel.editingModel.isDirty)
         .animation(.snappy, value: viewModel.isInEditMode)
+        .onChange(of: persistedLockState) { _, newValue in
+            lockAnimationPresenter?.play(newValue.isLocked ? .lock : .unlock)
+        }
         .onReceive(viewModel.isFinishedPublisher()) {
             dismiss()
         }
@@ -103,6 +113,7 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
                 AsyncButton {
                     try await authenticationService.validateAuthentication(reason: "Unlock item")
                     viewModel.isLocked = false
+                    lockAnimationPresenter?.play(.unlock)
                 } label: {
                     unlockRow {
                         Text("Unlock")

@@ -69,6 +69,7 @@ struct SecureNoteDetailView: View {
                 isShowingDeleteConfirmation: $isShowingDeleteConfirmation,
                 navigationPath: $navigationPath,
                 presentationMode: presentationMode,
+                persistedLockState: viewModel.editingModel.initialDetail.lockState,
             ) {
                 if viewModel.isInEditMode {
                     noteContentsEditingSection

@@ -18,6 +18,8 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Storage for 2FA codes (TOTP, HOTP)
 - Backup export
 - Backup encryption
+- App icon generated from a SwiftUI view (`VaultAppIcon`) with light, dark and tinted variants, via `make app-icon`
+- Full-screen lock animation when an item's lock state is saved or a locked item is unlocked
 
 ### Fixed
 
@@ -25,8 +27,8 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 ### Changed
 
-- N/A
+- App icon refreshed: the same door and wheel, now layered with a metal gradient, rim light and shadow
 
 ### Removed
 
-- N/A
+- The hand-made `VaultLogo.png` app icon (replaced by the generated set)
