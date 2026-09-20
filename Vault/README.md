@@ -133,4 +133,31 @@ You shouldn't need to manually change the locale or any other simulator setting 
 	<td>Generate App Store screenshots (see <a href="./Screenshots/README.md">Screenshots/</a>)</td>
 	<td><b>make screenshots</b></td>
   </tr>
+  <tr>
+	<td>Regenerate the app icon from its SwiftUI source (see <a href="#app-icon">App Icon</a>)</td>
+	<td><b>make app-icon</b></td>
+  </tr>
 </table>
+
+## App Icon
+
+The app icon is not a hand-made image: it is a SwiftUI view.
+
+- `Sources/VaultAppIcon` holds the drawing (`VaultAppIconView`, built from
+  `VaultLockGlyphView`) and the lock animation made from the same artwork
+  (`VaultLockAnimationView`). It depends on nothing but SwiftUI, so it builds for
+  the Mac as well as iOS.
+- `Sources/VaultAppIconGenerator` renders that view with `ImageRenderer` into
+  `VaultApp/VaultApp/Assets.xcassets/AppIcon.appiconset` as three 1024px PNGs
+  (default, dark and tinted appearances) and rewrites the set's `Contents.json`.
+
+Run `make app-icon` after changing the drawing and commit the result. For a quick
+look without touching the catalog, point it elsewhere and shrink it:
+
+```sh
+swift run -c release vault-app-icon-generator --output /tmp/icon-preview --size 256
+```
+
+The same drawing is the padlock on a locked item's detail screen, where it spins
+open once the user authenticates, so the icon on the Home Screen and the door in
+the app never drift apart.

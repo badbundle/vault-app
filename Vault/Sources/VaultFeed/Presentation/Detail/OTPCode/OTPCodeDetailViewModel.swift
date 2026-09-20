@@ -191,7 +191,14 @@ public final class OTPCodeDetailViewModel: DetailViewModel {
                     isFinishedSubject.send()
                 case let .editing(code, metadata):
                     try await editor.updateCode(id: metadata.id, item: code, edits: editingModel.detail)
+                    // Locking takes effect on this very screen, so the user sees
+                    // the lock work and has to unlock to get back in.
+                    let didLock = !editingModel.initialDetail.lockState.isLocked && editingModel.detail.lockState
+                        .isLocked
                     editingModel.didPersist()
+                    if didLock {
+                        isLocked = true
+                    }
                 }
             }
         } catch {

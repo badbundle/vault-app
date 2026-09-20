@@ -192,6 +192,51 @@ struct OTPCodeDetailViewModelTests {
     }
 
     @Test
+    func saveChanges_editingLocksItemWhenLockStateTurnsOn() async {
+        let sut = makeSUTEditing(metadata: anyVaultItemMetadata(lockState: .notLocked))
+        sut.editingModel.detail.lockState = .lockedWithNativeSecurity
+
+        await sut.saveChanges()
+
+        #expect(sut.isLocked)
+    }
+
+    @Test
+    func saveChanges_editingDoesNotLockItemWhenLockStateStaysOff() async {
+        let sut = makeSUTEditing(metadata: anyVaultItemMetadata(lockState: .notLocked))
+        makeDirty(sut: sut)
+
+        await sut.saveChanges()
+
+        #expect(!sut.isLocked)
+    }
+
+    @Test
+    func saveChanges_editingDoesNotRelockUnlockedItemWhenLockStateStaysOn() async {
+        let sut = makeSUTEditing(metadata: anyVaultItemMetadata(lockState: .lockedWithNativeSecurity))
+        sut.isLocked = false
+        makeDirty(sut: sut)
+
+        await sut.saveChanges()
+
+        #expect(!sut.isLocked)
+    }
+
+    @Test
+    func saveChanges_editingDoesNotLockItemIfSaveFailed() async {
+        let editor = OTPCodeDetailEditorMock()
+        editor.updateCodeHandler = { _, _, _ in
+            throw TestError()
+        }
+        let sut = makeSUTEditing(metadata: anyVaultItemMetadata(lockState: .notLocked), editor: editor)
+        sut.editingModel.detail.lockState = .lockedWithNativeSecurity
+
+        await sut.saveChanges()
+
+        #expect(!sut.isLocked)
+    }
+
+    @Test
     func saveChanges_editingSetsSavingToFalseAfterSaveError() async {
         let editor = OTPCodeDetailEditorMock()
         editor.updateCodeHandler = { _, _, _ in

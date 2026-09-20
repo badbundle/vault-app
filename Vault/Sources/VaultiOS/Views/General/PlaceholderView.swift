@@ -2,16 +2,17 @@ import Foundation
 import SwiftUI
 
 /// Temporary view to use when there is no content with: icon, title, description.
-struct PlaceholderView: View {
-    var systemIcon: String
+struct PlaceholderView<Icon: View>: View {
     var title: String
     var subtitle: String?
+    /// Drawn at `.largeTitle` size; a system image by default.
+    @ViewBuilder var icon: () -> Icon
 
     @ScaledMetric(relativeTo: .largeTitle) private var iconHeight: Double = 40
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Image(systemName: systemIcon)
+            icon()
                 .font(.largeTitle)
                 .foregroundStyle(.primary)
                 .frame(height: iconHeight, alignment: .center)
@@ -33,6 +34,14 @@ struct PlaceholderView: View {
         .textCase(.none)
         .multilineTextAlignment(.leading)
         .listRowSeparator(.hidden)
+    }
+}
+
+extension PlaceholderView where Icon == Image {
+    init(systemIcon: String, title: String, subtitle: String? = nil) {
+        self.init(title: title, subtitle: subtitle) {
+            Image(systemName: systemIcon)
+        }
     }
 }
 

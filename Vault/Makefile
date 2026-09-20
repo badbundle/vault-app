@@ -4,6 +4,12 @@ SHELL = /bin/sh
 benchmark-keygen:
 	swift run -c release vault-keygen-speedtest
 
+# App icon: renders Sources/VaultAppIcon into the app's asset catalog as the
+# light, dark and tinted 1024px PNGs plus Contents.json. Commit the output.
+.PHONY: app-icon
+app-icon:
+	swift run -c release vault-app-icon-generator
+
 .PHONY: format
 format:
 	swift package plugin --allow-writing-to-package-directory swiftlint --fix --quiet ./Sources

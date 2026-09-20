@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import VaultAppIcon
 import VaultFeed
 
 /// The basis of a detail view with some of the editing state already bound to buttons etc.
@@ -13,7 +14,14 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
     @ViewBuilder var contents: () -> ContentsView
 
     @Environment(DeviceAuthenticationService.self) private var authenticationService: DeviceAuthenticationService
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isError = false
+    /// What the vault door in the locked section is doing. `.lock` plays when a
+    /// save has just locked the item; `.unlock` once the user has authenticated,
+    /// with the contents taking over as the bolts release.
+    @State private var lockTransition: VaultLockTransition?
+    @State private var lockClickCount = 0
 
     private func dismiss() {
         presentationMode?.wrappedValue.dismiss()
@@ -31,6 +39,14 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(viewModel.editingModel.isDirty)
         .animation(.snappy, value: viewModel.isInEditMode)
+        .sensoryFeedback(.impact(weight: .heavy), trigger: lockClickCount)
+        .onChange(of: viewModel.isLocked) { wasLocked, isLocked in
+            // Locked by a save: show the door being shut, so the lock is seen to
+            // work. Also clears any unlock that played before this re-lock.
+            if isLocked, !wasLocked {
+                lockTransition = reduceMotion ? nil : .lock
+            }
+        }
         .onReceive(viewModel.isFinishedPublisher()) {
             dismiss()
         }
@@ -90,11 +106,9 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
     private var lockedSection: some View {
         if authenticationService.canAuthenticate {
             Section {
-                PlaceholderView(
-                    systemIcon: "lock.fill",
-                    title: "Item Locked",
-                    subtitle: "Unlock this item to view its contents.",
-                )
+                PlaceholderView(title: "Item Locked", subtitle: "Unlock this item to view its contents.") {
+                    lockGlyph
+                }
                 .padding()
                 .containerRelativeFrame(.horizontal)
             }
@@ -102,7 +116,11 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
             Section {
                 AsyncButton {
                     try await authenticationService.validateAuthentication(reason: "Unlock item")
-                    viewModel.isLocked = false
+                    if reduceMotion {
+                        viewModel.isLocked = false
+                    } else {
+                        lockTransition = .unlock
+                    }
                 } label: {
                     unlockRow {
                         Text("Unlock")
@@ -113,6 +131,7 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
                         ProgressView()
                     }
                 }
+                .disabled(lockTransition != nil)
             }
         } else {
             Section {
@@ -144,6 +163,43 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
                 }
             }
         }
+    }
+
+    /// The padlock of the locked section is the vault door from the app icon. At
+    /// rest it sits shut. When a save has just locked the item the door swings
+    /// shut and the wheel spins to seat; when the user authenticates the wheel
+    /// spins the other way and the contents come in on the click (at this size
+    /// the door swinging open afterwards would only be a wait).
+    @ViewBuilder
+    private var lockGlyph: some View {
+        let appearance: VaultAppIconAppearance = colorScheme == .dark ? .dark : .light
+        Group {
+            switch lockTransition {
+            case .lock:
+                VaultLockAnimationView(
+                    transition: .lock,
+                    appearance: appearance,
+                    metrics: .compact,
+                    onClick: { lockClickCount += 1 },
+                    onFinished: { lockTransition = nil },
+                )
+            case .unlock:
+                VaultLockAnimationView(
+                    transition: .unlock,
+                    appearance: appearance,
+                    metrics: .compact,
+                    onClick: {
+                        lockClickCount += 1
+                        withAnimation(.snappy) {
+                            viewModel.isLocked = false
+                        }
+                    },
+                )
+            case nil:
+                VaultLockGlyphView(appearance: appearance, metrics: .compact)
+            }
+        }
+        .accessibilityHidden(true)
     }
 
     private func unlockRow(@ViewBuilder content: @escaping () -> some View) -> some View {

@@ -46,6 +46,13 @@
         "identifier" : "VaultKeygenSpeedtestCompileTests",
         "name" : "VaultKeygenSpeedtestCompileTests"
       }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "VaultAppIconGeneratorTests",
+        "name" : "VaultAppIconGeneratorTests"
+      }
     }
   ],
   "version" : 1

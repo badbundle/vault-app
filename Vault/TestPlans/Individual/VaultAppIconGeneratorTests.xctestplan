@@ -1,0 +1,37 @@
+{
+  "configurations" : [
+    {
+      "id" : "EB3B4F0C-A23A-42FD-8EFE-7CF5F3B042DB",
+      "name" : "Test Scheme Action",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "environmentVariableEntries" : [
+      {
+        "key" : "TZ",
+        "value" : "UTC"
+      }
+    ],
+    "language" : "en",
+    "locationScenario" : {
+      "identifier" : "London, England",
+      "referenceType" : "built-in"
+    },
+    "region" : "US",
+    "testExecutionOrdering" : "random",
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "VaultAppIconGeneratorTests",
+        "name" : "VaultAppIconGeneratorTests"
+      }
+    }
+  ],
+  "version" : 1
+}
