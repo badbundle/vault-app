@@ -6,7 +6,7 @@
 # references are recorded on that runtime. No GitHub-hosted GA image provides
 # Xcode 27 yet: `macos-26` tops out at Xcode 26.6 and carries no iOS 27.0
 # simulator runtime. The beta `xcode-27` image does have both, but its runner
-# pool could not absorb this 13-way test matrix — every shard sat queued
+# pool could not absorb this 14-way test matrix — every shard sat queued
 # indefinitely.
 #
 # RE-ENABLE when Xcode 27 is available on the `macos-26` runner image (or a
@@ -149,6 +149,8 @@ jobs:
             only_testing: VaultCoreTests
           - suite: VaultKeygenSpeedtestCompileTests
             only_testing: VaultKeygenSpeedtestCompileTests
+          - suite: VaultAppIconGeneratorTests
+            only_testing: VaultAppIconGeneratorTests
           - suite: VaultExportTests
             only_testing: VaultExportTests
           - suite: VaultBackupTests

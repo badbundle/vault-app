@@ -112,6 +112,13 @@
     {
       "target" : {
         "containerPath" : "container:",
+        "identifier" : "VaultAppIconGeneratorTests",
+        "name" : "VaultAppIconGeneratorTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
         "identifier" : "VaultExportTests",
         "name" : "VaultExportTests"
       }

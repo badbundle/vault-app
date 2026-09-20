@@ -44,6 +44,11 @@ let package = Package(
             name: "vault-keygen-speedtest",
             targets: ["VaultKeygenSpeedtest"],
         ),
+        .library(name: "VaultAppIcon", targets: ["VaultAppIcon"]),
+        .executable(
+            name: "vault-app-icon-generator",
+            targets: ["VaultAppIconGenerator"],
+        ),
         .plugin(name: "FormatLint", targets: ["FormatLint"]),
     ],
     dependencies: [
@@ -51,6 +56,9 @@ let package = Package(
         .package(url: "https://github.com/attaswift/BigInt.git", exact: "6.0.1"),
         .package(url: "https://github.com/krzyzanowskim/CryptoSwift", exact: "1.10.0"),
         .package(url: "https://github.com/sunghyun-k/swiftui-toasts.git", exact: "1.1.1"),
+        // Already in the graph through swiftui-toasts; used directly for the
+        // full-screen lock animation, which has to draw above presented sheets.
+        .package(url: "https://github.com/sunghyun-k/swiftui-window-overlay.git", exact: "1.0.2"),
         .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2"),
         .package(url: "https://github.com/twostraws/CodeScanner", exact: "2.5.2"),
         .package(url: "https://github.com/dm-zharov/swift-security.git", exact: "2.5.1"),
@@ -77,10 +85,12 @@ let package = Package(
                 "VaultFeed",
                 "VaultSettings",
                 "VaultiOSShared",
+                "VaultAppIcon",
                 "CodeScanner",
                 "FoundationExtensions",
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
                 .product(name: "Toasts", package: "swiftui-toasts"),
+                .product(name: "WindowOverlay", package: "swiftui-window-overlay"),
             ],
             resources: [
                 .process("Resources/Feed.xcstrings"),
@@ -92,6 +102,7 @@ let package = Package(
             name: "VaultiOSTests",
             dependencies: [
                 "VaultiOS",
+                "VaultAppIcon",
                 "VaultCore",
                 "VaultFeed",
                 "VaultSettings",
@@ -276,6 +287,34 @@ let package = Package(
             name: "VaultKeygenSpeedtestCompileTests",
             dependencies: ["VaultKeygenSpeedtest"],
             swiftSettings: swiftSettings,
+        ),
+
+        // MARK: - APP ICON
+
+        // The app icon as a SwiftUI view, plus the lock animation built from the
+        // same artwork. Deliberately a leaf (SwiftUI + Foundation only) so the
+        // generator below can build it for the macOS host with `swift run`.
+        .target(
+            name: "VaultAppIcon",
+            swiftSettings: swiftSettings,
+            plugins: targetPlugins,
+        ),
+        // Renders `VaultAppIcon` into the app's `AppIcon.appiconset` (`make app-icon`).
+        .executableTarget(
+            name: "VaultAppIconGenerator",
+            dependencies: [
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                "VaultAppIcon",
+            ],
+            swiftSettings: swiftSettings,
+        ),
+        // Also what makes CI compile the generator: the CI schemes only build
+        // what the test plans reach (see `VaultKeygenSpeedtestCompileTests`).
+        .testTarget(
+            name: "VaultAppIconGeneratorTests",
+            dependencies: ["VaultAppIconGenerator", "VaultAppIcon"],
+            swiftSettings: swiftSettings,
+            plugins: testTargetPlugins,
         ),
         .target(
             name: "VaultiOSAutofill",

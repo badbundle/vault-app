@@ -1,0 +1,87 @@
+import SwiftUI
+
+/// The safe door and its wheel, with no background.
+///
+/// One drawing serves both the app icon (wheel at rest, door shut) and every frame
+/// of the lock animation (wheel spinning, door swinging on its left-hand hinge).
+/// The depth comes from layering alone: a metal gradient, a rim light clipped to
+/// the edges and a soft shadow pool under the wheel. No blur, shadow or material
+/// effects, so it renders the same on screen, in `ImageRenderer` and in snapshots.
+public struct VaultLockGlyphView: View {
+    public var wheelRotation: Angle
+    /// 0 is shut; 1 is swung open by `metrics.doorOpenAngle`.
+    public var doorOpening: Double
+    public var appearance: VaultAppIconAppearance
+    public var metrics: VaultIconMetrics
+
+    public init(
+        wheelRotation: Angle = .zero,
+        doorOpening: Double = 0,
+        appearance: VaultAppIconAppearance = .light,
+        metrics: VaultIconMetrics = .standard,
+    ) {
+        self.wheelRotation = wheelRotation
+        self.doorOpening = doorOpening
+        self.appearance = appearance
+        self.metrics = metrics
+    }
+
+    public var body: some View {
+        GeometryReader { proxy in
+            let side = min(proxy.size.width, proxy.size.height)
+            artwork(side: side)
+                .frame(width: side, height: side)
+                .rotation3DEffect(
+                    .degrees(-doorOpening * metrics.doorOpenAngle),
+                    axis: (x: 0, y: 1, z: 0),
+                    anchor: UnitPoint(x: (1 - metrics.doorSide) / 2, y: 0.5),
+                    perspective: 0.5,
+                )
+                .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+        .aspectRatio(1, contentMode: .fit)
+    }
+
+    private func artwork(side: CGFloat) -> some View {
+        let palette = appearance.palette
+        let door = VaultDoorShape(metrics: metrics)
+        // Rotating the shape rather than the view keeps the light coming from
+        // above while the wheel turns.
+        let wheel = VaultWheelShape(metrics: metrics).rotation(wheelRotation)
+        let highlightWidth = side * metrics.highlightWidth
+        let shadowDiameter = side * metrics.wheelShadowRadius * 2
+
+        return ZStack {
+            door.fill(palette.metalGradient)
+            door
+                .stroke(palette.highlightGradient, lineWidth: highlightWidth)
+                .clipShape(door)
+            Circle()
+                .fill(
+                    RadialGradient(
+                        colors: [palette.shadow, palette.shadow.opacity(0)],
+                        center: .center,
+                        startRadius: 0,
+                        endRadius: side * metrics.wheelShadowRadius,
+                    ),
+                )
+                .frame(width: shadowDiameter, height: shadowDiameter)
+                .offset(y: side * metrics.wheelShadowOffset)
+            wheel.fill(palette.metalGradient)
+            wheel
+                .stroke(palette.highlightGradient, lineWidth: highlightWidth)
+                .clipShape(wheel)
+        }
+    }
+}
+
+#Preview("Closed") {
+    VaultLockGlyphView()
+        .frame(width: 256, height: 256)
+}
+
+#Preview("Open, dark") {
+    VaultLockGlyphView(wheelRotation: .degrees(30), doorOpening: 1, appearance: .dark)
+        .frame(width: 256, height: 256)
+        .background(Color.black)
+}
