@@ -124,12 +124,8 @@ struct BackupImportFlowView: View {
 
     private var automaticImportSection: some View {
         Section {
-            Button {
+            ProminentActionButton("Select PDF File", systemImage: "doc.badge.arrow.up.fill") {
                 isImporting = true
-            } label: {
-                FormRow(image: Image(systemName: "arrow.down.document.fill"), color: .accentColor) {
-                    Text("Select PDF File")
-                }
             }
         } header: {
             Text("Automatic Import")
@@ -149,12 +145,8 @@ struct BackupImportFlowView: View {
 
     private var qrCodeImportSection: some View {
         Section {
-            Button {
+            ProminentActionButton("Start Scanning", systemImage: "qrcode.viewfinder") {
                 modal = .cameraScanning
-            } label: {
-                FormRow(image: Image(systemName: "qrcode.viewfinder"), color: .accentColor) {
-                    Text("Start Scanning")
-                }
             }
         } header: {
             Text("QR Code Import")
@@ -227,16 +219,8 @@ struct BackupImportFlowView: View {
     // MARK: - Import Row
 
     private func importRow(vault: VaultApplicationPayload) -> some View {
-        AsyncButton {
+        ProminentActionButton("Import Now", systemImage: "square.and.arrow.down") {
             await viewModel.importPayload(payload: vault)
-        } label: {
-            FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
-                Text("Import Now")
-            }
-        } loading: {
-            FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
-                ProgressView()
-            }
         }
     }
 }

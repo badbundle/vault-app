@@ -62,16 +62,8 @@ struct BackupKeyDecryptorView: View {
 
     private var decryptSection: some View {
         Section {
-            AsyncButton {
+            ProminentActionButton("Decrypt", systemImage: "lock.open.fill") {
                 await viewModel.attemptDecryption()
-            } label: {
-                FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
-                    Text("Decrypt")
-                }
-            } loading: {
-                FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
-                    ProgressView()
-                }
             }
             .disabled(!viewModel.canAttemptDecryption || viewModel.isDecrypting)
         }

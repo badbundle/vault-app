@@ -100,16 +100,8 @@ struct BackupExportView: View {
 
     private func authenticateSection(isError: Bool) -> some View {
         Section {
-            AsyncButton {
+            ProminentActionButton("Authenticate", systemImage: "key.horizontal.fill") {
                 await dataModel.loadBackupPassword()
-            } label: {
-                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
-                    Text("Authenticate")
-                }
-            } loading: {
-                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
-                    ProgressView()
-                }
             }
         } header: {
             Text(isError ? "Authentication Failed" : "Locked")
@@ -145,12 +137,8 @@ struct BackupExportView: View {
 
     private func pdfBackupSection(password: DerivedEncryptionKey) -> some View {
         Section {
-            Button {
+            ProminentActionButton("Create PDF Backup", systemImage: "printer.filled.and.paper") {
                 modal = .pdfBackup(password)
-            } label: {
-                FormRow(image: Image(systemName: "printer.filled.and.paper"), color: .accentColor) {
-                    Text("Create PDF Backup")
-                }
             }
         } header: {
             Text("PDF Backup")
@@ -163,12 +151,8 @@ struct BackupExportView: View {
 
     private func deviceTransferSection(password: DerivedEncryptionKey) -> some View {
         Section {
-            Button {
+            ProminentActionButton("Start Transfer", systemImage: "qrcode") {
                 modal = .deviceTransfer(password)
-            } label: {
-                FormRow(image: Image(systemName: "qrcode"), color: .accentColor) {
-                    Text("Start Transfer")
-                }
             }
         } header: {
             Text("Transfer to Another Device")

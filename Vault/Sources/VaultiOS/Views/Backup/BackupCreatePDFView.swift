@@ -54,16 +54,8 @@ struct BackupCreatePDFView: View {
 
     private var createSection: some View {
         Section {
-            AsyncButton {
+            ProminentActionButton("Make PDF", systemImage: "doc.text.fill") {
                 await viewModel.createPDF()
-            } label: {
-                FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
-                    Text("Make PDF")
-                }
-            } loading: {
-                FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
-                    ProgressView()
-                }
             }
         } footer: {
             if case let .error(presentationError) = viewModel.state {

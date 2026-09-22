@@ -24,15 +24,9 @@ struct OpenSourceView: View {
     private var linkSection: some View {
         Section {
             Link(destination: OpenSourceStrings.openSourceLink) {
-                HStack {
-                    Text(OpenSourceStrings.viewOnGitHub)
-                    Image(systemName: "arrow.up.right")
-                }
-                .frame(maxWidth: .infinity)
+                ProminentActionLabel(OpenSourceStrings.viewOnGitHub, systemImage: "arrow.up.right")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .noListBackground()
+            .prominentActionButton()
         }
     }
 }

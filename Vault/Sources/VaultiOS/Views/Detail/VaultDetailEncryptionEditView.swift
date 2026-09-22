@@ -73,14 +73,9 @@ struct VaultDetailEncryptionEditView: View {
 
         if newEncryptionPassword.isNotBlank {
             Section {
-                Button {
+                ProminentActionButton("Encrypt", systemImage: "lock.fill") {
                     didSetNewEncryptionPassword(newEncryptionPassword)
                     dismiss()
-                } label: {
-                    FormRow(image: Image(systemName: "checkmark.circle.fill"), color: .accentColor) {
-                        Text("Encrypt")
-                            .foregroundStyle(Color.accentColor)
-                    }
                 }
                 .disabled(!doPasswordsMatch)
             }
@@ -100,14 +95,9 @@ struct VaultDetailEncryptionEditView: View {
         }
 
         Section {
-            Button {
+            ProminentActionButton("Remove Encryption", systemImage: "lock.slash.fill", role: .destructive) {
                 didRemoveEncryption()
                 dismiss()
-            } label: {
-                FormRow(image: Image(systemName: "xmark.circle.fill"), color: .red) {
-                    Text("Remove Encryption")
-                        .foregroundStyle(Color.red)
-                }
             }
         }
     }

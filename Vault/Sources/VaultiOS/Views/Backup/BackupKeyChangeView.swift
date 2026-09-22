@@ -20,6 +20,7 @@ struct BackupKeyChangeView: View {
                 authenticateSection(isError: false)
             case .allowed:
                 passwordSection
+                setPasswordSection
                 detailsSection
             case .denied:
                 authenticateSection(isError: true)
@@ -70,16 +71,8 @@ struct BackupKeyChangeView: View {
 
     private func authenticateSection(isError: Bool) -> some View {
         Section {
-            AsyncButton {
+            ProminentActionButton("Authenticate", systemImage: "key.horizontal.fill") {
                 await viewModel.onAppear()
-            } label: {
-                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
-                    Text("Authenticate")
-                }
-            } loading: {
-                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
-                    ProgressView()
-                }
             }
         } header: {
             Text(isError ? "Authentication Failed" : "Locked")
@@ -111,32 +104,33 @@ struct BackupKeyChangeView: View {
                     .foregroundStyle(viewModel.passwordConfirmMatches ? .green : .red)
                 }
                 .disabled(viewModel.newPassword.isLoading)
-
-                Button {
-                    keyGenerationTask?.cancel()
-                    keyGenerationTask = Task {
-                        await viewModel.saveEnteredPassword()
-                    }
-                } label: {
-                    FormRow(image: Image(systemName: "checkmark.shield.fill"), color: .accentColor) {
-                        Text("Set Backup Password")
-                    }
-                }
-                .animation(.none, value: viewModel.newPassword)
-                .disabled(!viewModel.canSetBackupPassword)
             }
         } header: {
             Text("Backup Password")
         } footer: {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(
-                    "Backups are encrypted with this password. You will need it to restore a backup, so keep it somewhere safe.",
-                )
+            Text(
+                "Backups are encrypted with this password. You will need it to restore a backup, so keep it somewhere safe.",
+            )
+        }
+        .animation(.snappy, value: viewModel.newlyEnteredPassword)
+    }
 
+    @ViewBuilder
+    private var setPasswordSection: some View {
+        if viewModel.newlyEnteredPassword.isNotEmpty {
+            Section {
+                ProminentActionButton("Set Backup Password", systemImage: "checkmark.shield.fill") {
+                    keyGenerationTask?.cancel()
+                    keyGenerationTask = Task {
+                        await viewModel.saveEnteredPassword()
+                    }
+                }
+                .animation(.none, value: viewModel.newPassword)
+                .disabled(!viewModel.canSetBackupPassword)
+            } footer: {
                 setPasswordStatus
             }
         }
-        .animation(.snappy, value: viewModel.newlyEnteredPassword)
     }
 
     @ViewBuilder

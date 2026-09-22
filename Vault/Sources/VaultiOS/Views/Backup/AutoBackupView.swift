@@ -70,16 +70,8 @@ struct AutoBackupView: View {
 
     private func authenticateSection(isError: Bool) -> some View {
         Section {
-            AsyncButton {
+            ProminentActionButton("Authenticate", systemImage: "key.horizontal.fill") {
                 await dataModel.loadBackupPassword()
-            } label: {
-                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
-                    Text("Authenticate")
-                }
-            } loading: {
-                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
-                    ProgressView()
-                }
             }
         } header: {
             Text(isError ? "Authentication Failed" : "Locked")
@@ -230,20 +222,13 @@ struct AutoBackupView: View {
             } else {
                 // Only disable while the tap is in flight: the status row replaces this button as soon as
                 // the service reports progress, so the button's own spinner would only flash.
-                AsyncButton(
-                    action: {
-                        await viewModel.backupNow()
-                    },
+                ProminentActionButton(
+                    "Backup Now",
+                    systemImage: "arrow.clockwise.icloud",
                     actionOptions: [.disableButton],
-                    label: {
-                        FormRow(image: Image(systemName: "arrow.clockwise.icloud"), color: .accentColor) {
-                            Text("Backup Now")
-                        }
-                    },
-                    loading: {
-                        EmptyView()
-                    },
-                )
+                ) {
+                    await viewModel.backupNow()
+                }
             }
         }
         .animation(.default, value: viewModel.showsBackupCompleteNotice)
