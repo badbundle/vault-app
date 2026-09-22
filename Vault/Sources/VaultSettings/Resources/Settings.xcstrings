@@ -45,35 +45,13 @@
         }
       }
     },
-    "openSource.aboutLink" : {
+    "openSource.about" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "View the source code on GitHub"
-          }
-        }
-      }
-    },
-    "openSource.aboutOpenSource" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The source code for this app is available for anybody to view, modify, or compile on their own. This is known as open-source software (OSS)."
-          }
-        }
-      }
-    },
-    "openSource.aboutPrivacy" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "When it comes to storing your senstive data, never take any company or individual at their word. You can audit the source code and build this app yourself if you are particularly security conscious."
+            "value" : "The source code for this app is available for anybody to view, modify, or compile on their own. When it comes to storing your sensitive data, never take any company or individual at their word: you can audit the source code and build this app yourself if you are particularly security conscious."
           }
         }
       }
@@ -85,6 +63,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Open Source"
+          }
+        }
+      }
+    },
+    "openSource.viewOnGitHub" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View on GitHub"
           }
         }
       }

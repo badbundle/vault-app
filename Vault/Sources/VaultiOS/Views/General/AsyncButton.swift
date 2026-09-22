@@ -6,6 +6,7 @@ import SwiftUI
 /// Attribution: https://www.swiftbysundell.com/articles/building-an-async-swiftui-button/
 struct AsyncButton<Label: View, Loading: View>: View {
     var progressAlignment: Alignment = .center
+    var role: ButtonRole?
     var action: () async throws -> Void
     var actionOptions = Set(ActionOption.allCases)
     @ViewBuilder var label: () -> Label
@@ -17,6 +18,7 @@ struct AsyncButton<Label: View, Loading: View>: View {
 
     var body: some View {
         Button(
+            role: role,
             action: {
                 if actionOptions.contains(.disableButton) {
                     isDisabled = true
@@ -56,9 +58,12 @@ struct AsyncButton<Label: View, Loading: View>: View {
     }
 }
 
+/// Top level rather than nested so the same option set fits every `AsyncButton` specialisation.
+enum AsyncButtonActionOption: CaseIterable {
+    case disableButton
+    case showProgressView
+}
+
 extension AsyncButton {
-    enum ActionOption: CaseIterable {
-        case disableButton
-        case showProgressView
-    }
+    typealias ActionOption = AsyncButtonActionOption
 }

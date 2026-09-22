@@ -5,16 +5,12 @@ public enum OpenSourceStrings {
         localized(key: "openSource.title")
     }
 
-    public static var aboutOpenSource: String {
-        localized(key: "openSource.aboutOpenSource")
+    public static var about: String {
+        localized(key: "openSource.about")
     }
 
-    public static var aboutPrivacy: String {
-        localized(key: "openSource.aboutPrivacy")
-    }
-
-    public static var aboutLink: String {
-        localized(key: "openSource.aboutLink")
+    public static var viewOnGitHub: String {
+        localized(key: "openSource.viewOnGitHub")
     }
 
     public static let openSourceLink = URL(string: "https://github.com/badbundle/vault-app")!

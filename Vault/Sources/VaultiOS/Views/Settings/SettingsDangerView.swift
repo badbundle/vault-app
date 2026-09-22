@@ -37,7 +37,7 @@ struct SettingsDangerView: View {
 
     private var deleteAllSection: some View {
         Section {
-            AsyncButton {
+            ProminentActionButton("Delete All Data", systemImage: "trash.fill", role: .destructive) {
                 do {
                     withAnimation {
                         deleteError = nil
@@ -51,15 +51,6 @@ struct SettingsDangerView: View {
                         deleteError = error
                     }
                 }
-            } label: {
-                deleteAllRow {
-                    Text("Delete All Data")
-                        .foregroundStyle(Color.red)
-                }
-            } loading: {
-                deleteAllRow {
-                    ProgressView()
-                }
             }
         } footer: {
             if let deleteError {
@@ -67,9 +58,5 @@ struct SettingsDangerView: View {
                     .foregroundStyle(.red)
             }
         }
-    }
-
-    private func deleteAllRow(@ViewBuilder content: @escaping () -> some View) -> some View {
-        FormRow(image: Image(systemName: "trash.fill"), color: .red, content: content)
     }
 }

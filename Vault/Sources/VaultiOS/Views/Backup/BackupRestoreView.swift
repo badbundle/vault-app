@@ -64,8 +64,7 @@ extension BackupRestoreView {
         Section {
             importButton(
                 title: "Import Backup",
-                icon: "square.and.arrow.down.fill",
-                color: .accentColor,
+                icon: "square.and.arrow.down",
             ) {
                 modal = .importToCurrentlyEmpty(dataModel.backupPassword.fetchedPassword)
             }
@@ -78,8 +77,7 @@ extension BackupRestoreView {
         Section {
             importButton(
                 title: "Import & Merge",
-                icon: "square.and.arrow.down.on.square.fill",
-                color: .accentColor,
+                icon: "square.and.arrow.down.on.square",
             ) {
                 modal = .importAndMerge(dataModel.backupPassword.fetchedPassword)
             }
@@ -97,7 +95,6 @@ extension BackupRestoreView {
             importButton(
                 title: "Import & Override",
                 icon: "exclamationmark.triangle.fill",
-                color: .red,
                 isDestructive: true,
             ) {
                 modal = .importAndOverride(dataModel.backupPassword.fetchedPassword)
@@ -116,22 +113,12 @@ extension BackupRestoreView {
     private func importButton(
         title: String,
         icon: String,
-        color: Color,
         isDestructive: Bool = false,
         presentModal: @escaping () -> Void,
     ) -> some View {
-        AsyncButton {
+        ProminentActionButton(title, systemImage: icon, role: isDestructive ? .destructive : nil) {
             await dataModel.loadBackupPassword()
             presentModal()
-        } label: {
-            FormRow(image: Image(systemName: icon), color: color) {
-                Text(title)
-                    .foregroundStyle(isDestructive ? Color.red : Color.accentColor)
-            }
-        } loading: {
-            FormRow(image: Image(systemName: icon), color: color) {
-                ProgressView()
-            }
         }
     }
 }

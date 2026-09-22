@@ -94,24 +94,11 @@ struct EncryptedItemDetailView: View {
         }
 
         Section {
-            AsyncButton {
+            ProminentActionButton("Decrypt", systemImage: "lock.open.fill") {
                 await viewModel.startDecryption()
-            } label: {
-                decryptRow {
-                    Text("Decrypt")
-                        .foregroundStyle(Color.accentColor)
-                }
-            } loading: {
-                decryptRow {
-                    ProgressView()
-                }
             }
             .disabled(!viewModel.canStartDecryption)
         }
         .animation(.snappy, value: viewModel.state)
-    }
-
-    private func decryptRow(@ViewBuilder content: @escaping () -> some View) -> some View {
-        FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor, content: content)
     }
 }

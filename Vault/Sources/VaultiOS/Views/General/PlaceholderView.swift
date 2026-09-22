@@ -16,7 +16,7 @@ struct PlaceholderView<Icon: View>: View {
                 .font(.largeTitle)
                 .foregroundStyle(.primary)
                 .frame(height: iconHeight, alignment: .center)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(.headline)
                     .foregroundStyle(.primary)

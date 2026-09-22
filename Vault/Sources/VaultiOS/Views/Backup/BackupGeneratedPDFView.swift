@@ -97,10 +97,9 @@ struct BackupGeneratedPDFView: View {
     private var exportSection: some View {
         Section {
             ShareLink(item: pdf.diskURL, subject: .init("Vault Export")) {
-                FormRow(image: Image(systemName: "square.and.arrow.up.fill"), color: .accentColor) {
-                    Text("Export & Save")
-                }
+                ProminentActionLabel("Export & Save", systemImage: "square.and.arrow.up")
             }
+            .prominentActionButton()
         } footer: {
             Text("Make sure you export and save the PDF, or your data will not be backed up.")
                 .foregroundStyle(.red)

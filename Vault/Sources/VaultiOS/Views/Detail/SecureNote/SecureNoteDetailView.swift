@@ -394,13 +394,8 @@ struct SecureNoteDetailView: View {
     }
 
     private var deleteButton: some View {
-        Button {
+        ProminentActionButton(localized(key: "action.delete.title"), systemImage: "trash.fill", role: .destructive) {
             isShowingDeleteConfirmation = true
-        } label: {
-            FormRow(image: Image(systemName: "trash.fill"), color: .red) {
-                Text(localized(key: "action.delete.title"))
-                    .foregroundStyle(Color.red)
-            }
         }
     }
 }

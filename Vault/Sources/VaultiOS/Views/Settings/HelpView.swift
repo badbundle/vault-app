@@ -7,58 +7,56 @@ struct HelpView: View {
 
     var body: some View {
         Form {
-            generalSection
-            securitySection
-            backupsSection
+            headerSection
+            questionsSection
         }
         .navigationTitle(Text(viewModel.helpTitle))
+        .navigationBarTitleDisplayMode(.inline)
     }
 
-    private var generalSection: some View {
+    private var headerSection: some View {
+        PlaceholderView(
+            systemIcon: "questionmark.bubble.fill",
+            title: viewModel.helpTitle,
+            subtitle: "Answers to common questions about how Vault works.",
+        )
+        .padding()
+        .containerRelativeFrame(.horizontal)
+    }
+
+    private var questionsSection: some View {
         Section {
-            NavigationLink {
+            question("What is a 'code'?") {
                 SettingsDocumentView(title: "About Codes", content: FAQCodesFileContent())
-            } label: {
-                Label("What is a 'code'?", systemImage: "questionmark.circle.fill")
             }
-        } header: {
-            Label("General", systemImage: "info.circle.fill")
-        }
-    }
-
-    private var securitySection: some View {
-        Section {
-            NavigationLink {
+            question("Can I encrypt individual items?") {
                 SettingsDocumentView(title: "Item Encryption", content: FAQItemEncryptionFileContent())
-            } label: {
-                Label("Can I encrypt individual items?", systemImage: "lock.shield.fill")
             }
-        } header: {
-            Label("Security", systemImage: "lock.fill")
+            question("Why should I make backups?") {
+                SettingsDocumentView(title: "About Backups", content: FAQBackupsGeneralFileContent())
+            }
+            question("Are backups secure?") {
+                SettingsDocumentView(title: "Backup Security", content: FAQBackupsSecurityFileContent())
+            }
+            question("How do I move items to another device?") {
+                SettingsDocumentView(title: "Moving Between Devices", content: FAQSyncDevicesFileContent())
+            }
         }
     }
 
-    private var backupsSection: some View {
-        Section {
-            NavigationLink {
-                SettingsDocumentView(title: "About Backups", content: FAQBackupsGeneralFileContent())
-            } label: {
-                Label("Why should I make backups?", systemImage: "questionmark.circle.fill")
+    private func question(_ title: String, @ViewBuilder destination: () -> some View) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            FormRow(image: Image(systemName: "questionmark.circle"), color: .blue, style: .standard) {
+                Text(title)
             }
-
-            NavigationLink {
-                SettingsDocumentView(title: "Backup Security", content: FAQBackupsSecurityFileContent())
-            } label: {
-                Label("Are backups secure?", systemImage: "lock.fill")
-            }
-
-            NavigationLink {
-                SettingsDocumentView(title: "Moving Between Devices", content: FAQSyncDevicesFileContent())
-            } label: {
-                Label("How do I move items to another device?", systemImage: "iphone.and.arrow.forward")
-            }
-        } header: {
-            Label("Backups", systemImage: "doc.on.doc.fill")
         }
+    }
+}
+
+#Preview {
+    NavigationStack {
+        HelpView(viewModel: SettingsViewModel())
     }
 }

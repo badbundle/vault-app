@@ -108,6 +108,7 @@ struct DeviceTransferExportView: View {
         }
     }
 
+    @ViewBuilder
     private func errorSection(_ presentationError: PresentationError) -> some View {
         Section {
             PlaceholderView(
@@ -117,15 +118,11 @@ struct DeviceTransferExportView: View {
             )
             .padding()
             .containerRelativeFrame(.horizontal)
+        }
 
-            Button {
-                Task {
-                    await viewModel.generateShards()
-                }
-            } label: {
-                FormRow(image: Image(systemName: "arrow.clockwise"), color: .accentColor) {
-                    Text("Try Again")
-                }
+        Section {
+            ProminentActionButton("Try Again", systemImage: "arrow.clockwise") {
+                await viewModel.generateShards()
             }
         }
     }
