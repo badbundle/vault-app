@@ -16,7 +16,12 @@ public struct VaultItemFeedView<
     @Environment(VaultInjector.self) private var injector
     @Environment(VaultDataModel.self) private var dataModel
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var state: VaultItemFeedState
+    @Namespace private var barGlass
+    @AccessibilityFocusState private var isStatusBarFocused: Bool
 
     public init(
         localSettings: LocalSettings,
@@ -44,6 +49,13 @@ public struct VaultItemFeedView<
             .onChange(of: dataModel.itemsFilteringByTags) { _, _ in
                 Task {
                     await dataModel.reloadItems()
+                }
+            }
+            .onChange(of: canCollapseBar) { _, canCollapse in
+                // Starting to edit, turning on VoiceOver, or widening to a
+                // regular layout brings the full bar straight back.
+                if !canCollapse {
+                    setBarCollapsed(false)
                 }
             }
     }
@@ -76,10 +88,24 @@ public struct VaultItemFeedView<
                 .containerRelativeFrame(.vertical)
             }
         }
+        // Attached to the vertical scroll view itself, before anything that
+        // wraps it, so the pill row's horizontal scrolling is never seen.
+        .onScrollPhaseChange { _, phase in
+            state.barTracker.phaseChanged(to: phase)
+        }
+        .onScrollGeometryChange(for: FeedScrollPosition.self) { geometry in
+            FeedScrollPosition(geometry)
+        } action: { _, position in
+            guard let change = state.barTracker.scrolled(to: position, canCollapse: canCollapseBar) else { return }
+            setBarCollapsed(change == .collapse)
+        }
         .searchable(text: $dataModel.itemsSearchQuery)
         .autocorrectionDisabled()
         .textInputAutocapitalization(.never)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        // A bar rather than an inset so the system draws its scroll edge
+        // effect: tiles fade and blur beneath the glass instead of running
+        // straight into it.
+        .safeAreaBar(edge: .bottom, spacing: 0) {
             Group {
                 if verticalSizeClass == .compact {
                     compactFeedBar
@@ -99,26 +125,69 @@ public struct VaultItemFeedView<
         }
     }
 
-    /// Plain regular glass lets tile text show straight through the bar, so
-    /// a wash of the background colour sits behind the glass to keep it
-    /// legible over busy content while keeping the glass edge and lensing.
-    ///
-    /// This is a backdrop rather than `Glass.tint` because a tinted glass
-    /// renders as an empty image under `CALayer.render(in:)`, which blanks
-    /// every snapshot test that includes the feed.
-    private var feedBarWash: Color {
-        Color(.systemBackground).opacity(0.85)
+    // MARK: - Collapsing
+
+    /// Collapsing follows the system tab bar, which only minimizes in compact
+    /// layouts. It never happens mid-edit, so Done stays in reach, or under
+    /// VoiceOver, so the filters are never a hidden step away.
+    private var canCollapseBar: Bool {
+        !state.isEditing
+            && !voiceOverEnabled
+            && (horizontalSizeClass == .compact || verticalSizeClass == .compact)
     }
 
-    /// Tag filters stacked above the status bar, for regular-height layouts.
-    private var regularFeedBar: some View {
-        VStack(spacing: 8) {
-            if dataModel.allTags.isNotEmpty {
-                tagFilterBar
-            }
+    /// Checked again at render time so the full bar shows whenever editing,
+    /// whatever order state changes arrive in.
+    private var showsCollapsedBar: Bool {
+        state.isBarCollapsed && !state.isEditing
+    }
 
-            bottomBar
-                .padding(.horizontal)
+    private var barAnimation: Animation {
+        reduceMotion ? .easeInOut(duration: 0.2) : .snappy
+    }
+
+    /// Glass surfaces that morph into each other as the bar collapses. Under
+    /// Reduce Motion they have no identity, so they crossfade instead.
+    private func barGlassID(_ id: FeedBarGlassID) -> FeedBarGlassID? {
+        reduceMotion ? nil : id
+    }
+
+    private var barGlassTransition: GlassEffectTransition {
+        reduceMotion ? .materialize : .matchedGeometry
+    }
+
+    /// One transaction for the bar and the safe area it gives back, so the
+    /// glass morph and the feed's resize move together.
+    private func setBarCollapsed(_ isCollapsed: Bool) {
+        guard state.isBarCollapsed != isCollapsed else { return }
+        withAnimation(barAnimation) {
+            state.isBarCollapsed = isCollapsed
+        }
+    }
+
+    // MARK: - Bar layouts
+
+    /// Tag filters stacked above the status bar, for regular-height layouts.
+    ///
+    /// Everything shares one glass container so the pills and status bar can
+    /// morph into the collapsed capsule. The pill row spans the screen and
+    /// doesn't clip here, so the container can sit outside its scroll view.
+    private var regularFeedBar: some View {
+        GlassEffectContainer {
+            // No spacing: the pills' 44pt hit targets already leave a gap
+            // between the drawn pills and the status bar.
+            VStack(spacing: 0) {
+                if showsCollapsedBar {
+                    collapsedBar
+                } else {
+                    if dataModel.allTags.isNotEmpty {
+                        tagFilterBar(ownsGlassContainer: false)
+                    }
+
+                    bottomBar
+                        .padding(.horizontal)
+                }
+            }
         }
     }
 
@@ -126,39 +195,52 @@ public struct VaultItemFeedView<
     /// layouts (iPhone landscape) where two rows would crowd out the grid.
     private var compactFeedBar: some View {
         HStack(spacing: 8) {
-            if dataModel.allTags.isNotEmpty {
-                tagFilterBar
+            if dataModel.allTags.isNotEmpty, !showsCollapsedBar {
+                tagFilterBar(ownsGlassContainer: true)
             } else {
                 // Keep the bar trailing where it sits when tags are present.
                 Spacer()
             }
 
+            // The pills clip, so they keep their own container; the status
+            // bar and the collapsed capsule share this one to morph in place.
+            GlassEffectContainer {
+                if showsCollapsedBar {
+                    collapsedBar
+                } else {
+                    bottomBar
+                }
+            }
             // Hugging its content collapses the bar's internal spacer so the
             // tag row takes whatever width is left.
-            bottomBar
-                .fixedSize(horizontal: true, vertical: false)
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal)
     }
 
     /// Horizontally scrolling row of tag filters.
-    private var tagFilterBar: some View {
+    ///
+    /// - Parameter ownsGlassContainer: Whether the pills get a container of
+    ///   their own inside the scroll view. Glass renders at the container's
+    ///   level, so when the row clips, a container outside the scroll view
+    ///   would let pills draw past its edge.
+    private func tagFilterBar(ownsGlassContainer: Bool) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            // The container lives inside the scroll view on purpose: glass
-            // renders at the container's level, so a container outside the
-            // scroll view would let pills draw past its clip.
-            GlassEffectContainer {
+            // The container clips to its bounds, and the pill stroke straddles
+            // the capsule edge; the pills' 44pt hit targets leave it room
+            // above and below so the border isn't shaved.
+            if ownsGlassContainer {
+                GlassEffectContainer {
+                    pillRow
+                }
+            } else {
                 pillRow
-                    // The container clips to its bounds, and the pill stroke
-                    // straddles the capsule edge, so give it room above and
-                    // below or the top and bottom of the border get shaved.
-                    .padding(.vertical, 2)
             }
         }
         // Side by side with the bar the scroll view no longer spans the
         // screen, so it must clip or pills would slide underneath the bar.
         .scrollClipDisabled(verticalSizeClass != .compact)
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
     }
 
     private var pillRow: some View {
@@ -176,7 +258,13 @@ public struct VaultItemFeedView<
                         isSelected: dataModel.itemsFilteringByTags.contains(tag.id),
                     )
                     .glassEffect(.regular.interactive(), in: .capsule)
-                    .background(feedBarWash, in: .capsule)
+                    .glassEffectID(barGlassID(.tag(tag.id)), in: barGlass)
+                    .glassEffectTransition(barGlassTransition)
+                    .glassSnapshotBackdrop(in: .capsule)
+                    // The plain button style draws nothing, so the whole
+                    // 44pt frame is tappable while the pill stays compact.
+                    .frame(minHeight: 44)
+                    .contentShape(.rect)
                 }
                 .id(tag)
             }
@@ -197,6 +285,9 @@ public struct VaultItemFeedView<
             statusLabel
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                // Lands focus here when the collapsed capsule is expanded,
+                // since the element that had focus is gone.
+                .accessibilityFocused($isStatusBarFocused)
 
             Spacer()
 
@@ -228,12 +319,59 @@ public struct VaultItemFeedView<
             .fixedSize()
         }
         // Glass keeps the row legible over the grid scrolling beneath it
-        // without the heavy, opaque panel a flat fill would need.
-        .padding(.vertical, 6)
+        // without the heavy, opaque panel a flat fill would need. The
+        // buttons' hit targets set the height, so there is no vertical padding.
+        .frame(minHeight: 44)
         .padding(.horizontal, 14)
         .glassEffect(.regular, in: .capsule)
-        .background(feedBarWash, in: .capsule)
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .glassEffectID(barGlassID(.status), in: barGlass)
+        .glassEffectTransition(barGlassTransition)
+        .glassSnapshotBackdrop(in: .capsule)
+        .transition(.opacity)
+    }
+
+    /// The whole bar minimized to one capsule while scrolling down: the item
+    /// count and any active filter, so the feed's scope stays visible. Tapping
+    /// it brings the filters and actions back.
+    private var collapsedBar: some View {
+        Button {
+            state.barTracker.resetTravel()
+            setBarCollapsed(false)
+            isStatusBarFocused = true
+        } label: {
+            statusLabel
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .frame(minHeight: 44)
+                .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .glassEffectID(barGlassID(.status), in: barGlass)
+        .glassEffectTransition(barGlassTransition)
+        .glassSnapshotBackdrop(in: .capsule)
+        .transition(.opacity)
+        .accessibilityLabel(collapsedBarAccessibilityLabel)
+        .accessibilityHint(localized(key: "codeFeed.bar.collapsed.accessibilityHint"))
+    }
+
+    /// The collapsed capsule read as a sentence rather than its glyphs.
+    ///
+    /// The count always comes from `itemsCountDescription`, which never
+    /// reveals items hidden behind a search passphrase.
+    private var collapsedBarAccessibilityLabel: String {
+        let count = dataModel.itemsCountDescription
+        switch activeFilterSummary {
+        case .none:
+            return count
+        case let .named(name):
+            return localized(key: "codeFeed.bar.collapsed.filteredByTag.\(count).\(name)")
+        case .count:
+            return localized(
+                key: "codeFeed.bar.collapsed.filteredByTags.\(count).\(dataModel.filteringByTagsDescription)",
+            )
+        }
     }
 
     private var clearButton: some View {
@@ -242,12 +380,15 @@ public struct VaultItemFeedView<
         } label: {
             Label("Clear", systemImage: "tag.slash.fill")
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(MinimumHitTargetButtonStyle(base: .bordered))
         .tint(.secondary)
     }
 
+    /// Edit is a secondary action, so at rest it matches Clear's monochrome
+    /// bezel and only Done — the action that ends the mode — is tinted.
+    @ViewBuilder
     private var editButton: some View {
-        Button {
+        let button = Button {
             state.isEditing.toggle()
         } label: {
             Label(
@@ -255,7 +396,13 @@ public struct VaultItemFeedView<
                 systemImage: state.isEditing ? "checkmark" : "pencil",
             )
         }
-        .buttonStyle(.borderedProminent)
+        if state.isEditing {
+            button.buttonStyle(MinimumHitTargetButtonStyle(base: .borderedProminent))
+        } else {
+            button
+                .buttonStyle(MinimumHitTargetButtonStyle(base: .bordered))
+                .tint(.secondary)
+        }
     }
 
     @ViewBuilder
@@ -271,10 +418,13 @@ public struct VaultItemFeedView<
                 Image(systemName: "key.horizontal")
                 Text(dataModel.itemsCountDescription)
 
-                if let filterDescription {
-                    Text("•")
-                    Image(systemName: "tag.fill")
-                        .font(.caption)
+                if let filterDescription = activeFilterSummary.shortDescription {
+                    Group {
+                        Text("•")
+                        Image(systemName: "tag.fill")
+                            .font(.caption)
+                    }
+                    .accessibilityHidden(true)
                     Text(filterDescription)
                 }
             }
@@ -282,25 +432,26 @@ public struct VaultItemFeedView<
         }
     }
 
-    /// Describes the active tag filters, or `nil` when none are applied.
+    /// The active tag filters, shared by the visible status label and the
+    /// collapsed capsule's spoken label.
     ///
     /// The filter pills scroll horizontally, so an active tag can sit
     /// off-screen; naming it keeps that state visible. Only a single name
     /// fits beside the item count and the Clear/Edit buttons, so past one
     /// filter this falls back to the bare count.
-    private var filterDescription: String? {
+    private var activeFilterSummary: ActiveFilterSummary {
         let activeIDs = dataModel.itemsFilteringByTags
-        guard activeIDs.isNotEmpty else { return nil }
+        guard activeIDs.isNotEmpty else { return .none }
         guard activeIDs.count == 1, let activeID = activeIDs.first else {
-            return "\(activeIDs.count)"
+            return .count(activeIDs.count)
         }
 
         // A filter whose tag is no longer in `allTags` has no name to show.
         guard let tag = dataModel.allTags.first(where: { $0.id == activeID }) else {
-            return "\(activeIDs.count)"
+            return .count(activeIDs.count)
         }
 
-        return tag.name.isBlank ? "Tag" : tag.name
+        return .named(tag.name.isBlank ? "Tag" : tag.name)
     }
 
     private func filterBinding(for tag: VaultItemTag) -> Binding<Bool> {
@@ -374,7 +525,45 @@ public struct VaultItemFeedView<
     }
 }
 
+/// Identities of the feed bar's glass surfaces, so they morph into one
+/// another as the bar collapses and expands.
+private enum FeedBarGlassID: Hashable, Sendable {
+    /// The status bar, and the collapsed capsule it becomes.
+    case status
+    case tag(Identifier<VaultItemTag>)
+}
+
+private enum ActiveFilterSummary: Equatable {
+    case none
+    case named(String)
+    case count(Int)
+
+    /// The filter as shown beside the item count, or `nil` when none apply.
+    var shortDescription: String? {
+        switch self {
+        case .none: nil
+        case let .named(name): name
+        case let .count(count): "\(count)"
+        }
+    }
+}
+
+// In a navigation stack so the bottom search field and the scroll edge effect
+// under the bar show as they do in the app. Scroll to watch the bar collapse.
 #Preview {
+    NavigationStack {
+        makeFeedPreview()
+    }
+}
+
+#Preview("Landscape", traits: .landscapeLeft) {
+    NavigationStack {
+        makeFeedPreview()
+    }
+}
+
+@MainActor
+private func makeFeedPreview() -> some View {
     let store = VaultStoreStub()
     let tagStore = VaultTagStoreStub()
     let workTag = Identifier<VaultItemTag>()

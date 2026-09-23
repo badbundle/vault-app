@@ -28,6 +28,8 @@ Only app binary versions >2.0 should be used in production for this reason.
 ### Changed
 
 - App icon refreshed: the same door and wheel, now layered with a metal gradient, rim light and shadow
+- The feed's bottom bar minimizes to a single capsule showing the item count and active filter while scrolling down, and returns on scrolling up, at the top, or with a tap
+- The feed's bottom bar uses clear Liquid Glass with a scroll edge effect, and its tag filters and buttons have larger tap targets
 
 ### Removed
 

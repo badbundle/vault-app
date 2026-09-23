@@ -22,6 +22,7 @@ struct VaultMainNavigationViewSnapshotTests {
             vaultDataModel: vaultDataModel,
             injector: injector,
         )
+        .environment(\.drawsGlassSnapshotBackdrop, true)
         .framedForTest()
 
         assertSnapshot(of: view, as: .image)

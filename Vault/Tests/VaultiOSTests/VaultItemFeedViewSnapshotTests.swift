@@ -460,6 +460,100 @@ final class VaultItemFeedViewSnapshotTests {
     }
 }
 
+// MARK: - Collapsed bar
+
+extension VaultItemFeedViewSnapshotTests {
+    /// Scrolling down minimizes the pills and status bar to one centred
+    /// capsule carrying the item count.
+    @Test
+    func collapsedBar_countOnly() async {
+        let dataModel = await makeTaggedDataModel()
+
+        let sut = makeSUT(dataModel: dataModel, state: collapsedState())
+            .framedForTest(height: 240)
+            .background(Color.gray)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// The collapsed capsule keeps the feed's scope visible by naming a
+    /// single active filter.
+    @Test
+    func collapsedBar_singleFilterIsNamed() async {
+        let dataModel = await makeTaggedDataModel()
+        dataModel.itemsFilteringByTags = [dataModel.allTags[0].id]
+
+        let sut = makeSUT(dataModel: dataModel, state: collapsedState())
+            .framedForTest(height: 240)
+            .background(Color.gray)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
+    func collapsedBar_multipleFiltersFallBackToCount() async {
+        let dataModel = await makeTaggedDataModel()
+        dataModel.itemsFilteringByTags = Set(dataModel.allTags.prefix(2).map(\.id))
+
+        let sut = makeSUT(dataModel: dataModel, state: collapsedState())
+            .framedForTest(height: 240)
+            .background(Color.gray)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// Editing always shows the full bar, so Done can't be collapsed away.
+    @Test
+    func collapsedBar_editingShowsFullBar() async {
+        let dataModel = await makeTaggedDataModel()
+        let state = collapsedState()
+        state.isEditing = true
+
+        let sut = makeSUT(dataModel: dataModel, state: state)
+            .framedForTest(height: 240)
+            .background(Color.gray)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// In landscape the capsule stays trailing, where the status bar sits.
+    @Test
+    func landscape_collapsedBar() async {
+        let dataModel = await makeTaggedDataModel()
+        dataModel.itemsFilteringByTags = [dataModel.allTags[0].id]
+
+        let sut = makeSUT(dataModel: dataModel, state: collapsedState())
+            .framedForLandscapeTest()
+            .background(Color.gray)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    private func collapsedState() -> VaultItemFeedState {
+        let state = VaultItemFeedState()
+        state.isBarCollapsed = true
+        return state
+    }
+
+    private func makeTaggedDataModel() async -> VaultDataModel {
+        let store = VaultStoreStub()
+        let tagStore = VaultTagStoreStub()
+        // Built once so the IDs survive the view reloading the tags.
+        let tags = [
+            VaultItemTag(id: .init(), name: "work"),
+            VaultItemTag(id: .init(), name: "personal", color: .tagDefault),
+            VaultItemTag(id: .init(), name: "archive", color: .gray),
+        ]
+        tagStore.retrieveTagsHandler = { tags }
+        store.retrieveHandler = { _ in
+            .init(items: [uniqueVaultItem(), uniqueVaultItem()])
+        }
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: tagStore)
+        await dataModel.reloadData()
+        return dataModel
+    }
+}
+
 // MARK: - Helpers
 
 extension VaultItemFeedViewSnapshotTests {
@@ -531,5 +625,6 @@ extension VaultItemFeedViewSnapshotTests {
             defaults: Defaults(userDefaults: .standard),
             fileManager: FileManager(),
         ))
+        .environment(\.drawsGlassSnapshotBackdrop, true)
     }
 }
