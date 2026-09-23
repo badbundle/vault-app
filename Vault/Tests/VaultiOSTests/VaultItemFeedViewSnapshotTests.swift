@@ -531,5 +531,6 @@ extension VaultItemFeedViewSnapshotTests {
             defaults: Defaults(userDefaults: .standard),
             fileManager: FileManager(),
         ))
+        .environment(\.drawsGlassSnapshotBackdrop, true)
     }
 }

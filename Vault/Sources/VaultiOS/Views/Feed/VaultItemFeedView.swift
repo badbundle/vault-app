@@ -79,7 +79,10 @@ public struct VaultItemFeedView<
         .searchable(text: $dataModel.itemsSearchQuery)
         .autocorrectionDisabled()
         .textInputAutocapitalization(.never)
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+        // A bar rather than an inset so the system draws its scroll edge
+        // effect: tiles fade and blur beneath the glass instead of running
+        // straight into it.
+        .safeAreaBar(edge: .bottom, spacing: 0) {
             Group {
                 if verticalSizeClass == .compact {
                     compactFeedBar
@@ -99,20 +102,11 @@ public struct VaultItemFeedView<
         }
     }
 
-    /// Plain regular glass lets tile text show straight through the bar, so
-    /// a wash of the background colour sits behind the glass to keep it
-    /// legible over busy content while keeping the glass edge and lensing.
-    ///
-    /// This is a backdrop rather than `Glass.tint` because a tinted glass
-    /// renders as an empty image under `CALayer.render(in:)`, which blanks
-    /// every snapshot test that includes the feed.
-    private var feedBarWash: Color {
-        Color(.systemBackground).opacity(0.85)
-    }
-
     /// Tag filters stacked above the status bar, for regular-height layouts.
     private var regularFeedBar: some View {
-        VStack(spacing: 8) {
+        // No spacing: the pills' 44pt hit targets already leave a gap
+        // between the drawn pills and the status bar.
+        VStack(spacing: 0) {
             if dataModel.allTags.isNotEmpty {
                 tagFilterBar
             }
@@ -147,12 +141,11 @@ public struct VaultItemFeedView<
             // The container lives inside the scroll view on purpose: glass
             // renders at the container's level, so a container outside the
             // scroll view would let pills draw past its clip.
+            // The container clips to its bounds, and the pill stroke straddles
+            // the capsule edge; the pills' 44pt hit targets leave it room
+            // above and below so the border isn't shaved.
             GlassEffectContainer {
                 pillRow
-                    // The container clips to its bounds, and the pill stroke
-                    // straddles the capsule edge, so give it room above and
-                    // below or the top and bottom of the border get shaved.
-                    .padding(.vertical, 2)
             }
         }
         // Side by side with the bar the scroll view no longer spans the
@@ -176,7 +169,11 @@ public struct VaultItemFeedView<
                         isSelected: dataModel.itemsFilteringByTags.contains(tag.id),
                     )
                     .glassEffect(.regular.interactive(), in: .capsule)
-                    .background(feedBarWash, in: .capsule)
+                    .glassSnapshotBackdrop(in: .capsule)
+                    // The plain button style draws nothing, so the whole
+                    // 44pt frame is tappable while the pill stays compact.
+                    .frame(minHeight: 44)
+                    .contentShape(.rect)
                 }
                 .id(tag)
             }
@@ -228,11 +225,12 @@ public struct VaultItemFeedView<
             .fixedSize()
         }
         // Glass keeps the row legible over the grid scrolling beneath it
-        // without the heavy, opaque panel a flat fill would need.
-        .padding(.vertical, 6)
+        // without the heavy, opaque panel a flat fill would need. The
+        // buttons' hit targets set the height, so there is no vertical padding.
+        .frame(minHeight: 44)
         .padding(.horizontal, 14)
         .glassEffect(.regular, in: .capsule)
-        .background(feedBarWash, in: .capsule)
+        .glassSnapshotBackdrop(in: .capsule)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
@@ -242,12 +240,15 @@ public struct VaultItemFeedView<
         } label: {
             Label("Clear", systemImage: "tag.slash.fill")
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(MinimumHitTargetButtonStyle(base: .bordered))
         .tint(.secondary)
     }
 
+    /// Edit is a secondary action, so at rest it matches Clear's monochrome
+    /// bezel and only Done — the action that ends the mode — is tinted.
+    @ViewBuilder
     private var editButton: some View {
-        Button {
+        let button = Button {
             state.isEditing.toggle()
         } label: {
             Label(
@@ -255,7 +256,13 @@ public struct VaultItemFeedView<
                 systemImage: state.isEditing ? "checkmark" : "pencil",
             )
         }
-        .buttonStyle(.borderedProminent)
+        if state.isEditing {
+            button.buttonStyle(MinimumHitTargetButtonStyle(base: .borderedProminent))
+        } else {
+            button
+                .buttonStyle(MinimumHitTargetButtonStyle(base: .bordered))
+                .tint(.secondary)
+        }
     }
 
     @ViewBuilder
