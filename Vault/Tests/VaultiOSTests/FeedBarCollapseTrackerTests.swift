@@ -63,13 +63,28 @@ struct FeedBarCollapseTrackerTests {
         #expect(changes == [nil])
     }
 
+    /// Once the person has scrolled, returning to the top expands the bar
+    /// however it got there, including a tap on the status bar.
     @Test(arguments: [ScrollPhase.idle, .animating, .interacting])
     func expandsWithinTopZoneInAnyPhase(phase: ScrollPhase) {
-        var sut = makeSUT(phase: phase)
+        var sut = makeSUT(phase: .interacting)
+        _ = scroll(&sut, through: [500])
 
+        sut.phaseChanged(to: phase)
         let changes = scroll(&sut, through: [FeedBarCollapseTracker.topZone])
 
         #expect(changes == [.expand])
+    }
+
+    /// A bar collapsed from outside, as in a snapshot test, is left alone
+    /// until the person scrolls.
+    @Test(arguments: [ScrollPhase.idle, .animating])
+    func staysPassiveUntilTheUserScrolls(phase: ScrollPhase) {
+        var sut = makeSUT(phase: phase)
+
+        let changes = scroll(&sut, through: [0, 0], maxOffset: 0)
+
+        #expect(changes == [nil, nil])
     }
 
     @Test
@@ -92,9 +107,11 @@ struct FeedBarCollapseTrackerTests {
 
     @Test(arguments: [ScrollPhase.idle, .animating])
     func ignoresMovementThatIsNotTheUserScrolling(phase: ScrollPhase) {
-        var sut = makeSUT(phase: phase)
+        var sut = makeSUT(phase: .interacting)
+        _ = scroll(&sut, through: [300])
 
-        let changes = scroll(&sut, through: [100, 200, 50])
+        sut.phaseChanged(to: phase)
+        let changes = scroll(&sut, through: [400, 500, 350])
 
         #expect(changes == [nil, nil, nil])
     }

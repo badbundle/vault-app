@@ -56,6 +56,9 @@ struct FeedBarCollapseTracker {
 
     private var lastPosition: FeedScrollPosition?
     private var isUserScrolling = false
+    /// Until the person scrolls, the bar can only have been collapsed from
+    /// outside (in a snapshot test, say), so the tracker has nothing to undo.
+    private var hasUserScrolled = false
     /// Signed distance travelled in the current direction; positive is down.
     private var travel: CGFloat = 0
 
@@ -64,6 +67,7 @@ struct FeedBarCollapseTracker {
         switch phase {
         case .tracking, .interacting, .decelerating:
             isUserScrolling = true
+            hasUserScrolled = true
         case .idle, .animating:
             // Programmatic scrolls (including a tap on the status bar) and
             // layout changes are not the person scrolling.
@@ -79,6 +83,7 @@ struct FeedBarCollapseTracker {
     mutating func scrolled(to position: FeedScrollPosition, canCollapse: Bool) -> Change? {
         let previous = lastPosition
         lastPosition = position
+        guard hasUserScrolled else { return nil }
 
         // Near the top, or with nothing to scroll, the bar is always shown.
         // These can only expand, so they apply whatever caused the change.

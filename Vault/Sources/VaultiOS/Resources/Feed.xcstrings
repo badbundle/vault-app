@@ -89,6 +89,39 @@
         }
       }
     },
+    "codeFeed.bar.collapsed.accessibilityHint" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expands to show tag filters and feed actions"
+          }
+        }
+      }
+    },
+    "codeFeed.bar.collapsed.filteredByTag.%@.%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, filtered by %2$@"
+          }
+        }
+      }
+    },
+    "codeFeed.bar.collapsed.filteredByTags.%@.%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
     "codeFeed.editMode.dragToReorder" : {
       "extractionState" : "manual",
       "localizations" : {
