@@ -12,12 +12,18 @@ public enum ElectrumSeedType: Equatable, Hashable, CaseIterable, Sendable {
 
 /// Validation of Electrum "new style" (v2) seeds.
 ///
-/// These don't have a wordlist-dependent checksum like BIP39. Instead, the HMAC-SHA512 of the normalized phrase
-/// (keyed with "Seed version") starts with a version prefix identifying the seed type.
+/// Specification: the Electrum Seed Version System, https://electrum.readthedocs.io/en/latest/seedphrase.html.
+/// These seeds don't depend on a wordlist and have no BIP39 style checksum. Instead, "a seed phrase must produce a
+/// registered version number": the hex HMAC-SHA512 of the normalized phrase, keyed with "Seed version", starts with
+/// a prefix identifying the seed type.
 ///
-/// Ported from `electrum/mnemonic.py` (`normalize_text`, `is_new_seed`, `calc_seed_type`) and `electrum/version.py`
-/// in `spesmilo/electrum` at commit `638fbba8ff0c449b773f2fe3d3d06b984491e8fa`. MIT licensed.
+/// Ported from https://github.com/spesmilo/electrum/blob/master/electrum/mnemonic.py (`normalize_text`,
+/// `is_new_seed`, `calc_seed_type`) and https://github.com/spesmilo/electrum/blob/master/electrum/version.py (the
+/// prefixes), at commit `638fbba8ff0c449b773f2fe3d3d06b984491e8fa`. MIT licensed.
+///
+/// Old (pre 2.0) Electrum seeds, which use a different wordlist and encoding, aren't supported.
 enum ElectrumSeedVersion {
+    /// The registered version number, from `version.py`: `01` standard, `100` segwit, `101` 2FA and `102` 2FA segwit.
     static func seedType(of words: [String]) -> ElectrumSeedType? {
         let normalized = normalize(words.joined(separator: " "))
         let code = HMAC<SHA512>.authenticationCode(
@@ -39,7 +45,9 @@ enum ElectrumSeedVersion {
         }
     }
 
-    /// Port of `normalize_text`. Works on Unicode scalars, as Python strings are sequences of code points.
+    /// Port of `normalize_text`, the documentation's `prepare_seed`, which "removes all but one space between words.
+    /// It also removes diacritics, and it removes spaces between Asian CJK characters." Works on Unicode scalars, as
+    /// Python strings are sequences of code points.
     static func normalize(_ text: String) -> String {
         let decomposed = text.decomposedStringWithCompatibilityMapping.lowercased()
 

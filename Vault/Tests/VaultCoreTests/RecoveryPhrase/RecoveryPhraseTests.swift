@@ -60,6 +60,27 @@ struct RecoveryPhraseStandardTests {
     }
 
     @Test(arguments: [
+        ("", true),
+        ("Passphrase with spaces and symbols !~", true),
+        (" ", true),
+        ("café", false),
+        ("パスワード", false),
+        ("tab\there", false),
+        ("new\nline", false),
+        ("\u{7F}", false),
+    ])
+    func allowsPassphrase_slip39OnlyAllowsPrintableASCII(passphrase: String, expected: Bool) {
+        #expect(RecoveryPhraseStandard.slip39.allowsPassphrase(passphrase) == expected)
+    }
+
+    @Test(arguments: [RecoveryPhraseStandard.bip39, .electrum, .monero, .other])
+    func allowsPassphrase_otherStandardsAllowAnything(standard: RecoveryPhraseStandard) {
+        for passphrase in ["", "café", "パスワード", "tab\there", "🔑"] {
+            #expect(standard.allowsPassphrase(passphrase))
+        }
+    }
+
+    @Test(arguments: [
         (RecoveryPhraseStandard.bip39, 25, 24),
         (.bip39, 13, 12),
         (.bip39, 14, 15),

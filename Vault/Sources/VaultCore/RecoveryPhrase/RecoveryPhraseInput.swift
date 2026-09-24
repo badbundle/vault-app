@@ -6,9 +6,12 @@ public enum RecoveryPhraseInput {
     /// The words in `text`, in order.
     ///
     /// Tolerates the ways phrases are commonly written down or exported:
-    /// - separated by any whitespace (including the ideographic space used for Japanese) or by commas/semicolons;
+    /// - separated by any whitespace or by commas/semicolons, including the ideographic space (U+3000) that BIP39
+    ///   says Japanese phrases use and implementations must accept
+    ///   (https://github.com/bitcoin/bips/blob/master/bip-0039/bip-0039-wordlists.md, "Japanese");
     /// - numbered, like `1. abandon 2. ability` or `1)abandon`, where the numbering is dropped;
-    /// - Chinese words run together without spaces, where each character is a separate word.
+    /// - Chinese words run together without spaces, where each character is a separate word. BIP39 proposes spaces
+    ///   between Chinese words "for the sake of uniformity", but notes Chinese text doesn't usually have them.
     public static func words(in text: String) -> [String] {
         var cleaned = String.UnicodeScalarView()
         for scalar in text.unicodeScalars where !invisibleScalars.contains(scalar) {

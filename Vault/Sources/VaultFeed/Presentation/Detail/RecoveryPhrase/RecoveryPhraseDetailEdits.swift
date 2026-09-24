@@ -151,6 +151,11 @@ public struct RecoveryPhraseDetailEdits: EditableState {
         case willChange
     }
 
+    /// If the standard allows the passphrase: SLIP-39 passphrases can only contain printable ASCII.
+    public var isSeedPassphraseAllowedByStandard: Bool {
+        standard.allowsPassphrase(seedPassphrase)
+    }
+
     /// Leading or trailing whitespace in the passphrase is almost always a mistake, but it can't be removed
     /// automatically as it changes the wallet.
     public var seedPassphraseHasSurroundingWhitespace: Bool {

@@ -1161,7 +1161,29 @@
         }
       }
     },
-    "recoveryPhraseValidation.invalidShare.detail" : {
+    "recoveryPhraseValidation.malformed.monero.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The checksum matches, but the words don't make a valid Monero key. A word may be mistyped or in the wrong order. Check each word against your backup."
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.malformed.monero.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid seed"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.malformed.slip39.detail" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
@@ -1172,7 +1194,7 @@
         }
       }
     },
-    "recoveryPhraseValidation.invalidShare.title" : {
+    "recoveryPhraseValidation.malformed.slip39.title" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {

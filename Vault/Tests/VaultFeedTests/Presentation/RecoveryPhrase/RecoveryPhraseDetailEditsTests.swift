@@ -267,6 +267,19 @@ struct RecoveryPhraseDetailEditsTests {
     }
 
     @Test
+    func isSeedPassphraseAllowedByStandard_onlyRestrictsSLIP39() {
+        var sut = completeEdits()
+        sut.seedPassphrase = "café"
+        #expect(sut.isSeedPassphraseAllowedByStandard)
+
+        sut.setStandard(.slip39)
+        #expect(sut.isSeedPassphraseAllowedByStandard == false)
+
+        sut.seedPassphrase = "cafe"
+        #expect(sut.isSeedPassphraseAllowedByStandard)
+    }
+
+    @Test
     func seedPassphraseHasSurroundingWhitespace() {
         var sut = completeEdits()
 

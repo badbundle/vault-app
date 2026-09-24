@@ -15,10 +15,14 @@ public struct RecoveryPhrase: Equatable, Hashable, Sendable {
     public var contents: String
     /// The standard that the words are expected to conform to, used for validation.
     public var standard: RecoveryPhraseStandard
-    /// The optional passphrase (also known as the "25th word" or seed extension).
+    /// The optional passphrase (also known as the "25th word", seed extension or seed offset).
     ///
     /// This is kept exactly as it was entered: any change to it, even whitespace, results in a different wallet.
-    /// Empty if there is no passphrase.
+    /// Empty if there is no passphrase. Each standard treats it differently when deriving the wallet: BIP39 normalizes
+    /// it to NFKD ("From mnemonic to seed", https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki), SLIP-39
+    /// only allows printable ASCII ("Passphrase", https://github.com/satoshilabs/slips/blob/master/slip-0039.md) and
+    /// Electrum ignores case and accents (`normalize_text` in
+    /// https://github.com/spesmilo/electrum/blob/master/electrum/mnemonic.py).
     public var passphrase: String
 
     public init(

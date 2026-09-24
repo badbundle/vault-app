@@ -174,10 +174,10 @@ struct RecoveryPhraseValidatorTests {
     }
 
     @Test(arguments: RecoveryPhraseTestVectors.slip39InvalidShare)
-    func validate_slip39InvalidShare(phrase: String) {
+    func validate_slip39MalformedShare(phrase: String) {
         let result = RecoveryPhraseValidator.validate(words: RecoveryPhraseInput.words(in: phrase), standard: .slip39)
 
-        #expect(result.status == .invalidShare)
+        #expect(result.status == .malformed)
     }
 
     @Test
@@ -242,6 +242,20 @@ struct RecoveryPhraseValidatorTests {
         #expect(result.unknownWordPositions == [6])
     }
 
+    /// Electrum seeds don't depend on a wordlist, so a registered version number makes a seed valid whatever its
+    /// words. The seed was found (and checked) with Electrum's `normalize_text` and `calc_seed_type`.
+    @Test
+    func validate_electrumValidWithWordsOutsideAnyWordlist() {
+        let phrase = "wild father tree among universe vaultword838 mobile favorite target dynamic credit identify"
+        let words = RecoveryPhraseInput.words(in: phrase)
+
+        let result = RecoveryPhraseValidator.validate(words: words, standard: .electrum)
+
+        #expect(result.status == .valid(.electrum(.standard)))
+        #expect(result.unknownWordPositions.isEmpty)
+        #expect(result.canonicalWords == words)
+    }
+
     @Test
     func validate_electrumWordNotInAnySupportedList() {
         // A BIP39 Czech word: Czech isn't one of the lists Electrum creates seeds from.
@@ -295,6 +309,33 @@ struct RecoveryPhraseValidatorTests {
         let result = RecoveryPhraseValidator.validate(words: words, standard: .monero)
 
         #expect(result.status == .invalidChecksum)
+    }
+
+    /// Monero matches words by their unique three letter prefix, so abbreviations and anything after the prefix
+    /// don't matter, as in `find_seed_language`.
+    @Test(arguments: RecoveryPhraseTestVectors.moneroValid)
+    func validate_moneroMatchesWordsByPrefix(phrase: String) {
+        let words = RecoveryPhraseInput.words(in: phrase)
+        let abbreviated = words.enumerated().map { offset, word in
+            offset.isMultiple(of: 2) ? String(word.prefix(3)) : word + "xyz"
+        }
+
+        let result = RecoveryPhraseValidator.validate(words: abbreviated, standard: .monero)
+
+        #expect(result.status == .valid(.monero))
+        #expect(result.canonicalWords == words, "Saved with the whole words")
+    }
+
+    /// Passes the checksum, but the first three words would need more than 32 bits, so Monero's `words_to_bytes`
+    /// rejects it ("mumble mumble"). Built, and checked, with Monero's algorithm.
+    @Test
+    func validate_moneroGroupThatOverflowsIsMalformed() {
+        let phrase = "velvet abducts abbey number token physics poetry unquoted nibs useful sabotage limits benches "
+            + "lifestyle eden nitrogen anvil fewest avoid batch vials washing fences goat abducts"
+
+        let result = RecoveryPhraseValidator.validate(words: RecoveryPhraseInput.words(in: phrase), standard: .monero)
+
+        #expect(result.status == .malformed)
     }
 
     @Test(arguments: RecoveryPhraseTestVectors.moneroValid)

@@ -64,11 +64,16 @@ public struct RecoveryPhraseValidationSummary: Equatable, Sendable {
             systemIconName = "exclamationmark.triangle.fill"
             title = localized(key: "recoveryPhraseValidation.invalidChecksum.title")
             detail = localized(key: "recoveryPhraseValidation.invalidChecksum.detail")
-        case .invalidShare:
+        case .malformed:
             kind = .warning
             systemIconName = "exclamationmark.triangle.fill"
-            title = localized(key: "recoveryPhraseValidation.invalidShare.title")
-            detail = localized(key: "recoveryPhraseValidation.invalidShare.detail")
+            if standard == .monero {
+                title = localized(key: "recoveryPhraseValidation.malformed.monero.title")
+                detail = localized(key: "recoveryPhraseValidation.malformed.monero.detail")
+            } else {
+                title = localized(key: "recoveryPhraseValidation.malformed.slip39.title")
+                detail = localized(key: "recoveryPhraseValidation.malformed.slip39.detail")
+            }
         case .unsupportedWordCount:
             kind = .warning
             systemIconName = "exclamationmark.triangle.fill"

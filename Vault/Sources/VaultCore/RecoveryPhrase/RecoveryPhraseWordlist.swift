@@ -5,6 +5,15 @@ import FoundationExtensions
 ///
 /// The index of a word within the list is the value it encodes, so the order is significant.
 ///
+/// ## References
+///
+/// - BIP39 wordlists: https://github.com/bitcoin/bips/blob/master/bip-0039/bip-0039-wordlists.md, and the "Wordlist"
+///   section of https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki (UTF-8, NFKD).
+/// - SLIP-39 wordlist: https://github.com/satoshilabs/slips/blob/master/slip-0039/wordlist.txt, described in the
+///   "Wordlist" section of https://github.com/satoshilabs/slips/blob/master/slip-0039.md.
+/// - Monero English wordlist: https://github.com/monero-project/monero/blob/master/src/mnemonics/english.h (unique
+///   prefix length 3).
+///
 /// ## Provenance
 ///
 /// The lists are bundled as UTF-8 text files, one word per line, and are byte-for-byte copies of their upstream
@@ -25,6 +34,9 @@ public struct RecoveryPhraseWordlist: Sendable {
     /// The words, in list order, in canonical (NFC) spelling.
     public let words: [String]
     private let indexByKey: [String: Int]
+    /// For lists where a word is identified by its unique prefix alone, the index of each word by the lookup key of
+    /// that prefix.
+    private let indexByPrefixKey: [String: Int]
     /// Indexes into `words`, ordered by their lookup key, for prefix completions.
     private let indexesSortedByKey: [Int]
     private let keys: [String]
@@ -35,6 +47,14 @@ public struct RecoveryPhraseWordlist: Sendable {
         let keys = words.map { Self.lookupKey(for: $0, foldingDiacritics: id.foldsDiacritics) }
         self.keys = keys
         indexByKey = Dictionary(keys.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
+        if let prefixLength = id.uniquePrefixLength {
+            indexByPrefixKey = Dictionary(
+                keys.enumerated().map { (Self.prefix(of: $1, length: prefixLength), $0) },
+                uniquingKeysWith: { first, _ in first },
+            )
+        } else {
+            indexByPrefixKey = [:]
+        }
         indexesSortedByKey = keys.indices.sorted {
             keys[$0].unicodeScalars.lexicographicallyPrecedes(keys[$1].unicodeScalars)
         }
@@ -42,8 +62,16 @@ public struct RecoveryPhraseWordlist: Sendable {
 
     /// The index of `word` in this list, ignoring case, surrounding whitespace, Unicode normalization form and (for
     /// Latin-script lists) diacritics.
+    ///
+    /// For a list where words are identified by a unique prefix (Monero), any word starting with that prefix matches,
+    /// as it does in Monero itself, so the abbreviation "vel" is "velvet".
     public func index(of word: String) -> Int? {
-        indexByKey[Self.lookupKey(for: word, foldingDiacritics: id.foldsDiacritics)]
+        let key = Self.lookupKey(for: word, foldingDiacritics: id.foldsDiacritics)
+        if let index = indexByKey[key] {
+            return index
+        }
+        guard let prefixLength = id.uniquePrefixLength, key.unicodeScalars.count >= prefixLength else { return nil }
+        return indexByPrefixKey[Self.prefix(of: key, length: prefixLength)]
     }
 
     public func contains(_ word: String) -> Bool {
@@ -67,10 +95,16 @@ public struct RecoveryPhraseWordlist: Sendable {
         return completions
     }
 
+    private static func prefix(of key: String, length: Int) -> String {
+        var prefix = String.UnicodeScalarView()
+        prefix.append(contentsOf: key.unicodeScalars.prefix(length))
+        return String(prefix)
+    }
+
     /// Normalizes a word so it can be matched against the words in a list.
     ///
-    /// Compatibility decomposition (NFKD) matches the normalization BIP39 mandates and also maps full-width Latin
-    /// characters to their ASCII equivalents.
+    /// Compatibility decomposition (NFKD, https://unicode.org/reports/tr15/) matches the normalization BIP39 mandates
+    /// for wordlists, and also maps full-width Latin characters to their ASCII equivalents.
     static func lookupKey(for word: String, foldingDiacritics: Bool) -> String {
         let decomposed = word
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -111,11 +145,25 @@ extension RecoveryPhraseWordlist {
             }
         }
 
+        /// The number of leading characters that identify a word on their own, for lists that match words by it.
+        ///
+        /// Monero matches the words of a seed with a checksum word by this prefix (`find_seed_language` in
+        /// https://github.com/monero-project/monero/blob/master/src/mnemonics/electrum-words.cpp), and the English
+        /// list declares a prefix length of 3. The BIP39 and SLIP-39 lists also have unique 4 letter prefixes, but
+        /// their reference implementations only accept whole words.
+        var uniquePrefixLength: Int? {
+            switch self {
+            case .monero: 3
+            case .bip39, .slip39: nil
+            }
+        }
+
         /// Whether diacritics are ignored when matching words.
         ///
         /// Only for Latin-script lists, where words are unique without their accents and people commonly type them
-        /// without (the Spanish list is explicitly designed for this). Never for Japanese, where a voicing mark
-        /// distinguishes different words.
+        /// without. The BIP39 wordlists document this for Spanish ("'ñ', 'ü', 'á', etc... are considered equal to
+        /// 'n', 'u', 'a'") and French ("é-è" are considered equal to "e"); the Italian, Czech and Portuguese lists
+        /// have no diacritics. Never for Japanese, where a voicing mark distinguishes different words.
         var foldsDiacritics: Bool {
             switch self {
             case let .bip39(language): language.isLatinScript

@@ -70,11 +70,21 @@ struct RecoveryPhraseValidationSummaryTests {
     }
 
     @Test
-    func invalidShare() {
-        let sut = makeSUT(.invalidShare, standard: .slip39)
+    func malformed_slip39() {
+        let sut = makeSUT(.malformed, standard: .slip39)
 
         #expect(sut.kind == .warning)
         #expect(sut.title == "Invalid share")
+        #expect(sut.detail.contains("SLIP-39"))
+    }
+
+    @Test
+    func malformed_monero() {
+        let sut = makeSUT(.malformed, standard: .monero, wordCount: 25)
+
+        #expect(sut.kind == .warning)
+        #expect(sut.title == "Invalid seed")
+        #expect(sut.detail.contains("Monero"))
     }
 
     @Test

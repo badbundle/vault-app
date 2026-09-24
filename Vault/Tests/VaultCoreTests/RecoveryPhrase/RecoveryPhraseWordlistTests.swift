@@ -81,6 +81,33 @@ struct RecoveryPhraseWordlistTests {
     }
 
     @Test
+    func indexOf_moneroMatchesUniquePrefix() throws {
+        let monero = try #require(RecoveryPhraseWordlist.named(.monero))
+        let velvet = try #require(monero.index(of: "velvet"))
+
+        #expect(monero.index(of: "vel") == velvet)
+        #expect(monero.index(of: "VELVETT") == velvet)
+        #expect(monero.index(of: "ve") == nil, "Shorter than the unique prefix")
+        #expect(monero.index(of: "xyz") == nil)
+    }
+
+    @Test(arguments: [RecoveryPhraseWordlist.ID.bip39(.english), .slip39])
+    func indexOf_bip39AndSLIP39OnlyMatchWholeWords(id: RecoveryPhraseWordlist.ID) throws {
+        let wordlist = try #require(RecoveryPhraseWordlist.named(id))
+        let word = try #require(wordlist.words.first { $0.count > 4 })
+
+        #expect(wordlist.index(of: String(word.prefix(4))) == nil)
+        #expect(wordlist.index(of: word + "x") == nil)
+    }
+
+    @Test
+    func uniquePrefixes_areUniqueWhereMatchedByPrefix() throws {
+        let monero = try #require(RecoveryPhraseWordlist.named(.monero))
+
+        #expect(Set(monero.words.map { $0.prefix(3) }).count == monero.words.count)
+    }
+
+    @Test
     func indexOf_japaneseKeepsVoicingMarks() throws {
         let japanese = try #require(RecoveryPhraseWordlist.named(.bip39(.japanese)))
 

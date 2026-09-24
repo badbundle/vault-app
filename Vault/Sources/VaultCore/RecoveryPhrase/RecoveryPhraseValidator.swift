@@ -12,11 +12,12 @@ public struct RecoveryPhraseValidation: Equatable, Sendable {
         case unsupportedWordCount
         /// Some words aren't in the wordlist.
         case unknownWords
-        /// Every word is in the wordlist, but the checksum doesn't match. A word was mistyped as another valid word,
-        /// or the words are in the wrong order.
+        /// Every word is in the wordlist, but the checksum doesn't match (or, for Electrum, there's no registered
+        /// version number). A word was mistyped as another valid word, or the words are in the wrong order.
         case invalidChecksum
-        /// The checksum matches, but the phrase is malformed in a way the standard doesn't allow.
-        case invalidShare
+        /// The checksum matches, but the words don't encode something the standard allows: a SLIP-39 share with
+        /// non-zero padding or a group threshold above the group count, or a Monero seed that doesn't decode to a key.
+        case malformed
         case valid(Detail)
     }
 
@@ -58,6 +59,13 @@ public struct RecoveryPhraseValidation: Equatable, Sendable {
 }
 
 /// Checks the words of a recovery phrase against the wordlist and checksum of a standard.
+///
+/// This only ever informs: BIP39 says that for a mnemonic that doesn't validate, "software must compute a checksum
+/// for the mnemonic sentence using a wordlist and issue a warning if it is invalid"
+/// (https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki, "From mnemonic to seed"), and SLIP-39 that
+/// implementations SHOULD NOT correct errors "beyond potentially suggesting to the user where in the mnemonic an
+/// error might be found, without suggesting the correction to make"
+/// (https://github.com/satoshilabs/slips/blob/master/slip-0039.md, "Combining the shares").
 public enum RecoveryPhraseValidator {
     public static func validate(words: [String], standard: RecoveryPhraseStandard) -> RecoveryPhraseValidation {
         let words = words.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -95,6 +103,11 @@ public enum RecoveryPhraseValidator {
         }
 
         guard standard.supports(wordCount: words.count) else { return result(.unsupportedWordCount) }
+        // Electrum seeds don't depend on a wordlist: "a seed phrase must produce a registered version number", so a
+        // seed that does is valid even with words that aren't in any list Electrum ships.
+        if standard == .electrum, missing.isEmpty, let seedType = ElectrumSeedVersion.seedType(of: words) {
+            return .init(status: .valid(.electrum(seedType)), canonicalWords: bestMatch.canonicalWords)
+        }
         guard unknown.isEmpty else { return result(.unknownWords) }
         guard missing.isEmpty else { return result(.incomplete) }
 
@@ -111,11 +124,8 @@ public enum RecoveryPhraseValidator {
             }
             return result(.valid(.bip39(languages: languages)), canonicalWords: first.canonicalWords)
         case .electrum:
-            let canonicalWords = bestMatch.canonicalWords
-            guard let seedType = ElectrumSeedVersion.seedType(of: canonicalWords) else {
-                return result(.invalidChecksum)
-            }
-            return result(.valid(.electrum(seedType)), canonicalWords: canonicalWords)
+            // Only reached when the version number isn't registered.
+            return result(.invalidChecksum)
         case .slip39:
             guard let indices = bestMatch.completeIndices else { return result(.unknownWords) }
             switch SLIP39Share.validate(indices: indices) {
@@ -123,13 +133,21 @@ public enum RecoveryPhraseValidator {
                 return result(.valid(.slip39(isExtendable: isExtendable)), canonicalWords: bestMatch.canonicalWords)
             case .invalidChecksum:
                 return result(.invalidChecksum)
-            case .invalidShare:
-                return result(.invalidShare)
+            case .malformed:
+                return result(.malformed)
             }
         case .monero:
+            guard let indices = bestMatch.completeIndices else { return result(.unknownWords) }
             let canonicalWords = bestMatch.canonicalWords
-            guard MoneroChecksum.isValid(words: canonicalWords) else { return result(.invalidChecksum) }
-            return result(.valid(.monero), canonicalWords: canonicalWords)
+            let wordlistCount = bestMatch.wordlist.words.count
+            switch MoneroSeed.validate(indices: indices, words: canonicalWords, wordlistCount: wordlistCount) {
+            case .valid:
+                return result(.valid(.monero), canonicalWords: canonicalWords)
+            case .invalidChecksum:
+                return result(.invalidChecksum)
+            case .malformed:
+                return result(.malformed)
+            }
         case .other:
             return result(.notValidated)
         }

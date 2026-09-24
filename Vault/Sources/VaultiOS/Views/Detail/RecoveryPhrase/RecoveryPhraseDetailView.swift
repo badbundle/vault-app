@@ -444,6 +444,13 @@ struct RecoveryPhraseDetailView: View {
             Text("Passphrase")
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
+                if !viewModel.editingModel.detail.isSeedPassphraseAllowedByStandard {
+                    Label(
+                        "SLIP-39 passphrases can only use unaccented letters, digits, spaces and common symbols (printable ASCII), so wallets may not accept this one.",
+                        systemImage: "exclamationmark.triangle.fill",
+                    )
+                    .foregroundStyle(.orange)
+                }
                 if viewModel.editingModel.detail.seedPassphraseHasSurroundingWhitespace {
                     Label(
                         "The passphrase starts or ends with a space. This is part of the passphrase, so make sure it's intended.",
