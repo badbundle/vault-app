@@ -125,7 +125,7 @@ struct VaultDataModelEditorAdapterTests {
                 case let .otpCode(otpCode):
                     #expect(otpCode.data.accountName == "new account name")
                     #expect(otpCode.data.issuer == "new issuer name")
-                case .secureNote, .encryptedItem:
+                case .secureNote, .encryptedItem, .recoveryPhrase:
                     Issue.record("invalid kind")
                 }
             }

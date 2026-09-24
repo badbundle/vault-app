@@ -1,0 +1,250 @@
+import Foundation
+import Testing
+@testable import VaultCore
+
+struct RecoveryPhraseValidatorTests {
+    // MARK: - BIP39
+
+    @Test(arguments: RecoveryPhraseTestVectors.bip39Valid)
+    func validate_bip39ValidVectors(language: BIP39Language, phrase: String) {
+        let words = RecoveryPhraseInput.words(in: phrase)
+
+        let result = RecoveryPhraseValidator.validate(words: words, standard: .bip39)
+
+        guard case let .valid(.bip39(languages)) = result.status else {
+            Issue.record("Expected valid BIP39 phrase, got \(result.status)")
+            return
+        }
+        #expect(languages.contains(language))
+        #expect(result.unknownWordPositions.isEmpty)
+        #expect(result.missingWordPositions.isEmpty)
+        #expect(result.canonicalWords?.count == words.count)
+    }
+
+    @Test(arguments: RecoveryPhraseTestVectors.bip39InvalidChecksum)
+    func validate_bip39SwappedWordsHaveInvalidChecksum(language _: BIP39Language, phrase: String) {
+        let words = RecoveryPhraseInput.words(in: phrase)
+
+        let result = RecoveryPhraseValidator.validate(words: words, standard: .bip39)
+
+        #expect(result.status == .invalidChecksum)
+        #expect(result.unknownWordPositions.isEmpty)
+    }
+
+    @Test
+    func validate_bip39EveryWordCountIsCovered() {
+        let counts = Set(RecoveryPhraseTestVectors.bip39Valid.map { RecoveryPhraseInput.words(in: $0.1).count })
+
+        #expect(counts == Set(RecoveryPhraseStandard.bip39.supportedWordCounts))
+    }
+
+    /// Both phrases only use words that are in the English and French lists (found, and checked, with
+    /// `Mnemonic.check` from trezor/python-mnemonic).
+    @Test(arguments: [
+        ("impact cycle million stable bicycle canal prison civil label romance bonus civil", [BIP39Language.english]),
+        ("bicycle excuse badge question crucial guide mobile cruel public correct rival phrase", [.english, .french]),
+    ])
+    func validate_bip39WordsSharedBetweenLanguagesUseTheChecksum(phrase: String, expected: [BIP39Language]) {
+        let result = RecoveryPhraseValidator.validate(words: RecoveryPhraseInput.words(in: phrase), standard: .bip39)
+
+        #expect(result.status == .valid(.bip39(languages: expected)))
+    }
+
+    @Test
+    func validate_bip39ToleratesCaseAndMissingAccents() throws {
+        let valid = try #require(RecoveryPhraseTestVectors.bip39Valid.first { $0.0 == .spanish && $0.1.contains("á") })
+        let words = RecoveryPhraseInput.words(in: valid.1)
+        let unaccented = words.map { word in
+            var ascii = String.UnicodeScalarView()
+            ascii.append(contentsOf: word.decomposedStringWithCanonicalMapping.unicodeScalars.filter(\.isASCII))
+            return String(ascii).uppercased()
+        }
+        #expect(unaccented != words)
+
+        let result = RecoveryPhraseValidator.validate(words: unaccented, standard: .bip39)
+
+        #expect(result.isValid)
+        #expect(result.canonicalWords == words.map(\.precomposedStringWithCanonicalMapping))
+    }
+
+    @Test
+    func validate_bip39ReportsUnknownWordPositions() {
+        var words = Array(repeating: "abandon", count: 11) + ["about"]
+        words[2] = "notaword"
+        words[7] = "abandonn"
+
+        let result = RecoveryPhraseValidator.validate(words: words, standard: .bip39)
+
+        #expect(result.status == .unknownWords)
+        #expect(result.unknownWordPositions == [2, 7])
+        #expect(result.canonicalWords == nil)
+    }
+
+    @Test
+    func validate_incompleteWhenWordsAreBlank() {
+        var words = Array(repeating: "abandon", count: 11) + ["about"]
+        words[3] = ""
+        words[5] = "   "
+
+        let result = RecoveryPhraseValidator.validate(words: words, standard: .bip39)
+
+        #expect(result.status == .incomplete)
+        #expect(result.missingWordPositions == [3, 5])
+        #expect(result.unknownWordPositions.isEmpty)
+    }
+
+    @Test
+    func validate_unknownWordsTakePrecedenceOverIncomplete() {
+        var words = Array(repeating: "", count: 12)
+        words[0] = "abandon"
+        words[1] = "notaword"
+
+        let result = RecoveryPhraseValidator.validate(words: words, standard: .bip39)
+
+        #expect(result.status == .unknownWords)
+        #expect(result.unknownWordPositions == [1])
+        #expect(result.missingWordPositions == Array(2 ..< 12))
+    }
+
+    @Test
+    func validate_unsupportedWordCount() {
+        let words = Array(repeating: "abandon", count: 13)
+
+        let result = RecoveryPhraseValidator.validate(words: words, standard: .bip39)
+
+        #expect(result.status == .unsupportedWordCount)
+    }
+
+    // MARK: - SLIP-39
+
+    @Test(arguments: RecoveryPhraseTestVectors.slip39Valid)
+    func validate_slip39ValidShares(isExtendable: Bool, phrase: String) {
+        let result = RecoveryPhraseValidator.validate(words: RecoveryPhraseInput.words(in: phrase), standard: .slip39)
+
+        #expect(result.status == .valid(.slip39(isExtendable: isExtendable)))
+    }
+
+    @Test
+    func validate_slip39CoversBothLengthsAndExtendability() {
+        let vectors = RecoveryPhraseTestVectors.slip39Valid
+        let counts = Set(vectors.map { RecoveryPhraseInput.words(in: $0.1).count })
+
+        #expect(counts == [20, 33])
+        #expect(vectors.contains { $0.0 })
+        #expect(vectors.contains { !$0.0 })
+    }
+
+    @Test(arguments: RecoveryPhraseTestVectors.slip39InvalidChecksum)
+    func validate_slip39InvalidChecksum(phrase: String) {
+        let result = RecoveryPhraseValidator.validate(words: RecoveryPhraseInput.words(in: phrase), standard: .slip39)
+
+        #expect(result.status == .invalidChecksum)
+    }
+
+    @Test(arguments: RecoveryPhraseTestVectors.slip39InvalidShare)
+    func validate_slip39InvalidShare(phrase: String) {
+        let result = RecoveryPhraseValidator.validate(words: RecoveryPhraseInput.words(in: phrase), standard: .slip39)
+
+        #expect(result.status == .invalidShare)
+    }
+
+    @Test
+    func validate_slip39SwappedWordsHaveInvalidChecksum() throws {
+        let valid = try #require(RecoveryPhraseTestVectors.slip39Valid.first)
+        var words = RecoveryPhraseInput.words(in: valid.1)
+        try #require(words[5] != words[9])
+        words.swapAt(5, 9)
+
+        let result = RecoveryPhraseValidator.validate(words: words, standard: .slip39)
+
+        #expect(result.status == .invalidChecksum)
+    }
+
+    // MARK: - Electrum
+
+    @Test(arguments: RecoveryPhraseTestVectors.electrumValid)
+    func validate_electrumValidSeeds(seedType: ElectrumSeedType, phrase: String) {
+        let result = RecoveryPhraseValidator.validate(words: RecoveryPhraseInput.words(in: phrase), standard: .electrum)
+
+        #expect(result.status == .valid(.electrum(seedType)))
+    }
+
+    @Test(arguments: RecoveryPhraseTestVectors.electrumInvalid)
+    func validate_electrumInvalidSeeds(phrase: String) {
+        let result = RecoveryPhraseValidator.validate(words: RecoveryPhraseInput.words(in: phrase), standard: .electrum)
+
+        #expect(result.status == .invalidChecksum)
+    }
+
+    @Test
+    func validate_electrumUnknownWord() {
+        // From Electrum's own tests: "ca" is a typo of "can".
+        let phrase = "science dawn member doll dutch real ca brick knife deny drive list"
+
+        let result = RecoveryPhraseValidator.validate(words: RecoveryPhraseInput.words(in: phrase), standard: .electrum)
+
+        #expect(result.status == .unknownWords)
+        #expect(result.unknownWordPositions == [6])
+    }
+
+    @Test
+    func normalize_matchesElectrum() {
+        // Expected values computed with `normalize_text` from `electrum/mnemonic.py`.
+        #expect(ElectrumSeedVersion.normalize("  OStrich  SECURITY\tdeer ") == "ostrich security deer")
+        #expect(ElectrumSeedVersion.normalize("almíbar peatón") == "almibar peaton")
+        #expect(ElectrumSeedVersion.normalize("眼 悲 叛") == "眼悲叛")
+        #expect(ElectrumSeedVersion.normalize("なのか\u{3000}まなぶ") == "なのかまなふ")
+        #expect(ElectrumSeedVersion.normalize("abc 眼 def") == "abc 眼 def")
+    }
+
+    // MARK: - Monero
+
+    @Test(arguments: RecoveryPhraseTestVectors.moneroValid)
+    func validate_moneroValidSeeds(phrase: String) {
+        let result = RecoveryPhraseValidator.validate(words: RecoveryPhraseInput.words(in: phrase), standard: .monero)
+
+        #expect(result.status == .valid(.monero))
+    }
+
+    @Test(arguments: RecoveryPhraseTestVectors.moneroValid)
+    func validate_moneroWrongChecksumWord(phrase: String) {
+        var words = RecoveryPhraseInput.words(in: phrase)
+        words[24] = words[24] == "abbey" ? "zoom" : "abbey"
+
+        let result = RecoveryPhraseValidator.validate(words: words, standard: .monero)
+
+        #expect(result.status == .invalidChecksum)
+    }
+
+    // MARK: - Other
+
+    @Test
+    func validate_otherIsNeverValidated() {
+        let result = RecoveryPhraseValidator.validate(words: ["any", "words", "at", "all"], standard: .other)
+
+        #expect(result.status == .notValidated)
+        #expect(result.isValid == false)
+    }
+
+    @Test
+    func validate_otherStillReportsMissingWords() {
+        let result = RecoveryPhraseValidator.validate(words: ["any", " ", "words"], standard: .other)
+
+        #expect(result.status == .notValidated)
+        #expect(result.missingWordPositions == [1])
+    }
+}
+
+struct RecoveryPhraseChecksumTests {
+    @Test
+    func crc32_matchesCheckValue() {
+        #expect(CRC32.checksum("123456789".utf8) == 0xCBF4_3926)
+        #expect(CRC32.checksum([UInt8]()) == 0)
+    }
+
+    @Test
+    func bip39Checksum_rejectsCountsThatAreNotAMultipleOfThree() {
+        #expect(BIP39Checksum.isValid(indices: []) == false)
+        #expect(BIP39Checksum.isValid(indices: Array(repeating: 0, count: 13)) == false)
+    }
+}

@@ -32,6 +32,12 @@ struct CreateItemPickerView: View {
                     subtitle: "Freeform text",
                     systemImage: "text.alignleft",
                 )
+                option(
+                    .recoveryPhrase,
+                    title: "Recovery Phrase",
+                    subtitle: "Crypto wallet seed words",
+                    systemImage: "list.number",
+                )
             }
         }
         .padding(.horizontal, 20)
@@ -40,7 +46,7 @@ struct CreateItemPickerView: View {
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         // The sheet hugs the content rather than snapping to `.medium`,
-        // which would leave half the sheet empty below two rows. Measured
+        // which would leave half the sheet empty below the rows. Measured
         // rather than fixed so Dynamic Type sizes still fit.
         .onGeometryChange(for: CGFloat.self) { proxy in
             proxy.size.height

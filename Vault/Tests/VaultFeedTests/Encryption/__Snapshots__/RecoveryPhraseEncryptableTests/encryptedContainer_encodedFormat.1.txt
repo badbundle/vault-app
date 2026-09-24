@@ -1,0 +1,11 @@
+{
+  "item_identifier" : "vault.item.recovery-phrase.v1",
+  "passphrase" : "passphrase",
+  "standard" : "SLIP39",
+  "title" : "Hello world",
+  "words" : [
+    "abandon",
+    "ability",
+    "able"
+  ]
+}

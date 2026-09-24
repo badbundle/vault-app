@@ -10,7 +10,7 @@ final class VaultBackupItemEncoderTests {
     // MARK: Full items
 
     @Test
-    func encode_encodesNote() {
+    func encode_encodesNote() throws {
         let id = Identifier<VaultItem>()
         let createdDate = Date(timeIntervalSince1970: 123_456)
         let updateDate = Date(timeIntervalSince1970: 456_789)
@@ -38,7 +38,7 @@ final class VaultBackupItemEncoderTests {
         )
         let sut = makeSUT()
 
-        let encodedItem = sut.encode(storedItem: item)
+        let encodedItem = try sut.encode(storedItem: item)
 
         #expect(encodedItem.id == id.rawValue)
         #expect(encodedItem.createdDate == createdDate)
@@ -63,7 +63,7 @@ final class VaultBackupItemEncoderTests {
     }
 
     @Test
-    func encode_encodesEncryptedItem() {
+    func encode_encodesEncryptedItem() throws {
         let id = Identifier<VaultItem>()
         let createdDate = Date(timeIntervalSince1970: 123_456)
         let updateDate = Date(timeIntervalSince1970: 456_789)
@@ -104,7 +104,7 @@ final class VaultBackupItemEncoderTests {
         )
         let sut = makeSUT()
 
-        let encodedItem = sut.encode(storedItem: item)
+        let encodedItem = try sut.encode(storedItem: item)
 
         #expect(encodedItem.id == id.rawValue)
         #expect(encodedItem.createdDate == createdDate)
@@ -133,7 +133,7 @@ final class VaultBackupItemEncoderTests {
     }
 
     @Test
-    func encode_encodesTOTPCode() {
+    func encode_encodesTOTPCode() throws {
         let id = Identifier<VaultItem>()
         let createdDate = Date(timeIntervalSince1970: 123_456)
         let updateDate = Date(timeIntervalSince1970: 456_789)
@@ -170,7 +170,7 @@ final class VaultBackupItemEncoderTests {
         )
         let sut = makeSUT()
 
-        let encodedItem = sut.encode(storedItem: item)
+        let encodedItem = try sut.encode(storedItem: item)
 
         #expect(encodedItem.id == id.rawValue)
         #expect(encodedItem.createdDate == createdDate)
@@ -201,7 +201,7 @@ final class VaultBackupItemEncoderTests {
     }
 
     @Test
-    func encode_encodesHOTPCode() {
+    func encode_encodesHOTPCode() throws {
         let id = Identifier<VaultItem>()
         let createdDate = Date(timeIntervalSince1970: 123_456)
         let updateDate = Date(timeIntervalSince1970: 456_789)
@@ -238,7 +238,7 @@ final class VaultBackupItemEncoderTests {
         )
         let sut = makeSUT()
 
-        let encodedItem = sut.encode(storedItem: item)
+        let encodedItem = try sut.encode(storedItem: item)
 
         #expect(encodedItem.id == id.rawValue)
         #expect(encodedItem.createdDate == createdDate)
@@ -271,28 +271,38 @@ final class VaultBackupItemEncoderTests {
     // MARK: Cases
 
     @Test
-    func encode_missingColor() {
+    func encode_missingColor() throws {
         let sut = makeSUT()
 
         let code1 = anyOTPAuthCode().wrapInAnyVaultItem(color: nil)
-        let encoded1 = sut.encode(storedItem: code1)
+        let encoded1 = try sut.encode(storedItem: code1)
         #expect(encoded1.tintColor == nil, "No encoded color, it should be nil")
     }
 
     @Test
-    func encode_otpAlgorithmTypes() {
+    func encode_refusesPlaintextRecoveryPhrase() {
+        let item = VaultItem(metadata: anyVaultItemMetadata(), item: .recoveryPhrase(anyRecoveryPhrase()))
+        let sut = makeSUT()
+
+        #expect(throws: VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable) {
+            try sut.encode(storedItem: item)
+        }
+    }
+
+    @Test
+    func encode_otpAlgorithmTypes() throws {
         let sut = makeSUT()
 
         let code1 = anyOTPAuthCode(algorithm: .sha1).wrapInAnyVaultItem()
-        let encoded1 = sut.encode(storedItem: code1)
+        let encoded1 = try sut.encode(storedItem: code1)
         #expect(encoded1.item.codeData?.algorithm == "SHA1")
 
         let code2 = anyOTPAuthCode(algorithm: .sha256).wrapInAnyVaultItem()
-        let encoded2 = sut.encode(storedItem: code2)
+        let encoded2 = try sut.encode(storedItem: code2)
         #expect(encoded2.item.codeData?.algorithm == "SHA256")
 
         let code3 = anyOTPAuthCode(algorithm: .sha512).wrapInAnyVaultItem()
-        let encoded3 = sut.encode(storedItem: code3)
+        let encoded3 = try sut.encode(storedItem: code3)
         #expect(encoded3.item.codeData?.algorithm == "SHA512")
     }
 }

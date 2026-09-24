@@ -420,6 +420,50 @@
         }
       }
     },
+    "electrumSeedType.segwit.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SegWit"
+          }
+        }
+      }
+    },
+    "electrumSeedType.standard.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard"
+          }
+        }
+      }
+    },
+    "electrumSeedType.twoFactor.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2FA"
+          }
+        }
+      }
+    },
+    "electrumSeedType.twoFactorSegwit.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2FA SegWit"
+          }
+        }
+      }
+    },
     "feed.searching.filteringByTags.%lld" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -859,6 +903,449 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Title only"
+          }
+        }
+      }
+    },
+    "recoveryPhraseDetail.action.delete.confirm.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This will permanently delete this recovery phrase. Unless you have another backup of it, you may lose access to your wallet forever."
+          }
+        }
+      }
+    },
+    "recoveryPhraseDetail.action.delete.confirm.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Recovery Phrase?"
+          }
+        }
+      }
+    },
+    "recoveryPhraseDetail.action.delete.entity.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete This Recovery Phrase Forever"
+          }
+        }
+      }
+    },
+    "recoveryPhraseDetail.field.titleEmpty.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untitled"
+          }
+        }
+      }
+    },
+    "recoveryPhraseDetail.listSection.created.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created"
+          }
+        }
+      }
+    },
+    "recoveryPhraseDetail.listSection.updated.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updated"
+          }
+        }
+      }
+    },
+    "recoveryPhraseDetail.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recovery Phrase"
+          }
+        }
+      }
+    },
+    "recoveryPhraseDetail.word.%lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Word %lld"
+          }
+        }
+      }
+    },
+    "recoveryPhraseStandard.bip39.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used by most wallets"
+          }
+        }
+      }
+    },
+    "recoveryPhraseStandard.bip39.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BIP39"
+          }
+        }
+      }
+    },
+    "recoveryPhraseStandard.electrum.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An Electrum wallet seed"
+          }
+        }
+      }
+    },
+    "recoveryPhraseStandard.electrum.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Electrum"
+          }
+        }
+      }
+    },
+    "recoveryPhraseStandard.monero.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Monero wallet seed"
+          }
+        }
+      }
+    },
+    "recoveryPhraseStandard.monero.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Monero"
+          }
+        }
+      }
+    },
+    "recoveryPhraseStandard.other.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Words aren't checked"
+          }
+        }
+      }
+    },
+    "recoveryPhraseStandard.other.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other"
+          }
+        }
+      }
+    },
+    "recoveryPhraseStandard.slip39.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A Shamir backup share"
+          }
+        }
+      }
+    },
+    "recoveryPhraseStandard.slip39.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SLIP-39"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.incomplete.detail.%lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Enter the word to check the phrase."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Enter all %lld words to check the phrase."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.incomplete.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Incomplete"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.invalidChecksum.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Every word is in the wordlist, but one may be mistyped or in the wrong order. Check each word against your backup."
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.invalidChecksum.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checksum doesn't match"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.invalidShare.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The checksum matches, but this isn't a valid SLIP-39 share. Check each word against your backup."
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.invalidShare.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invalid share"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.notValidated.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vault doesn't check the words of this type of phrase."
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.notValidated.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not checked"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.notValidated.unavailable.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The wordlist couldn't be loaded, so the words can't be checked."
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.unknownWords.multiple.%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Words %@ aren't in the wordlist. Check them against your backup."
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.unknownWords.single.%lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Word %lld isn't in the wordlist. Check it against your backup."
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.unknownWords.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unrecognized words"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.unsupportedWordCount.detail.%lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "This type of phrase can't have %lld word."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "This type of phrase can't have %lld words."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.unsupportedWordCount.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unsupported length"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.valid.bip39.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valid BIP39 phrase"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.valid.electrum.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valid Electrum seed"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.valid.monero.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valid Monero seed"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.valid.slip39.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valid SLIP-39 share"
+          }
+        }
+      }
+    },
+    "recoveryPhraseValidation.wordCount.%lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld word"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld words"
+                }
+              }
+            }
           }
         }
       }

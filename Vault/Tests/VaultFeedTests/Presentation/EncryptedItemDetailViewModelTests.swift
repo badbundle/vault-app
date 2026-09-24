@@ -74,6 +74,29 @@ final class EncryptedItemDetailViewModelTests {
     }
 
     @Test
+    func startDecryption_recoveryPhrase() async throws {
+        let phrase = anyRecoveryPhrase(title: "Wallet", passphrase: "extra")
+        let derivedKey = try VaultKeyDeriver.testing.createEncryptionKey(password: "hello")
+        let encryptor = VaultItemEncryptor(key: derivedKey)
+        let encryptedItem = try encryptor.encrypt(item: phrase)
+
+        let keyDeriverFactory = VaultKeyDeriverFactoryMock()
+        keyDeriverFactory.lookupVaultKeyDeriverHandler = { _ in .testing }
+        let sut = makeSUT(item: encryptedItem, keyDeriverFactory: keyDeriverFactory)
+        sut.enteredEncryptionPassword = "hello"
+
+        await sut.startDecryption()
+
+        switch sut.state {
+        case let .decrypted(.recoveryPhrase(decryptedPhrase), key):
+            #expect(decryptedPhrase == phrase)
+            #expect(key == derivedKey)
+        default:
+            Issue.record("Unexpected state \(sut.state)")
+        }
+    }
+
+    @Test
     func startDecryption_unknownItem() async throws {
         let encryptable = VaultItemEncryptableMock(
             itemIdentifier: "this is invalid",

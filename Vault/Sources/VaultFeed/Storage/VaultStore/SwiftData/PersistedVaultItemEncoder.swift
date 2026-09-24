@@ -45,20 +45,18 @@ extension PersistedVaultItemEncoder {
         existing: PersistedVaultItem? = nil,
     ) throws -> PersistedVaultItem {
         let now = currentDate()
-        let noteDetails: PersistedNoteDetails? = switch newData.item {
-        case let .secureNote(note): encodeSecureNoteDetails(newData: note)
-        case .otpCode: nil
-        case .encryptedItem: nil
-        }
-        let otpDetails: PersistedOTPDetails? = switch newData.item {
-        case let .otpCode(code): encodeOtpDetails(newData: code)
-        case .secureNote: nil
-        case .encryptedItem: nil
-        }
-        let encryptedItemDetails: PersistedEncryptedItemDetails? = switch newData.item {
-        case let .encryptedItem(data): encodeEncryptedItemDetails(newData: data)
-        case .secureNote: nil
-        case .otpCode: nil
+        let (noteDetails, otpDetails, encryptedItemDetails): (
+            PersistedNoteDetails?,
+            PersistedOTPDetails?,
+            PersistedEncryptedItemDetails?,
+        ) = switch newData.item {
+        case let .secureNote(note): (encodeSecureNoteDetails(newData: note), nil, nil)
+        case let .otpCode(code): (nil, encodeOtpDetails(newData: code), nil)
+        case let .encryptedItem(data): (nil, nil, encodeEncryptedItemDetails(newData: data))
+        case .recoveryPhrase:
+            // Recovery phrases must only ever be persisted encrypted. Refuse before anything is created in the
+            // context, so a bug elsewhere can never write the words in plaintext.
+            throw VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable
         }
         let updatedDate = switch writeUpdateContext?.updated {
         case .updateUpdatedDate: now

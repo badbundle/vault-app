@@ -46,6 +46,16 @@ struct DeveloperCreateItemsView: View {
             } loading: {
                 ProgressView()
             }
+
+            AsyncButton {
+                let factory = VaultItemDemoFactory()
+                let item = try factory.makeEncryptedRecoveryPhrase()
+                try await dataModel.insert(item: item)
+            } label: {
+                Text("Create encrypted recovery phrase")
+            } loading: {
+                ProgressView()
+            }
         }
     }
 }

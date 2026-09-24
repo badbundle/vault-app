@@ -144,6 +144,11 @@ let package = Package(
         .target(
             name: "VaultCore",
             dependencies: ["CryptoEngine", "FoundationExtensions"],
+            resources: [
+                // Recovery phrase wordlists (BIP39, SLIP-39, Monero), loaded lazily
+                // by `RecoveryPhraseWordlist`. Provenance is documented there.
+                .copy("Resources/Wordlists"),
+            ],
             swiftSettings: swiftSettings,
             plugins: targetPlugins,
         ),

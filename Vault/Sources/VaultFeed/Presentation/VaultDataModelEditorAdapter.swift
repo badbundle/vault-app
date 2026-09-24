@@ -214,3 +214,83 @@ extension VaultDataModelEditorAdapter: SecureNoteDetailEditor {
         try await dataModel.delete(itemID: id)
     }
 }
+
+extension VaultDataModelEditorAdapter: RecoveryPhraseDetailEditor {
+    public enum RecoveryPhraseError: Error, Sendable {
+        /// Recovery phrases can only be saved encrypted, but there was no password or key to encrypt it with.
+        case missingEncryptionKey
+    }
+
+    public func createRecoveryPhrase(initialEdits: RecoveryPhraseDetailEdits) async throws {
+        let (encryptedItem, _) = try await encryptRecoveryPhrase(edits: initialEdits)
+        try await dataModel.insert(item: makeRecoveryPhraseWrite(encryptedItem: encryptedItem, edits: initialEdits))
+    }
+
+    public func updateRecoveryPhrase(
+        id: Identifier<VaultItem>,
+        edits: RecoveryPhraseDetailEdits,
+    ) async throws -> DerivedEncryptionKey {
+        let (encryptedItem, key) = try await encryptRecoveryPhrase(edits: edits)
+        try await dataModel.update(
+            itemID: id,
+            data: makeRecoveryPhraseWrite(encryptedItem: encryptedItem, edits: edits),
+        )
+        return key
+    }
+
+    public func deleteRecoveryPhrase(id: Identifier<VaultItem>) async throws {
+        try await dataModel.delete(itemID: id)
+    }
+
+    /// Recovery phrases are always stored encrypted, so this only ever produces an `EncryptedItem`, never a
+    /// plaintext payload, and fails if there's nothing to encrypt it with.
+    private func encryptRecoveryPhrase(
+        edits: RecoveryPhraseDetailEdits,
+    ) async throws -> (EncryptedItem, DerivedEncryptionKey) {
+        let encryptionKey: DerivedEncryptionKey
+        if edits.newEncryptionPassword.isNotBlank {
+            let keyDeriver = keyDeriverFactory.makeVaultItemKeyDeriver()
+            encryptionKey = try await Task.background {
+                try keyDeriver.createEncryptionKey(password: edits.newEncryptionPassword)
+            }
+        } else if let existingEncryptionKey = edits.existingEncryptionKey {
+            encryptionKey = existingEncryptionKey
+        } else {
+            throw RecoveryPhraseError.missingEncryptionKey
+        }
+        let phrase = edits.makeRecoveryPhrase()
+        let encryptor = VaultItemEncryptor(key: encryptionKey)
+        let encryptedItem = try await Task.background {
+            try encryptor.encrypt(item: phrase)
+        }
+        return (encryptedItem, encryptionKey)
+    }
+
+    private func makeRecoveryPhraseWrite(
+        encryptedItem: EncryptedItem,
+        edits: RecoveryPhraseDetailEdits,
+    ) -> VaultItem.Write {
+        VaultItem.Write(
+            relativeOrder: edits.relativeOrder,
+            // Nothing about the phrase is stored outside of the encrypted item, except the title.
+            userDescription: "",
+            color: edits.color,
+            item: .encryptedItem(encryptedItem),
+            tags: edits.tags,
+            visibility: edits.viewConfig.visibility,
+            searchableLevel: edits.viewConfig.searchableLevel,
+            searchPassphraseUpdate: searchPassphraseUpdate(
+                viewConfig: edits.viewConfig,
+                newPhrase: edits.searchPassphrase,
+            ),
+            killphraseUpdate: killphraseUpdate(
+                enabled: edits.killphraseEnabled,
+                newPhrase: edits.newKillphrase,
+            ),
+            lockState: .lockedWithNativeSecurity,
+            showInQuickType: false,
+            // Encrypted items never show a preview of their contents.
+            previewMode: edits.previewMode == .titleAndFirstLine ? .titleOnly : edits.previewMode,
+        )
+    }
+}

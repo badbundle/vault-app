@@ -51,6 +51,13 @@ public struct GenericVaultItemPreviewViewGenerator<
             )
         case let .encryptedItem(data):
             encryptedGenerator.makeVaultPreviewView(item: data, metadata: metadata, behaviour: behaviour)
+        case .recoveryPhrase:
+            // Recovery phrases are only ever stored encrypted, so the feed never has a decrypted one. If one did
+            // end up here, show a hidden encrypted tile, which gives nothing away.
+            EncryptedItemPreviewView(
+                viewModel: .init(title: "", color: metadata.color ?? .default, previewMode: .hidden),
+                behaviour: behaviour,
+            )
         }
     }
 

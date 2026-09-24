@@ -12,6 +12,11 @@ public struct VaultItem: Equatable, Hashable, Identifiable, Sendable {
         case otpCode(OTPAuthCode)
         case secureNote(SecureNote)
         case encryptedItem(EncryptedItem)
+        /// A decrypted recovery phrase.
+        ///
+        /// This is the in-memory form only, which exists after the user has decrypted an `encryptedItem`. Recovery
+        /// phrases are always stored encrypted: the storage and backup encoders refuse this payload.
+        case recoveryPhrase(RecoveryPhrase)
     }
 
     /// Information about the stored item.
@@ -96,6 +101,13 @@ extension VaultItem.Payload {
     public var encryptedItem: EncryptedItem? {
         switch self {
         case let .encryptedItem(data): data
+        default: nil
+        }
+    }
+
+    public var recoveryPhrase: RecoveryPhrase? {
+        switch self {
+        case let .recoveryPhrase(phrase): phrase
         default: nil
         }
     }

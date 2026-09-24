@@ -5,6 +5,8 @@ public enum VaultIdentifiers {
     public enum Item {
         public static let secureNote = "vault.item.secure-note.v1"
         public static let otpCode = "vault.item.otp-code.v1"
+        /// Only ever stored inside an encrypted item, never as a plaintext payload.
+        public static let recoveryPhrase = "vault.item.recovery-phrase.v1"
     }
 
     public enum SecureStorageKey {

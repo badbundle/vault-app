@@ -26,7 +26,7 @@ public final class EncryptedVaultEncoder {
         let tagEncoder = VaultBackupTagEncoder()
         return try backupEncoder.encryptBackupPayload(
             items: payload.items.map {
-                itemEncoder.encode(storedItem: $0)
+                try itemEncoder.encode(storedItem: $0)
             },
             tags: payload.tags.map {
                 tagEncoder.encode(tag: $0)

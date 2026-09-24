@@ -130,6 +130,18 @@ func anySecureNote(
     SecureNote(title: title, contents: contents, format: format)
 }
 
+/// The first BIP39 test vector: a valid 12 word English phrase.
+let validBIP39Words = Array(repeating: "abandon", count: 11) + ["about"]
+
+func anyRecoveryPhrase(
+    title: String = "",
+    words: [String] = validBIP39Words,
+    standard: RecoveryPhraseStandard = .bip39,
+    passphrase: String = "",
+) -> RecoveryPhrase {
+    RecoveryPhrase(title: title, words: words, standard: standard, passphrase: passphrase)
+}
+
 func anyEncryptedItem(title: String = "Hello") -> EncryptedItem {
     EncryptedItem(
         version: "1.0.0",
