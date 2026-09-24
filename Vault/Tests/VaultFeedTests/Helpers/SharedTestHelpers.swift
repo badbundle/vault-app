@@ -138,9 +138,113 @@ func anyRecoveryPhrase(
     words: [String] = validBIP39Words,
     standard: RecoveryPhraseStandard = .bip39,
     passphrase: String = "",
+    contents: String = "",
 ) -> RecoveryPhrase {
-    RecoveryPhrase(title: title, words: words, standard: standard, passphrase: passphrase)
+    RecoveryPhrase(title: title, words: words, standard: standard, passphrase: passphrase, contents: contents)
 }
+
+/// Recovery phrases covering every standard, word count extremes and the scripts of the wordlists, for checking that
+/// the words survive encoding exactly: same words, same order, same Unicode scalars.
+let recoveryPhraseFixtures: [RecoveryPhrase] = [
+    RecoveryPhrase(
+        title: "English BIP39",
+        words: Array(repeating: "abandon", count: 23) + ["art"],
+        standard: .bip39,
+        passphrase: "",
+        contents: "",
+    ),
+    RecoveryPhrase(
+        title: "Japanese BIP39",
+        // Decomposed kana (as in the wordlist file), which must not be recomposed.
+        words: [
+            "あいこくしん",
+            "あいさつ",
+            "あいた\u{3099}",
+            "あおそら",
+            "あかちゃん",
+            "あきる",
+            "あけか\u{3099}た",
+            "あける",
+            "あこか\u{3099}れる",
+            "あさい",
+            "あさひ",
+            "あしあと",
+        ],
+        standard: .bip39,
+        passphrase: "パスフレーズ",
+        contents: "日本語のメモ",
+    ),
+    RecoveryPhrase(
+        title: "Chinese BIP39",
+        words: ["的", "一", "是", "在", "不", "了", "有", "和", "人", "这", "中", "大"],
+        standard: .bip39,
+        passphrase: "",
+        contents: "",
+    ),
+    RecoveryPhrase(
+        title: "Spanish BIP39",
+        // Both precomposed and decomposed accents.
+        words: [
+            "árbol",
+            "a\u{301}baco",
+            "niño",
+            "nin\u{303}o",
+            "peatón",
+            "vehículo",
+            "almíbar",
+            "tibio",
+            "superar",
+            "vencer",
+            "hacha",
+            "odisea",
+        ],
+        standard: .bip39,
+        passphrase: "contraseña",
+        contents: "",
+    ),
+    RecoveryPhrase(
+        title: "SLIP-39 share",
+        words: ("theory painting academic academic armed sweater year military elder discuss acne wildlife boring "
+            + "employer fused large satoshi bundle carbon diagnose anatomy hamster leaves tracks paces beyond phantom "
+            + "capital marvel lips brave detect luck").split(separator: " ").map(String.init),
+        standard: .slip39,
+        passphrase: "",
+        contents: "Share 1 of 3, 2 needed",
+    ),
+    RecoveryPhrase(
+        title: "Electrum",
+        words: "wild father tree among universe such mobile favorite target dynamic credit identify"
+            .split(separator: " ").map(String.init),
+        standard: .electrum,
+        passphrase: "Did you ever hear the tragedy of Darth Plagueis the Wise?",
+        contents: "",
+    ),
+    RecoveryPhrase(
+        title: "Monero",
+        words: ("velvet lymph giddy number token physics poetry unquoted nibs useful sabotage limits benches "
+            + "lifestyle eden nitrogen anvil fewest avoid batch vials washing fences goat unquoted")
+            .split(separator: " ").map(String.init),
+        standard: .monero,
+        passphrase: "",
+        contents: "",
+    ),
+    RecoveryPhrase(
+        title: "Other, 48 words",
+        // Anything goes: mixed case, punctuation, emoji, repeats, and words that aren't in any list.
+        words: (1 ... 48).map { index in index.isMultiple(of: 2) ? "Word-\(index)" : "🔑\(index)\"quoted\"" },
+        standard: .other,
+        // Whitespace is significant in a passphrase.
+        passphrase: "  leading and trailing  \n",
+        contents: "Line one\nLine two, with \"quotes\" and a backslash \\ and emoji 🪙",
+    ),
+    RecoveryPhrase(
+        title: "",
+        words: ["single"],
+        standard: .other,
+        passphrase: "",
+        contents: "",
+    ),
+]
 
 func anyEncryptedItem(title: String = "Hello") -> EncryptedItem {
     EncryptedItem(

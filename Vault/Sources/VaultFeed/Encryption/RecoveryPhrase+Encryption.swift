@@ -8,6 +8,7 @@ extension RecoveryPhrase: VaultItemEncryptable {
             words: encryptedContainer.words,
             standard: encryptedContainer.standard.toStandard(),
             passphrase: encryptedContainer.passphrase,
+            contents: encryptedContainer.contents,
         )
     }
 
@@ -17,6 +18,7 @@ extension RecoveryPhrase: VaultItemEncryptable {
             words: words,
             standard: .init(standard: standard),
             passphrase: passphrase,
+            contents: contents,
         )
     }
 
@@ -27,12 +29,14 @@ extension RecoveryPhrase: VaultItemEncryptable {
         var words: [String]
         var standard: Standard
         var passphrase: String
+        var contents: String
 
-        init(title: String, words: [String], standard: Standard, passphrase: String) {
+        init(title: String, words: [String], standard: Standard, passphrase: String, contents: String) {
             self.title = title
             self.words = words
             self.standard = standard
             self.passphrase = passphrase
+            self.contents = contents
         }
 
         enum CodingKeys: String, CodingKey {
@@ -41,6 +45,7 @@ extension RecoveryPhrase: VaultItemEncryptable {
             case words
             case standard
             case passphrase
+            case contents
         }
 
         public init(from decoder: any Decoder) throws {
@@ -51,6 +56,7 @@ extension RecoveryPhrase: VaultItemEncryptable {
             // Tolerate fields that a future version might drop, so the words themselves are never lost.
             standard = try container.decodeIfPresent(Standard.self, forKey: .standard) ?? .other
             passphrase = try container.decodeIfPresent(String.self, forKey: .passphrase) ?? ""
+            contents = try container.decodeIfPresent(String.self, forKey: .contents) ?? ""
         }
 
         enum Standard: String, Codable {

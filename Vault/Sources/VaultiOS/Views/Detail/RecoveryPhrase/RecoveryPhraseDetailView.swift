@@ -24,6 +24,7 @@ struct RecoveryPhraseDetailView: View {
 
     private enum Field: Hashable {
         case title
+        case contents
         case word(Int)
         case seedPassphrase
     }
@@ -184,6 +185,13 @@ struct RecoveryPhraseDetailView: View {
                 Text(viewModel.visibleTitle)
                     .font(.title2.bold())
                     .multilineTextAlignment(.leading)
+                if viewModel.editingModel.detail.contents.isNotBlank {
+                    Text(viewModel.editingModel.detail.contents)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .privacySensitive()
+                }
                 RecoveryPhraseValidationBadge(summary: viewModel.validationSummary())
             }
             .padding(.vertical, 4)
@@ -271,8 +279,13 @@ struct RecoveryPhraseDetailView: View {
                 .focused($focusedField, equals: .title)
                 .submitLabel(.next)
                 .onSubmit {
-                    focusedField = .word(0)
+                    focusedField = .contents
                 }
+
+            TextField("Description", text: $viewModel.editingModel.detail.contents, axis: .vertical)
+                .lineLimit(2 ... 8)
+                .focused($focusedField, equals: .contents)
+                .privacySensitive()
         } header: {
             VStack(spacing: 6) {
                 iconHeader
@@ -286,7 +299,7 @@ struct RecoveryPhraseDetailView: View {
             .padding(.bottom, 4)
         } footer: {
             Text(
-                "Titles aren't encrypted. Anyone who can open Vault can see and search for them, so avoid naming the wallet or what it holds.",
+                "The title isn't encrypted: anyone who can open Vault can see and search for it, so avoid naming the wallet or what it holds. The description is encrypted along with the words.",
             )
         }
     }
@@ -615,7 +628,7 @@ struct RecoveryPhraseDetailView: View {
         Spacer()
 
         Button {
-            focusedField = index > 0 ? .word(index - 1) : .title
+            focusedField = index > 0 ? .word(index - 1) : .contents
         } label: {
             Image(systemName: "chevron.up")
                 .accessibilityLabel(Text("Previous Word"))

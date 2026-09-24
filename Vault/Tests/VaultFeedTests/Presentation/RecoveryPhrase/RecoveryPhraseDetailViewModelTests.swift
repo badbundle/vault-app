@@ -18,13 +18,14 @@ struct RecoveryPhraseDetailViewModelTests {
 
     @Test
     func init_editingModelUsesInitialData() {
-        let phrase = anyRecoveryPhrase(title: "Wallet", standard: .bip39, passphrase: " extra ")
+        let phrase = anyRecoveryPhrase(title: "Wallet", standard: .bip39, passphrase: " extra ", contents: "Context")
         let key = anyKey()
         let metadata = anyVaultItemMetadata(color: .init(red: 0.1, green: 0.2, blue: 0.3), previewMode: .titleOnly)
         let sut = makeSUTEditing(phrase: phrase, metadata: metadata, key: key)
 
         let detail = sut.editingModel.detail
         #expect(detail.title == "Wallet")
+        #expect(detail.contents == "Context")
         #expect(detail.words == phrase.words)
         #expect(detail.standard == .bip39)
         #expect(detail.seedPassphrase == " extra ")
@@ -152,6 +153,21 @@ struct RecoveryPhraseDetailViewModelTests {
         #expect(editor.updateRecoveryPhraseCallCount == 1)
         #expect(editor.updateRecoveryPhraseArgValues.first?.0 == metadata.id)
         #expect(editor.updateRecoveryPhraseArgValues.first?.1.title == "New title")
+        #expect(sut.editingModel.isDirty == false)
+    }
+
+    @Test
+    func editingContents_makesEditsDirtyAndIsSaved() async throws {
+        let editor = RecoveryPhraseDetailEditorMock()
+        let key = anyKey()
+        editor.updateRecoveryPhraseHandler = { _, _ in key }
+        let sut = makeSUTEditing(phrase: anyRecoveryPhrase(contents: "Before"), key: key, editor: editor)
+
+        sut.editingModel.detail.contents = "After"
+        #expect(sut.editingModel.isDirty)
+        await sut.saveChanges()
+
+        #expect(editor.updateRecoveryPhraseArgValues.first?.1.makeRecoveryPhrase().contents == "After")
         #expect(sut.editingModel.isDirty == false)
     }
 

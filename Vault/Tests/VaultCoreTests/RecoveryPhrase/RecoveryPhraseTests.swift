@@ -10,6 +10,7 @@ struct RecoveryPhraseTests {
             words: ["abandon", "ability", "able"],
             standard: .bip39,
             passphrase: "secret",
+            contents: "private contents",
         )
 
         let representations = [
@@ -22,13 +23,20 @@ struct RecoveryPhraseTests {
         for representation in representations {
             #expect(!representation.contains("abandon"))
             #expect(!representation.contains("secret"))
+            #expect(!representation.contains("private contents"))
             #expect(representation.contains("3 words"))
         }
     }
 
     @Test
     func mirror_doesNotExposeWords() {
-        let sut = RecoveryPhrase(title: "", words: ["abandon"], standard: .bip39, passphrase: "secret")
+        let sut = RecoveryPhrase(
+            title: "",
+            words: ["abandon"],
+            standard: .bip39,
+            passphrase: "secret",
+            contents: "private contents",
+        )
 
         let children = Mirror(reflecting: sut).children.map { "\($0.label ?? ""): \($0.value)" }
 

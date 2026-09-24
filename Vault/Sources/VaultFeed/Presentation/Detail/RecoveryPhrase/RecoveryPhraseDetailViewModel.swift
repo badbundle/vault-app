@@ -56,6 +56,7 @@ public final class RecoveryPhraseDetailViewModel: DetailViewModel {
         case let .editing(phrase, metadata, encryptionKey):
             .init(detail: .init(
                 title: phrase.title,
+                contents: phrase.contents,
                 standard: phrase.standard,
                 words: phrase.words,
                 seedPassphrase: phrase.passphrase,

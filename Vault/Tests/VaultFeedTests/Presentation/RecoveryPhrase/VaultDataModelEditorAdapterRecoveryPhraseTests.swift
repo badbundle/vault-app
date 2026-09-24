@@ -35,6 +35,7 @@ struct VaultDataModelEditorAdapterRecoveryPhraseTests {
                     words: validBIP39Words,
                     standard: .bip39,
                     passphrase: " my passphrase ",
+                    contents: "Which wallet this is",
                 ))
                 return .new()
             }
@@ -200,6 +201,7 @@ extension VaultDataModelEditorAdapterRecoveryPhraseTests {
             edits.applyInput(word, at: index)
         }
         edits.seedPassphrase = " my passphrase "
+        edits.contents = "\nWhich wallet this is  "
         return edits
     }
 

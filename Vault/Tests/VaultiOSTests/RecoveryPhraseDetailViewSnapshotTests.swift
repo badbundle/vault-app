@@ -28,6 +28,7 @@ final class RecoveryPhraseDetailViewSnapshotTests {
             words: bip39Valid24Words,
             standard: .bip39,
             passphrase: "",
+            contents: "Kept in the safe at home. Long-term savings, don't touch.",
         ))
         viewModel.isLocked = false
 
@@ -41,11 +42,11 @@ final class RecoveryPhraseDetailViewSnapshotTests {
             words: bip39Valid24Words,
             standard: .bip39,
             passphrase: "",
+            contents: "Kept in the safe at home. Long-term savings, don't touch.",
         ))
         viewModel.isLocked = false
-        viewModel.areWordsRevealed = true
 
-        snapshotScenarios(view: makeSUT(viewModel: viewModel))
+        snapshotScenarios(view: makeSUT(viewModel: viewModel), beforeEach: { viewModel.areWordsRevealed = true })
     }
 
     @Test
@@ -59,9 +60,12 @@ final class RecoveryPhraseDetailViewSnapshotTests {
             passphrase: "",
         ))
         viewModel.isLocked = false
-        viewModel.areWordsRevealed = true
 
-        snapshotScenarios(view: makeSUT(viewModel: viewModel), dynamicTypeSizes: [.medium])
+        snapshotScenarios(
+            view: makeSUT(viewModel: viewModel),
+            dynamicTypeSizes: [.medium],
+            beforeEach: { viewModel.areWordsRevealed = true },
+        )
     }
 
     @Test
@@ -76,9 +80,12 @@ final class RecoveryPhraseDetailViewSnapshotTests {
     func unknownWords_revealed() {
         let viewModel = makeEditingViewModel(phrase: phraseWithUnknownWords)
         viewModel.isLocked = false
-        viewModel.areWordsRevealed = true
 
-        snapshotScenarios(view: makeSUT(viewModel: viewModel), dynamicTypeSizes: [.medium])
+        snapshotScenarios(
+            view: makeSUT(viewModel: viewModel),
+            dynamicTypeSizes: [.medium],
+            beforeEach: { viewModel.areWordsRevealed = true },
+        )
     }
 
     @Test
@@ -103,9 +110,12 @@ final class RecoveryPhraseDetailViewSnapshotTests {
             passphrase: "",
         ))
         viewModel.isLocked = false
-        viewModel.areWordsRevealed = true
 
-        snapshotScenarios(view: makeSUT(viewModel: viewModel), dynamicTypeSizes: [.medium, .accessibility2])
+        snapshotScenarios(
+            view: makeSUT(viewModel: viewModel),
+            dynamicTypeSizes: [.medium, .accessibility2],
+            beforeEach: { viewModel.areWordsRevealed = true },
+        )
     }
 
     @Test
@@ -218,10 +228,13 @@ extension RecoveryPhraseDetailViewSnapshotTests {
         dynamicTypeSizes: [DynamicTypeSize] = [.xSmall, .medium, .xxLarge],
         height: CGFloat = 1400,
         testName: String = #function,
+        beforeEach: () -> Void = {},
     ) {
         let colorSchemes: [ColorScheme] = [.light, .dark]
         for colorScheme in colorSchemes {
             for dynamicTypeSize in dynamicTypeSizes {
+                // The view masks the words again when it disappears, which it does after each snapshot.
+                beforeEach()
                 let snapshottingView = view
                     .environment(\.scenePhase, scenePhase)
                     .dynamicTypeSize(dynamicTypeSize)

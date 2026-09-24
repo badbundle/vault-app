@@ -13,6 +13,9 @@ public struct RecoveryPhraseDetailEdits: EditableState {
     /// Stored in plaintext, alongside the encrypted item.
     public var title: String
 
+    /// Freeform description shown below the title, encrypted along with the words.
+    public var contents: String
+
     public private(set) var standard: RecoveryPhraseStandard
 
     /// The words, as entered. Always `wordCount` long, with blanks for words that haven't been entered yet.
@@ -54,6 +57,7 @@ public struct RecoveryPhraseDetailEdits: EditableState {
 
     public init(
         title: String,
+        contents: String,
         standard: RecoveryPhraseStandard,
         words: [String],
         seedPassphrase: String,
@@ -69,6 +73,7 @@ public struct RecoveryPhraseDetailEdits: EditableState {
         previewMode: NotePreviewMode,
     ) {
         self.title = title
+        self.contents = contents
         self.standard = standard
         self.words = words
         self.seedPassphrase = seedPassphrase
@@ -213,6 +218,7 @@ extension RecoveryPhraseDetailEdits {
             words: validation.canonicalWords ?? trimmedWords,
             standard: standard,
             passphrase: seedPassphrase,
+            contents: contents.trimmingCharacters(in: .whitespacesAndNewlines),
         )
     }
 }
@@ -225,6 +231,7 @@ extension RecoveryPhraseDetailEdits {
         let standard = RecoveryPhraseStandard.bip39
         return .init(
             title: "",
+            contents: "",
             standard: standard,
             words: Array(repeating: "", count: standard.defaultWordCount),
             seedPassphrase: "",

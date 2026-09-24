@@ -10,6 +10,8 @@ struct RecoveryPhraseDetailEditsTests {
         let sut = RecoveryPhraseDetailEdits.new()
 
         #expect(sut.standard == .bip39)
+        #expect(sut.title == "")
+        #expect(sut.contents == "")
         #expect(sut.words == Array(repeating: "", count: 24))
         #expect(sut.lockState == .lockedWithNativeSecurity)
         #expect(sut.previewMode == .titleOnly)
@@ -244,6 +246,24 @@ struct RecoveryPhraseDetailEditsTests {
 
         #expect(sut.makeRecoveryPhrase().passphrase == "  Pass Phrase \n")
         #expect(sut.seedPassphraseHasSurroundingWhitespace)
+    }
+
+    @Test
+    func makeRecoveryPhrase_includesTrimmedContents() {
+        var sut = completeEdits()
+        sut.contents = "\n  Ledger in the drawer\nSecond line  \n"
+
+        #expect(sut.makeRecoveryPhrase().contents == "Ledger in the drawer\nSecond line")
+    }
+
+    @Test
+    func isValid_doesNotRequireContentsOrTitle() {
+        var sut = completeEdits()
+        sut.newEncryptionPassword = "password"
+
+        #expect(sut.title.isEmpty)
+        #expect(sut.contents.isEmpty)
+        #expect(sut.isValid)
     }
 
     @Test

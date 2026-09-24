@@ -1,4 +1,5 @@
 {
+  "contents" : "Some contents",
   "item_identifier" : "vault.item.recovery-phrase.v1",
   "passphrase" : "passphrase",
   "standard" : "SLIP39",

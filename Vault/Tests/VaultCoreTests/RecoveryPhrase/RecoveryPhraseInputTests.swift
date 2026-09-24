@@ -46,6 +46,23 @@ struct RecoveryPhraseInputTests {
         #expect(RecoveryPhraseInput.words(in: "的 一，是、在") == ["的", "一", "是", "在"])
     }
 
+    @Test(arguments: [
+        ("abandon", false),
+        ("", false),
+        ("日本", false),
+        ("abandon ", true),
+        (" abandon", true),
+        ("aban don", true),
+        ("abandon\n", true),
+        ("abandon,", true),
+        ("abandon;", true),
+        ("あいこくしん\u{3000}", true),
+        ("的、", true),
+    ])
+    func containsSeparator(text: String, expected: Bool) {
+        #expect(RecoveryPhraseInput.containsSeparator(text) == expected)
+    }
+
     @Test
     func words_doesNotSplitKana() {
         #expect(RecoveryPhraseInput.words(in: "がっこう") == ["がっこう"])
