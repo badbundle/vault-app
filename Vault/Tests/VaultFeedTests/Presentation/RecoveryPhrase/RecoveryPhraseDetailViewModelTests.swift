@@ -76,6 +76,42 @@ struct RecoveryPhraseDetailViewModelTests {
         #expect(sut.isLocked)
     }
 
+    // MARK: - Revealing words
+
+    @Test
+    func areWordsRevealed_existingItemStartsMasked() {
+        let sut = makeSUTEditing()
+
+        #expect(sut.areWordsRevealed == false)
+    }
+
+    @Test
+    func areWordsRevealed_creatingStartsRevealed() {
+        let sut = makeSUTCreating()
+
+        #expect(sut.areWordsRevealed)
+    }
+
+    @Test
+    func lock_masksRevealedWords() {
+        let sut = makeSUTEditing()
+        sut.isLocked = false
+        sut.areWordsRevealed = true
+
+        sut.lock()
+
+        #expect(sut.areWordsRevealed == false)
+    }
+
+    @Test
+    func areWordsRevealed_doesNotMakeEditsDirty() {
+        let sut = makeSUTEditing()
+
+        sut.areWordsRevealed = true
+
+        #expect(sut.editingModel.isDirty == false)
+    }
+
     // MARK: - Saving
 
     @Test

@@ -118,7 +118,7 @@ public struct VaultItemDemoFactory {
             killphraseUpdate: .clear,
             lockState: .lockedWithNativeSecurity,
             showInQuickType: false,
-            previewMode: .hidden,
+            previewMode: .titleOnly,
         )
     }
 }

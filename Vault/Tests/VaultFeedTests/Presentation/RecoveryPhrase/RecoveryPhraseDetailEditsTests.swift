@@ -6,13 +6,13 @@ import VaultKeygen
 
 struct RecoveryPhraseDetailEditsTests {
     @Test
-    func new_hasProtectiveDefaults() {
+    func new_hasExpectedDefaults() {
         let sut = RecoveryPhraseDetailEdits.new()
 
         #expect(sut.standard == .bip39)
         #expect(sut.words == Array(repeating: "", count: 24))
         #expect(sut.lockState == .lockedWithNativeSecurity)
-        #expect(sut.previewMode == .hidden)
+        #expect(sut.previewMode == .titleOnly)
         #expect(sut.viewConfig == .alwaysVisible)
         #expect(sut.passwordState == .required)
         #expect(sut.isValid == false)

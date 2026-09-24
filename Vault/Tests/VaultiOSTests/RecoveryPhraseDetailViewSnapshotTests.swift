@@ -22,7 +22,7 @@ final class RecoveryPhraseDetailViewSnapshotTests {
     }
 
     @Test
-    func valid24Words() {
+    func valid24Words_masked() {
         let viewModel = makeEditingViewModel(phrase: .init(
             title: "Hardware wallet",
             words: bip39Valid24Words,
@@ -35,7 +35,21 @@ final class RecoveryPhraseDetailViewSnapshotTests {
     }
 
     @Test
-    func invalidChecksum() {
+    func valid24Words_revealed() {
+        let viewModel = makeEditingViewModel(phrase: .init(
+            title: "Hardware wallet",
+            words: bip39Valid24Words,
+            standard: .bip39,
+            passphrase: "",
+        ))
+        viewModel.isLocked = false
+        viewModel.areWordsRevealed = true
+
+        snapshotScenarios(view: makeSUT(viewModel: viewModel))
+    }
+
+    @Test
+    func invalidChecksum_revealed() {
         var words = bip39Valid24Words
         words.swapAt(0, 23)
         let viewModel = makeEditingViewModel(phrase: .init(
@@ -45,6 +59,24 @@ final class RecoveryPhraseDetailViewSnapshotTests {
             passphrase: "",
         ))
         viewModel.isLocked = false
+        viewModel.areWordsRevealed = true
+
+        snapshotScenarios(view: makeSUT(viewModel: viewModel), dynamicTypeSizes: [.medium])
+    }
+
+    @Test
+    func unknownWords_masked() {
+        let viewModel = makeEditingViewModel(phrase: phraseWithUnknownWords)
+        viewModel.isLocked = false
+
+        snapshotScenarios(view: makeSUT(viewModel: viewModel), dynamicTypeSizes: [.medium])
+    }
+
+    @Test
+    func unknownWords_revealed() {
+        let viewModel = makeEditingViewModel(phrase: phraseWithUnknownWords)
+        viewModel.isLocked = false
+        viewModel.areWordsRevealed = true
 
         snapshotScenarios(view: makeSUT(viewModel: viewModel), dynamicTypeSizes: [.medium])
     }
@@ -63,7 +95,7 @@ final class RecoveryPhraseDetailViewSnapshotTests {
     }
 
     @Test
-    func slip39Share() {
+    func slip39Share_revealed() {
         let viewModel = makeEditingViewModel(phrase: .init(
             title: "Share 1",
             words: slip39ShareWords,
@@ -71,6 +103,7 @@ final class RecoveryPhraseDetailViewSnapshotTests {
             passphrase: "",
         ))
         viewModel.isLocked = false
+        viewModel.areWordsRevealed = true
 
         snapshotScenarios(view: makeSUT(viewModel: viewModel), dynamicTypeSizes: [.medium, .accessibility2])
     }
@@ -111,6 +144,15 @@ final class RecoveryPhraseDetailViewSnapshotTests {
             at: 0,
         )
         viewModel.editingModel.detail.newEncryptionPassword = "password"
+
+        snapshotScenarios(view: makeSUT(viewModel: viewModel), dynamicTypeSizes: [.medium], height: 1800)
+    }
+
+    @Test
+    func editMode_existingPhraseMasked() {
+        let viewModel = makeEditingViewModel(phrase: phraseWithUnknownWords)
+        viewModel.isLocked = false
+        viewModel.startEditing()
 
         snapshotScenarios(view: makeSUT(viewModel: viewModel), dynamicTypeSizes: [.medium], height: 1800)
     }
@@ -205,6 +247,14 @@ extension RecoveryPhraseDetailViewSnapshotTests {
     /// The first 24 word BIP39 test vector (all zero entropy).
     private var bip39Valid24Words: [String] {
         Array(repeating: "abandon", count: 23) + ["art"]
+    }
+
+    /// Words 3 and 8 aren't in the BIP39 wordlist.
+    private var phraseWithUnknownWords: RecoveryPhrase {
+        var words = Array(repeating: "abandon", count: 11) + ["about"]
+        words[2] = "abandom"
+        words[7] = "zooo"
+        return RecoveryPhrase(title: "Savings", words: words, standard: .bip39, passphrase: "")
     }
 
     /// A valid 33 word SLIP-39 share from the python-shamir-mnemonic test vectors.

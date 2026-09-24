@@ -4,9 +4,9 @@ import VaultFeed
 /// Shows and edits a recovery phrase.
 ///
 /// A recovery phrase is only ever opened after decrypting it with its password, and always opens locked, needing
-/// device authentication as well. Its words are hidden whenever the app isn't in the foreground (so they don't appear
-/// in the app switcher) or the screen is being recorded or shared, and it locks again when the app goes to the
-/// background.
+/// device authentication as well. Once unlocked, the words stay masked until tapped. They're hidden whenever the app
+/// isn't in the foreground (so they don't appear in the app switcher) or the screen is being recorded or shared, and
+/// the item locks again when the app goes to the background.
 @MainActor
 struct RecoveryPhraseDetailView: View {
     @State private var viewModel: RecoveryPhraseDetailViewModel
@@ -133,6 +133,9 @@ struct RecoveryPhraseDetailView: View {
         }
         .onDisappear {
             isSeedPassphraseRevealed = false
+            if !viewModel.isInitialCreation {
+                viewModel.areWordsRevealed = false
+            }
         }
         .onChange(of: selectedColor.hashValue) { _, _ in
             viewModel.editingModel.detail.color = VaultItemColor(color: selectedColor)
@@ -193,15 +196,33 @@ struct RecoveryPhraseDetailView: View {
 
     private var wordsSection: some View {
         Section {
-            RecoveryPhraseWordGridView(
-                words: viewModel.editingModel.detail.words,
-                wordNumberLabel: viewModel.strings.wordNumber,
-            )
-            .privacySensitive()
-            .listRowInsets(EdgeInsets(vertical: 12, horizontal: 12))
+            wordGrid(highlighting: viewModel.validationSummary().unknownWordPositions)
         } header: {
             Text(viewModel.editingModel.detail.standard.localizedTitle)
+        } footer: {
+            revealWordsHint
         }
+    }
+
+    /// The words, masked until the user taps them.
+    private func wordGrid(highlighting unknownWordPositions: Set<Int>) -> some View {
+        RecoveryPhraseWordGridView(
+            words: viewModel.editingModel.detail.words,
+            isRevealed: viewModel.areWordsRevealed,
+            highlightedPositions: unknownWordPositions,
+            wordNumberLabel: viewModel.strings.wordNumber,
+            toggleRevealed: {
+                withAnimation(.snappy) {
+                    viewModel.areWordsRevealed.toggle()
+                }
+            },
+        )
+        .privacySensitive()
+        .listRowInsets(EdgeInsets(vertical: 12, horizontal: 12))
+    }
+
+    private var revealWordsHint: some View {
+        Text(viewModel.areWordsRevealed ? "Tap a word to hide them all." : "Tap a word to reveal them all.")
     }
 
     private var seedPassphraseSection: some View {
@@ -322,15 +343,34 @@ struct RecoveryPhraseDetailView: View {
     private var wordsEditingSection: some View {
         let summary = viewModel.validationSummary(whileEditingWordAt: focusedWordIndex)
         return Section {
-            ForEach(viewModel.editingModel.detail.words.indices, id: \.self) { index in
-                wordField(index: index, isUnknown: summary.unknownWordPositions.contains(index))
+            if viewModel.areWordsRevealed {
+                ForEach(viewModel.editingModel.detail.words.indices, id: \.self) { index in
+                    let isUnknown = summary.unknownWordPositions.contains(index)
+                    wordField(index: index, isUnknown: isUnknown)
+                        .listRowBackground(isUnknown ? unknownWordRowBackground : nil)
+                }
+            } else {
+                // Editing an existing phrase would otherwise show every word, so they stay masked until tapped.
+                wordGrid(highlighting: summary.unknownWordPositions)
             }
         } header: {
             Text("Words")
         } footer: {
-            RecoveryPhraseValidationBadge(summary: summary)
-                .font(.footnote)
-                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 8) {
+                if !viewModel.areWordsRevealed {
+                    revealWordsHint
+                }
+                RecoveryPhraseValidationBadge(summary: summary)
+                    .font(.footnote)
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private var unknownWordRowBackground: some View {
+        ZStack {
+            Color(UIColor.secondarySystemGroupedBackground)
+            Color.orange.opacity(0.2)
         }
     }
 

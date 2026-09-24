@@ -22,7 +22,7 @@ struct VaultDataModelEditorAdapterRecoveryPhraseTests {
                 #expect(data.userDescription == "", "Nothing about the phrase is stored outside the encrypted item")
                 #expect(data.lockState == .lockedWithNativeSecurity)
                 #expect(data.showInQuickType == false)
-                #expect(data.previewMode == .hidden)
+                #expect(data.previewMode == .titleOnly)
                 #expect(data.visibility == .always)
                 guard case let .encryptedItem(item) = data.item else {
                     Issue.record("Recovery phrase was not encrypted")

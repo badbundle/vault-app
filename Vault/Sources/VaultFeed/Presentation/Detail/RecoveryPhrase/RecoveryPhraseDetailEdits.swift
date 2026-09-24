@@ -237,8 +237,8 @@ extension RecoveryPhraseDetailEdits {
             tags: [],
             relativeOrder: .min,
             existingEncryptionKey: nil,
-            // The title isn't encrypted, so don't show it in the feed unless the user chooses to.
-            previewMode: .hidden,
+            // Only the title: the contents of an encrypted item are never previewed.
+            previewMode: .titleOnly,
         )
     }
 }

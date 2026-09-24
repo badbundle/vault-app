@@ -22,6 +22,9 @@ public final class RecoveryPhraseDetailViewModel: DetailViewModel {
     /// Always starts locked for an existing item, whatever its stored lock state, and locks again whenever the app
     /// goes to the background.
     public var isLocked: Bool
+    /// Even once unlocked, the words are masked until the user chooses to reveal them, so they aren't on screen the
+    /// moment the item opens. Starts revealed only when creating, as there's nothing to hide yet.
+    public var areWordsRevealed: Bool
     public let dataModel: VaultDataModel
     private let locale: Locale
     private let detailEditState = DetailEditState<RecoveryPhraseDetailEdits>()
@@ -42,6 +45,10 @@ public final class RecoveryPhraseDetailViewModel: DetailViewModel {
         isLocked = switch mode {
         case .creating: false
         case .editing: true
+        }
+        areWordsRevealed = switch mode {
+        case .creating: true
+        case .editing: false
         }
         editingModel = switch mode {
         case .creating:
@@ -75,9 +82,11 @@ public final class RecoveryPhraseDetailViewModel: DetailViewModel {
         false
     }
 
-    /// Lock the item, requiring authentication again to see it. Called when the app moves to the background.
+    /// Lock the item, requiring authentication again to see it, and mask the words again. Called when the app moves
+    /// to the background.
     public func lock() {
         isLocked = true
+        areWordsRevealed = false
     }
 
     public var allTags: [VaultItemTag] {

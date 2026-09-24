@@ -20,7 +20,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Backup encryption
 - App icon generated from a SwiftUI view (`VaultAppIcon`) with light, dark and tinted variants, via `make app-icon`
 - Locked items show the vault door from the app icon, which spins open when the item is unlocked. Turning the lock on and saving locks the item on the spot, door shutting and wheel spinning, so the lock is seen to work
-- Recovery phrases (crypto wallet seed words) as a new item type. They're always encrypted with a password and locked with the device passcode, shown as a numbered list, and checked against the wordlist and checksum of BIP39 (all 10 languages), SLIP-39, Electrum and Monero phrases. Words are hidden while the app is in the background or the screen is being recorded, and there's no way to copy them
+- Recovery phrases (crypto wallet seed words) as a new item type. They're always encrypted with a password and locked with the device passcode, shown as a numbered list, and checked against the wordlist and checksum of BIP39 (all 10 languages), SLIP-39, Electrum and Monero phrases, with any unrecognized words highlighted. Even once unlocked, the words stay masked until tapped. They're hidden while the app is in the background or the screen is being recorded, and there's no way to copy them
 
 ### Fixed
 
