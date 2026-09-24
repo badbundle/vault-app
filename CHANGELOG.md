@@ -24,7 +24,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 ### Fixed
 
-- N/A
+- Backups containing an encrypted item (such as an encrypted note) couldn't be restored: the encryption IV's key didn't survive the backup's key encoding. The backup format is unchanged, so backups made before the fix restore too
 
 ### Changed
 

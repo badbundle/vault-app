@@ -119,11 +119,105 @@ struct IntermediateEncodedVaultDecoderTests {
 
         #expect(decoded == input, "Decoded backup differs from input")
     }
+
+    @Test
+    func decodeVault_decodesEncryptedItem() throws {
+        let input = try anyBackupPayload(created: Date(timeIntervalSince1970: 12345), items: [anyEncryptedBackupItem()])
+        let encoder = IntermediateEncodedVaultEncoder()
+
+        let decoded = try sut.decode(encodedVault: encoder.encode(vaultBackup: input))
+
+        #expect(decoded == input, "Decoded backup differs from input")
+    }
+
+    /// The format backups with encrypted items have always been written in, which must still restore.
+    @Test
+    func decodeVault_decodesEncryptedItemInExistingFormat() throws {
+        let json = """
+        {
+          "created" : 12345000,
+          "items" : [
+            {
+              "created_date" : 12345000,
+              "id" : "A5950174-2106-4251-BD73-58B8D39F77F3",
+              "item" : {
+                "encrypted" : {
+                  "data" : {
+                    "authentication" : "AgICAgICAgICAgICAgICAgI=",
+                    "data" : "/v7+/v7+",
+                    "encryption_iv" : "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+                    "keygen_salt" : "BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUF",
+                    "keygen_signature" : "this is test sig",
+                    "title" : "this is my title",
+                    "version" : "2.0.3"
+                  }
+                }
+              },
+              "lock_state" : "LOCKED_NATIVE",
+              "relative_order" : 1000,
+              "searchable_level" : "FULL",
+              "tags" : [],
+              "updated_date" : 19345000,
+              "user_description" : "",
+              "visibility" : "ALWAYS"
+            }
+          ],
+          "obfuscation_padding" : "q6urCg==",
+          "tags" : [],
+          "user_description" : "Example vault with a single encrypted item",
+          "version" : "1.0.0"
+        }
+        """
+        let compressed = try (Data(json.utf8) as NSData).compressed(using: .lzma) as Data
+
+        let decoded = try sut.decode(encodedVault: IntermediateEncodedVault(data: compressed))
+
+        let item = try #require(decoded.items.first)
+        guard case let .encrypted(data: encrypted) = item.item else {
+            Issue.record("Expected an encrypted item, got \(item.item)")
+            return
+        }
+        #expect(encrypted.encryptionIV == Data(repeating: 0x04, count: 24))
+        #expect(encrypted.data == Data(repeating: 0xFE, count: 6))
+        #expect(encrypted.authentication == Data(repeating: 0x02, count: 17))
+        #expect(encrypted.keygenSalt == Data(repeating: 0x05, count: 30))
+        #expect(encrypted.keygenSignature == "this is test sig")
+        #expect(encrypted.title == "this is my title")
+        #expect(encrypted.version == "2.0.3")
+        #expect(item.lockState == .lockedWithNativeSecurity)
+    }
 }
 
 // MARK: - Helpers
 
 extension IntermediateEncodedVaultDecoderTests {
+    private func anyEncryptedBackupItem() throws -> VaultBackupItem {
+        try VaultBackupItem(
+            id: #require(UUID(uuidString: "A5950174-2106-4251-BD73-58B8D39F77F3")),
+            createdDate: Date(timeIntervalSince1970: 12345),
+            updatedDate: Date(timeIntervalSince1970: 19345),
+            relativeOrder: 1000,
+            userDescription: "",
+            tags: [],
+            visibility: .always,
+            searchableLevel: .full,
+            searchPassphraseSalt: nil,
+            searchPassphraseDigest: nil,
+            killphraseSalt: nil,
+            killphraseDigest: nil,
+            lockState: .lockedWithNativeSecurity,
+            item: .encrypted(data: .init(
+                version: "1.0.0",
+                title: "this is my title",
+                data: Data(repeating: 0xFE, count: 300),
+                authentication: Data(repeating: 0x02, count: 17),
+                encryptionIV: Data(repeating: 0x04, count: 24),
+                keygenSalt: Data(repeating: 0x05, count: 30),
+                keygenSignature: "this is test sig",
+            )),
+        )
+    }
+
     private func anyBackupPayload(
         created: Date = Date(),
         userDescription: String = "my description",
