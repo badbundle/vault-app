@@ -1,27 +1,8 @@
-#!/bin/bash
-# Posts the "Validate (local)" status for each pushed branch commit that
-# scripts/validate.sh has already validated (see README.md#validation). It never
-# blocks the push: a commit that hasn't been validated just doesn't get the
-# check, and main won't accept it until it does.
-#
-# Enable once per clone: git config core.hooksPath .githooks
-
-repo_root=$(git rev-parse --show-toplevel)
-state_dir="$(cd "$repo_root" && cd "$(git rev-parse --git-common-dir)" && pwd)/validate"
-mkdir -p "$state_dir/logs"
-
-while read -r _local_ref local_sha remote_ref _remote_sha; do
-  case "$remote_ref" in refs/heads/*) ;; *) continue ;; esac
-  case "$local_sha" in *[!0]*) ;; *) continue ;; esac # deleting the branch
-
-  if [ -f "$state_dir/results/$local_sha" ]; then
-    # The commit only reaches GitHub after this hook returns, so post from the
-    # background once it's there.
-    nohup "$repo_root/scripts/validate.sh" --post "$local_sha" \
-      </dev/null >>"$state_dir/logs/post.log" 2>&1 &
-  else
-    echo "validate: ${local_sha:0:9} (${remote_ref#refs/heads/}) hasn't been validated; run 'make validate' in Vault/ to get the green check." >&2
-  fi
-done
-
+#!/bin/sh
+# Posts local-check results for pushed commits: https://github.com/badbundle/local-check
+bin="$(git rev-parse --show-toplevel)/node_modules/.bin/local-check"
+if [ -x "$bin" ]; then
+  exec "$bin" hook pre-push "$@"
+fi
+echo "local-check isn't installed, so results won't be posted. Run bun install." >&2
 exit 0

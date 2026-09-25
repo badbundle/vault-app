@@ -12,3 +12,6 @@ vendor/
 *.p12
 *.mobileprovision
 *.ipa
+
+# Bun
+node_modules/

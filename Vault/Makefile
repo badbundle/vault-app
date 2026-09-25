@@ -20,11 +20,13 @@ lint:
 	swift package plugin --allow-writing-to-package-directory swiftlint --strict --quiet ./Sources
 	swift package --allow-writing-to-package-directory format --lint --sources=./
 
-# Validation: lint, build and test the current commit in a clean worktree, then
-# post the green "Validate (local)" check to GitHub. See ../README.md#validation.
+# Validation: runs the checks in ../local-check.config.ts on the current commit,
+# in a clean worktree, then posts the green "Validate (local)" check to GitHub.
+# Installing first keeps local-check at the version package.json pins.
+# See ../README.md#validation.
 .PHONY: validate
 validate:
-	../scripts/validate.sh
+	cd .. && bun install --frozen-lockfile --silent && bun run --silent validate
 
 # Marketing screenshots: capture raw shots of the app on throwaway simulators,
 # then put them in device frames with titles. See Screenshots/README.md.

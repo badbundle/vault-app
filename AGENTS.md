@@ -14,7 +14,7 @@ Read [`MANIFESTO.md`](./MANIFESTO.md) before proposing or implementing any featu
 
 ## Validation
 
-There is no hosted CI. Before a PR can merge into `main`, its latest commit needs the **Validate (local)** status check, which is posted by running `make validate` in `Vault/`. See [Validation](./README.md#validation) in the README and the rules in [`Vault/AGENTS.md`](./Vault/AGENTS.md).
+There is no hosted CI. Before a PR can merge into `main`, its latest commit needs the **Validate (local)** status check, which is posted by running `make validate` in `Vault/`, using the checks in [`local-check.config.ts`](./local-check.config.ts). See [Validation](./README.md#validation) in the README and the rules in [`Vault/AGENTS.md`](./Vault/AGENTS.md).
 
 ## Layout
 

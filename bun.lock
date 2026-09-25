@@ -1,0 +1,14 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "devDependencies": {
+        "@badbundle/local-check": "github:badbundle/local-check#v0.1.0",
+      },
+    },
+  },
+  "packages": {
+    "@badbundle/local-check": ["@badbundle/local-check@github:badbundle/local-check#ec24fc9", { "bin": { "local-check": "src/cli.ts" } }, "badbundle-local-check-ec24fc9", "sha512-D5hLBd6ui/hwMULjh8vsqJejvcWUZX1idPKu2rb/UCKwrtmv223RgqWCOvA9JcrfbWF2JYnHvNGOCpDNjmuyWw=="],
+  }
+}
