@@ -327,21 +327,19 @@ public struct VaultItemFeedView<
     private var pillRow: some View {
         HStack {
             ForEach(dataModel.allTags) { tag in
-                // `TagPillView` draws its own capsule — filled when
-                // selected, outlined when not — which reads far more
-                // clearly than tinting a bordered button both ways.
-                // Glass beneath it keeps the pill legible over whatever
-                // scrolls past. The toggle keeps the button trait and
-                // selected state that a bare tap gesture would not expose.
+                // The same glass pill that shows a tag everywhere else,
+                // tinted while its filter is active, which reads far more
+                // clearly than tinting a bordered button both ways. The
+                // toggle keeps the button trait and selected state that a
+                // bare tap gesture would not expose.
                 Toggle(isOn: filterBinding(for: tag)) {
                     TagPillView(
                         tag: tag,
                         isSelected: dataModel.itemsFilteringByTags.contains(tag.id),
+                        isInteractive: true,
                     )
-                    .glassEffect(.regular.interactive(), in: .capsule)
                     .glassEffectID(barGlassID(.tag(tag.id)), in: barGlass)
                     .glassEffectTransition(barGlassTransition)
-                    .glassSnapshotBackdrop(in: .capsule)
                     // The plain button style draws nothing, so the whole
                     // 44pt frame is tappable while the pill stays compact.
                     .frame(minHeight: 44)
@@ -353,7 +351,6 @@ public struct VaultItemFeedView<
         .toggleStyle(.button)
         .buttonStyle(.plain)
         .controlSize(.small)
-        .font(.footnote)
         // Beside the bar the scroll view clips, so the row keeps a hair of
         // inset or the first pill's stroke is shaved at the leading edge;
         // stacked, it spans the screen and carries the normal margin.
@@ -657,7 +654,7 @@ public struct VaultItemFeedView<
             return .count(activeIDs.count)
         }
 
-        return .named(tag.name.isBlank ? "Tag" : tag.name)
+        return .named(tag.displayName)
     }
 
     private func filterBinding(for tag: VaultItemTag) -> Binding<Bool> {

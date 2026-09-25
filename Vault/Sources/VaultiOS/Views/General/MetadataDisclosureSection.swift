@@ -35,7 +35,7 @@ struct MetadataDisclosureSection: View {
                             .id(tag)
                     }
                 }
-                .font(.footnote)
+                .controlSize(.small)
             }
             .scrollClipDisabled()
             .padding(.top, 8)

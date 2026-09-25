@@ -99,25 +99,29 @@ struct VaultTagDetailView: View {
         }
     }
 
-    /// Mirrors the icon-and-colour header used by the item detail editors.
-    private var iconEditingHeader: some View {
-        VStack(spacing: 6) {
-            Image(systemName: viewModel.currentTag.iconName)
-                .font(.title)
-                .foregroundStyle(selectedColor)
+    /// The tag as the rest of the app will show it, updating as it's edited,
+    /// above the colour picker. Mirrors the icon-and-colour header used by
+    /// the item detail editors.
+    private var previewHeader: some View {
+        VStack(spacing: 10) {
+            TagPillView(tag: viewModel.previewTag)
+                // Only echoes the name field, icon grid and colour picker,
+                // which VoiceOver already reads.
+                .accessibilityHidden(true)
 
             ColorPicker(selection: $selectedColor, supportsOpacity: false, label: {
                 EmptyView()
             })
             .labelsHidden()
         }
+        .textCase(nil)
     }
 
     private var nameSection: some View {
         Section {
             TextField("My Tag", text: $viewModel.currentTag.name)
         } header: {
-            iconEditingHeader
+            previewHeader
                 .containerRelativeFrame(.horizontal)
                 .padding(.vertical, 2)
                 .padding(.bottom, 4)
@@ -129,7 +133,7 @@ struct VaultTagDetailView: View {
             IconGridPicker(
                 selectedIcon: $viewModel.currentTag.iconName,
                 iconOptions: viewModel.systemIconOptions,
-                selectedColor: viewModel.currentTag.color.prominentIconColor,
+                selectedColor: viewModel.currentTag.color.badgeColor,
             )
         } header: {
             Text("Icon")
@@ -151,8 +155,8 @@ struct VaultTagDetailView: View {
 
 // MARK: - Icon Grid Picker
 
-/// Inline grid of selectable SF Symbols. The selected icon is drawn the same
-/// way as a prominent `FormRow` icon so it matches how the tag appears in lists.
+/// Inline grid of selectable SF Symbols. The selected icon is drawn like the
+/// tag's badge, so it matches how the tag appears everywhere else.
 private struct IconGridPicker: View {
     @Binding var selectedIcon: String
     let iconOptions: [String]
@@ -173,7 +177,7 @@ private struct IconGridPicker: View {
                         .frame(width: cellSize, height: cellSize)
                         .background(
                             isSelected ? selectedColor : Color(.tertiarySystemFill),
-                            in: RoundedRectangle(cornerRadius: 8),
+                            in: .circle,
                         )
                 }
                 .buttonStyle(.plain)
