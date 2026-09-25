@@ -1,7 +1,5 @@
 # These jobs are run on everything, including main and PRs.
 #
-# TEMPORARILY DISABLED — automatic triggers are commented out below.
-#
 # The project builds and tests against Xcode 27 / iOS 27.0, and the snapshot
 # references are recorded on that runtime. No GitHub-hosted GA image provides
 # Xcode 27 yet: `macos-26` tops out at Xcode 26.6 and carries no iOS 27.0
@@ -9,23 +7,31 @@
 # pool could not absorb this 14-way test matrix — every shard sat queued
 # indefinitely.
 #
-# RE-ENABLE when Xcode 27 is available on the `macos-26` runner image (or a
-# `macos-27` GA image ships): uncomment the `pull_request` and `push` triggers
-# below. Everything else in this file is already configured for Xcode 27 and
-# iOS 27.0, so no other change should be needed.
+# So the jobs that need Xcode 27 (Lint, CI_iOS Build, CI_iOS Tests) run on the
+# badbundle self-hosted Mac runner (`[self-hosted, macOS, studio]`), which has
+# /Applications/Xcode_27.0.app and an iPhone 18 Pro Max / iOS 27.0 simulator.
+# There is one runner, so the test shards run one after another. Release Config
+# only needs Ruby, so it stays on GitHub-hosted `macos-26`.
 #
-# Track availability at https://github.com/actions/runner-images
+# This repo is public, so the self-hosted jobs never run for pull requests from
+# forks (the `if:` on each job) — a fork PR fails the CI_iOS check until its
+# changes are pushed to a branch in this repo. The repo also requires approval
+# before workflows run for any external contributor.
 #
-# Until then the workflow can still be run on demand via `workflow_dispatch`
-# (Actions tab → Validate → Run workflow, or `gh workflow run validate-all.yml`).
+# The self-hosted runner has no passwordless sudo, so Xcode is selected with
+# DEVELOPER_DIR instead of `sudo xcode-select`.
+#
+# MOVE BACK to GitHub-hosted runners once an image ships Xcode 27 and iOS 27.0:
+# set `runs-on` back to that image and drop the fork `if:` guards. Track
+# availability at https://github.com/actions/runner-images
 name: Validate
 
 on:
   workflow_dispatch:
-  # pull_request:
-  #   branches: [main]
-  # push:
-  #   branches: [main]
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
 
 env:
   XCODE_VERSION: "27.0"
@@ -56,14 +62,15 @@ jobs:
   lint:
     name: Lint
     timeout-minutes: 2
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, studio]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     defaults:
       run:
         working-directory: ./Vault
 
     steps:
       - uses: actions/checkout@v6.0.3
-      - run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer
+      - run: echo "DEVELOPER_DIR=/Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer" >> "$GITHUB_ENV"
 
       - name: Cache SPM Dependencies
         uses: actions/cache@v5.0.5
@@ -81,11 +88,12 @@ jobs:
   ci-ios-build:
     name: CI_iOS Build
     timeout-minutes: 20
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, studio]
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - uses: actions/checkout@v6.0.3
-      - run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer
+      - run: echo "DEVELOPER_DIR=/Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer" >> "$GITHUB_ENV"
 
       - name: Log Xcode Version
         run: xcodebuild -version
@@ -123,8 +131,9 @@ jobs:
   ci-ios-tests:
     name: CI_iOS Tests (${{ matrix.suite }})
     timeout-minutes: 20
-    runs-on: macos-26
+    runs-on: [self-hosted, macOS, studio]
     needs: ci-ios-build
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
       matrix:
@@ -160,7 +169,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6.0.3
-      - run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer
+      - run: echo "DEVELOPER_DIR=/Applications/Xcode_${{ env.XCODE_VERSION }}.app/Contents/Developer" >> "$GITHUB_ENV"
 
       - name: Download CI_iOS Test Products
         uses: actions/download-artifact@v8.0.1
