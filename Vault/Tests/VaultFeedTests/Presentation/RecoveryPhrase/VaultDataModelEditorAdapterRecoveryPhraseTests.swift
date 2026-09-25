@@ -137,6 +137,55 @@ struct VaultDataModelEditorAdapterRecoveryPhraseTests {
         #expect(returnedKey != existingKey)
     }
 
+    /// The title is stored twice: in plaintext for the feed and search, and encrypted with the phrase. Renaming
+    /// must update both.
+    @Test
+    func updateRecoveryPhrase_renamingUpdatesPlaintextAndEncryptedTitle() async throws {
+        let store = VaultStoreStub()
+        let sut = makeSUT(dataModel: anyVaultDataModel(vaultStore: store, vaultTagStore: VaultTagStoreStub()))
+        var edits = anyEdits()
+        edits.existingEncryptionKey = try VaultKeyDeriver.testing.createEncryptionKey(password: "existing")
+        edits.title = "  Renamed wallet  "
+
+        try await confirmation("Update handler called") { confirmation in
+            store.updateHandler = { _, data in
+                defer { confirmation() }
+                guard case let .encryptedItem(item) = data.item else {
+                    Issue.record("Recovery phrase was not encrypted")
+                    return
+                }
+                #expect(item.title == "Renamed wallet")
+                #expect((try? decrypt(item, password: "existing"))?.title == "Renamed wallet")
+            }
+
+            _ = try await sut.updateRecoveryPhrase(id: .new(), edits: edits)
+        }
+    }
+
+    @Test
+    func updateRecoveryPhrase_otherChangesKeepBothTitles() async throws {
+        let store = VaultStoreStub()
+        let sut = makeSUT(dataModel: anyVaultDataModel(vaultStore: store, vaultTagStore: VaultTagStoreStub()))
+        var edits = anyEdits()
+        edits.existingEncryptionKey = try VaultKeyDeriver.testing.createEncryptionKey(password: "existing")
+        edits.contents = "Changed description"
+        edits.applyInput("zoo", at: 0)
+
+        try await confirmation("Update handler called") { confirmation in
+            store.updateHandler = { _, data in
+                defer { confirmation() }
+                guard case let .encryptedItem(item) = data.item else {
+                    Issue.record("Recovery phrase was not encrypted")
+                    return
+                }
+                #expect(item.title == "My wallet")
+                #expect((try? decrypt(item, password: "existing"))?.title == "My wallet")
+            }
+
+            _ = try await sut.updateRecoveryPhrase(id: .new(), edits: edits)
+        }
+    }
+
     @Test
     func updateRecoveryPhrase_neverShowsContentInPreview() async throws {
         let store = VaultStoreStub()

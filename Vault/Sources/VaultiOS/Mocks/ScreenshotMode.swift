@@ -305,12 +305,9 @@ enum ScreenshotMode {
     /// The payload is the developer-tools demo note (password "hello"); only
     /// the container's plaintext title shows in the feed.
     private static func encryptedNote(title: String, tags: Set<Identifier<VaultItemTag>>) throws -> VaultItem.Write {
-        var item = try VaultItemDemoFactory().makeEncryptedSecureNote()
-        guard case var .encryptedItem(encrypted) = item.item else {
-            fatalError("makeEncryptedSecureNote() should produce an encrypted item")
-        }
-        encrypted.title = title
-        item.item = .encryptedItem(encrypted)
+        // Encrypted with the title rather than renaming it afterwards, so the
+        // plaintext title matches the encrypted one, as it does in the app.
+        var item = try VaultItemDemoFactory().makeEncryptedSecureNote(title: title)
         item.userDescription = title
         item.tags = tags
         return item

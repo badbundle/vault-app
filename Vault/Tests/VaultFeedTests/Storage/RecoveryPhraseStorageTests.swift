@@ -176,6 +176,78 @@ struct RecoveryPhraseStorageTests {
         ))
     }
 
+    // MARK: - Title
+
+    /// The title is stored twice: in plaintext, for the feed and search, and encrypted with the phrase. Renaming in
+    /// the editor must update both.
+    @Test
+    func title_renamingKeepsPlaintextAndEncryptedTitleInSync() async throws {
+        let store = try makeStore()
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: store)
+        let id = try await store.insert(item: makeEncryptedWrite(phrase: anyRecoveryPhrase(title: "Before")))
+        let stored = try #require(try await store.retrieve(query: .init()).items.first)
+        let viewModel = try makeViewModel(item: stored, phrase: decrypt(stored), dataModel: dataModel)
+
+        viewModel.startEditing()
+        viewModel.editingModel.detail.title = "After"
+        await viewModel.saveChanges()
+
+        let renamed = try #require(try await store.retrieve(query: .init()).items.first)
+        #expect(renamed.id == id)
+        #expect(renamed.item.encryptedItem?.title == "After")
+        #expect(try decrypt(renamed).title == "After")
+        #expect(viewModel.visibleTitle == "After")
+        #expect(try await store.retrieve(query: .init(filterText: "Before")).items.isEmpty)
+        #expect(try await store.retrieve(query: .init(filterText: "After")).items.map(\.id) == [id])
+    }
+
+    /// Only the encryptor sets the plaintext title, so the two can't differ. If they did (say the stored plaintext
+    /// were edited outside Vault), the decrypted title is the one shown, as it's authenticated, and the next save
+    /// puts them back in sync.
+    @Test
+    func title_mismatchedPlaintextIsReplacedByEncryptedTitleOnSave() async throws {
+        let store = try makeStore()
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: store)
+        let encrypted = try VaultItemEncryptor(key: key).encrypt(item: anyRecoveryPhrase(title: "Real title"))
+        var write = try makeEncryptedWrite(phrase: anyRecoveryPhrase())
+        write.item = .encryptedItem(EncryptedItem(
+            version: encrypted.version,
+            title: "Edited outside Vault",
+            data: encrypted.data,
+            authentication: encrypted.authentication,
+            encryptionIV: encrypted.encryptionIV,
+            keygenSalt: encrypted.keygenSalt,
+            keygenSignature: encrypted.keygenSignature,
+        ))
+        try await store.insert(item: write)
+        let stored = try #require(try await store.retrieve(query: .init()).items.first)
+        let storedEncrypted = try #require(stored.item.encryptedItem)
+
+        let keyDeriverFactory = VaultKeyDeriverFactoryMock()
+        keyDeriverFactory.lookupVaultKeyDeriverHandler = { _ in .testing }
+        let decryption = EncryptedItemDetailViewModel(
+            item: storedEncrypted,
+            metadata: stored.metadata,
+            keyDeriverFactory: keyDeriverFactory,
+        )
+        decryption.enteredEncryptionPassword = "password"
+        await decryption.startDecryption()
+        guard case let .decrypted(.recoveryPhrase(phrase), decryptedKey) = decryption.state else {
+            Issue.record("Expected a decrypted recovery phrase, got \(decryption.state)")
+            return
+        }
+        let viewModel = makeViewModel(item: stored, phrase: phrase, key: decryptedKey, dataModel: dataModel)
+        #expect(viewModel.visibleTitle == "Real title")
+
+        viewModel.startEditing()
+        viewModel.editingModel.detail.contents = "Any change"
+        await viewModel.saveChanges()
+
+        let resynced = try #require(try await store.retrieve(query: .init()).items.first)
+        #expect(resynced.item.encryptedItem?.title == "Real title")
+        #expect(try decrypt(resynced).title == "Real title")
+    }
+
     // MARK: - Backup items
 
     @Test(arguments: recoveryPhraseFixtures)
@@ -280,6 +352,22 @@ extension RecoveryPhraseStorageTests {
     private func makeEncryptedItem(phrase: RecoveryPhrase) throws -> VaultItem {
         try VaultItemEncryptor(key: key).encrypt(item: phrase)
             .wrapInAnyVaultItem(lockState: .lockedWithNativeSecurity, showInQuickType: false, previewMode: .titleOnly)
+    }
+
+    /// A detail view model for a decrypted phrase, saving through the real editor, as the app does.
+    private func makeViewModel(
+        item: VaultItem,
+        phrase: RecoveryPhrase,
+        key: DerivedEncryptionKey? = nil,
+        dataModel: VaultDataModel,
+    ) -> RecoveryPhraseDetailViewModel {
+        let keyDeriverFactory = VaultKeyDeriverFactoryMock()
+        keyDeriverFactory.makeVaultItemKeyDeriverHandler = { .testing }
+        return RecoveryPhraseDetailViewModel(
+            mode: .editing(phrase: phrase, metadata: item.metadata, existingKey: key ?? self.key),
+            dataModel: dataModel,
+            editor: VaultDataModelEditorAdapter(dataModel: dataModel, keyDeriverFactory: keyDeriverFactory),
+        )
     }
 
     private func decrypt(_ item: VaultItem) throws -> RecoveryPhrase {

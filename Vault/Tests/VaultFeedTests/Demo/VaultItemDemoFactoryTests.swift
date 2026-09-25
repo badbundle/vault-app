@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import VaultCore
+import VaultKeygen
 @testable import VaultFeed
 
 struct VaultItemDemoFactoryTests {
@@ -67,6 +68,33 @@ struct VaultItemDemoFactoryTests {
         #expect(encrypted.authentication.isEmpty == false)
         #expect(encrypted.encryptionIV.isEmpty == false)
     }
+
+    @Test
+    func makeEncryptedSecureNote_plaintextTitleMatchesEncryptedNote() throws {
+        let item = try VaultItemDemoFactory().makeEncryptedSecureNote(title: "Recovery codes")
+
+        let encrypted = try #require(item.item.encryptedItem)
+        let note: SecureNote = try decryptDemoItem(encrypted, identifier: VaultIdentifiers.Item.secureNote)
+        #expect(encrypted.title == "Recovery codes")
+        #expect(note.title == encrypted.title)
+        #expect(note.contents.hasPrefix("Recovery codes\n"), "As in the app, the title is the first line")
+    }
+
+    @Test
+    func makeEncryptedRecoveryPhrase_plaintextTitleMatchesEncryptedPhrase() throws {
+        let item = try VaultItemDemoFactory().makeEncryptedRecoveryPhrase()
+
+        let encrypted = try #require(item.item.encryptedItem)
+        let phrase: RecoveryPhrase = try decryptDemoItem(encrypted, identifier: VaultIdentifiers.Item.recoveryPhrase)
+        #expect(phrase.title == encrypted.title)
+        #expect(item.lockState == .lockedWithNativeSecurity)
+    }
+}
+
+/// Demo items are encrypted with the password "hello".
+private func decryptDemoItem<T: VaultItemEncryptable>(_ item: EncryptedItem, identifier: String) throws -> T {
+    let key = try VaultKeyDeriver.Item.Fast.v1.recreateEncryptionKey(password: "hello", salt: item.keygenSalt)
+    return try VaultItemDecryptor(key: key).decrypt(item: item, expectedItemIdentifier: identifier)
 }
 
 private func assertCommonDemoMetadata(
