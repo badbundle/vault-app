@@ -47,7 +47,7 @@ final class BackupKeyChangeViewSnapshotTests {
             let dataModel = anyVaultDataModel()
             await dataModel.loadBackupPasswordStatus()
             let viewModel = await makeSucceededViewModel(dataModel: dataModel)
-            return NavigationStack { BackupKeyChangeView(viewModel: viewModel) }
+            return BackupKeyChangeView(viewModel: viewModel)
         }
     }
 
@@ -58,7 +58,16 @@ final class BackupKeyChangeViewSnapshotTests {
             let dataModel = anyVaultDataModel(backupPasswordStore: passwordSetStore())
             await dataModel.loadBackupPasswordStatus()
             let viewModel = await makeSucceededViewModel(dataModel: dataModel)
-            return NavigationStack { BackupKeyChangeView(viewModel: viewModel) }
+            return BackupKeyChangeView(viewModel: viewModel)
+        }
+    }
+
+    @Test
+    func detailsPage() async {
+        await snapshotScenarios {
+            NavigationStack {
+                BackupPasswordDetailsView(viewModel: makeViewModel())
+            }
         }
     }
 
@@ -79,9 +88,9 @@ final class BackupKeyChangeViewSnapshotTests {
                 await Task.yield()
             }
 
-            // Wrapped in a NavigationStack so the toolbar renders: the
-            // point of this snapshot is the enabled Cancel button.
-            let snapshottingView = NavigationStack { BackupKeyChangeView(viewModel: viewModel) }
+            // The point of this snapshot is the enabled Cancel button in
+            // the view's own navigation bar.
+            let snapshottingView = BackupKeyChangeView(viewModel: viewModel)
                 .dynamicTypeSize(.medium)
                 .preferredColorScheme(colorScheme)
                 .framedForTest()

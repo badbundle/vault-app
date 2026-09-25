@@ -28,13 +28,11 @@ struct BackupHomeView: View {
             await dataModel.loadBackupPasswordStatus()
         }
         .sheet(isPresented: $isShowingPasswordSheet) {
-            NavigationStack {
-                BackupKeyChangeView(viewModel: .init(
-                    dataModel: dataModel,
-                    authenticationService: authenticationService,
-                    deriverFactory: injector.vaultKeyDeriverFactory,
-                ))
-            }
+            BackupKeyChangeView(viewModel: .init(
+                dataModel: dataModel,
+                authenticationService: authenticationService,
+                deriverFactory: injector.vaultKeyDeriverFactory,
+            ))
         }
     }
 

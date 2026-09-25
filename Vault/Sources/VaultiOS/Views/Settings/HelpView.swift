@@ -26,30 +26,20 @@ struct HelpView: View {
 
     private var questionsSection: some View {
         Section {
-            question("What is a 'code'?") {
+            HelpQuestionLink(question: "What is a 'code'?") {
                 SettingsDocumentView(title: "About Codes", content: FAQCodesFileContent())
             }
-            question("Can I encrypt individual items?") {
+            HelpQuestionLink(question: "Can I encrypt individual items?") {
                 SettingsDocumentView(title: "Item Encryption", content: FAQItemEncryptionFileContent())
             }
-            question("Why should I make backups?") {
+            HelpQuestionLink(question: "Why should I make backups?") {
                 SettingsDocumentView(title: "About Backups", content: FAQBackupsGeneralFileContent())
             }
-            question("Are backups secure?") {
+            HelpQuestionLink(question: "Are backups secure?") {
                 SettingsDocumentView(title: "Backup Security", content: FAQBackupsSecurityFileContent())
             }
-            question("How do I move items to another device?") {
+            HelpQuestionLink(question: "How do I move items to another device?") {
                 SettingsDocumentView(title: "Moving Between Devices", content: FAQSyncDevicesFileContent())
-            }
-        }
-    }
-
-    private func question(_ title: String, @ViewBuilder destination: () -> some View) -> some View {
-        NavigationLink {
-            destination()
-        } label: {
-            FormRow(image: Image(systemName: "questionmark.circle"), color: .blue, style: .standard) {
-                Text(title)
             }
         }
     }
