@@ -106,6 +106,8 @@ final class VaultDataModelTests {
         #expect(sut.itemSearchHash != originalHash)
         #expect(sut.feedTitle.isEmpty == false)
         #expect(sut.filteringByTagsDescription.isEmpty == false)
+        #expect(sut.itemsMatchCountDescription.isEmpty == false)
+        #expect(sut.itemsMatchCountDescription != sut.itemsCountDescription)
     }
 
     @Test

@@ -320,17 +320,19 @@ final class VaultItemFeedViewSnapshotTests {
         let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: tagStore)
         await dataModel.reloadData()
 
-        // Use a narrow width to stress-test button wrapping
+        // Use a narrow width to stress-test button wrapping. The backdrop
+        // shows the search button beside the status bar.
         let sut = makeSUT(dataModel: dataModel)
             .frame(width: 320, height: 600)
+            .background(Color.gray)
 
         dataModel.itemsFilteringByTags = [tag1Id]
 
         assertSnapshot(of: sut, as: .image)
     }
 
-    /// In compact height the tag row and the status bar share one row so the
-    /// grid keeps as much of the short screen as possible.
+    /// In compact height the status bar, tag row and search button share one
+    /// row so the grid keeps as much of the short screen as possible.
     @Test
     func landscape_collapsesToSingleRow() async {
         let store = VaultStoreStub()
@@ -351,14 +353,15 @@ final class VaultItemFeedViewSnapshotTests {
 
         let sut = makeSUT(dataModel: dataModel)
             .framedForLandscapeTest()
+            .background(Color.gray)
 
         dataModel.itemsFilteringByTags = [tag1Id]
 
         assertSnapshot(of: sut, as: .image)
     }
 
-    /// Without tags the compact row is just the status bar, hugging the
-    /// trailing edge where it sits when tags are present.
+    /// Without tags the compact row is the status bar and search button,
+    /// at either edge where they sit when tags are present.
     @Test
     func landscape_noTags_barOnly() async {
         let store = VaultStoreStub()
@@ -370,6 +373,7 @@ final class VaultItemFeedViewSnapshotTests {
 
         let sut = makeSUT(dataModel: dataModel)
             .framedForLandscapeTest()
+            .background(Color.gray)
 
         assertSnapshot(of: sut, as: .image)
     }
@@ -460,6 +464,54 @@ final class VaultItemFeedViewSnapshotTests {
     }
 }
 
+// MARK: - Search
+
+extension VaultItemFeedViewSnapshotTests {
+    /// Opening search lifts the status bar onto its own row so the field
+    /// spans the width beneath it, with a button to close search.
+    @Test
+    func search_openWithEmptyQuery() async {
+        let dataModel = await makeTaggedDataModel()
+        let state = VaultItemFeedState()
+        state.isSearchPresented = true
+
+        let sut = makeSUT(dataModel: dataModel, state: state)
+            .framedForTest(height: 320)
+            .background(Color.gray)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// While searching, the status bar counts matches and still names the
+    /// active filter, with Clear beside it.
+    @Test
+    func search_matchesWithTagFilter() async {
+        let dataModel = await makeTaggedDataModel()
+        dataModel.itemsSearchQuery = "test"
+        dataModel.itemsFilteringByTags = [dataModel.allTags[0].id]
+
+        let sut = makeSUT(dataModel: dataModel)
+            .framedForTest(height: 320)
+            .background(Color.gray)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// In landscape the status bar, pills and search share one row, and an
+    /// open search field takes a second.
+    @Test
+    func landscape_searchOpen() async {
+        let dataModel = await makeTaggedDataModel()
+        dataModel.itemsSearchQuery = "test"
+
+        let sut = makeSUT(dataModel: dataModel)
+            .framedForLandscapeTest()
+            .background(Color.gray)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+}
+
 // MARK: - Collapsed bar
 
 extension VaultItemFeedViewSnapshotTests {
@@ -524,6 +576,20 @@ extension VaultItemFeedViewSnapshotTests {
 
         let sut = makeSUT(dataModel: dataModel, state: collapsedState())
             .framedForLandscapeTest()
+            .background(Color.gray)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// Collapsed with a search open, the count reads as matches beside the
+    /// query, which stays visible in place of the field.
+    @Test
+    func collapsedBar_searchingShowsMatchesAndQuery() async {
+        let dataModel = await makeTaggedDataModel()
+        dataModel.itemsSearchQuery = "test"
+
+        let sut = makeSUT(dataModel: dataModel, state: collapsedState())
+            .framedForTest(height: 240)
             .background(Color.gray)
 
         assertSnapshot(of: sut, as: .image)

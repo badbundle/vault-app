@@ -520,6 +520,35 @@
         }
       }
     },
+    "feedViewModel.searching.matches.%lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld match"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld matches"
+                }
+              },
+              "zero" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "No matches"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "feedViewModel.searching.title.%lld" : {
       "extractionState" : "manual",
       "localizations" : {
