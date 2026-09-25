@@ -49,10 +49,11 @@ platform :ios do
     release_build_number = next_release_build_number
     UI.message("Using release build number #{release_build_number}")
 
-    get_certificates
-    get_provisioning_profile(app_identifier: "com.badbundle.vault")
-    get_provisioning_profile(app_identifier: "com.badbundle.vault.VaultAutofill")
-    get_provisioning_profile(app_identifier: "com.badbundle.vault.Widgets")
+    # Pass the Apple ID to each signing step; there's no Appfile, so they'd each prompt for it.
+    get_certificates(username: "badbundlelimited@gmail.com")
+    get_provisioning_profile(app_identifier: "com.badbundle.vault", username: "badbundlelimited@gmail.com")
+    get_provisioning_profile(app_identifier: "com.badbundle.vault.VaultAutofill", username: "badbundlelimited@gmail.com")
+    get_provisioning_profile(app_identifier: "com.badbundle.vault.Widgets", username: "badbundlelimited@gmail.com")
 
     export_options = {
       provisioningProfiles: {
@@ -107,6 +108,8 @@ platform :ios do
   desc "Upload the existing VaultApp.ipa to App Store Connect (no build, no bump)"
   lane :upload do
     upload_to_app_store(
+      username: "badbundlelimited@gmail.com",
+      team_id: "442P244AFS",
       ipa: "./VaultApp.ipa",
       skip_metadata: true,
       skip_screenshots: true
