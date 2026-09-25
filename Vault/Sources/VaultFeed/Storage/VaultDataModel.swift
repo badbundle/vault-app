@@ -135,7 +135,7 @@ public final class VaultDataModel {
     /// Whether a backup password is set, for surfaces that aren't behind device authentication.
     ///
     /// Unlike `backupPassword`, loading this never loads the key itself or asks the user to
-    /// authenticate.
+    /// authenticate: if the store can't answer without authentication, it stays `.unknown`.
     public private(set) var backupPasswordStatus: BackupPasswordStatus = .unknown
 
     /// Derived from the unlocked vault key. Cached here so the killphrase

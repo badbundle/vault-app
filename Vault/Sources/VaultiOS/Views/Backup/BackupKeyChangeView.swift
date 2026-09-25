@@ -185,16 +185,12 @@ struct BackupKeyChangeView: View {
     @ViewBuilder
     private var successSections: some View {
         Section {
-            PlaceholderView(
+            BackupConfirmationHeader(
                 title: viewModel.didReplaceExistingPassword ? "Backup Password Changed" : "Backup Password Set",
                 subtitle: "Your backups will be encrypted with this password from now on.",
-            ) {
-                Image(systemName: "checkmark.shield.fill")
-                    .foregroundStyle(.green)
-            }
-            .padding()
-            .containerRelativeFrame(.horizontal)
-            .accessibilityElement(children: .combine)
+                systemImage: "checkmark.shield.fill",
+                color: .green,
+            )
         }
 
         Section {

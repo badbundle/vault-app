@@ -9,8 +9,9 @@ public protocol BackupPasswordStore: Observable, Sendable {
     func set(password: DerivedEncryptionKey) async throws
     /// What's known about the stored password, without loading the password itself.
     ///
-    /// Unlike `fetchPassword()`, this never requires the user to authenticate, so it's safe to call
-    /// from surfaces that aren't behind device authentication. Returns `nil` if no password is set.
+    /// Unlike `fetchPassword()`, this never asks the user to authenticate (if the store would need
+    /// to, it throws instead), so it's safe to call from surfaces that aren't behind device
+    /// authentication. Returns `nil` if no password is set.
     func fetchPasswordMetadata() async throws -> BackupPasswordMetadata?
 }
 
