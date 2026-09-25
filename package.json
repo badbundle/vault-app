@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "scripts": {
+    "validate": "local-check",
+    "prepare": "local-check install-hook"
+  },
+  "devDependencies": {
+    "@badbundle/local-check": "github:badbundle/local-check#v0.1.0"
+  }
+}
