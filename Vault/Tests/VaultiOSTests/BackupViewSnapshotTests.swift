@@ -10,7 +10,7 @@ import VaultFeed
 struct BackupViewSnapshotTests {
     @Test
     func backupHome_noBackup() {
-        let sut = makeBackupHomeSUT(dataModel: anyVaultDataModel())
+        let sut = makeBackupHomeSUT(dataModel: anyVaultDataModel(backupPasswordStore: unknownStatusPasswordStore()))
 
         assertSnapshot(of: sut, as: .image)
     }
@@ -26,7 +26,36 @@ struct BackupViewSnapshotTests {
                 payloadHash: .init(value: Data(repeating: 0xAB, count: 32)),
             )
         }
-        let sut = makeBackupHomeSUT(dataModel: anyVaultDataModel(backupEventLogger: backupEventLogger))
+        let sut = makeBackupHomeSUT(dataModel: anyVaultDataModel(
+            backupPasswordStore: unknownStatusPasswordStore(),
+            backupEventLogger: backupEventLogger,
+        ))
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
+    func backupHome_passwordNotSet() async {
+        let backupPasswordStore = BackupPasswordStoreMock()
+        backupPasswordStore.fetchPasswordMetadataHandler = { nil }
+        let dataModel = anyVaultDataModel(backupPasswordStore: backupPasswordStore)
+        await dataModel.loadBackupPasswordStatus()
+
+        let sut = makeBackupHomeSUT(dataModel: dataModel)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
+    func backupHome_passwordSet() async {
+        let backupPasswordStore = BackupPasswordStoreMock()
+        backupPasswordStore.fetchPasswordMetadataHandler = {
+            .init(lastSetDate: Date(timeIntervalSince1970: 1_700_000_000))
+        }
+        let dataModel = anyVaultDataModel(backupPasswordStore: backupPasswordStore)
+        await dataModel.loadBackupPasswordStatus()
+
+        let sut = makeBackupHomeSUT(dataModel: dataModel)
 
         assertSnapshot(of: sut, as: .image)
     }
@@ -109,6 +138,13 @@ struct BackupViewSnapshotTests {
 }
 
 extension BackupViewSnapshotTests {
+    /// A store whose password status can't be read, so the hub falls back to its neutral password row.
+    private func unknownStatusPasswordStore() -> BackupPasswordStoreMock {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { throw TestError() }
+        return store
+    }
+
     private func makeBackupHomeSUT(
         dataModel: VaultDataModel,
     ) -> some View {

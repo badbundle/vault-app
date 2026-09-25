@@ -82,6 +82,7 @@ final class VaultDataModelTests {
         #expect(sut.allTags == [])
         #expect(sut.allTagsState == .base)
         #expect(sut.backupPassword == .notFetched)
+        #expect(sut.backupPasswordStatus == .unknown)
         #expect(sut.allTagsRetrievalError == nil)
         #expect(sut.hasAnyItems == false)
     }
@@ -777,6 +778,109 @@ final class VaultDataModelTests {
 
         #expect(sut.backupPassword == .notFetched) // still initial value
         #expect(store.setCallCount == 1)
+    }
+
+    @Test
+    func storeBackupPassword_updatesStatusFromStore() async throws {
+        let store = BackupPasswordStoreMock()
+        let metadata = BackupPasswordMetadata(lastSetDate: Date(timeIntervalSince1970: 1_700_000_000))
+        store.fetchPasswordMetadataHandler = { metadata }
+        let sut = makeSUT(backupPasswordStore: store)
+
+        let password = DerivedEncryptionKey(key: .random(), salt: Data(), keyDervier: .testing)
+        try await sut.store(backupPassword: password)
+
+        #expect(sut.backupPasswordStatus == .set(metadata))
+    }
+
+    @Test
+    func storeBackupPassword_statusIsSetEvenIfMetadataUnavailable() async throws {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { throw TestError() }
+        let sut = makeSUT(backupPasswordStore: store)
+
+        let password = DerivedEncryptionKey(key: .random(), salt: Data(), keyDervier: .testing)
+        try await sut.store(backupPassword: password)
+
+        #expect(sut.backupPasswordStatus == .set(BackupPasswordMetadata(lastSetDate: nil)))
+    }
+
+    @Test
+    func storeBackupPassword_errorDoesNotUpdateStatus() async throws {
+        let store = BackupPasswordStoreMock()
+        store.setHandler = { _ in throw TestError() }
+        let sut = makeSUT(backupPasswordStore: store)
+
+        let password = DerivedEncryptionKey(key: .random(), salt: Data(), keyDervier: .testing)
+        await #expect(throws: (any Error).self) {
+            try await sut.store(backupPassword: password)
+        }
+
+        #expect(sut.backupPasswordStatus == .unknown)
+    }
+
+    @Test
+    func loadBackupPasswordStatus_setIfStoreHasMetadata() async {
+        let store = BackupPasswordStoreMock()
+        let metadata = BackupPasswordMetadata(lastSetDate: Date(timeIntervalSince1970: 1_700_000_000))
+        store.fetchPasswordMetadataHandler = { metadata }
+        let sut = makeSUT(backupPasswordStore: store)
+
+        await sut.loadBackupPasswordStatus()
+
+        #expect(sut.backupPasswordStatus == .set(metadata))
+        #expect(sut.backupPasswordStatus.isSet)
+    }
+
+    @Test
+    func loadBackupPasswordStatus_notSetIfStoreHasNoPassword() async {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { nil }
+        let sut = makeSUT(backupPasswordStore: store)
+
+        await sut.loadBackupPasswordStatus()
+
+        #expect(sut.backupPasswordStatus == .notSet)
+        #expect(!sut.backupPasswordStatus.isSet)
+    }
+
+    @Test
+    func loadBackupPasswordStatus_unknownIfStoreError() async {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { .init(lastSetDate: nil) }
+        let sut = makeSUT(backupPasswordStore: store)
+        await sut.loadBackupPasswordStatus()
+
+        store.fetchPasswordMetadataHandler = { throw TestError() }
+        await sut.loadBackupPasswordStatus()
+
+        #expect(sut.backupPasswordStatus == .unknown)
+    }
+
+    /// The status is shown on surfaces that aren't behind device authentication, so loading it must
+    /// never load the password itself (which would prompt for authentication).
+    @Test
+    func loadBackupPasswordStatus_doesNotLoadPassword() async {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { .init(lastSetDate: nil) }
+        let sut = makeSUT(backupPasswordStore: store)
+
+        await sut.loadBackupPasswordStatus()
+
+        #expect(store.fetchPasswordCallCount == 0)
+        #expect(sut.backupPassword == .notFetched)
+    }
+
+    @Test
+    func purgeSensitiveData_keepsBackupPasswordStatus() async {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { .init(lastSetDate: nil) }
+        let sut = makeSUT(backupPasswordStore: store)
+        await sut.loadBackupPasswordStatus()
+
+        sut.purgeSensitiveData()
+
+        #expect(sut.backupPasswordStatus == .set(.init(lastSetDate: nil)))
     }
 
     @Test

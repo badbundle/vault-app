@@ -118,6 +118,26 @@ public final class VaultDataModel {
     public private(set) var backupPassword: BackupPasswordState = .notFetched
     public private(set) var backupPasswordLoadingState: LoadingState = .notLoading
 
+    public enum BackupPasswordStatus: Sendable, Equatable {
+        /// Not loaded yet, or the store couldn't be read.
+        case unknown
+        case notSet
+        case set(BackupPasswordMetadata)
+
+        public var isSet: Bool {
+            switch self {
+            case .set: true
+            case .unknown, .notSet: false
+            }
+        }
+    }
+
+    /// Whether a backup password is set, for surfaces that aren't behind device authentication.
+    ///
+    /// Unlike `backupPassword`, loading this never loads the key itself or asks the user to
+    /// authenticate: if the store can't answer without authentication, it stays `.unknown`.
+    public private(set) var backupPasswordStatus: BackupPasswordStatus = .unknown
+
     /// Derived from the unlocked vault key. Cached here so the killphrase
     /// match and write paths can avoid redoing HKDF on every keystroke.
     /// `nil` whenever the vault is not currently unlocked.
@@ -314,9 +334,25 @@ extension VaultDataModel {
         }
     }
 
+    /// Refreshes `backupPasswordStatus` without loading the password.
+    public func loadBackupPasswordStatus() async {
+        do {
+            if let metadata = try await backupPasswordStore.fetchPasswordMetadata() {
+                backupPasswordStatus = .set(metadata)
+            } else {
+                backupPasswordStatus = .notSet
+            }
+        } catch {
+            backupPasswordStatus = .unknown
+        }
+    }
+
     public func store(backupPassword: DerivedEncryptionKey) async throws {
         try await backupPasswordStore.set(password: backupPassword)
         self.backupPassword = .fetched(backupPassword)
+        // It's set now, even if the store can't say when.
+        let metadata = try? await backupPasswordStore.fetchPasswordMetadata()
+        backupPasswordStatus = .set(metadata ?? BackupPasswordMetadata(lastSetDate: nil))
     }
 }
 

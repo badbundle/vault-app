@@ -12,6 +12,7 @@ struct BackupPasswordStoreImplTests {
 
         #expect(storage.retrieveCallCount == 0)
         #expect(storage.storeCallCount == 0)
+        #expect(storage.attributesCallCount == 0)
     }
 
     @Test
@@ -66,6 +67,52 @@ struct BackupPasswordStoreImplTests {
             storage.storeArgValues.map(\.1) ==
                 ["vault.secure-storage.backup-password.v1"],
         )
+    }
+
+    @Test
+    func fetchPasswordMetadata_readsAttributesNotData() async throws {
+        let storage = SecureStorageMock()
+        let sut = makeSUT(secureStorage: storage)
+        storage.attributesHandler = { _ in .init(modificationDate: nil) }
+
+        _ = try await sut.fetchPasswordMetadata()
+
+        #expect(storage.attributesArgValues == ["vault.secure-storage.backup-password.v1"])
+        #expect(storage.retrieveCallCount == 0)
+    }
+
+    @Test
+    func fetchPasswordMetadata_lastSetDateIsModificationDate() async throws {
+        let storage = SecureStorageMock()
+        let sut = makeSUT(secureStorage: storage)
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        storage.attributesHandler = { _ in .init(modificationDate: date) }
+
+        let metadata = try await sut.fetchPasswordMetadata()
+
+        #expect(metadata == BackupPasswordMetadata(lastSetDate: date))
+    }
+
+    @Test
+    func fetchPasswordMetadata_notFoundReturnsNil() async throws {
+        let storage = SecureStorageMock()
+        let sut = makeSUT(secureStorage: storage)
+        storage.attributesHandler = { _ in nil }
+
+        let metadata = try await sut.fetchPasswordMetadata()
+
+        #expect(metadata == nil)
+    }
+
+    @Test
+    func fetchPasswordMetadata_fetchErrorRethrowsError() async throws {
+        let storage = SecureStorageMock()
+        let sut = makeSUT(secureStorage: storage)
+        storage.attributesHandler = { _ in throw TestError() }
+
+        await #expect(throws: (any Error).self) {
+            try await sut.fetchPasswordMetadata()
+        }
     }
 }
 
