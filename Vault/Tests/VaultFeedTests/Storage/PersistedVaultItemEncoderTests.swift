@@ -624,6 +624,21 @@ extension PersistedVaultItemEncoderTests {
     }
 }
 
+// MARK: - Recovery Phrase
+
+extension PersistedVaultItemEncoderTests {
+    @Test
+    func encodeRecoveryPhrase_refusesPlaintext() throws {
+        let sut = makeSUT()
+        let item = VaultItem(metadata: anyVaultItemMetadata(), item: .recoveryPhrase(anyRecoveryPhrase()))
+
+        #expect(throws: VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable) {
+            try sut.encode(item: item.makeWritable())
+        }
+        #expect(context.insertedModelsArray.isEmpty)
+    }
+}
+
 // MARK: - Helpers
 
 extension PersistedVaultItemEncoderTests {

@@ -11,6 +11,7 @@ struct VaultDetailCreateView<
     @Binding var navigationPath: NavigationPath
     @Environment(VaultDataModel.self) private var dataModel
     @Environment(VaultInjector.self) private var injector
+    @Environment(DeviceAuthenticationService.self) private var authenticationService
 
     var body: some View {
         switch creatingItem {
@@ -30,6 +31,19 @@ struct VaultDetailCreateView<
                 navigationPath: $navigationPath,
                 dataModel: dataModel,
             )
+        case .recoveryPhrase:
+            if authenticationService.canAuthenticate {
+                RecoveryPhraseDetailView(
+                    newPhraseWithEditor: VaultDataModelEditorAdapter(
+                        dataModel: dataModel,
+                        keyDeriverFactory: injector.vaultKeyDeriverFactory,
+                    ),
+                    navigationPath: $navigationPath,
+                    dataModel: dataModel,
+                )
+            } else {
+                RecoveryPhrasePasscodeRequiredView()
+            }
         }
     }
 }

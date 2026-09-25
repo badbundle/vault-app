@@ -21,6 +21,10 @@ struct ThirdPartyLibrariesLoaderTests {
             "swift-security",
             "swift-markdown-ui",
             "Lucide",
+            "BIP39 wordlists (python-mnemonic)",
+            "SLIP-39 wordlist (python-shamir-mnemonic)",
+            "Monero wordlist",
+            "Electrum",
         ])
     }
 

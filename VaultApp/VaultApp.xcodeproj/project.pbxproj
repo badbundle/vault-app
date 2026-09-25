@@ -617,6 +617,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Vault;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Vault uses the camera to allow importing data visually, such as scanning QR codes.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Vault uses biometrics to locally protect access to your data.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -652,6 +653,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultApp/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Vault;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Vault uses the camera to allow importing data visually, such as scanning QR codes.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Vault uses biometrics to locally protect access to your data.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

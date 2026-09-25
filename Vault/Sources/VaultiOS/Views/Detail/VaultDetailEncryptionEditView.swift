@@ -10,7 +10,8 @@ struct VaultDetailEncryptionEditView: View {
     @State private var newEncryptionPassword = ""
     @State private var newEncryptionPasswordConfirm = ""
     var didSetNewEncryptionPassword: (String) -> Void
-    var didRemoveEncryption: () -> Void
+    /// `nil` when the item must stay encrypted, in which case the password can be changed but not removed.
+    var didRemoveEncryption: (() -> Void)?
 
     @Environment(\.dismiss) private var dismiss
 
@@ -18,6 +19,7 @@ struct VaultDetailEncryptionEditView: View {
         newEncryptionPassword == newEncryptionPasswordConfirm
     }
 
+    /// For an item where encryption is optional, so can be removed once enabled.
     init(
         title: String,
         description: String,
@@ -32,13 +34,33 @@ struct VaultDetailEncryptionEditView: View {
         self.didRemoveEncryption = didRemoveEncryption
     }
 
+    /// For an item that must always be encrypted. There's no way to remove the encryption, only to set or change
+    /// the password.
+    init(
+        title: String,
+        description: String,
+        hasExistingPassword: Bool,
+        didSetNewEncryptionPassword: @escaping (String) -> Void,
+    ) {
+        self.title = title
+        self.description = description
+        _encryptionIsEnabled = State(initialValue: hasExistingPassword)
+        self.didSetNewEncryptionPassword = didSetNewEncryptionPassword
+        didRemoveEncryption = nil
+    }
+
     var body: some View {
         Form {
             titleSection
-            if encryptionIsEnabled {
-                removeEncryptionSection
-            } else {
-                createEncryptionSection
+            switch (encryptionIsEnabled, didRemoveEncryption) {
+            case let (true, .some(didRemoveEncryption)):
+                removeEncryptionSection(didRemoveEncryption: didRemoveEncryption)
+            case (true, nil):
+                changePasswordSection
+            case (false, .some):
+                passwordEntrySection(actionTitle: "Encrypt", systemImage: "lock.fill")
+            case (false, nil):
+                passwordEntrySection(actionTitle: "Set Password", systemImage: "lock.fill")
             }
         }
     }
@@ -52,7 +74,7 @@ struct VaultDetailEncryptionEditView: View {
     }
 
     @ViewBuilder
-    private var createEncryptionSection: some View {
+    private func passwordEntrySection(actionTitle: String, systemImage: String) -> some View {
         Section {
             FormRow(image: Image(systemName: "lock.fill"), color: .primary, style: .standard) {
                 SecureField("Password...", text: $newEncryptionPassword)
@@ -73,7 +95,7 @@ struct VaultDetailEncryptionEditView: View {
 
         if newEncryptionPassword.isNotBlank {
             Section {
-                ProminentActionButton("Encrypt", systemImage: "lock.fill") {
+                ProminentActionButton(actionTitle, systemImage: systemImage) {
                     didSetNewEncryptionPassword(newEncryptionPassword)
                     dismiss()
                 }
@@ -83,7 +105,23 @@ struct VaultDetailEncryptionEditView: View {
     }
 
     @ViewBuilder
-    private var removeEncryptionSection: some View {
+    private var changePasswordSection: some View {
+        Section {
+            Text("""
+            This item is always encrypted. \
+            After changing the password, the old password no longer works for this item, \
+            but backups made before the change still need the old password. \
+            A forgotten password can't be recovered.
+            """)
+            .foregroundStyle(.secondary)
+            .font(.caption)
+        }
+
+        passwordEntrySection(actionTitle: "Change Password", systemImage: "key.fill")
+    }
+
+    @ViewBuilder
+    private func removeEncryptionSection(didRemoveEncryption: @escaping () -> Void) -> some View {
         Section {
             Text("""
             Encryption is currently enabled for this item. \

@@ -15,6 +15,11 @@ public protocol VaultItemEncryptedContainer: Codable {
     ///
     /// Definitions are in `VaultIdentifiers.Item`
     var itemIdentifier: String { get }
-    /// The title that is shown externally and is not encrypted.
+    /// The title, which is also stored unencrypted (as `EncryptedItem.title`) so it can be shown and searched
+    /// without the password.
+    ///
+    /// `VaultItemEncryptor` copies it to `EncryptedItem.title` on every encryption, so it's the single source of the
+    /// plaintext title and both copies are always written together. Once decrypted, trust this copy: unlike the
+    /// plaintext one, it's authenticated by the encryption.
     var title: String { get }
 }

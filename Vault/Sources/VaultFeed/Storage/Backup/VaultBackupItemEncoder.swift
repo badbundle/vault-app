@@ -8,11 +8,15 @@ import VaultCore
 /// This transforms and encodes all the properties of the item such that it's in a format
 /// that can be passed to the backup & encryption engine.
 final class VaultBackupItemEncoder {
-    func encode(storedItem: VaultItem) -> VaultBackupItem {
+    func encode(storedItem: VaultItem) throws -> VaultBackupItem {
         let itemDetail: VaultBackupItem.Item = switch storedItem.item {
         case let .otpCode(code): .otp(data: encodeOTPCode(code: code))
         case let .secureNote(note): .note(data: encodeNote(note: note))
         case let .encryptedItem(item): .encrypted(data: encodeEncryptedItem(item: item))
+        case .recoveryPhrase:
+            // Backups only ever carry recovery phrases as encrypted items. Stored items are never in this form, but
+            // refuse rather than risk the words ending up in a backup.
+            throw VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable
         }
         return VaultBackupItem(
             id: storedItem.id.rawValue,

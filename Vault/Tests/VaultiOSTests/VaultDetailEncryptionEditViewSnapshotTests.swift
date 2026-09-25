@@ -39,6 +39,38 @@ final class VaultDetailEncryptionEditViewSnapshotTests {
             )
         }
     }
+
+    @Test
+    func layoutEncryptionRequiredNoPassword() {
+        for colorScheme in [ColorScheme.light, .dark] {
+            let snapshottingView = makeRequiredView(hasExistingPassword: false)
+                .dynamicTypeSize(.medium)
+                .preferredColorScheme(colorScheme)
+                .framedForTest()
+
+            assertSnapshot(
+                of: snapshottingView,
+                as: .image,
+                named: "\(colorScheme)_medium",
+            )
+        }
+    }
+
+    @Test
+    func layoutEncryptionRequiredExistingPassword() {
+        for colorScheme in [ColorScheme.light, .dark] {
+            let snapshottingView = makeRequiredView(hasExistingPassword: true)
+                .dynamicTypeSize(.medium)
+                .preferredColorScheme(colorScheme)
+                .framedForTest()
+
+            assertSnapshot(
+                of: snapshottingView,
+                as: .image,
+                named: "\(colorScheme)_medium",
+            )
+        }
+    }
 }
 
 // MARK: - Helpers
@@ -51,6 +83,15 @@ extension VaultDetailEncryptionEditViewSnapshotTests {
             encryptionInitiallyEnabled: encryptionInitiallyEnabled,
             didSetNewEncryptionPassword: { _ in },
             didRemoveEncryption: {},
+        )
+    }
+
+    private func makeRequiredView(hasExistingPassword: Bool) -> some View {
+        VaultDetailEncryptionEditView(
+            title: "Password",
+            description: "This item is always encrypted.",
+            hasExistingPassword: hasExistingPassword,
+            didSetNewEncryptionPassword: { _ in },
         )
     }
 }

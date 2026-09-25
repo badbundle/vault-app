@@ -91,6 +91,29 @@ final class GenericVaultItemPreviewViewGeneratorTests {
         assertSnapshot(of: view.frame(width: 100, height: 100), as: .image)
     }
 
+    /// Recovery phrases are only stored encrypted, so this is a fallback that must not reveal anything.
+    @Test
+    func makeVaultPreviewView_recoveryPhraseShowsHiddenEncryptedTile() {
+        let totp = TOTPGeneratorMock()
+        let hotp = HOTPGeneratorMock()
+        let note = SecureNoteGeneratorMock()
+        let encrypted = EncryptedItemGeneratorMock()
+        let sut = makeSUT(totp: totp, hotp: hotp, secureNote: note, encryptedItem: encrypted)
+
+        let phrase = RecoveryPhrase(title: "Secret title", words: ["abandon"], standard: .bip39, passphrase: "")
+        let view = sut.makeVaultPreviewView(
+            item: .recoveryPhrase(phrase),
+            metadata: uniqueMetadata(),
+            behaviour: .normal,
+        )
+
+        assertSnapshot(of: view.frame(width: 150, height: 150), as: .image)
+        #expect(totp.calledMethods == [])
+        #expect(hotp.calledMethods == [])
+        #expect(note.calledMethods == [])
+        #expect(encrypted.calledMethods == [])
+    }
+
     @Test
     func scenePhaseDidChange_callsOnAllCollaborators() {
         let totp = TOTPGeneratorMock()

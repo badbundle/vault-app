@@ -13,6 +13,9 @@ public protocol DetailViewModel: AnyObject, Observable {
     var isInitialCreation: Bool { get }
     var isSaving: Bool { get }
     var isLocked: Bool { get set }
+    /// If the item can be unlocked without device authentication, when the device has no passcode or biometrics set
+    /// up. Defaults to `true`.
+    var allowsUnlockWithoutDeviceAuthentication: Bool { get }
 
     func startEditing()
     func saveChanges() async
@@ -25,6 +28,10 @@ public protocol DetailViewModel: AnyObject, Observable {
 extension DetailViewModel {
     public var shouldShowDeleteButton: Bool {
         !isInitialCreation
+    }
+
+    public var allowsUnlockWithoutDeviceAuthentication: Bool {
+        true
     }
 }
 

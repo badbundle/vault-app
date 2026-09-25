@@ -48,6 +48,33 @@ struct VaultDetailEditView<
                 ),
                 openInEditMode: openInEditMode,
             )
+        case let .recoveryPhrase(phrase):
+            // A decrypted recovery phrase always comes with the key it was decrypted with, which is needed to
+            // re-encrypt it on save. Without one, there's no safe way to edit it.
+            if let encryptionKey {
+                RecoveryPhraseDetailView(
+                    editingExisting: phrase,
+                    encryptionKey: encryptionKey,
+                    navigationPath: $navigationPath,
+                    dataModel: dataModel,
+                    storedMetadata: storedItem.metadata,
+                    editor: VaultDataModelEditorAdapter(
+                        dataModel: dataModel,
+                        keyDeriverFactory: injector.vaultKeyDeriverFactory,
+                    ),
+                    openInEditMode: openInEditMode,
+                )
+            } else {
+                Form {
+                    PlaceholderView(
+                        systemIcon: "exclamationmark.triangle.fill",
+                        title: "Can't Open Item",
+                        subtitle: "This item couldn't be opened. Close it and try again.",
+                    )
+                    .padding()
+                    .containerRelativeFrame(.horizontal)
+                }
+            }
         case let .encryptedItem(item):
             EncryptedItemDetailView(
                 viewModel: .init(

@@ -22,6 +22,7 @@ struct VaultItemEncryptor {
         let encrypted = try encryptor.encrypt(plaintext: encodedFormat, iv: iv.data)
         return EncryptedItem(
             version: "1.0.0",
+            // The plaintext title is always a copy of the encrypted one, so the two can't differ.
             title: containerEncoding.title,
             data: encrypted.ciphertext,
             authentication: encrypted.authenticationTag,

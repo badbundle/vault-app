@@ -70,10 +70,11 @@ public struct VaultItemDemoFactory {
         )
     }
 
-    public func makeEncryptedSecureNote() throws -> VaultItem.Write {
+    /// A note encrypted with the password "hello". As in the app, the title is the first line of the contents.
+    public func makeEncryptedSecureNote(title: String = "Hi there") throws -> VaultItem.Write {
         let note = SecureNote(
-            title: "Hi there",
-            contents: "This is a test \(UUID().uuidString.prefix(12))",
+            title: title,
+            contents: "\(title)\nThis is a test \(UUID().uuidString.prefix(12))",
             format: .plain,
         )
         let derived = try VaultKeyDeriver.Item.Fast.v1.createEncryptionKey(password: "hello")
@@ -92,6 +93,33 @@ public struct VaultItemDemoFactory {
             lockState: .notLocked,
             showInQuickType: false,
             previewMode: .titleAndFirstLine,
+        )
+    }
+
+    /// A recovery phrase (the public BIP39 test vector), encrypted with the password "hello".
+    public func makeEncryptedRecoveryPhrase() throws -> VaultItem.Write {
+        let phrase = RecoveryPhrase(
+            title: "Demo wallet \(UUID().uuidString.prefix(6))",
+            words: Array(repeating: "abandon", count: 11) + ["about"],
+            standard: .bip39,
+            passphrase: "",
+        )
+        let derived = try VaultKeyDeriver.Item.Fast.v1.createEncryptionKey(password: "hello")
+        let encryptor = VaultItemEncryptor(key: derived)
+        let encrypted = try encryptor.encrypt(item: phrase)
+        return VaultItem.Write(
+            relativeOrder: 0,
+            userDescription: "",
+            color: nil,
+            item: .encryptedItem(encrypted),
+            tags: [],
+            visibility: .always,
+            searchableLevel: .full,
+            searchPassphraseUpdate: .clear,
+            killphraseUpdate: .clear,
+            lockState: .lockedWithNativeSecurity,
+            showInQuickType: false,
+            previewMode: .titleOnly,
         )
     }
 }

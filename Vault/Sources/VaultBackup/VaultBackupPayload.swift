@@ -172,6 +172,19 @@ extension VaultBackupItem {
             self.keygenSalt = keygenSalt
             self.keygenSignature = keygenSignature
         }
+
+        /// Backups are encoded with snake case keys. `encryptionIV` encodes as `encryption_iv`, but that decodes as
+        /// `encryptionIv`, which wouldn't match the property: no backup containing an encrypted item could be
+        /// restored. This key encodes the same `encryption_iv` as always, and decodes it too.
+        enum CodingKeys: String, CodingKey {
+            case version
+            case title
+            case data
+            case authentication
+            case encryptionIV = "encryptionIv"
+            case keygenSalt
+            case keygenSignature
+        }
     }
 
     /// A backed up OTP code.

@@ -133,6 +133,24 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
                 }
                 .disabled(lockTransition != nil)
             }
+        } else if !viewModel.allowsUnlockWithoutDeviceAuthentication {
+            // Without device authentication there's no way to unlock this item. It's still there, and can be
+            // viewed again once a passcode is set up.
+            Section {
+                FormRow(
+                    image: Image(systemName: "lock.trianglebadge.exclamationmark.fill"),
+                    color: .red,
+                    style: .standard,
+                ) {
+                    VStack(alignment: .leading) {
+                        Text("Passcode Required")
+                            .font(.headline)
+                            .foregroundStyle(.red)
+                        Text("Set up a passcode on this device to view this item.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
         } else {
             Section {
                 FormRow(

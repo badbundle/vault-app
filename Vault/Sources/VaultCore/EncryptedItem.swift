@@ -9,7 +9,11 @@ public struct EncryptedItem: Equatable, Hashable, Codable, Sendable {
     /// This is to allow for backwards-incompatible changes in the future.
     public var version: SemVer
     /// User-visible title while the payload is still encrypted.
-    public var title: String
+    ///
+    /// A plaintext copy of the title inside the encrypted payload, so the item can be shown and searched without its
+    /// password. `VaultItemEncryptor` sets it from the payload each time it encrypts, so the two always match: to
+    /// change the title, re-encrypt the item. It isn't settable, so it can't drift from the payload on its own.
+    public let title: String
     /// The encrypted payload.
     public var data: Data
     /// Additional data that represents authentication.
