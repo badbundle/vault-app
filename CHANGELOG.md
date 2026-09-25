@@ -28,7 +28,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 ### Changed
 
-- App icon refreshed: the same door and wheel, now layered with a metal gradient, rim light and shadow
+- App icon refreshed: the same door and wheel, now layered with a metal gradient and rim light on a vibrant aqua-to-blue background, with no shadow behind the wheel. In the dark icon the door itself takes on the aqua and blue, so a locked item's door is blue in dark mode too
 - The feed's bottom bar minimizes while scrolling down, to a capsule showing the item count and active filter beside the search button (or the current search), and returns on scrolling up, at the top, or with a tap. It keeps its space while minimized, so the feed doesn't jump and still bounces at the bottom
 - Search lives in the feed's bottom bar: the status bar sits bottom left and a search button bottom right, which opens the search field beneath the status bar. While searching, the status bar counts the matches alongside any tag filter
 - The feed's bottom bar uses clear Liquid Glass with a scroll edge effect, and its tag filters and buttons have larger tap targets

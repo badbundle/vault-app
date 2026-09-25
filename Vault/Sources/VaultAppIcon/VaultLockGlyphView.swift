@@ -4,9 +4,9 @@ import SwiftUI
 ///
 /// One drawing serves both the app icon (wheel at rest, door shut) and every frame
 /// of the lock animation (wheel spinning, door swinging on its left-hand hinge).
-/// The depth comes from layering alone: a metal gradient, a rim light clipped to
-/// the edges and a soft shadow pool under the wheel. No blur, shadow or material
-/// effects, so it renders the same on screen, in `ImageRenderer` and in snapshots.
+/// The depth comes from layering alone: a metal gradient and a rim light clipped
+/// to the edges. No blur, shadow or material effects, so it renders the same on
+/// screen, in `ImageRenderer` and in snapshots.
 public struct VaultLockGlyphView: View {
     public var wheelRotation: Angle
     /// 0 is shut; 1 is swung open by `metrics.doorOpenAngle`.
@@ -49,26 +49,12 @@ public struct VaultLockGlyphView: View {
         // above while the wheel turns.
         let wheel = VaultWheelShape(metrics: metrics).rotation(wheelRotation)
         let highlightWidth = side * metrics.highlightWidth
-        let shadowDiameter = side * metrics.wheelShadowRadius * 2
 
         return ZStack {
             door.fill(palette.metalGradient)
             door
                 .stroke(palette.highlightGradient, lineWidth: highlightWidth)
                 .clipShape(door)
-            if metrics.wheelShadowRadius > 0 {
-                Circle()
-                    .fill(
-                        RadialGradient(
-                            colors: [palette.shadow, palette.shadow.opacity(0)],
-                            center: .center,
-                            startRadius: 0,
-                            endRadius: side * metrics.wheelShadowRadius,
-                        ),
-                    )
-                    .frame(width: shadowDiameter, height: shadowDiameter)
-                    .offset(y: side * metrics.wheelShadowOffset)
-            }
             wheel.fill(palette.metalGradient)
             wheel
                 .stroke(palette.highlightGradient, lineWidth: highlightWidth)
