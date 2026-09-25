@@ -126,6 +126,10 @@ You shouldn't need to manually change the locale or any other simulator setting 
 	<td><b>make lint</b></td>
   </tr>
   <tr>
+	<td>Validate the current commit and post the green check to GitHub (see <a href="../README.md#validation">Validation</a>)</td>
+	<td><b>make validate</b></td>
+  </tr>
+  <tr>
 	<td>Force clean existing build artifacts</td>
 	<td><b>make clean</b></td>
   </tr>

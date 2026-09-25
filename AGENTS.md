@@ -12,6 +12,10 @@ This root-level file only covers things that apply across the whole repo (the Sw
 
 Read [`MANIFESTO.md`](./MANIFESTO.md) before proposing or implementing any feature that touches killphrases, search passphrases, lock state, authentication, telemetry, backups, exports, or anything in the Danger Zone. The manifesto is normative — when a proposed change conflicts with it, the manifesto wins unless it is amended first via a dedicated `MANIFESTO:` PR.
 
+## Validation
+
+There is no hosted CI. Before a PR can merge into `main`, its latest commit needs the **Validate (local)** status check, which is posted by running `make validate` in `Vault/`. See [Validation](./README.md#validation) in the README and the rules in [`Vault/AGENTS.md`](./Vault/AGENTS.md).
+
 ## Layout
 
 - [`Vault/`](./Vault) — Swift Package with all targets, tests, and tooling. Open `Vault.xcworkspace` to work on it.
