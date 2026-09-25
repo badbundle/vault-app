@@ -84,9 +84,12 @@ struct EncryptedItemDetailView: View {
     @ViewBuilder
     private var passwordEntrySection: some View {
         Section {
-            FormRow(image: Image(systemName: "lock.fill"), color: .primary, style: .standard) {
-                SecureField("Password...", text: $viewModel.enteredEncryptionPassword)
-            }
+            LabeledTextField(
+                "Password",
+                text: $viewModel.enteredEncryptionPassword,
+                kind: .secure(),
+                status: viewModel.state.presentationError == nil ? .none : .error(),
+            )
         }
         .onChange(of: viewModel.enteredEncryptionPassword) { _, _ in
             // When the text changes, reset the state.

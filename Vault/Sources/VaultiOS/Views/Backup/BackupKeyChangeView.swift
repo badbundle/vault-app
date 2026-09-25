@@ -165,7 +165,7 @@ struct BackupKeyChangeView: View {
 
     private var passwordSection: some View {
         Section {
-            SecureField("New Password", text: $viewModel.newlyEnteredPassword)
+            LabeledTextField("New Password", text: $viewModel.newlyEnteredPassword, kind: .secure())
                 .focused($focusedField, equals: .new)
                 .submitLabel(.next)
                 .onSubmit {
@@ -174,21 +174,15 @@ struct BackupKeyChangeView: View {
                 .disabled(viewModel.newPassword.isLoading)
 
             if viewModel.newlyEnteredPassword.isNotEmpty {
-                HStack {
-                    SecureField("Confirm Password", text: $viewModel.newlyEnteredPasswordConfirm)
-                        .focused($focusedField, equals: .confirm)
-                        .submitLabel(.done)
-                        .onSubmit(saveEnteredPassword)
-
-                    Image(
-                        systemName: viewModel
-                            .passwordConfirmMatches ? "checkmark.circle.fill" : "xmark.circle.fill",
-                    )
-                    .foregroundStyle(viewModel.passwordConfirmMatches ? .green : .red)
-                    .accessibilityLabel(
-                        Text(viewModel.passwordConfirmMatches ? "Passwords match" : "Passwords don't match"),
-                    )
-                }
+                LabeledTextField(
+                    "Confirm Password",
+                    text: $viewModel.newlyEnteredPasswordConfirm,
+                    kind: .secure(),
+                    status: viewModel.passwordConfirmMatches ? .valid : .error(),
+                )
+                .focused($focusedField, equals: .confirm)
+                .submitLabel(.done)
+                .onSubmit(saveEnteredPassword)
                 .disabled(viewModel.newPassword.isLoading)
             }
         }

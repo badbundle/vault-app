@@ -64,13 +64,11 @@ struct VaultDetailKillphraseEditView: View {
             }
 
             if killphraseEnabled {
-                FormRow(image: Image(systemName: "textformat"), color: .secondary, style: .standard) {
-                    TextField("Set new killphrase...", text: $newKillphrase)
-                        .keyboardType(.default)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .textInputAutocapitalization(.never)
-                }
+                LabeledTextField("New Killphrase", text: $newKillphrase)
+                    .keyboardType(.default)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .textInputAutocapitalization(.never)
             }
         } footer: {
             if killphraseEnabled {

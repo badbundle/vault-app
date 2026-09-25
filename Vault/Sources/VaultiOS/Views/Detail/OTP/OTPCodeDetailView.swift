@@ -86,7 +86,6 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
                     keyEditingSection
                 }
                 nameEditingSection
-                descriptionEditingSection
                 editingActionsSection
             } else {
                 if case let .editing(code, metadata) = viewModel.mode {
@@ -216,13 +215,26 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
 
     private var nameEditingSection: some View {
         Section {
-            TextField(
+            LabeledTextField(
                 viewModel.strings.siteNameTitle,
                 text: $viewModel.editingModel.detail.issuerTitle,
+                status: .init(errorFrom: viewModel.editingModel.detail.$issuerTitle),
             )
-            TextField(text: $viewModel.editingModel.detail.accountNameTitle) {
-                Text(viewModel.strings.accountNameExample)
-            }
+
+            LabeledTextField(
+                viewModel.strings.accountNameTitle,
+                text: $viewModel.editingModel.detail.accountNameTitle,
+                prompt: viewModel.strings.accountNameExample,
+            )
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+
+            LabeledTextField(
+                viewModel.strings.descriptionTitle,
+                text: $viewModel.editingModel.detail.description,
+                prompt: viewModel.strings.descriptionSubtitle,
+                kind: .multiline(minLines: 3),
+            )
         } header: {
             iconEditingHeader
                 .containerRelativeFrame(.horizontal)
@@ -231,22 +243,15 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
         }
     }
 
-    private var descriptionEditingSection: some View {
-        Section {
-            TextEditor(text: $viewModel.editingModel.detail.description)
-                .font(.subheadline)
-                .frame(minHeight: 120)
-                .keyboardType(.default)
-                .contentMargins(12, for: .scrollContent)
-                .listRowInsets(EdgeInsets())
-        } header: {
-            Text(viewModel.strings.descriptionTitle)
-        }
-    }
-
     private var keyEditingSection: some View {
         Section {
-            TextField(viewModel.strings.inputSecretTitle, text: $viewModel.editingModel.detail.secretBase32String)
+            LabeledTextField(
+                viewModel.strings.inputSecretTitle,
+                text: $viewModel.editingModel.detail.secretBase32String,
+                status: keyStatus,
+            )
+            .fontDesign(.monospaced)
+            .autocorrectionDisabled()
 
             Picker(selection: $viewModel.editingModel.detail.codeType) {
                 ForEach(OTPAuthType.Kind.allCases) { authType in
@@ -302,6 +307,15 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
             )
             .padding()
             .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// The header above the key already explains what's wrong, so the field only flags it.
+    private var keyStatus: LabeledTextField.Status {
+        switch viewModel.editingModel.detail.$secretBase32String {
+        case .valid: .valid
+        case .invalid: .none
+        case .error: .error()
         }
     }
 

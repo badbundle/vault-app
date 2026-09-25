@@ -39,12 +39,11 @@ struct BackupCreatePDFView: View {
                 }
             }
 
-            TextEditor(text: $viewModel.userHint)
-                .font(.callout)
-                .frame(minHeight: 150)
-                .keyboardType(.default)
-                .contentMargins(12, for: .scrollContent)
-                .listRowInsets(EdgeInsets())
+            LabeledTextField(
+                "Password Hint",
+                text: $viewModel.userHint,
+                kind: .multiline(minLines: 3),
+            )
         } header: {
             Text("Options")
         } footer: {
