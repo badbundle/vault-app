@@ -3,42 +3,22 @@ import SwiftUI
 import VaultFeed
 
 extension VaultItemTag {
-    /// Returns the fill/background color for displaying this tag in pill form
+    /// The name to show for this tag, with a placeholder while it is blank.
+    var displayName: String {
+        name.isBlank ? "Tag" : name
+    }
+
+    /// The fill of the tag's pill: clear, or while selected, a tint of its
+    /// outline, so every tag shows its selection equally clearly.
     /// - Parameter isSelected: Whether the tag is in a selected state
     func fillColor(isSelected: Bool) -> Color {
-        if isSelected {
-            let baseColor = color.color
-            let brightness = baseColor.percievedBrightness
-
-            // For very light colors (near white), use neutral light gray
-            if brightness > 0.9 {
-                return Color.primary.opacity(0.08)
-            }
-            // For very dark colors (near black), use very subtle tint
-            else if brightness < 0.15 {
-                return Color.primary.opacity(0.06)
-            }
-            // For normal colors, use standard opacity
-            else {
-                return baseColor.opacity(0.2)
-            }
-        } else {
-            // Unselected pills are transparent
-            return .clear
-        }
+        isSelected ? strokeColor.opacity(0.2) : .clear
     }
 
-    /// Returns the stroke/foreground color for displaying this tag in pill form
-    /// - Parameter isSelected: Whether the tag is in a selected state
-    func strokeColor(isSelected _: Bool) -> Color {
-        // Use the readable foreground color that has good contrast
+    /// The outline of the tag's pill: its color, adjusted where needed so it
+    /// stands out on light and dark backgrounds alike.
+    var strokeColor: Color {
         readableForegroundColor()
-    }
-
-    /// Returns the fill color for the prominent `FormRow` icon square, which
-    /// draws a white glyph on top.
-    func prominentIconColor() -> Color {
-        color.prominentIconColor
     }
 
     /// Returns a foreground color that's guaranteed to be readable
@@ -70,13 +50,17 @@ extension VaultItemTag {
 }
 
 extension VaultItemColor {
-    /// Fill color for a prominent icon square that draws a white glyph on top.
-    var prominentIconColor: Color {
+    /// Fill color for a tag's badge, the circle that draws its white glyph on
+    /// top.
+    var badgeColor: Color {
         let baseColor = color
 
-        // Near-white fills would hide the white glyph, so fall back to a neutral gray
+        // Near-white fills would hide the white glyph, so fall back to a
+        // neutral gray. A plain RGB gray rather than a system one, which
+        // glass renders as a vibrant fill that shifts with the backdrop, so
+        // the badge matches inside and outside a glass pill.
         if baseColor.percievedBrightness > 0.9 {
-            return .gray
+            return VaultItemColor.gray.color
         }
         return baseColor
     }

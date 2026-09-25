@@ -76,11 +76,8 @@ struct VaultTagFeedView: View {
                 Button {
                     modal = .editingTag(tag)
                 } label: {
-                    FormRow(image: Image(systemName: tag.iconName), color: tag.prominentIconColor()) {
-                        Text(tag.name)
-                            .foregroundStyle(Color.primary)
-                    }
-                    .contentShape(Rectangle())
+                    TagRowLabel(tag: tag)
+                        .contentShape(Rectangle())
                 }
             }
             .onDelete { indexSet in

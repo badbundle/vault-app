@@ -12,6 +12,8 @@ public final class VaultTagDetailViewModel {
     public internal(set) var deleteError: PresentationError?
 
     private let tagId: Identifier<VaultItemTag>?
+    /// Stands in for the identifier of a tag that hasn't been saved yet.
+    private let unsavedTagId = Identifier<VaultItemTag>()
     private let dataModel: VaultDataModel
 
     public static var defaultIconOption: String {
@@ -99,6 +101,17 @@ public final class VaultTagDetailViewModel {
 
     public var systemIconOptions: [String] {
         Self.systemIconOptions
+    }
+
+    /// The tag as it stands with the current edits, for previewing how it
+    /// will look once saved.
+    public var previewTag: VaultItemTag {
+        VaultItemTag(
+            id: tagId ?? unsavedTagId,
+            name: currentTag.name,
+            color: currentTag.color,
+            iconName: currentTag.iconName,
+        )
     }
 
     private func makeWritableTag() -> VaultItemTag.Write {

@@ -27,12 +27,26 @@ struct TagPillViewSnapshotTests {
 
         snapshotScenarios(tag: tag)
     }
+
+    /// The size the feed's filters and an item's metadata use.
+    @Test
+    func compactSize() {
+        let tag = VaultItemTag(
+            id: .new(),
+            name: "Work",
+            color: .init(red: 0.2, green: 0.47, blue: 0.96),
+            iconName: "briefcase.fill",
+        )
+
+        snapshotScenarios(tag: tag, controlSize: .small)
+    }
 }
 
 extension TagPillViewSnapshotTests {
-    func snapshotScenarios(tag: VaultItemTag, testName: String = #function) {
+    func snapshotScenarios(tag: VaultItemTag, controlSize: ControlSize = .regular, testName: String = #function) {
         for isSelected in [true, false] {
             let tagView = TagPillView(tag: tag, isSelected: isSelected)
+                .controlSize(controlSize)
             let isSelectedName = isSelected ? "selected" : "no-selected"
             for colorScheme in ColorScheme.allCases {
                 let colorSchemeName = colorScheme.description
@@ -40,9 +54,12 @@ extension TagPillViewSnapshotTests {
                     .frame(width: 300, height: 200)
                     .background(Color(UIColor.systemBackground))
                     .environment(\.colorScheme, colorScheme)
+                // The pill's glass resolves its content's colors from the
+                // host's traits, which the environment alone doesn't set.
+                let traits = UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
 
                 let config = [isSelectedName, colorSchemeName].joined(separator: ".")
-                assertSnapshot(of: sut, as: .image, named: config, testName: testName)
+                assertSnapshot(of: sut, as: .image(traits: traits), named: config, testName: testName)
             }
         }
     }

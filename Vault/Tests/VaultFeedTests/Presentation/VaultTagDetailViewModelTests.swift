@@ -60,6 +60,32 @@ struct VaultTagDetailViewModelTests {
     }
 
     @Test
+    func previewTag_existingTag_reflectsEditsUnderTheTagsIdentifier() {
+        let tag = VaultItemTag(id: .init(), name: "tag", color: .gray, iconName: "tag.fill")
+        let sut = makeSUT(existingTag: tag)
+
+        sut.currentTag.name = "Work"
+        sut.currentTag.color = .black
+        sut.currentTag.iconName = "briefcase.fill"
+
+        #expect(sut.previewTag == VaultItemTag(id: tag.id, name: "Work", color: .black, iconName: "briefcase.fill"))
+    }
+
+    @Test
+    func previewTag_newTag_reflectsEditsUnderAStableIdentifier() {
+        let sut = makeSUT()
+        let initialPreview = sut.previewTag
+
+        sut.currentTag.name = "Work"
+        sut.currentTag.iconName = "briefcase.fill"
+
+        #expect(sut.previewTag.id == initialPreview.id)
+        #expect(sut.previewTag.name == "Work")
+        #expect(sut.previewTag.color == .tagDefault)
+        #expect(sut.previewTag.iconName == "briefcase.fill")
+    }
+
+    @Test
     func isDirty_tracksCurrentTagChanges() {
         let sut = makeSUT()
 

@@ -84,9 +84,8 @@ struct VaultDetailTagEditView: View {
     }
 
     private func tagRow(_ tag: VaultItemTag, @ViewBuilder accessory: @escaping () -> some View) -> some View {
-        FormRow(image: Image(systemName: tag.iconName), color: tag.prominentIconColor()) {
-            Text(tag.name)
-                .foregroundStyle(Color.primary)
+        HStack {
+            TagRowLabel(tag: tag)
             Spacer()
             accessory()
         }
