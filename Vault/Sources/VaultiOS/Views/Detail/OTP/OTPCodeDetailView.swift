@@ -392,31 +392,10 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
             Button {
                 modal = .editTags
             } label: {
-                VStack {
-                    FormRow(
-                        image: Image(systemName: "tag"),
-                        color: .accentColor,
-                        style: .standard,
-                    ) {
-                        LabeledContent(
-                            "Tags",
-                            value: viewModel.strings.tagCount(tags: viewModel.editingModel.detail.tags.count),
-                        )
-                        .font(.body)
-                    }
-
-                    if viewModel.tagsThatAreSelected.isNotEmpty {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(alignment: .center, spacing: 8) {
-                                ForEach(viewModel.tagsThatAreSelected) { tag in
-                                    TagPillView(tag: tag, isSelected: true)
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-                        .scrollClipDisabled()
-                    }
-                }
+                VaultDetailTagsRow(
+                    tags: viewModel.tagsThatAreSelected,
+                    countDescription: viewModel.strings.tagCount(tags: viewModel.editingModel.detail.tags.count),
+                )
             }
         }
 

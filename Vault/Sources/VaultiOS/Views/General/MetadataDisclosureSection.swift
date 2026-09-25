@@ -28,17 +28,8 @@ struct MetadataDisclosureSection: View {
     @ViewBuilder
     private var tagsFooter: some View {
         if tags.isNotEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack {
-                    ForEach(tags) { tag in
-                        TagPillView(tag: tag, isSelected: true)
-                            .id(tag)
-                    }
-                }
-                .controlSize(.small)
-            }
-            .scrollClipDisabled()
-            .padding(.top, 8)
+            AttachedTagsView(tags: tags)
+                .padding(.top, 8)
         }
     }
 }
