@@ -73,13 +73,11 @@ struct BackupExportView: View {
                     }
                 }
             case .updatePassword:
-                NavigationStack {
-                    BackupKeyChangeView(viewModel: .init(
-                        dataModel: dataModel,
-                        authenticationService: authenticationService,
-                        deriverFactory: injector.vaultKeyDeriverFactory,
-                    ))
-                }
+                BackupKeyChangeView(viewModel: .init(
+                    dataModel: dataModel,
+                    authenticationService: authenticationService,
+                    deriverFactory: injector.vaultKeyDeriverFactory,
+                ))
             case let .deviceTransfer(password):
                 NavigationStack {
                     DeviceTransferExportView(

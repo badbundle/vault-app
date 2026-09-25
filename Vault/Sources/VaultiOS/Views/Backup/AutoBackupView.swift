@@ -56,13 +56,11 @@ struct AutoBackupView: View {
             await viewModel.onAppear()
         }
         .sheet(isPresented: $isShowingCreatePassword) {
-            NavigationStack {
-                BackupKeyChangeView(viewModel: .init(
-                    dataModel: dataModel,
-                    authenticationService: authenticationService,
-                    deriverFactory: injector.vaultKeyDeriverFactory,
-                ))
-            }
+            BackupKeyChangeView(viewModel: .init(
+                dataModel: dataModel,
+                authenticationService: authenticationService,
+                deriverFactory: injector.vaultKeyDeriverFactory,
+            ))
         }
     }
 
