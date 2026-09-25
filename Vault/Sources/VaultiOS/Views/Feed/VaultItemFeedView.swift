@@ -22,6 +22,12 @@ public struct VaultItemFeedView<
     @State private var state: VaultItemFeedState
     @Namespace private var barGlass
     @AccessibilityFocusState private var isStatusBarFocused: Bool
+    @FocusState private var isSearchFieldFocused: Bool
+    /// Set when the person opens search, so the field takes focus as soon as
+    /// it appears rather than every time the bar expands to show it.
+    @State private var focusesSearchFieldOnAppear = false
+    /// The bar's height when last expanded, which it keeps while collapsed.
+    @State private var expandedBarHeight: CGFloat?
 
     public init(
         localSettings: LocalSettings,
@@ -52,8 +58,9 @@ public struct VaultItemFeedView<
                 }
             }
             .onChange(of: canCollapseBar) { _, canCollapse in
-                // Starting to edit, turning on VoiceOver, or widening to a
-                // regular layout brings the full bar straight back.
+                // Starting to edit or type a search, turning on VoiceOver, or
+                // widening to a regular layout brings the full bar straight
+                // back.
                 if !canCollapse {
                     setBarCollapsed(false)
                 }
@@ -69,8 +76,7 @@ public struct VaultItemFeedView<
     }
 
     private var listOfCodesView: some View {
-        @Bindable var dataModel = dataModel
-        return ScrollView(.vertical, showsIndicators: true) {
+        ScrollView(.vertical, showsIndicators: true) {
             if dataModel.items.isNotEmpty {
                 LazyVGrid(columns: columns) {
                     Section {
@@ -99,9 +105,9 @@ public struct VaultItemFeedView<
             guard let change = state.barTracker.scrolled(to: position, canCollapse: canCollapseBar) else { return }
             setBarCollapsed(change == .collapse)
         }
-        .searchable(text: $dataModel.itemsSearchQuery)
-        .autocorrectionDisabled()
-        .textInputAutocapitalization(.never)
+        // Scrolling the results puts the keyboard away, which also frees the
+        // bar to collapse.
+        .scrollDismissesKeyboard(.immediately)
         // A bar rather than an inset so the system draws its scroll edge
         // effect: tiles fade and blur beneath the glass instead of running
         // straight into it.
@@ -114,8 +120,21 @@ public struct VaultItemFeedView<
                 }
             }
             .padding(.vertical, 6)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { height in
+                if !showsCollapsedBar {
+                    expandedBarHeight = height
+                }
+            }
+            // Collapsing only changes how the bar looks, never the space it
+            // takes: the bar's height is the feed's bottom inset, and
+            // changing that mid-scroll moves the content under the finger
+            // and cuts the bounce at the bottom short.
+            .frame(minHeight: showsCollapsedBar ? expandedBarHeight : nil, alignment: .bottom)
             .animation(.snappy, value: state.isEditing)
             .animation(.snappy, value: dataModel.isSearching)
+            .animation(.snappy, value: showsSearchField)
             // Filter changes get a much shorter spring than the rest: the
             // default one fades the filter name and Clear button out over
             // ~0.4s while the glass capsule morphs, which reads as the bar
@@ -128,18 +147,27 @@ public struct VaultItemFeedView<
     // MARK: - Collapsing
 
     /// Collapsing follows the system tab bar, which only minimizes in compact
-    /// layouts. It never happens mid-edit, so Done stays in reach, or under
-    /// VoiceOver, so the filters are never a hidden step away.
+    /// layouts. It never happens mid-edit, so Done stays in reach, while
+    /// typing a search, or under VoiceOver, so the filters are never a hidden
+    /// step away.
     private var canCollapseBar: Bool {
         !state.isEditing
+            && !isSearchFieldFocused
             && !voiceOverEnabled
             && (horizontalSizeClass == .compact || verticalSizeClass == .compact)
     }
 
-    /// Checked again at render time so the full bar shows whenever editing,
-    /// whatever order state changes arrive in.
+    /// Checked again at render time so the full bar shows whenever editing
+    /// or typing, whatever order state changes arrive in.
     private var showsCollapsedBar: Bool {
-        state.isBarCollapsed && !state.isEditing
+        state.isBarCollapsed && !state.isEditing && !isSearchFieldFocused
+    }
+
+    /// Whether search is open, showing its field (or, while collapsed, its
+    /// query) in place of the search button. A query is never hidden, however
+    /// it was set.
+    private var showsSearchField: Bool {
+        state.isSearchPresented || dataModel.itemsSearchQuery.isNotEmpty
     }
 
     private var barAnimation: Animation {
@@ -156,8 +184,6 @@ public struct VaultItemFeedView<
         reduceMotion ? .materialize : .matchedGeometry
     }
 
-    /// One transaction for the bar and the safe area it gives back, so the
-    /// glass morph and the feed's resize move together.
     private func setBarCollapsed(_ isCollapsed: Bool) {
         guard state.isBarCollapsed != isCollapsed else { return }
         withAnimation(barAnimation) {
@@ -165,55 +191,110 @@ public struct VaultItemFeedView<
         }
     }
 
+    // MARK: - Searching
+
+    /// Expands the bar with the search field open and focused.
+    private func openSearch() {
+        state.barTracker.resetTravel()
+        focusesSearchFieldOnAppear = true
+        withAnimation(barAnimation) {
+            state.isBarCollapsed = false
+            state.isSearchPresented = true
+        }
+    }
+
+    /// Clears the query and puts the search button back.
+    private func closeSearch() {
+        isSearchFieldFocused = false
+        focusesSearchFieldOnAppear = false
+        withAnimation(barAnimation) {
+            state.isSearchPresented = false
+            dataModel.itemsSearchQuery = ""
+        }
+    }
+
     // MARK: - Bar layouts
 
-    /// Tag filters stacked above the status bar, for regular-height layouts.
+    /// Tag filters above the status bar and search, for regular-height
+    /// layouts. The status bar sits leading with the search button trailing;
+    /// opening search lifts the status bar onto a row of its own so the
+    /// field can take the full width beneath it.
     ///
-    /// Everything shares one glass container so the pills and status bar can
-    /// morph into the collapsed capsule. The pill row spans the screen and
-    /// doesn't clip here, so the container can sit outside its scroll view.
+    /// Everything shares one glass container so the pills, status bar and
+    /// search can morph as the bar collapses and search opens. The pill row
+    /// spans the screen and doesn't clip here, so the container can sit
+    /// outside its scroll view.
     private var regularFeedBar: some View {
         GlassEffectContainer {
             // No spacing: the pills' 44pt hit targets already leave a gap
             // between the drawn pills and the status bar.
             VStack(spacing: 0) {
-                if showsCollapsedBar {
-                    collapsedBar
-                } else {
-                    if dataModel.allTags.isNotEmpty {
-                        tagFilterBar(ownsGlassContainer: false)
+                if dataModel.allTags.isNotEmpty, !showsCollapsedBar {
+                    tagFilterBar(ownsGlassContainer: false)
+                }
+
+                HStack(spacing: 8) {
+                    if showsCollapsedBar {
+                        collapsedBar
+                        Spacer(minLength: 0)
+                    } else {
+                        statusBar
                     }
 
-                    bottomBar
+                    if !showsSearchField || showsCollapsedBar {
+                        searchButton
+                    }
+                }
+                .padding(.horizontal)
+
+                if showsSearchField, !showsCollapsedBar {
+                    searchFieldRow
                         .padding(.horizontal)
+                        .padding(.top, 8)
                 }
             }
         }
     }
 
-    /// Tag filters and the status bar side by side, for compact-height
-    /// layouts (iPhone landscape) where two rows would crowd out the grid.
+    /// Status bar, tag filters and search button in one row, for
+    /// compact-height layouts (iPhone landscape) where stacking them would
+    /// crowd out the grid. An open search field takes a second row.
     private var compactFeedBar: some View {
-        HStack(spacing: 8) {
-            if dataModel.allTags.isNotEmpty, !showsCollapsedBar {
-                tagFilterBar(ownsGlassContainer: true)
-            } else {
-                // Keep the bar trailing where it sits when tags are present.
-                Spacer()
-            }
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                // The pills clip, so they keep their own container; the
+                // status bar and the collapsed capsule share this one to
+                // morph in place.
+                GlassEffectContainer {
+                    if showsCollapsedBar {
+                        collapsedBar
+                    } else {
+                        statusBar
+                    }
+                }
+                // Hugging its content collapses the bar's internal spacer so
+                // the tag row takes whatever width is left.
+                .fixedSize(horizontal: true, vertical: false)
 
-            // The pills clip, so they keep their own container; the status
-            // bar and the collapsed capsule share this one to morph in place.
-            GlassEffectContainer {
-                if showsCollapsedBar {
-                    collapsedBar
+                if dataModel.allTags.isNotEmpty, !showsCollapsedBar {
+                    tagFilterBar(ownsGlassContainer: true)
                 } else {
-                    bottomBar
+                    // Keep search trailing where it sits when tags are present.
+                    Spacer(minLength: 0)
+                }
+
+                if !showsSearchField || showsCollapsedBar {
+                    GlassEffectContainer {
+                        searchButton
+                    }
                 }
             }
-            // Hugging its content collapses the bar's internal spacer so the
-            // tag row takes whatever width is left.
-            .fixedSize(horizontal: true, vertical: false)
+
+            if showsSearchField, !showsCollapsedBar {
+                GlassEffectContainer {
+                    searchFieldRow
+                }
+            }
         }
         .padding(.horizontal)
     }
@@ -280,7 +361,27 @@ public struct VaultItemFeedView<
     }
 
     /// Item count and the feed-level actions.
-    private var bottomBar: some View {
+    private var statusBar: some View {
+        // Where the label and the button titles don't all fit, as on a
+        // narrow phone beside the search button, the buttons drop their
+        // titles before the count is truncated.
+        ViewThatFits(in: .horizontal) {
+            statusBarRow(iconOnlyButtons: false)
+            statusBarRow(iconOnlyButtons: true)
+        }
+        // Glass keeps the row legible over the grid scrolling beneath it
+        // without the heavy, opaque panel a flat fill would need. The
+        // buttons' hit targets set the height, so there is no vertical padding.
+        .frame(minHeight: 44)
+        .padding(.horizontal, 14)
+        .glassEffect(.regular, in: .capsule)
+        .glassEffectID(barGlassID(.status), in: barGlass)
+        .glassEffectTransition(barGlassTransition)
+        .glassSnapshotBackdrop(in: .capsule)
+        .transition(.opacity)
+    }
+
+    private func statusBarRow(iconOnlyButtons: Bool) -> some View {
         HStack {
             statusLabel
                 .font(.subheadline)
@@ -312,27 +413,18 @@ public struct VaultItemFeedView<
                     }
                 }
             }
+            .labelStyle(StatusBarButtonLabelStyle(iconOnly: iconOnlyButtons))
             .buttonBorderShape(.capsule)
             .controlSize(.small)
             .font(.footnote)
             .lineLimit(1)
             .fixedSize()
         }
-        // Glass keeps the row legible over the grid scrolling beneath it
-        // without the heavy, opaque panel a flat fill would need. The
-        // buttons' hit targets set the height, so there is no vertical padding.
-        .frame(minHeight: 44)
-        .padding(.horizontal, 14)
-        .glassEffect(.regular, in: .capsule)
-        .glassEffectID(barGlassID(.status), in: barGlass)
-        .glassEffectTransition(barGlassTransition)
-        .glassSnapshotBackdrop(in: .capsule)
-        .transition(.opacity)
     }
 
-    /// The whole bar minimized to one capsule while scrolling down: the item
-    /// count and any active filter, so the feed's scope stays visible. Tapping
-    /// it brings the filters and actions back.
+    /// The status bar and filters minimized to one capsule while scrolling
+    /// down: the item count and any active filter, so the feed's scope stays
+    /// visible. Tapping it brings the filters and actions back.
     private var collapsedBar: some View {
         Button {
             state.barTracker.resetTravel()
@@ -357,11 +449,8 @@ public struct VaultItemFeedView<
     }
 
     /// The collapsed capsule read as a sentence rather than its glyphs.
-    ///
-    /// The count always comes from `itemsCountDescription`, which never
-    /// reveals items hidden behind a search passphrase.
     private var collapsedBarAccessibilityLabel: String {
-        let count = dataModel.itemsCountDescription
+        let count = countDescription
         switch activeFilterSummary {
         case .none:
             return count
@@ -415,8 +504,10 @@ public struct VaultItemFeedView<
             .lineLimit(1)
         } else {
             HStack(spacing: 4) {
-                Image(systemName: "key.horizontal")
-                Text(dataModel.itemsCountDescription)
+                Image(systemName: dataModel.isSearching ? "magnifyingglass" : "key.horizontal")
+                Text(countDescription)
+                    // On a narrow bar the filter name truncates first.
+                    .layoutPriority(1)
 
                 if let filterDescription = activeFilterSummary.shortDescription {
                     Group {
@@ -430,6 +521,121 @@ public struct VaultItemFeedView<
             }
             .lineLimit(1)
         }
+    }
+
+    /// What the feed is showing: its items, or while searching, the matches.
+    ///
+    /// Both count only what the feed displays, so neither reveals items
+    /// hidden behind a search passphrase.
+    private var countDescription: String {
+        dataModel.isSearching ? dataModel.itemsMatchCountDescription : dataModel.itemsCountDescription
+    }
+
+    // MARK: - Search controls
+
+    /// Opens search. While the bar is collapsed with a search open, it also
+    /// carries the query, and tapping it goes back to editing that.
+    ///
+    /// One capsule whatever it shows, so its glass morphs into the field and
+    /// back; with only the glyph it is a circle.
+    private var searchButton: some View {
+        Button {
+            openSearch()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.body.weight(.medium))
+
+                if showsSearchField, dataModel.itemsSearchQuery.isNotEmpty {
+                    Text(dataModel.itemsSearchQuery)
+                        .font(.subheadline)
+                        .lineLimit(1)
+                        .frame(maxWidth: 120, alignment: .leading)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(.trailing, 6)
+                }
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .padding(.horizontal, showsSearchField && dataModel.itemsSearchQuery.isNotEmpty ? 10 : 0)
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("f", modifiers: .command)
+        .glassEffect(.regular.interactive(), in: .capsule)
+        .glassEffectID(barGlassID(.search), in: barGlass)
+        .glassEffectTransition(barGlassTransition)
+        .glassSnapshotBackdrop(in: .capsule)
+        .transition(.opacity)
+        .accessibilityLabel("Search")
+        .accessibilityValue(showsSearchField ? dataModel.itemsSearchQuery : "")
+    }
+
+    /// The search field, with a button to close search beside it.
+    private var searchFieldRow: some View {
+        @Bindable var dataModel = dataModel
+        return HStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+
+                TextField("Search", text: $dataModel.itemsSearchQuery)
+                    .focused($isSearchFieldFocused)
+                    .submitLabel(.search)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onSubmit {
+                        isSearchFieldFocused = false
+                    }
+
+                if dataModel.itemsSearchQuery.isNotEmpty {
+                    Button {
+                        dataModel.itemsSearchQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 32, height: 44)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear Text")
+                }
+            }
+            // The clear button carries its own margin.
+            .padding(.leading, 14)
+            .padding(.trailing, dataModel.itemsSearchQuery.isNotEmpty ? 6 : 14)
+            .frame(minHeight: 44)
+            // The whole capsule focuses the field, not just its text.
+            .contentShape(.capsule)
+            .onTapGesture {
+                isSearchFieldFocused = true
+            }
+            .glassEffect(.regular, in: .capsule)
+            .glassEffectID(barGlassID(.search), in: barGlass)
+            .glassEffectTransition(barGlassTransition)
+            .glassSnapshotBackdrop(in: .capsule)
+            .onAppear {
+                guard focusesSearchFieldOnAppear else { return }
+                focusesSearchFieldOnAppear = false
+                isSearchFieldFocused = true
+            }
+
+            Button {
+                closeSearch()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.body.weight(.medium))
+                    .frame(width: 44, height: 44)
+                    .contentShape(.circle)
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .circle)
+            .glassEffectID(barGlassID(.closeSearch), in: barGlass)
+            .glassEffectTransition(barGlassTransition)
+            .glassSnapshotBackdrop(in: .circle)
+            .accessibilityLabel("Close Search")
+        }
+        .transition(.opacity)
     }
 
     /// The active tag filters, shared by the visible status label and the
@@ -531,6 +737,23 @@ private enum FeedBarGlassID: Hashable, Sendable {
     /// The status bar, and the collapsed capsule it becomes.
     case status
     case tag(Identifier<VaultItemTag>)
+    /// The search button, and the field it opens into.
+    case search
+    case closeSearch
+}
+
+/// The status bar's buttons with their titles, or with only their icons when
+/// space is short. Either way the title stays as the accessibility label.
+private struct StatusBarButtonLabelStyle: LabelStyle {
+    var iconOnly: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        if iconOnly {
+            Label(configuration).labelStyle(.iconOnly)
+        } else {
+            Label(configuration).labelStyle(.titleAndIcon)
+        }
+    }
 }
 
 private enum ActiveFilterSummary: Equatable {

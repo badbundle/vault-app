@@ -177,18 +177,39 @@ struct FeedBarCollapseTrackerTests {
         #expect(changes == [nil])
     }
 
+    /// Geometry as the feed reports it on an iPhone 18 Pro Max: a 956pt
+    /// screen, 116pt under the navigation bar and 134pt under the feed bar,
+    /// leaving a 706pt container.
     @Test
     func positionFromScrollGeometryMeasuresFromTheTopInset() {
-        let geometry = ScrollGeometry(
-            contentOffset: CGPoint(x: 0, y: -100),
-            contentSize: CGSize(width: 390, height: 2000),
-            contentInsets: EdgeInsets(top: 100, leading: 0, bottom: 50, trailing: 0),
-            containerSize: CGSize(width: 390, height: 800),
-        )
+        let geometry = feedGeometry(contentOffsetY: -116)
 
         let position = FeedScrollPosition(geometry)
 
-        #expect(position == FeedScrollPosition(offset: 0, maxOffset: 1350))
+        #expect(position == FeedScrollPosition(offset: 0, maxOffset: 950))
+    }
+
+    /// Resting at the bottom must land exactly on `maxOffset`, or pulling
+    /// past the bottom and bouncing back reads as scrolling up.
+    @Test
+    func positionFromScrollGeometryRestingAtTheBottomReachesMaxOffset() {
+        let geometry = feedGeometry(contentOffsetY: 834)
+
+        let position = FeedScrollPosition(geometry)
+
+        #expect(position.offset == position.maxOffset)
+    }
+
+    @Test
+    func bounceBackFromPastTheBottomDoesNotExpand() {
+        var sut = makeSUT(phase: .interacting)
+        let collapse = scroll(&sut, through: [900, 950, 1000, 1080], maxOffset: 950)
+
+        sut.phaseChanged(to: .decelerating)
+        let bounce = scroll(&sut, through: [1040, 990, 960, 950], maxOffset: 950)
+
+        #expect(collapse == [nil, .collapse, nil, nil])
+        #expect(bounce == [nil, nil, nil, nil])
     }
 }
 
@@ -199,6 +220,15 @@ extension FeedBarCollapseTrackerTests {
         var sut = FeedBarCollapseTracker()
         sut.phaseChanged(to: phase)
         return sut
+    }
+
+    private func feedGeometry(contentOffsetY: CGFloat) -> ScrollGeometry {
+        ScrollGeometry(
+            contentOffset: CGPoint(x: 0, y: contentOffsetY),
+            contentSize: CGSize(width: 440, height: 1656),
+            contentInsets: EdgeInsets(top: 116, leading: 0, bottom: 134, trailing: 0),
+            containerSize: CGSize(width: 440, height: 706),
+        )
     }
 
     private func scroll(

@@ -17,10 +17,12 @@ struct FeedScrollPosition: Equatable {
 
     init(_ geometry: ScrollGeometry) {
         offset = geometry.contentOffset.y + geometry.contentInsets.top
-        maxOffset = geometry.contentSize.height
-            + geometry.contentInsets.top
-            + geometry.contentInsets.bottom
-            - geometry.containerSize.height
+        // `containerSize` is the viewport inside the content insets (the
+        // visible rect is that, outset by the insets), so the insets cancel
+        // out. Counting them again would put the bottom a whole bar and
+        // navigation bar further down than it is, so the bounce back from
+        // pulling past the real bottom would read as scrolling up.
+        maxOffset = geometry.contentSize.height - geometry.containerSize.height
     }
 
     /// The offset with rubber-banding at either end removed.
@@ -47,11 +49,8 @@ struct FeedBarCollapseTracker {
     static let expandDistance: CGFloat = 24
     /// Within this distance of the top the bar is always expanded.
     static let topZone: CGFloat = 24
-    /// Content must overflow by at least this much before the bar collapses.
-    ///
-    /// Collapsing shrinks the bar, which shrinks how far the feed can scroll;
-    /// this must exceed that change plus `topZone`, or collapsing at the
-    /// bottom of a short feed could land in the top zone and expand again.
+    /// Content must overflow by at least this much before the bar collapses:
+    /// a feed that barely scrolls has nothing to gain from hiding its filters.
     static let minimumOverflow: CGFloat = 160
 
     private var lastPosition: FeedScrollPosition?

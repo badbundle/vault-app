@@ -51,6 +51,15 @@ public final class VaultDataModel {
         localized(key: "feedViewModel.searching.title.\(items.count)")
     }
 
+    /// Pluralized count of the items matching the search query.
+    ///
+    /// The same count as `itemsCountDescription`, worded as search results,
+    /// so it carries the same guarantee: items that stay hidden behind a
+    /// search passphrase are never counted.
+    public var itemsMatchCountDescription: String {
+        localized(key: "feedViewModel.searching.matches.\(items.count)")
+    }
+
     public var filteringByTagsDescription: String {
         localized(key: "feed.searching.filteringByTags.\(itemsFilteringByTags.count)")
     }
