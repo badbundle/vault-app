@@ -101,7 +101,9 @@ platform :ios do
     # Upload to App Store using the correct Apple ID
     upload_to_app_store(
       username: "badbundlelimited@gmail.com",
-      team_id: "442P244AFS"
+      team_id: "442P244AFS",
+      # Skip the Preview.html confirmation of metadata and screenshots so the lane runs non-interactively.
+      force: true
     )
   end
 
