@@ -26,6 +26,9 @@ public final class BackupKeyChangeViewModel {
     public var newlyEnteredPasswordConfirm = ""
     public internal(set) var permissionState: PermissionState = .undetermined
     public private(set) var newPassword: NewPasswordState = .initial
+    /// Whether the password saved by `saveEnteredPassword()` replaced an existing one, so the
+    /// confirmation can point out that older backups still need the old password.
+    public private(set) var didReplaceExistingPassword = false
     private let encryptionKeyDeriver: VaultKeyDeriver
     private let authenticationService: DeviceAuthenticationService
     private let dataModel: VaultDataModel
@@ -52,11 +55,17 @@ public final class BackupKeyChangeViewModel {
         encryptionKeyDeriver.signature
     }
 
+    /// Whether a backup password is already set, and when.
+    public var currentPasswordStatus: VaultDataModel.BackupPasswordStatus {
+        dataModel.backupPasswordStatus
+    }
+
     public func onAppear() async {
         do {
             try await authenticationService
                 .validateAuthentication(reason: "Authenticate to change the backup password.")
             permissionState = .allowed
+            await dataModel.loadBackupPasswordStatus()
         } catch {
             permissionState = .denied
         }
@@ -87,7 +96,9 @@ public final class BackupKeyChangeViewModel {
             // interrupt it mid-derivation — make it authoritative here,
             // before the derived key replaces the stored password.
             try Task.checkCancellation()
+            let replacesExistingPassword = currentPasswordStatus.isSet
             try await dataModel.store(backupPassword: createdBackupPassword)
+            didReplaceExistingPassword = replacesExistingPassword
             newPassword = .success
             newlyEnteredPassword = ""
             newlyEnteredPasswordConfirm = ""

@@ -34,6 +34,15 @@ public final class BackupPasswordStoreImpl: BackupPasswordStore {
         let encodedPassword = try backupPasswordEncoder().encode(container)
         try await secureStorage.store(data: encodedPassword, forKey: KeychainKey.backupPassword)
     }
+
+    public func fetchPasswordMetadata() async throws -> BackupPasswordMetadata? {
+        guard let attributes = try await secureStorage.attributes(key: KeychainKey.backupPassword) else {
+            return nil
+        }
+        // `set(password:)` replaces the item rather than updating it, so its
+        // modification date is when the current password was set.
+        return BackupPasswordMetadata(lastSetDate: attributes.modificationDate)
+    }
 }
 
 // MARK: - Encoding

@@ -6,8 +6,8 @@ import VaultFeed
 /// backup password.
 ///
 /// The hub itself is reachable without device authentication — it exposes
-/// navigation and backup recency only. Every sub-surface that loads or uses
-/// the backup key authenticates on entry.
+/// navigation, backup recency and whether a backup password is set only.
+/// Every sub-surface that loads or uses the backup key authenticates on entry.
 @MainActor
 struct BackupHomeView: View {
     @Environment(VaultDataModel.self) var dataModel
@@ -24,6 +24,9 @@ struct BackupHomeView: View {
             passwordSection
         }
         .navigationTitle(Text("Backups"))
+        .task {
+            await dataModel.loadBackupPasswordStatus()
+        }
         .sheet(isPresented: $isShowingPasswordSheet) {
             NavigationStack {
                 BackupKeyChangeView(viewModel: .init(
@@ -94,17 +97,35 @@ struct BackupHomeView: View {
 
     // MARK: - Password Section
 
+    @ViewBuilder
     private var passwordSection: some View {
+        let status = dataModel.backupPasswordStatus
         Section {
+            BackupPasswordStatusRow(status: status)
+
             Button {
                 isShowingPasswordSheet = true
             } label: {
-                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
-                    Text("Backup Password")
+                switch status {
+                case .unknown:
+                    // Without a status row above it, the button names the feature itself.
+                    FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
+                        Text("Backup Password")
+                    }
+                case .notSet:
+                    Text("Set Up Backup Password")
+                case .set:
+                    Text("Change Backup Password")
                 }
             }
         } footer: {
-            Text("Set or change the password that protects your backups.")
+            switch status {
+            case .unknown:
+                Text("Set or change the password that protects your backups.")
+            case .notSet, .set:
+                Text("Backups are encrypted with this password. You'll need it to restore them.")
+            }
         }
+        .animation(.default, value: status)
     }
 }

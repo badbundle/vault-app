@@ -12,18 +12,53 @@ import VaultSettings
 @MainActor
 final class BackupKeyChangeViewSnapshotTests {
     @Test
-    func layout() {
-        snapshotScenarios {
+    func layout() async {
+        await snapshotScenarios {
             BackupKeyChangeView(viewModel: makeViewModel())
         }
     }
 
     @Test
-    func layoutAuthenticated() {
-        snapshotScenarios {
+    func layoutAuthenticated() async {
+        await snapshotScenarios {
             let viewModel = makeViewModel()
             viewModel.permissionState = .allowed
             return BackupKeyChangeView(viewModel: viewModel)
+        }
+    }
+
+    /// With a password already set, the screen says so and offers to change it rather than set it.
+    @Test
+    func layoutAuthenticatedPasswordSet() async {
+        await snapshotScenarios {
+            let dataModel = anyVaultDataModel(backupPasswordStore: passwordSetStore())
+            await dataModel.loadBackupPasswordStatus()
+            let viewModel = makeViewModel(dataModel: dataModel)
+            viewModel.permissionState = .allowed
+            viewModel.newlyEnteredPassword = "password"
+            viewModel.newlyEnteredPasswordConfirm = "password"
+            return BackupKeyChangeView(viewModel: viewModel)
+        }
+    }
+
+    @Test
+    func layoutSuccessFirstPassword() async {
+        await snapshotScenarios {
+            let dataModel = anyVaultDataModel()
+            await dataModel.loadBackupPasswordStatus()
+            let viewModel = await makeSucceededViewModel(dataModel: dataModel)
+            return NavigationStack { BackupKeyChangeView(viewModel: viewModel) }
+        }
+    }
+
+    /// Replacing a password also points out that older backups still need the old one.
+    @Test
+    func layoutSuccessChangedPassword() async {
+        await snapshotScenarios {
+            let dataModel = anyVaultDataModel(backupPasswordStore: passwordSetStore())
+            await dataModel.loadBackupPasswordStatus()
+            let viewModel = await makeSucceededViewModel(dataModel: dataModel)
+            return NavigationStack { BackupKeyChangeView(viewModel: viewModel) }
         }
     }
 
@@ -68,12 +103,32 @@ final class BackupKeyChangeViewSnapshotTests {
 // MARK: - Helpers
 
 extension BackupKeyChangeViewSnapshotTests {
-    private func makeViewModel() -> BackupKeyChangeViewModel {
+    private func makeViewModel(dataModel: VaultDataModel = anyVaultDataModel()) -> BackupKeyChangeViewModel {
         BackupKeyChangeViewModel(
-            dataModel: anyVaultDataModel(),
+            dataModel: dataModel,
             authenticationService: DeviceAuthenticationService(policy: DeviceAuthenticationPolicyAlwaysAllow()),
             deriverFactory: VaultKeyDeriverFactoryImpl(),
         )
+    }
+
+    /// A view model that has just saved a new password.
+    private func makeSucceededViewModel(dataModel: VaultDataModel) async -> BackupKeyChangeViewModel {
+        let viewModel = BackupKeyChangeViewModel(
+            dataModel: dataModel,
+            authenticationService: DeviceAuthenticationService(policy: DeviceAuthenticationPolicyAlwaysAllow()),
+            deriverFactory: VaultKeyDeriverFactoryTesting(),
+        )
+        viewModel.permissionState = .allowed
+        viewModel.newlyEnteredPassword = "password"
+        viewModel.newlyEnteredPasswordConfirm = "password"
+        await viewModel.saveEnteredPassword()
+        return viewModel
+    }
+
+    private func passwordSetStore() -> BackupPasswordStoreMock {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { .init(lastSetDate: Date(timeIntervalSince1970: 1_700_000_000)) }
+        return store
     }
 
     private func makeViewModel(deriver: BlockingKeyDeriver) -> BackupKeyChangeViewModel {
@@ -116,13 +171,13 @@ extension BackupKeyChangeViewSnapshotTests {
     private func snapshotScenarios(
         deviceAuthenticationPolicy: some DeviceAuthenticationPolicy = DeviceAuthenticationPolicyAlwaysAllow(),
         testName: String = #function,
-        makeView: () -> some View,
-    ) {
+        makeView: () async -> some View,
+    ) async {
         let colorSchemes: [ColorScheme] = [.light, .dark]
         let dynamicTypeSizes: [DynamicTypeSize] = [.xSmall, .medium, .xxLarge]
         for colorScheme in colorSchemes {
             for dynamicTypeSize in dynamicTypeSizes {
-                let snapshottingView = makeView()
+                let snapshottingView = await makeView()
                     .dynamicTypeSize(dynamicTypeSize)
                     .preferredColorScheme(colorScheme)
                     .framedForTest()

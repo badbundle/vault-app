@@ -46,6 +46,36 @@ struct BackupKeyChangeViewModelTests {
     }
 
     @Test
+    func onAppear_allowedLoadsCurrentPasswordStatus() async {
+        let store = BackupPasswordStoreMock()
+        let metadata = BackupPasswordMetadata(lastSetDate: Date(timeIntervalSince1970: 1_700_000_000))
+        store.fetchPasswordMetadataHandler = { metadata }
+        let dataModel = anyVaultDataModel(backupPasswordStore: store)
+        let sut = makeSUT(dataModel: dataModel)
+
+        await sut.onAppear()
+
+        #expect(sut.currentPasswordStatus == .set(metadata))
+        #expect(store.fetchPasswordCallCount == 0)
+    }
+
+    @Test
+    func onAppear_deniedDoesNotLoadCurrentPasswordStatus() async {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { .init(lastSetDate: nil) }
+        let dataModel = anyVaultDataModel(backupPasswordStore: store)
+        let sut = makeSUT(
+            dataModel: dataModel,
+            authenticationService: DeviceAuthenticationService(policy: .alwaysDeny),
+        )
+
+        await sut.onAppear()
+
+        #expect(sut.currentPasswordStatus == .unknown)
+        #expect(store.fetchPasswordMetadataCallCount == 0)
+    }
+
+    @Test
     func loadExistingPassword_callsLoadFromDataModel() async {
         let store = BackupPasswordStoreMock()
         let password = randomBackupPassword()
@@ -96,6 +126,73 @@ struct BackupKeyChangeViewModelTests {
         await sut.saveEnteredPassword()
 
         #expect(sut.newPassword == .success)
+    }
+
+    @Test
+    func saveEnteredPassword_successUpdatesCurrentPasswordStatus() async {
+        let store = BackupPasswordStoreMock()
+        let metadata = BackupPasswordMetadata(lastSetDate: Date(timeIntervalSince1970: 1_700_000_000))
+        store.fetchPasswordMetadataHandler = { metadata }
+        let sut = makeSUT(dataModel: anyVaultDataModel(backupPasswordStore: store))
+
+        sut.newlyEnteredPassword = "hello"
+        sut.newlyEnteredPasswordConfirm = "hello"
+
+        await sut.saveEnteredPassword()
+
+        #expect(sut.currentPasswordStatus == .set(metadata))
+    }
+
+    @Test
+    func saveEnteredPassword_firstPasswordDoesNotReplaceExisting() async {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { nil }
+        let dataModel = anyVaultDataModel(backupPasswordStore: store)
+        let sut = makeSUT(dataModel: dataModel)
+        await sut.onAppear()
+        store.fetchPasswordMetadataHandler = { .init(lastSetDate: nil) }
+
+        sut.newlyEnteredPassword = "hello"
+        sut.newlyEnteredPasswordConfirm = "hello"
+
+        await sut.saveEnteredPassword()
+
+        #expect(sut.didReplaceExistingPassword == false)
+    }
+
+    @Test
+    func saveEnteredPassword_replacingPasswordReplacesExisting() async {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { .init(lastSetDate: Date(timeIntervalSince1970: 1_700_000_000)) }
+        let dataModel = anyVaultDataModel(backupPasswordStore: store)
+        let sut = makeSUT(dataModel: dataModel)
+        await sut.onAppear()
+
+        sut.newlyEnteredPassword = "hello"
+        sut.newlyEnteredPasswordConfirm = "hello"
+
+        await sut.saveEnteredPassword()
+
+        #expect(sut.didReplaceExistingPassword == true)
+    }
+
+    @Test
+    func saveEnteredPassword_keygenErrorDoesNotReplaceExisting() async {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { .init(lastSetDate: nil) }
+        let deriverFactory = VaultKeyDeriverFactoryMock()
+        deriverFactory.makeVaultBackupKeyDeriverHandler = {
+            VaultKeyDeriver(deriver: KeyDeriverErroring(), signature: .testing)
+        }
+        let sut = makeSUT(dataModel: anyVaultDataModel(backupPasswordStore: store), deriverFactory: deriverFactory)
+        await sut.onAppear()
+
+        sut.newlyEnteredPassword = "hello"
+        sut.newlyEnteredPasswordConfirm = "hello"
+
+        await sut.saveEnteredPassword()
+
+        #expect(sut.didReplaceExistingPassword == false)
     }
 
     @Test

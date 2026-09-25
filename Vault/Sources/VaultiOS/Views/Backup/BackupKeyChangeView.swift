@@ -19,9 +19,14 @@ struct BackupKeyChangeView: View {
             case .undetermined:
                 authenticateSection(isError: false)
             case .allowed:
-                passwordSection
-                setPasswordSection
-                detailsSection
+                if viewModel.newPassword == .success {
+                    successSections
+                } else {
+                    currentPasswordSection
+                    passwordSection
+                    setPasswordSection
+                    detailsSection
+                }
             case .denied:
                 authenticateSection(isError: true)
             }
@@ -30,6 +35,10 @@ struct BackupKeyChangeView: View {
         .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(viewModel.newPassword.isLoading)
         .animation(.snappy, value: viewModel.newlyEnteredPassword.isNotEmpty)
+        .animation(.snappy, value: viewModel.newPassword == .success)
+        .sensoryFeedback(.success, trigger: viewModel.newPassword) { _, newValue in
+            newValue == .success
+        }
         .task {
             await viewModel.onAppear()
         }
@@ -86,6 +95,18 @@ struct BackupKeyChangeView: View {
         }
     }
 
+    // MARK: - Current Password Section
+
+    /// Makes it clear that a password is already set, so setting another replaces it.
+    @ViewBuilder
+    private var currentPasswordSection: some View {
+        if viewModel.currentPasswordStatus.isSet {
+            Section {
+                BackupPasswordStatusRow(status: viewModel.currentPasswordStatus)
+            }
+        }
+    }
+
     // MARK: - Password Section
 
     private var passwordSection: some View {
@@ -106,7 +127,7 @@ struct BackupKeyChangeView: View {
                 .disabled(viewModel.newPassword.isLoading)
             }
         } header: {
-            Text("Backup Password")
+            Text(viewModel.currentPasswordStatus.isSet ? "New Password" : "Backup Password")
         } footer: {
             Text(
                 "Backups are encrypted with this password. You will need it to restore a backup, so keep it somewhere safe.",
@@ -119,7 +140,10 @@ struct BackupKeyChangeView: View {
     private var setPasswordSection: some View {
         if viewModel.newlyEnteredPassword.isNotEmpty {
             Section {
-                ProminentActionButton("Set Backup Password", systemImage: "checkmark.shield.fill") {
+                ProminentActionButton(
+                    viewModel.currentPasswordStatus.isSet ? "Change Backup Password" : "Set Backup Password",
+                    systemImage: "checkmark.shield.fill",
+                ) {
                     keyGenerationTask?.cancel()
                     keyGenerationTask = Task {
                         await viewModel.saveEnteredPassword()
@@ -136,9 +160,6 @@ struct BackupKeyChangeView: View {
     @ViewBuilder
     private var setPasswordStatus: some View {
         switch viewModel.newPassword {
-        case .success:
-            Label("Backup password set", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
         case .keygenError:
             Label("Something went wrong. Your backup password was not changed.", systemImage: "xmark.octagon.fill")
                 .foregroundStyle(.red)
@@ -153,9 +174,56 @@ struct BackupKeyChangeView: View {
         case .passwordConfirmError:
             Label("Passwords do not match", systemImage: "xmark")
                 .foregroundStyle(.red)
-        case .initial:
+        case .initial, .success:
+            // Success replaces the whole form with `successSections`.
             EmptyView()
         }
+    }
+
+    // MARK: - Success Sections
+
+    @ViewBuilder
+    private var successSections: some View {
+        Section {
+            PlaceholderView(
+                title: viewModel.didReplaceExistingPassword ? "Backup Password Changed" : "Backup Password Set",
+                subtitle: "Your backups will be encrypted with this password from now on.",
+            ) {
+                Image(systemName: "checkmark.shield.fill")
+                    .foregroundStyle(.green)
+            }
+            .padding()
+            .containerRelativeFrame(.horizontal)
+            .accessibilityElement(children: .combine)
+        }
+
+        Section {
+            successNote(
+                title: "Keep it somewhere safe",
+                detail: "You'll need it to restore a backup. It can't be recovered if you forget it.",
+                systemImage: "lock.doc.fill",
+            )
+
+            if viewModel.didReplaceExistingPassword {
+                successNote(
+                    title: "Older backups keep their password",
+                    detail: "Backups made before now still need the password that was set when they were made.",
+                    systemImage: "clock.arrow.circlepath",
+                )
+            }
+        }
+    }
+
+    private func successNote(title: String, detail: String, systemImage: String) -> some View {
+        FormRow(
+            image: Image(systemName: systemImage),
+            color: .secondary,
+            style: .standard,
+            alignment: .firstTextBaseline,
+        ) {
+            TextAndSubtitle(title: title, subtitle: detail)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Details Section
