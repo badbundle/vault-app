@@ -13,3 +13,12 @@ Use the simulator configuration specified in `README.md` for all builds and test
 ## Committing
 
 Before every commit, run `make format` and `make lint` from the `Vault/` directory to ensure code is properly formatted and passes linting.
+
+## Validating a Pull Request
+
+There is no hosted CI. `main` only accepts a PR whose latest commit has the **Validate (local)** status check, and only `make validate` posts it (see [Validation](../README.md#validation)).
+
+- Commit first, then run `make validate` from the `Vault/` directory. It validates the committed `HEAD` in a clean worktree, so uncommitted changes aren't covered.
+- Run it again after every new commit on a PR branch: each commit needs its own check.
+- If it fails, fix the problem, commit, and validate the new commit. Never post, edit or fake the status by hand (for example with `gh api .../statuses`), and don't work around a failing test to get a green check.
+- It takes several minutes. Tell the user whether it passed, and if it didn't, which step failed and where its log is.

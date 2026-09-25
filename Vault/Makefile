@@ -20,6 +20,12 @@ lint:
 	swift package plugin --allow-writing-to-package-directory swiftlint --strict --quiet ./Sources
 	swift package --allow-writing-to-package-directory format --lint --sources=./
 
+# Validation: lint, build and test the current commit in a clean worktree, then
+# post the green "Validate (local)" check to GitHub. See ../README.md#validation.
+.PHONY: validate
+validate:
+	../scripts/validate.sh
+
 # Marketing screenshots: capture raw shots of the app on throwaway simulators,
 # then put them in device frames with titles. See Screenshots/README.md.
 .PHONY: screenshots

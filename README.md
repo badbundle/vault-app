@@ -53,3 +53,20 @@ As soon as we are able, we will be dropping the xcodeproj project wrapper and go
 - `Vault.xcworkspace` what you should open
 - `/Vault` Swift Package that defines targets used by the app, build settings, tooling.
 - `/VaultApp` minimal wrapper that packages this into an executable application.
+
+### Validation
+
+There is no hosted CI. Changes are validated on the developer's Mac, and the result is posted to the commit on GitHub as the **Validate (local)** status check. `main` requires that check, so a PR can't be merged until its latest commit has passed.
+
+1. Once per clone, enable the pre-push hook: `git config core.hooksPath .githooks`
+2. Commit your changes, then run `make validate` from `/Vault`.
+
+`make validate` ([`scripts/validate.sh`](./scripts/validate.sh)) checks out the exact commit into a separate worktree, so uncommitted changes and your usual DerivedData can't affect the result. It then runs, with Xcode 27.0:
+
+- `make lint`
+- the Fastlane config check (skipped, and noted on the check, if the Ruby version in `.ruby-version` isn't installed)
+- a build and full run of the `iOSAllTests` test plan on a throwaway iPhone 18 Pro Max / iOS 27.0 simulator, created for the run and deleted afterwards
+
+If the commit is already on GitHub, the result is posted straight away. Otherwise it's stored, and the pre-push hook posts it when you push, so you can validate before or after pushing. Every new commit needs validating again. Logs are kept in `.git/validate/logs/`.
+
+The check is self-attested: it records that the commit passed on the machine that posted it, rather than on independent CI.
