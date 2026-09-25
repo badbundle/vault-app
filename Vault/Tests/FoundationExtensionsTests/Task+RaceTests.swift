@@ -14,8 +14,11 @@ enum TaskRaceTests {
 
         @Test("Cancellation is always checked before returning")
         func noScheduledTasksCancelledThrowsCancellation() async throws {
+            let cancellationWaiter = TaskCancellationWaiter()
             let parent = Task {
-                try await Task.race(firstResolved: [TaskRace<Void>]())
+                // Only race once cancelled, as the task might otherwise run to completion before `cancel()`.
+                await cancellationWaiter.waitForTaskCancellation()
+                return try await Task.race(firstResolved: [TaskRace<Void>]())
             }
             parent.cancel()
 
@@ -143,8 +146,11 @@ enum TaskRaceTests {
 
         @Test("Cancellation is always checked before returning")
         func noScheduledTasksCancelledThrowsCancellation() async throws {
+            let cancellationWaiter = TaskCancellationWaiter()
             let parent = Task {
-                try await Task.race(firstValue: [TaskRace<Void>]())
+                // Only race once cancelled, as the task might otherwise run to completion before `cancel()`.
+                await cancellationWaiter.waitForTaskCancellation()
+                return try await Task.race(firstValue: [TaskRace<Void>]())
             }
             parent.cancel()
 

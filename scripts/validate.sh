@@ -171,6 +171,11 @@ destination="id=$udid"
 step "Lint" make -C Vault lint
 
 fastlane_note=""
+# Shells that haven't run `rbenv init` (non-interactive ones, like an agent's)
+# would otherwise find the system Ruby and skip this check.
+if command -v rbenv >/dev/null; then
+  PATH="$(rbenv root)/shims:$PATH"
+fi
 ruby_version=$(cat "$worktree/.ruby-version")
 if [ "$(cd "$worktree" && ruby -e 'print RUBY_VERSION' 2>/dev/null)" = "$ruby_version" ]; then
   step "Fastlane config" /bin/bash -c \
