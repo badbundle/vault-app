@@ -55,7 +55,7 @@ struct StubSearchPassphraseKeyStore: SearchPassphraseKeyStore {
 }
 
 @MainActor
-func anyVaultInjector() -> VaultInjector {
+func anyVaultInjector(vaultStoreArchives: any VaultStoreArchiving = NoVaultStoreArchives()) -> VaultInjector {
     VaultInjector(
         clock: EpochClockMock(currentTime: 100),
         intervalTimer: IntervalTimerMock(),
@@ -65,6 +65,7 @@ func anyVaultInjector() -> VaultInjector {
         autoBackupService: AutoBackupServiceMock(status: .disabled, configuration: .init()),
         defaults: Defaults(userDefaults: .standard),
         fileManager: .default,
+        vaultStoreArchives: vaultStoreArchives,
     )
 }
 

@@ -92,11 +92,13 @@ These are facts from the code and from the prototypes described in the [appendix
 - **The vault** is a SwiftData SQLite store, `vault-primary.sqlite` with `-wal` and `-shm`, in the App Group
   container (`VaultSharedStorage`). The app, the AutoFill extension and the widget extension all open it. Every
   field is plaintext, except the payloads of items that have their own password (`encryptedItemDetails`).
-- **Killphrase residue.** A killphrased item that has already been checkpointed into `vault-primary.sqlite`
-  stays there in plaintext until the next WAL checkpoint. The delete only goes to the WAL. The app keeps the
-  store open all session, and SQLite only checkpoints automatically at about 1,000 WAL pages, so that window
-  can be long. After a checkpoint the bytes are gone from the live files. This was measured in the `forensics`
-  prototype.
+- **Deletion residue (fixed in VAULT-55).** A delete only goes to the WAL, and the system SQLite's
+  `secure_delete = FAST` leaves whole freed pages (a long note's overflow pages) intact on the freelist. The
+  app keeps the store open all session, and SQLite only checkpoints automatically at about 1,000 WAL pages. Since
+  VAULT-55, the store runs `VACUUM` and `wal_checkpoint(TRUNCATE)` on a second connection straight after a
+  deletion (killphrase, single item, delete all, override import) or a killphrase or search passphrase change,
+  and again at launch if there are freed pages (`PersistedStoreScrubber`). Edits still leave the old version on
+  freed pages until the next launch.
 - **Device backups.** The App Group container is included in iCloud and Finder device backups, so the plaintext
   store is too. Without Advanced Data Protection, iCloud Backup is readable by Apple.
 - **Readable flags.** Non-null `killphraseDigest` and `searchPassphraseDigest` columns show which items have a
@@ -106,9 +108,13 @@ These are facts from the code and from the prototypes described in the [appendix
 - **Widgets.** WidgetKit archives the rendered timeline entries (issuer, account name, current code) in system
   storage. It also keeps the configured `OTPWidgetItemEntity`, which has the issuer and account name.
 - **Pending rehash files.** `vault-primary.pending-killphrase-rehash.json` and the search passphrase equivalent
-  hold plaintext phrases between a V1→V2 or V2→V3 migration and the first unlock after it.
+  hold plaintext phrases between a V1→V2 or V2→V3 migration and the rehash run later in the same launch. The run
+  deletes them once every entry is applied, or straight away if they can't be decoded; a crash mid-drain leaves
+  them for the next launch's run. Deleting all data deletes them too.
 - **Failed-open archives.** When the store can't be opened, `PersistedLocalVaultStoreFactory` moves it into
-  `vault-primary.failed-open-<timestamp>/`. Those are full plaintext copies of the vault.
+  `vault-primary.failed-open-<timestamp>/`. Those are full plaintext copies of the vault. Nothing reads them
+  again, but they may hold the only copy of some items, so they're never deleted automatically. Since VAULT-55
+  the Backups page says a vault was set aside and offers to delete it, and deleting all data deletes them.
 - **Settings.** The last backup event (dates and a payload hash) and the auto-backup configuration are in
   `UserDefaults`. The backup password's derived key and a "backup password is set" record are in the keychain.
   None of these identify items.
@@ -650,7 +656,8 @@ configuration, which the app can't edit. Turning on the password should tell use
   task exists (no `BGTaskScheduler`), so nothing needs the vault while it's locked. The backup format keeps its
   own KDF and container.
 - **Killphrases.** Matching and deletion happen in memory, then the file is replaced. The deleted item is gone
-  from the live file at once, where today it stays in `vault-primary.sqlite` until a checkpoint.
+  from the live file at once, as it is from the SQLite store's files since VAULT-55 scrubs them after the
+  delete.
 - **Search passphrases.** Matched in memory with the same digester.
 - **HMAC keys.** The killphrase and search passphrase keys stay device-wide keychain items. Per-item salts make
   sharing them across vaults harmless.
@@ -662,7 +669,7 @@ configuration, which the app can't edit. Turning on the password should tell use
 
 | Artifact | Today | Password on |
 | --- | --- | --- |
-| Vault store | Everything, plus killphrase residue until checkpoint | The header (format, slot count, slot size bucket, KDF parameters, salt). Nothing per vault. |
+| Vault store | Everything, plus old versions of edited items until the next launch | The header (format, slot count, slot size bucket, KDF parameters, salt). Nothing per vault. |
 | Device backups (iCloud, Finder) | The plaintext store | Ciphertext, open to offline guessing of the password |
 | QuickType identity store | Issuer, account and UUID per visible OTP | Empty |
 | Widget timelines | Issuer, account, codes | Locked placeholder |

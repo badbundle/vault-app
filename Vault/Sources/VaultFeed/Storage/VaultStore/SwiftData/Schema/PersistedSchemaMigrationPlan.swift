@@ -26,8 +26,10 @@ enum PersistedSchemaMigrationPlan: SchemaMigrationPlan {
     ///    the vault for the first time after upgrading.
     ///
     /// The window between Phase 1 and Phase 2 is the only time plaintext
-    /// killphrases live outside the SwiftData store. The pending file is
-    /// securely overwritten and deleted by the rehash service.
+    /// killphrases live outside the SwiftData store. The rehash service
+    /// deletes the pending file once it's done, and the app scrubs the
+    /// dropped column's pages out of the store's files at launch
+    /// (`PersistedLocalVaultStore.scrubContentLeftByEarlierSessions()`).
     static let v1ToV2 = MigrationStage.custom(
         fromVersion: PersistedSchemaV1.self,
         toVersion: PersistedSchemaV2.self,

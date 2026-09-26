@@ -16,6 +16,8 @@ public final class VaultInjector {
     public let autoBackupService: any AutoBackupService
     public let defaults: Defaults
     public let fileManager: FileManager
+    /// Vaults set aside because they couldn't be opened.
+    public let vaultStoreArchives: any VaultStoreArchiving
 
     public init(
         clock: any EpochClock,
@@ -26,6 +28,7 @@ public final class VaultInjector {
         autoBackupService: any AutoBackupService,
         defaults: Defaults,
         fileManager: FileManager,
+        vaultStoreArchives: any VaultStoreArchiving = NoVaultStoreArchives(),
     ) {
         self.clock = clock
         self.intervalTimer = intervalTimer
@@ -35,5 +38,6 @@ public final class VaultInjector {
         self.autoBackupService = autoBackupService
         self.defaults = defaults
         self.fileManager = fileManager
+        self.vaultStoreArchives = vaultStoreArchives
     }
 }
