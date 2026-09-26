@@ -4,7 +4,7 @@ import WidgetKit
 
 /// `accessoryCircular` (lock-screen ring) layout. Too small for the chunked
 /// code in a readable size; we show the seconds remaining inside the ring
-/// (TOTP) or a key glyph (HOTP / unavailable) and let the user open the app
+/// (TOTP), a key glyph (HOTP) or a padlock (unavailable / locked) and let the user open the app
 /// to read the actual code.
 struct OTPWidgetAccessoryCircularView: View {
     let snapshot: OTPWidgetSnapshot
@@ -27,7 +27,7 @@ struct OTPWidgetAccessoryCircularView: View {
             case .hotp:
                 Image(systemName: "key.horizontal.fill")
                     .font(.title3)
-            case .unavailable, .placeholder:
+            case .unavailable, .locked, .placeholder:
                 Image(systemName: "lock.fill")
                     .font(.title3)
                     .foregroundStyle(.secondary)
@@ -39,7 +39,7 @@ struct OTPWidgetAccessoryCircularView: View {
     private var deepLinkURL: URL? {
         switch snapshot {
         case let .hotp(state): WidgetDeepLink.hotpIncrement(itemID: state.itemID)
-        case .totp, .unavailable, .placeholder: nil
+        case .totp, .unavailable, .locked, .placeholder: nil
         }
     }
 }

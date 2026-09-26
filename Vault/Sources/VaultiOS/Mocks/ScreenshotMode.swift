@@ -70,6 +70,16 @@ enum ScreenshotMode {
         return Defaults(userDefaults: userDefaults)
     }
 
+    /// The app lock's settings, likewise wiped on every launch: the lock is off.
+    static func makeAppLockSettingsStore() -> AppLockSettingsStore {
+        let suiteName = "com.badbundle.vault.screenshots.app-lock"
+        guard let userDefaults = UserDefaults(suiteName: suiteName) else {
+            fatalError("Unable to create screenshot app lock defaults suite")
+        }
+        userDefaults.removePersistentDomain(forName: suiteName)
+        return AppLockSettingsStore(userDefaults: userDefaults)
+    }
+
     /// Fills `store` with the demo vault, records a fresh PDF backup of it
     /// and reloads `dataModel` from it.
     ///

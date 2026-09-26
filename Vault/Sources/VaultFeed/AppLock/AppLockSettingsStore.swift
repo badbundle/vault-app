@@ -1,0 +1,34 @@
+import Foundation
+
+/// The app lock's settings, kept in the defaults the app shares with its extensions.
+///
+/// The AutoFill and widget extensions read them too: while the lock is on, neither shows a code until the user has
+/// authenticated. Only the app changes them, through `AppLockService`.
+///
+/// `UserDefaults` is documented thread-safe, and this only reads and writes single values through it. Marked
+/// `@unchecked Sendable` so the widget extension's actor can hold it.
+public struct AppLockSettingsStore: @unchecked Sendable { // swiftlint:disable:this no_unchecked_sendable
+    private let userDefaults: UserDefaults
+
+    public init(userDefaults: UserDefaults) {
+        self.userDefaults = userDefaults
+    }
+
+    /// The App Group's defaults, which the app and every extension read.
+    public static func shared() -> AppLockSettingsStore {
+        guard let userDefaults = UserDefaults(suiteName: VaultSharedStorage.appGroupID) else {
+            fatalError("Unable to access the defaults of App Group '\(VaultSharedStorage.appGroupID)'")
+        }
+        return AppLockSettingsStore(userDefaults: userDefaults)
+    }
+
+    /// Whether the app asks for device authentication before it shows the vault. Off until the user turns it on.
+    public var isEnabled: Bool {
+        get {
+            userDefaults.bool(forKey: VaultIdentifiers.Preferences.AppLock.isEnabled)
+        }
+        nonmutating set {
+            userDefaults.set(newValue, forKey: VaultIdentifiers.Preferences.AppLock.isEnabled)
+        }
+    }
+}

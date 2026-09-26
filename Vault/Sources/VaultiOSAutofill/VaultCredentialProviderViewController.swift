@@ -2,6 +2,7 @@ import AuthenticationServices
 import Combine
 import SwiftUI
 import VaultCore
+import VaultFeed
 import VaultiOS
 
 /// Implementation of the view controller that presents
@@ -10,7 +11,17 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
     private var cancellables = Set<AnyCancellable>()
 
     override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
-        vaultAutofillViewModel = VaultAutofillViewModel(localSettings: VaultRoot.localSettings)
+        vaultAutofillViewModel = VaultAutofillViewModel(
+            localSettings: VaultRoot.localSettings,
+            // A fresh lock for every request, rather than the process-wide
+            // one: the extension's process can outlive a request, but an
+            // unlock shouldn't.
+            appLock: AppLockService(
+                settings: VaultRoot.appLockSettingsStore,
+                authenticationService: VaultRoot.deviceAuthenticationService,
+                purgeSensitiveData: {},
+            ),
+        )
         super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
     }
 
@@ -100,6 +111,7 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
             retrieveItems: { try await VaultRoot.vaultStore.retrieve(query: .init()) },
             copyActionHandler: VaultRoot.vaultItemCopyHandler,
             clock: VaultRoot.clock,
+            isAppLockEnabled: VaultRoot.appLockSettingsStore.isEnabled,
         )
 
         switch await resolver.resolve(recordIdentifier: identity?.recordIdentifier) {

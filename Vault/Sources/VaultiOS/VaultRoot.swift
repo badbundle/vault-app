@@ -239,6 +239,40 @@ public enum VaultRoot {
     @MainActor
     public static let deviceAuthenticationService: DeviceAuthenticationService = .init(policy: .default)
 
+    // MARK: - App Lock
+
+    /// In the App Group's defaults, so the AutoFill and widget extensions follow the lock too.
+    @MainActor
+    public static let appLockSettingsStore: AppLockSettingsStore = {
+        #if DEBUG
+        // Marketing screenshots never show the lock, whatever the simulator has set.
+        if ScreenshotMode.isEnabled {
+            return ScreenshotMode.makeAppLockSettingsStore()
+        }
+        #endif
+        return .shared()
+    }()
+
+    @MainActor
+    public static let appLockService: AppLockService = .init(
+        settings: appLockSettingsStore,
+        authenticationService: deviceAuthenticationService,
+        purgeSensitiveData: purgeSensitiveDataForAppLock,
+        didChangeSettings: reloadWidgetTimelines,
+    )
+
+    /// Clears what a locked app shouldn't be holding: everything backgrounding clears, and the search, which might
+    /// be a search passphrase and the items it revealed.
+    @MainActor
+    private static func purgeSensitiveDataForAppLock() {
+        vaultDataModel.purgeSensitiveData()
+        guard vaultDataModel.itemsSearchQuery.isNotEmpty else { return }
+        vaultDataModel.itemsSearchQuery = ""
+        Task {
+            await vaultDataModel.reloadItems()
+        }
+    }
+
     // MARK: - Auto-Backup
 
     @MainActor

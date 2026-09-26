@@ -431,6 +431,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultAppAutofill/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Vault Autofill";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Vault uses biometrics to locally protect access to your data.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -461,6 +462,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultAppAutofill/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Vault Autofill";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Vault uses biometrics to locally protect access to your data.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
 				LD_RUNPATH_SEARCH_PATHS = (

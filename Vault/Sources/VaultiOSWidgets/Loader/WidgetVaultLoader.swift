@@ -24,8 +24,9 @@ public actor WidgetVaultLoader {
 
     private let makeStore: StoreFactory
     private var store: (any WidgetStore)?
+    private let appLockSettings: AppLockSettingsStore
 
-    public init(store: (any WidgetStore)? = nil) {
+    public init(store: (any WidgetStore)? = nil, appLockSettings: AppLockSettingsStore = .shared()) {
         if let store {
             self.store = store
             makeStore = { store }
@@ -33,11 +34,19 @@ public actor WidgetVaultLoader {
             self.store = nil
             makeStore = Self.makeSharedStore
         }
+        self.appLockSettings = appLockSettings
     }
 
-    public init(makeStore: @escaping StoreFactory) {
+    public init(appLockSettings: AppLockSettingsStore = .shared(), makeStore: @escaping StoreFactory) {
         self.makeStore = makeStore
         store = nil
+        self.appLockSettings = appLockSettings
+    }
+
+    /// Whether the app lock is on. While it is, the widget shows no codes and the loader hands out no items: the
+    /// widget's actions can't copy a code, and its configuration can't list the vault's items.
+    public nonisolated var isAppLocked: Bool {
+        appLockSettings.isEnabled
     }
 
     /// All items that are currently eligible to appear in a widget. Hidden,
@@ -99,7 +108,9 @@ public actor WidgetVaultLoader {
         ).makeVaultStoreOrThrow()
     }
 
+    /// Every read goes through here, so none reaches the vault while the app lock is on.
     private func retrieveItems() async throws -> VaultRetrievalResult<VaultItem> {
+        guard !isAppLocked else { return .empty() }
         let currentStore = try store ?? openStore()
         do {
             return try await currentStore.retrieve(query: .init())

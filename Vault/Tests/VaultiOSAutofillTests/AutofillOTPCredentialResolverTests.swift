@@ -90,6 +90,26 @@ struct AutofillOTPCredentialResolverTests {
 
         #expect(outcome == .failure)
     }
+
+    @Test
+    func resolve_appLockOn_returnsUserInteractionRequiredWithoutReadingTheVault() async {
+        // The app lock's gate: with it on, no code is served until the user
+        // has authenticated in the extension's UI.
+        let item = VaultItem(metadata: anyVaultItemMetadata(), item: .otpCode(makeTOTPCode(period: 30)))
+        var retrieveCount = 0
+        let sut = makeSUT(
+            retrieveItems: {
+                retrieveCount += 1
+                return .init(items: [item])
+            },
+            isAppLockEnabled: true,
+        )
+
+        let outcome = await sut.resolve(recordIdentifier: item.id.rawValue.uuidString)
+
+        #expect(outcome == .userInteractionRequired)
+        #expect(retrieveCount == 0)
+    }
 }
 
 // MARK: - Helpers
@@ -111,11 +131,13 @@ extension AutofillOTPCredentialResolverTests {
         retrieveItems: @escaping () async throws -> VaultRetrievalResult<VaultItem>,
         requiresAuthenticationToCopy: Bool = false,
         clock: EpochClockMock = EpochClockMock(currentTime: 100),
+        isAppLockEnabled: Bool = false,
     ) -> AutofillOTPCredentialResolver {
         AutofillOTPCredentialResolver(
             retrieveItems: retrieveItems,
             copyActionHandler: CopyActionHandlerStub(requiresAuthenticationToCopy: requiresAuthenticationToCopy),
             clock: clock,
+            isAppLockEnabled: isAppLockEnabled,
         )
     }
 

@@ -29,6 +29,7 @@ struct VaultSettingsView: View {
 
     var body: some View {
         Form {
+            AppLockSettingsSection()
             clipboardSection
             dangerSection
         }

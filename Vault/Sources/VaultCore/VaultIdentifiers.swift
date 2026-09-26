@@ -49,6 +49,12 @@ public enum VaultIdentifiers {
         public enum UniversalClipboard {
             public static let allowOTPs = "vault.preferences.universal-clipboard.allow-otps"
         }
+
+        /// Stored in the App Group's defaults rather than the app's own, so the
+        /// AutoFill and widget extensions can read them too.
+        public enum AppLock {
+            public static let isEnabled = "vault.preferences.app-lock.is-enabled"
+        }
     }
 
     public enum CodeScanning {

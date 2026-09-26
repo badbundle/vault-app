@@ -16,7 +16,12 @@ extension DeviceAuthenticationPolicy {
 
     public func authenticate(reason: String) async throws -> Bool {
         if canAuthenticateWithBiometrics {
-            return try await authenticateWithBiometrics(reason: reason)
+            do {
+                return try await authenticateWithBiometrics(reason: reason)
+            } catch let error as LAError where error.code == .userFallback && canAuthenicateWithPasscode {
+                // The biometric prompt's "Enter Password" button: the user wants to use the passcode instead.
+                return try await authenticateWithPasscode(reason: reason)
+            }
         }
 
         if canAuthenicateWithPasscode {

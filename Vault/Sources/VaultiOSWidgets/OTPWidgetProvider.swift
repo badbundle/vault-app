@@ -16,6 +16,9 @@ import WidgetKit
 /// (locked, hidden, killphrased, etc.) render as `.unavailable` — the same
 /// state shown for deleted or missing items, so a viewer cannot distinguish
 /// the two (manifesto C2).
+///
+/// While the app lock is on, every widget renders as `.locked`, whatever it
+/// was set up to show.
 public struct OTPWidgetProvider: AppIntentTimelineProvider {
     public typealias Entry = OTPWidgetEntry
     public typealias Intent = OTPWidgetIntent
@@ -49,6 +52,12 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
     }
 
     func makeTimeline(for configuration: OTPWidgetIntent) async -> Timeline<OTPWidgetEntry> {
+        // Checked before anything else, so no item is read. The app reloads
+        // every timeline when the lock is turned on or off.
+        if loader.isAppLocked {
+            return lockedTimeline()
+        }
+
         guard let entityID = configuration.item?.id else {
             return unavailableTimeline()
         }
@@ -150,6 +159,16 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
 
     private func unavailableTimeline() -> Timeline<OTPWidgetEntry> {
         let entry = OTPWidgetEntry(date: Date(), snapshot: .unavailable)
+        return Timeline(
+            entries: [entry],
+            policy: .after(Date().addingTimeInterval(Self.unavailableRefreshInterval)),
+        )
+    }
+
+    // MARK: - Locked
+
+    private func lockedTimeline() -> Timeline<OTPWidgetEntry> {
+        let entry = OTPWidgetEntry(date: Date(), snapshot: .locked)
         return Timeline(
             entries: [entry],
             policy: .after(Date().addingTimeInterval(Self.unavailableRefreshInterval)),

@@ -38,7 +38,7 @@ struct OTPWidgetAccessoryRectangularView: View {
                 currentValueLabel: { EmptyView() },
             )
             .progressViewStyle(.linear)
-        case .hotp, .unavailable, .placeholder:
+        case .hotp, .unavailable, .locked, .placeholder:
             Color(.quaternarySystemFill).clipShape(Capsule())
         }
     }
@@ -49,7 +49,7 @@ struct OTPWidgetAccessoryRectangularView: View {
         // The stored counter may already be stale, so the widget shows
         // masked digits until the user advances it in the app.
         case let .hotp(state): .locked(code: String(repeating: "0", count: state.digits))
-        case .unavailable, .placeholder: .notReady
+        case .unavailable, .locked, .placeholder: .notReady
         }
     }
 
@@ -60,6 +60,7 @@ struct OTPWidgetAccessoryRectangularView: View {
         case let .hotp(state):
             state.issuer.isEmpty ? state.accountName : state.issuer
         case .unavailable: "Unavailable"
+        case .locked: "Vault Locked"
         case .placeholder: "—"
         }
     }
@@ -67,7 +68,7 @@ struct OTPWidgetAccessoryRectangularView: View {
     private var deepLinkURL: URL? {
         switch snapshot {
         case let .hotp(state): WidgetDeepLink.hotpIncrement(itemID: state.itemID)
-        case .totp, .unavailable, .placeholder: nil
+        case .totp, .unavailable, .locked, .placeholder: nil
         }
     }
 }
