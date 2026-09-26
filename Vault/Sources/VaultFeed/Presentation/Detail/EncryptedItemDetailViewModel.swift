@@ -38,8 +38,21 @@ public final class EncryptedItemDetailViewModel {
         self.keyDeriverFactory = keyDeriverFactory
     }
 
+    /// Once the item is decrypted it's on its way to being shown, so there's nothing more to decrypt.
     public var canStartDecryption: Bool {
-        state != .decrypting && enteredEncryptionPassword.isNotBlank
+        switch state {
+        case .base, .decryptionError: enteredEncryptionPassword.isNotBlank
+        case .decrypting, .decrypted: false
+        }
+    }
+
+    /// Whether the password has decrypted the item, which is now being opened.
+    public var isDecrypted: Bool {
+        if case .decrypted = state {
+            true
+        } else {
+            false
+        }
     }
 
     public var isLoading: Bool {

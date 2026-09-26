@@ -24,6 +24,11 @@ struct VaultLockGlyphViewSnapshotTests {
     }
 
     @Test
+    func doorDecrypted_light() throws {
+        try assertSnapshot(of: render(makeSUT(doorOpening: VaultLockChoreography.decryptedDoor)), as: .image)
+    }
+
+    @Test
     func closed_dark() throws {
         try assertSnapshot(of: render(makeSUT(appearance: .dark, background: .black)), as: .image)
     }
