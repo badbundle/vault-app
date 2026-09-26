@@ -114,7 +114,11 @@ public enum VaultUnlockResult: Equatable, Sendable {
     /// A vault opened, and the store session now reads and writes it.
     case unlocked
     /// No vault opened with the password.
-    case wrongPassword
+    ///
+    /// - reachesEraseThreshold: Whether this was `AppLockPasswordAttemptCounter.eraseThreshold` or more wrong
+    ///   attempts in a row. If the user has turned on erasing after too many (VAULT-34), that's when to erase with
+    ///   `VaultEraser.erase()`. Never show it: the lock screen shows only how long to wait.
+    case wrongPassword(reachesEraseThreshold: Bool)
     /// The user has to wait this long after their last wrong attempts before trying again. Nothing was tried.
     case mustWait(Duration)
 }
@@ -147,9 +151,12 @@ extension VaultUnlockService {
 
         let deadline = try await min(deadlineStore.unlockDeadline(), Self.maximumDeadline)
         guard let contents = try await file.open() else { throw VaultUnlockError.noEncryptedVault }
-        // The erase after too many wrong attempts (VAULT-52) will use `reachesEraseThreshold`.
-        if case let .delayed(remaining) = try await attemptCounter.countAttempt() {
+        let reachesEraseThreshold: Bool
+        switch try await attemptCounter.countAttempt() {
+        case let .delayed(remaining):
             return .mustWait(remaining)
+        case let .counted(reaches):
+            reachesEraseThreshold = reaches
         }
         let start = clock.now
         let attempt = await Task.detached(priority: .userInitiated) { [work] in
@@ -170,7 +177,7 @@ extension VaultUnlockService {
 
         switch attempt.outcome {
         case .success(nil):
-            return .wrongPassword
+            return .wrongPassword(reachesEraseThreshold: reachesEraseThreshold)
         case let .success(opened?):
             try await attemptCounter.reset()
             let store = EncryptedVaultStore(file: file, slot: opened.slot, state: opened.state)

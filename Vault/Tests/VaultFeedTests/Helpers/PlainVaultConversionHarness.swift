@@ -134,6 +134,11 @@ struct PlainVaultConversionHarness {
         case .password:
             let vault = try #require(try await openEncryptedVault())
             return (.password, vault.state)
+        case .erasing:
+            throw UnexpectedErase()
         }
     }
+
+    /// A conversion never erases, so recovery never has one to finish.
+    struct UnexpectedErase: Error {}
 }

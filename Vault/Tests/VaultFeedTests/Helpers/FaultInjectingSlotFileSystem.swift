@@ -105,8 +105,17 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         return try base.contentsOfDirectory(at: url)
     }
 
+    /// Adds an entry to the log that isn't a step, for something outside the file system that a test wants to see
+    /// in order with the steps, such as a hook.
+    func record(_ entry: String) {
+        state.modify { $0.log.append(entry) }
+    }
+
     /// Logs the step, then throws if it's the one to go wrong.
-    private func step(_ name: String) throws {
+    ///
+    /// Other test doubles call it too, so what they do counts as a step that can fail or crash, in order with the
+    /// file system's own.
+    func step(_ name: String) throws {
         let (number, fault) = state.modify { state in
             state.log.append(name)
             state.stepsSinceInjecting += 1
