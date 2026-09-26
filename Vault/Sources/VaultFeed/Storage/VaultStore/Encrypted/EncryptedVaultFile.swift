@@ -30,15 +30,26 @@ struct EncryptedVaultFile: Sendable {
     /// A save holds the lock for tens of milliseconds, so waiting this long means something is wrong, and a store
     /// that waited forever would never finish its change or let the vault lock.
     let lockTimeout: Duration
+    /// When the file's contents can be read. While the App Lock Password is on, only while the device is unlocked:
+    /// only the app and the AutoFill sheet read it, and both run then. While it's off (the `deviceKey` mode), once
+    /// the device has been unlocked after starting up, as the plain store is, so the widgets can read it (VAULT-50).
+    var protection: SlotFileProtection
 
     init(
         directory: URL,
         fileSystem: any SlotFileSystem = LiveSlotFileSystem(),
         lockTimeout: Duration = .seconds(10),
+        protection: SlotFileProtection = .complete,
     ) {
         self.directory = directory
         self.fileSystem = fileSystem
         self.lockTimeout = lockTimeout
+        self.protection = protection
+    }
+
+    /// The file protection for a storage mode.
+    static func protection(for mode: VaultStorageState.Mode) -> SlotFileProtection {
+        mode == .deviceKey ? .completeUntilFirstUserAuthentication : .complete
     }
 
     var url: URL {
@@ -135,7 +146,7 @@ extension EncryptedVaultFile {
             let fileSystem = file.fileSystem
             let temporaryURL = file.directory.appending(path: temporaryFilePrefix + UUID().uuidString)
             do {
-                try fileSystem.createFile(at: temporaryURL, contents: newFile.bytes)
+                try fileSystem.createFile(at: temporaryURL, contents: newFile.bytes, protection: file.protection)
                 try fileSystem.synchronizeFile(at: temporaryURL)
                 guard let written = try fileSystem.contents(of: temporaryURL), written == newFile.bytes else {
                     throw EncryptedVaultStoreError.verificationFailed

@@ -38,6 +38,15 @@ public final actor VaultStoreSession {
         self.target = target
     }
 
+    /// The encrypted vault the session reads and writes, if that's what it's switched to.
+    var unlockedStore: EncryptedVaultStore? {
+        if case let .unlocked(store) = target {
+            store
+        } else {
+            nil
+        }
+    }
+
     public var isLocked: Bool {
         if case .locked = target {
             true
@@ -66,8 +75,17 @@ public final actor VaultStoreSession {
     }
 
     /// Switch to `locked`, once every call already underway has finished.
-    public func lock() async {
-        await switchTo(.locked)
+    ///
+    /// - Returns: The `lockEpoch` this lock started. Something that locks the session to work on the vault, then
+    ///   switches it back with `switchTo(_:unlessLockedSince:)`, passes this: reading `lockEpoch` after the lock could
+    ///   miss a lock that came while this one waited.
+    @discardableResult
+    public func lock() async -> Int {
+        target = .locked
+        lockEpoch += 1
+        let epoch = lockEpoch
+        await waitForOperationsInFlight()
+        return epoch
     }
 
     private func waitForOperationsInFlight() async {

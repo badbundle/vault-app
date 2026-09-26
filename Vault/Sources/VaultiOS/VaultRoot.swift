@@ -413,7 +413,7 @@ public enum VaultRoot {
         }
         // Finish a conversion to an encrypted vault that the app was stopped in the middle of: QuickType mustn't
         // keep the vault's issuers and accounts, nor the widgets its codes.
-        if storageMode == .password {
+        if storageMode != .plain {
             let otpAutofillStore = vaultOtpAutofillStore
             let directory = vaultStorageDirectory
             Task {

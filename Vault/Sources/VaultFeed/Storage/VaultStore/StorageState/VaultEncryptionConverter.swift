@@ -32,6 +32,8 @@ import Foundation
 ///    the app stops first. Then it clears the journal, and switches the store session to the vault, unless the app
 ///    has locked meanwhile.
 ///
+/// It asks for background time for all of it (`VaultBackgroundTime`), because it holds `vault-slots.lock`.
+///
 /// A failure before the commit undoes the conversion, once the journal on disk shows it didn't commit, and goes back
 /// to the plain store. Nothing deletes the plain store before the encrypted vault is committed. See "Migration: plain
 /// to encrypted" in `docs/on-device-encryption.md`.
@@ -71,6 +73,7 @@ public actor VaultEncryptionConverter {
     private let archives: any VaultStoreArchiving
     private let attemptCounter: AppLockPasswordAttemptCounter
     private let hooks: Hooks
+    private let backgroundTime: VaultBackgroundTime
     private let calibrate: @Sendable () throws -> AppLockKeyDerivationCalibration
 
     /// - Parameters:
@@ -79,6 +82,7 @@ public actor VaultEncryptionConverter {
     ///   - plainStoreOpenedNormally: Whether the plain store opened without being set aside, rather than as an
     ///     empty fallback.
     ///   - archives: The archives of the plain store, set aside when it failed to open.
+    ///   - backgroundTime: Keeps the app running until the conversion has finished: `.application` in the app.
     public init(
         directory: URL,
         plainStore: PersistedLocalVaultStore,
@@ -87,6 +91,7 @@ public actor VaultEncryptionConverter {
         archives: any VaultStoreArchiving,
         attemptCounter: AppLockPasswordAttemptCounter,
         hooks: Hooks,
+        backgroundTime: VaultBackgroundTime,
     ) {
         self.init(
             directory: directory,
@@ -97,6 +102,7 @@ public actor VaultEncryptionConverter {
             archives: archives,
             attemptCounter: attemptCounter,
             hooks: hooks,
+            backgroundTime: backgroundTime,
             calibrate: { try AppLockKeyDerivationCalibrator().calibrate() },
         )
     }
@@ -110,6 +116,7 @@ public actor VaultEncryptionConverter {
         archives: any VaultStoreArchiving,
         attemptCounter: AppLockPasswordAttemptCounter,
         hooks: Hooks,
+        backgroundTime: VaultBackgroundTime = .none,
         calibrate: @escaping @Sendable () throws -> AppLockKeyDerivationCalibration,
     ) {
         self.directory = directory
@@ -120,6 +127,7 @@ public actor VaultEncryptionConverter {
         self.archives = archives
         self.attemptCounter = attemptCounter
         self.hooks = hooks
+        self.backgroundTime = backgroundTime
         self.calibrate = calibrate
     }
 }
@@ -159,7 +167,16 @@ extension VaultEncryptionConverter {
         guard !isConverting, let plainStore else { throw VaultEncryptionError.alreadyEncrypted }
         isConverting = true
         defer { isConverting = false }
+        try await backgroundTime.whileRunning {
+            try await encrypt(plainStore, password: password, deletingArchives: deletingArchives)
+        }
+    }
 
+    private func encrypt(
+        _ plainStore: PersistedLocalVaultStore,
+        password: String,
+        deletingArchives: Bool,
+    ) async throws {
         let stateFile = VaultStorageStateFile(directory: directory, fileSystem: fileSystem)
         guard try stateFile.read() == .plain else { throw VaultEncryptionError.alreadyEncrypted }
         guard plainStoreOpenedNormally else { throw VaultEncryptionError.plainStoreDidNotOpen }
@@ -180,8 +197,7 @@ extension VaultEncryptionConverter {
         let lockEpoch: Int
         do {
             try stateFile.write(VaultStorageState(mode: .plain, transition: .encrypting))
-            await session.lock()
-            lockEpoch = await session.lockEpoch
+            lockEpoch = await session.lock()
             converted = try await convert(plainStore, password: password)
             guard try held.locked.read() == nil else { throw VaultEncryptionError.alreadyEncrypted }
             try held.locked.write(converted.file) { written in
@@ -212,11 +228,8 @@ extension VaultEncryptionConverter {
         do {
             try VaultStorageRecovery(directory: directory, fileSystem: fileSystem)
                 .deletePlainStore(archives: archiveNames)
-            try stateFile.write(VaultStorageState(
-                mode: .password,
-                transition: .clearingSystemSurfaces,
-                unlockDeadline: converted.unlockDeadline,
-            ))
+            // Updated rather than written whole from here on: an unlock attempt can raise the deadline meanwhile.
+            try await stateFile.update { $0.transition = .clearingSystemSurfaces }
             deletedPlainStore = true
         } catch {
             // The journal still says to delete the plain store, so the next launch finishes it, then clears the
@@ -226,7 +239,11 @@ extension VaultEncryptionConverter {
         await hooks.reloadWidgets()
         if deletedPlainStore {
             // If this fails, the next launch clears the surfaces again, which does no harm.
-            try? stateFile.write(VaultStorageState(mode: .password, unlockDeadline: converted.unlockDeadline))
+            _ = try? await stateFile.update { state in
+                if state.transition == .clearingSystemSurfaces {
+                    state.transition = nil
+                }
+            }
         }
         // If the app locked while converting, it stays locked: the vault opens with the password.
         let store = EncryptedVaultStore(file: file, slot: converted.slot, state: converted.state)

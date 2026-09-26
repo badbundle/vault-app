@@ -146,6 +146,24 @@ extension VaultSlotFileTests {
             }
         }
     }
+
+    @Test
+    func isPossibleFileSize_onlyForAHeaderAndSixteenSlotsOfAnAllowedSize() throws {
+        let header = VaultSlotFile.Header.length
+        let possible = [1 << 20, 1 << 21, 1 << 22].map { header + 16 * $0 }
+        let impossible = [
+            0, header, header + 16 * (1 << 19), header + 16 * (1 << 23), header + 16 * (3 << 20),
+            header + 16 * (1 << 20) + 1, header + 16 * (1 << 20) - 16, 16 * (1 << 20),
+        ]
+
+        #expect(try VaultSlotFile.isPossibleFileSize(makeFile().bytes.count))
+        for size in possible {
+            #expect(VaultSlotFile.isPossibleFileSize(size), "\(size)")
+        }
+        for size in impossible {
+            #expect(!VaultSlotFile.isPossibleFileSize(size), "\(size)")
+        }
+    }
 }
 
 // MARK: - Password and device-key wraps
@@ -643,7 +661,7 @@ extension VaultSlotFileTests {
             try file.seal(payload("stale"), in: created)
         }
         #expect(throws: VaultSlotFileError.slotChanged) {
-            try file.rewrap(created, with: randomKey(), wrappedAt: date)
+            try file.rekey(created, to: randomKey(), payload: payload("stale"), wrappedAt: date)
         }
         #expect(file.bytes == before)
     }
@@ -668,7 +686,7 @@ extension VaultSlotFileTests {
         let current = try VaultSlotFile(bytes: file.bytes).reopen(created)
         #expect(current.generation == 2)
 
-        try file.rewrap(current, with: randomKey(), wrappedAt: date)
+        try file.rekey(current, to: randomKey(), payload: payload("second"), wrappedAt: date)
         #expect(throws: VaultSlotFileError.slotDidNotOpen) {
             try file.reopen(created)
         }
@@ -780,11 +798,11 @@ extension VaultSlotFileTests {
     }
 }
 
-// MARK: - Rewrapping
+// MARK: - Rekeying
 
 extension VaultSlotFileTests {
     @Test
-    func rewrap_movesTheSlotToTheNewKeyWithoutTouchingTheBody() throws {
+    func rekey_movesTheSlotToTheNewKeyWithANewDataKeyAndBody() throws {
         var file = try makeFile()
         let passwordKey = randomKey()
         let deviceKey = VaultSlotRootKey.device(SymmetricKey(size: .bits256))
@@ -792,29 +810,67 @@ extension VaultSlotFileTests {
         let before = file.bytes
         let later = Date(timeIntervalSince1970: 1_800_000_000.25)
 
-        let rewrapped = try file.rewrap(created, with: deviceKey, wrappedAt: later)
+        let rekeyed = try file.rekey(created, to: deviceKey, payload: payload("vault", version: 2), wrappedAt: later)
 
         let slot = file.slotRange(14)
-        #expect(file
-            .bytes[slot.lowerBound ..< slot.lowerBound + 32] == before[slot.lowerBound ..< slot.lowerBound + 32])
-        #expect(file
-            .bytes[slot.lowerBound + 32 ..< slot.lowerBound + 116] !=
-            before[slot.lowerBound + 32 ..< slot.lowerBound + 116])
-        #expect(file
-            .bytes[slot.lowerBound + 116 ..< slot.upperBound] == before[slot.lowerBound + 116 ..< slot.upperBound])
+        let nonce = slot.lowerBound ..< slot.lowerBound + 32
+        let keyBox = slot.lowerBound + 32 ..< slot.lowerBound + 116
+        let body = slot.lowerBound + 116 ..< slot.lowerBound + 116 + 64
+        #expect(file.bytes[nonce] == before[nonce])
+        #expect(file.bytes[keyBox] != before[keyBox])
+        #expect(file.bytes[body] != before[body])
+        #expect(bytes(of: rekeyed.dataKey) != bytes(of: created.dataKey))
         let read = try VaultSlotFile(bytes: file.bytes)
         #expect(throws: VaultSlotFileError.slotDidNotOpen) {
             try read.openSlot(14, with: passwordKey)
         }
         let opened = try read.openSlot(14, with: deviceKey)
-        #expect(rewrapped.generation == 2)
+        #expect(rekeyed.generation == 2)
         #expect(opened.generation == 2)
         #expect(opened.wrappedAt == later)
-        #expect(try read.openPayload(of: opened) == payload("vault"))
+        #expect(try read.openPayload(of: opened) == payload("vault", version: 2))
+    }
+
+    /// With the old data key, from an older copy of the file, the new body doesn't open; and the new key box, paired
+    /// with the old body, doesn't either.
+    @Test
+    func rekey_leavesNoKeyThatOpensBothTheOldAndNewBodies() throws {
+        var file = try makeFile()
+        let created = try file.createVault(inSlot: 5, rootKey: randomKey(), payload: payload("old"), wrappedAt: date)
+        let oldBytes = file.bytes
+        let newKey = randomKey()
+
+        let rekeyed = try file.rekey(created, to: newKey, payload: payload("new"), wrappedAt: date)
+
+        #expect(throws: VaultSlotFileError.bodyDidNotOpen) {
+            try file.openPayload(of: created)
+        }
+        var spliced = file.bytes
+        let body = file.slotRange(5).lowerBound + 116 ..< file.slotRange(5).upperBound
+        spliced.replaceSubrange(body, with: oldBytes[body])
+        let splicedFile = try VaultSlotFile(bytes: spliced)
+        #expect(throws: VaultSlotFileError.bodyDidNotOpen) {
+            try splicedFile.openPayload(of: splicedFile.openSlot(5, with: newKey))
+        }
+        #expect(try file.openPayload(of: rekeyed) == payload("new"))
     }
 
     @Test
-    func rewrap_changesThePassword() throws {
+    func rekey_leavesTheHeaderAndEveryOtherSlotAsTheyWere() throws {
+        var file = try makeFile()
+        let created = try file.createVault(inSlot: 7, rootKey: randomKey(), payload: payload("vault"), wrappedAt: date)
+        let before = file.bytes
+
+        try file.rekey(created, to: randomKey(), payload: payload("vault"), wrappedAt: date)
+
+        #expect(file.bytes[0 ..< 128] == before[0 ..< 128])
+        for index in VaultSlotFile.slotIndices where index != 7 {
+            #expect(file.bytes[file.slotRange(index)] == before[file.slotRange(index)], "slot \(index)")
+        }
+    }
+
+    @Test
+    func rekey_changesThePassword() throws {
         var file = try makeFile()
         let oldPassword = "old password"
         let newPassword = "new password"
@@ -825,7 +881,12 @@ extension VaultSlotFileTests {
             wrappedAt: date,
         )
 
-        try file.rewrap(created, with: file.header.passwordKey(for: newPassword), wrappedAt: date)
+        try file.rekey(
+            created,
+            to: file.header.passwordKey(for: newPassword),
+            payload: payload("vault"),
+            wrappedAt: date,
+        )
 
         let read = try VaultSlotFile(bytes: file.bytes)
         let oldKey = try read.header.passwordKey(for: oldPassword)

@@ -271,22 +271,31 @@ secret: the lock screen already shows whether a password is set.
   the state on every call, not just at launch (`GuardedPlainVaultStore`). (What they show is VAULT-49's.)
 
 `plain` exists so that users who never opt in carry no new risk. The first time the password is set, there's a
-one-time, verified conversion. After that, turning the password on and off only rewraps keys.
+one-time, verified conversion. After that, turning the password on and off only rekeys the open vault's slot.
 
 ### Key hierarchy
 
 - `K_pw` = Argon2id(password, `salt`, params from the header): 32 bytes, derived once per unlock attempt.
 - `W_i` = HKDF-SHA256(ikm `K_pw`, salt `slotNonce_i`, info `"vault.slot.wrap.password.v1"`) for each slot `i`.
   In `encrypted(deviceKey)` mode it's HKDF-SHA256(ikm `D`, salt `slotNonce_i`,
-  info `"vault.slot.wrap.device.v1"`), where `D` is a 256-bit keychain item. It's migratable, so a device backup
-  restores it with the file. Its accessibility class is set in sub-issue 11 to whatever widgets need to keep
-  working as they do today.
+  info `"vault.slot.wrap.device.v1"`), where `D` is a 256-bit keychain item (`VaultDeviceKeychainStore`):
+  - **Readable after the first unlock** (`kSecAttrAccessibleAfterFirstUnlock`), like the plain store's files, so
+    the widgets can refresh while the device is locked, as they do today (VAULT-50). A stricter class would break
+    that, and a looser one adds nothing they need.
+  - **Migratable**, not `ThisDeviceOnly`, so a device backup restores it with the file. It never syncs to iCloud
+    Keychain.
+  - **In the App Group's access group**, like the attempt counter, for the extensions (VAULT-50).
+  - **New every time the password is turned off**, and deleted when it's turned back on, so it only ever opens
+    copies of the file written while the password was off.
 - `K_i`, the data key, is 256 random bits per vault. It's sealed under `W_i` together with the body length, a
   generation counter and the time it was wrapped.
 - The body is sealed under `K_i` with AES-256-GCM (CryptoKit) and a fresh nonce on every save.
 
-**Changing the password** derives the new `K_pw`, reseals `K_i` under the new `W_i` and rewrites the file. The
-body is untouched. Every save re-encrypts the body anyway, because the whole vault is a few hundred KiB.
+**Changing the password**, turning it off and turning it back on all **rekey** the open vault's slot: a new random
+`K_i`, the body sealed again under it, and the key box sealed under the new `W_i`, in one verified rename. The
+old `K_i` is never written again. So the old password, with a copy of the file from before (a backup, say), reads
+nothing written since, and neither box of an old copy can be spliced into the new file to open it (MANIFESTO C6).
+The whole vault is a few hundred KiB, so resealing the body costs no more than a save.
 
 The salt and KDF parameters are **shared by all slots** and fixed for the life of the file. That lets one
 derivation test every slot. It also means the parameters can't be raised later for vaults the app can't open
@@ -401,8 +410,9 @@ changes it for slots the app can't open, and `i` is 2 bytes. It's `VaultSlotFile
 - **Generations and wrap times.** Every write to a slot increments its generation: creating it, saving and
   rewrapping. A write is refused if the slot's current key box doesn't open at the generation the writer loaded.
   The wrapped-at time is set when a vault is created or rewrapped, and saves keep it.
-- **Rewrapping** (password change, or switching between the password and the device key) reseals the key box
-  only. The slot nonce and body stay as they are.
+- **Rekeying** (password change, or switching between the password and the device key) gives the slot a new
+  `K_i`, and seals both its boxes again. Only the slot nonce stays. The save that replaces the file checks the old
+  key box no longer opens.
 - **Unused slots** are random bytes. AES-GCM output is indistinguishable from random, so an empty slot, a real
   vault and a duress vault look the same.
 - **The header is authenticated** as AAD, so tampering with the KDF parameters or the salt makes every slot fail
@@ -420,8 +430,10 @@ changes it for slots the app can't open, and `i` is 2 bytes. It's `VaultSlotFile
 - **Total size** is 16 MiB at the minimum (16 slots of 1 MiB). Rewriting it takes 9 ms on the M5 Max. After a
   growth to 2 MiB slots it's 32 MiB.
 - **File protection** is `.complete` in password mode: only the foreground app and the AutoFill sheet read it,
-  and both run while the device is unlocked. In `encrypted(deviceKey)` mode, use the same class as today's
-  store, so widgets behave as they do now ([sub-issue 11](#sub-issues)).
+  and both run while the device is unlocked. In `encrypted(deviceKey)` mode it's the same class as today's store,
+  `.completeUntilFirstUserAuthentication`, so widgets behave as they do now
+  ([sub-issue 11](#sub-issues)). Each rekey sets the class for the mode it moves to
+  (`EncryptedVaultFile.protection(for:)`), and saves keep it.
 - **Device backups** keep including the file. It's ciphertext, and it's portable: the password plus the file
   are enough to restore on a new iPhone.
 
@@ -504,6 +516,7 @@ error is thrown. `deleteItems(matchingKillphrase:using:)` returns `false` instea
 | A save, after the rename | New file, already verified | None needed |
 | Disk full, or verification fails | Old file intact | Error shown; nothing changes in memory |
 | A password change | Old or new file, never a mix | Either the old or the new password works |
+| Turning the password off or on | Old or new file; the journal says `turningOff` or `turningOn` | The device key is tried on every slot. See [Turning the password off](#turning-the-password-off-and-why-it-doesnt-convert-back) |
 | Slot growth | Old or new file; one rename covers every slot | None needed |
 | Enabling the password | See [Migration](#migration-plain-to-encrypted) | Journal |
 | A torn write or storage fault (not expected on APFS) | A slot fails to authenticate | The file is **never** reset automatically. The failure screen offers restoring from a backup, or erasing. |
@@ -581,21 +594,58 @@ different order:
 - **The session** switches to the vault only if it hasn't locked since the conversion locked it: if the app went to
   the background meanwhile, it stays locked, and the vault opens with the password.
 - **Recovery never deletes a possible only copy.** It deletes the SQLite store only if the encrypted file is there
-  and reads as one, and the encrypted file only if the SQLite store is there. Otherwise the app shows its failure
-  screen.
+  and has the size of one, and the encrypted file only if the SQLite store is there. Otherwise the app shows its
+  failure screen. It checks the size rather than reading the file, because the file can only be read while the
+  device is unlocked, and the app can launch in the background while it's locked. The file was verified before
+  the commit, and only verified writes replace it.
+- **Background time.** The conversion holds `vault-slots.lock`, and iOS terminates an app suspended while it holds
+  a file lock in the App Group's container (`0xdead10cc`). So it asks for background time for all of it
+  (`VaultBackgroundTime`, `.application` in the app). If that runs out anyway, recovery treats it as a crash.
+- **Updates, not overwrites.** After the commit, each state write updates the state as it is then
+  (`VaultStorageStateFile.update(_:)`), so an unlock attempt that raises the deadline meanwhile isn't undone.
 
 **No step deletes the source before a verified copy is committed.**
 
 ### Turning the password off, and why it doesn't convert back
 
-Turning the password off requires the current password (VAULT-22). It then:
+`VaultPasswordChangeService` (VAULT-48) changes the password, turns it off, and turns it back on.
 
-1. Journals `turningOff`.
-2. Reseals the open vault's key under a device-key wrap and replaces the file.
-3. Sets the mode to `encrypted(deviceKey)`.
+**Checking the current password** is an unlock attempt (`VaultUnlockService.checkPassword(_:opensSlot:)`):
+counted before deriving, the same derivation and sixteen trials, held to the deadline, and the count reset only if
+it's right. It opens no body, whatever the password. Right means it opens **the open vault's** slot, so a password
+that opens another vault is as wrong as any other, and the check never shows another vault is there.
 
-Turning it back on reverses this with the new password and the same salt. At launch, `turningOff` is resolved
-by trying the device key on every slot: if a slot opens, the rewrap happened; if not, the password is still on.
+**Changing the password** checks the current one, refuses a new one equal to it once both are in Unicode's
+composed form ("must differ", identical in every vault), derives the new `K_pw` with the file's salt, and rekeys
+the slot. One rename makes the change, so there's nothing to journal: either password works afterwards, never
+neither. A new password that happens to open another slot is accepted silently (see
+[Same passwords](#same-passwords)).
+
+**Turning the password off** checks the current one. It then:
+
+1. Makes a new device key `D`, replacing any there was.
+2. Journals `turningOff`.
+3. Rekeys the open vault's slot to `D`, and gives the file the `deviceKey` mode's protection.
+4. Sets the mode to `encrypted(deviceKey)` and clears the journal.
+
+**Turning it back on**, from `encrypted(deviceKey)`, needs no current password: device authentication opened the
+vault. It resets the attempt counter, derives the new password's key with the file's salt, journals `turningOn`,
+rekeys the slot, sets the mode to `encrypted(password)`, and deletes `D`, which opens nothing any more.
+
+**In the `deviceKey` mode** the app unlocks with device authentication only (`unlockWithDeviceKey()`): no
+password, no attempt to count, no deadline. It opens the slot `D` opens.
+
+- **Recovery.** At launch, `turningOff` and `turningOn` are resolved by trying `D` on every slot: if one opens,
+  the rekey happened (off) or didn't (on), and the mode is `encrypted(deviceKey)`; if none does, it's
+  `encrypted(password)`, and a `D` left from turning it on is deleted. The vault is intact either way. If a rekey
+  fails before its rename, the journal is cleared straight away.
+- **Only the open vault's slot changes.** The header and every other slot stay byte for byte. From a duress vault
+  it all behaves the same, and never touches the real vault.
+- **Wrap times** come from the wrap stamp (`VaultWrapStamping`), never the clock directly, because they break ties
+  when one password opens more than one slot. A clock set back would otherwise let a coercer choose which slot
+  wins, and use "change the password" to test guesses without counting them.
+- **Background time**, as for the conversion, because the rekey holds `vault-slots.lock`.
+- **The state** is updated, not overwritten, as after a conversion.
 
 Converting back to SQLite isn't offered, because it can't be done correctly:
 
@@ -742,7 +792,7 @@ payloads.
 
 - **Delete All Data** empties the open vault's slot and keeps the slot and its password. It's the same in every
   vault.
-- **Turning the password off** rewraps the open vault only (see above).
+- **Turning the password off** rekeys the open vault only (see above).
 - **Backups and auto-backup** read only the open vault. VAULT-23 must keep each vault's auto-backup destination
   and retention cleanup in that vault's settings, so a duress vault never deletes or overwrites the real one's
   backups.

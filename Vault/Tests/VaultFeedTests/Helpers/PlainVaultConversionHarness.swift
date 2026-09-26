@@ -24,11 +24,13 @@ struct PlainVaultConversionHarness {
     ///   - openedNormally: Whether the plain store opened normally, rather than as an empty fallback.
     ///   - releasingPlainStore: Runs when the converter lets go of the plain store, after the commit.
     ///   - clearingCredentialIdentities: Runs when the converter clears the QuickType identity store.
+    ///   - backgroundTime: Given the conversion's file system, the background time it asks for.
     init(
         directory: URL,
         openedNormally: Bool = true,
         releasingPlainStore: @escaping @Sendable (VaultStoreSession) async -> Void = { _ in },
         clearingCredentialIdentities: @escaping @Sendable () -> Void = {},
+        backgroundTime: (FaultInjectingSlotFileSystem) -> VaultBackgroundTime = { _ in .none },
     ) throws {
         let store = try PersistedLocalVaultStoreFactory(storageDirectory: directory).makeVaultStoreOrThrow()
         try self.init(
@@ -37,6 +39,7 @@ struct PlainVaultConversionHarness {
             openedNormally: openedNormally,
             releasingPlainStore: releasingPlainStore,
             clearingCredentialIdentities: clearingCredentialIdentities,
+            backgroundTime: backgroundTime,
         )
     }
 
@@ -46,6 +49,7 @@ struct PlainVaultConversionHarness {
         openedNormally: Bool = true,
         releasingPlainStore: @escaping @Sendable (VaultStoreSession) async -> Void = { _ in },
         clearingCredentialIdentities: @escaping @Sendable () -> Void = {},
+        backgroundTime: (FaultInjectingSlotFileSystem) -> VaultBackgroundTime = { _ in .none },
     ) throws {
         let session = VaultStoreSession(target: .plain(store))
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: LiveSlotFileSystem())
@@ -76,6 +80,7 @@ struct PlainVaultConversionHarness {
                 },
                 reloadWidgets: { log.modify { $0.append("reload widgets") } },
             ),
+            backgroundTime: backgroundTime(fileSystem),
             calibrate: {
                 AppLockKeyDerivationCalibration(
                     parameters: EncryptedVaultFixture.kdfParameters,
@@ -131,9 +136,9 @@ struct PlainVaultConversionHarness {
             let reopened = try PersistedLocalVaultStoreFactory(storageDirectory: directory, recoveryMode: .openOnly)
                 .makeVaultStoreOrThrow()
             return try await (.plain, reopened.recordState())
-        case .password:
+        case .password, .deviceKey:
             let vault = try #require(try await openEncryptedVault())
-            return (.password, vault.state)
+            return (mode, vault.state)
         }
     }
 }
