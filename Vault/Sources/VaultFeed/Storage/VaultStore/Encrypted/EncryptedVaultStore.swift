@@ -21,6 +21,11 @@ import VaultCore
 /// `docs/on-device-encryption.md`.
 public final class EncryptedVaultStore: Sendable {
     let records: RecordVaultStore
+    /// Where the vault is saved: its slot of the file.
+    let persistence: SlotFilePersistence
+    private let currentDate: @Sendable () -> Date
+    /// Derives a new password's key and tries it on a slot, as unlocking does.
+    private let work: any VaultUnlockWork
 
     /// The vault in `slot`, whose payload has already been read.
     ///
@@ -28,19 +33,26 @@ public final class EncryptedVaultStore: Sendable {
     ///   - file: Where the vault file is.
     ///   - slot: The vault's slot, as it was opened.
     ///   - state: The vault the slot's payload holds.
+    ///   - work: What derives a password's key and tries it on a slot, when making a duress vault: the unlock
+    ///     service's, so both derive the same way.
     init(
         file: EncryptedVaultFile,
         slot: VaultSlotFile.OpenedSlot,
         state: VaultRecordState,
         sortOrder: VaultStoreSortOrder = .relativeOrder,
         currentDate: @escaping @Sendable () -> Date = { Date() },
+        work: any VaultUnlockWork = LiveVaultUnlockWork(),
     ) {
+        let persistence = SlotFilePersistence(file: file, slot: slot)
+        self.persistence = persistence
         records = RecordVaultStore(
             state: state,
             sortOrder: sortOrder,
             currentDate: currentDate,
-            persistence: SlotFilePersistence(file: file, slot: slot),
+            persistence: persistence,
         )
+        self.currentDate = currentDate
+        self.work = work
     }
 
     /// Reads the vault in `slot`.
@@ -57,6 +69,7 @@ public final class EncryptedVaultStore: Sendable {
         slot: VaultSlotFile.OpenedSlot,
         sortOrder: VaultStoreSortOrder = .relativeOrder,
         currentDate: @escaping @Sendable () -> Date = { Date() },
+        work: any VaultUnlockWork = LiveVaultUnlockWork(),
     ) throws {
         try self.init(
             file: file,
@@ -64,6 +77,7 @@ public final class EncryptedVaultStore: Sendable {
             state: EncryptedVaultPayload.decode(slot: slot, in: contents),
             sortOrder: sortOrder,
             currentDate: currentDate,
+            work: work,
         )
     }
 }
@@ -162,5 +176,41 @@ extension EncryptedVaultStore: VaultStoreKillphraseDeleter {
     @discardableResult
     public func deleteItems(matchingKillphrase: String, using matcher: any KillphraseMatcher) async -> Bool {
         await records.deleteItems(matchingKillphrase: matchingKillphrase, using: matcher)
+    }
+}
+
+// MARK: - Duress vault
+
+extension EncryptedVaultStore {
+    /// Makes a duress vault from this vault: a new, empty vault that `password` opens at the next unlock (VAULT-23).
+    ///
+    /// It goes in the first of this vault's duress slots, so making another replaces the one before, and it gets this
+    /// vault's other duress slots, plus one chosen at random (`VaultDuressSlots`). The file is replaced as for a save,
+    /// under its lock and verified. This vault's own slot isn't written, so it keeps working with its password.
+    ///
+    /// The real vault and a duress vault make one the same way, with the same steps, and the new vault's payload has
+    /// the same shape as every other's. Nothing in either vault records that the duress vault was made.
+    ///
+    /// - A password that's this vault's own App Lock Password is refused. One that happens to open another slot is
+    ///   accepted, without anything being tried against the other slots: refusing it would be an oracle. If a
+    ///   password opens more than one slot, unlocking opens the most recently wrapped, which is this new vault.
+    /// - It derives the password's key as unlocking does, which takes about half a second.
+    ///
+    /// Never log, print or measure anything about it (MANIFESTO C3).
+    ///
+    /// - Throws: `VaultDuressVaultError.matchesAppLockPassword` for this vault's own password, `.unavailable` if this
+    ///   vault's duress slots aren't a valid list, or an error reading or replacing the file. The file is unchanged
+    ///   when it throws.
+    public func makeDuressVault(password: String) async throws {
+        let placement = try await VaultDuressSlots.placement(
+            madeFromSlot: persistence.slot.index,
+            duressSlots: records.state.vault.duressSlots,
+        )
+        try await persistence.makeDuressVault(
+            password: password,
+            placement: placement,
+            wrappedAt: currentDate(),
+            work: work,
+        )
     }
 }

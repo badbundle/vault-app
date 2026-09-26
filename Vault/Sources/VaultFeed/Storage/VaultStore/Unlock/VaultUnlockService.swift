@@ -173,7 +173,7 @@ extension VaultUnlockService {
             return .wrongPassword
         case let .success(opened?):
             try await attemptCounter.reset()
-            let store = EncryptedVaultStore(file: file, slot: opened.slot, state: opened.state)
+            let store = EncryptedVaultStore(file: file, slot: opened.slot, state: opened.state, work: work)
             // The session only switches if it hasn't locked since this attempt began, checked on the session itself,
             // so a lock can't slip in between the check and the switch.
             guard await session.switchTo(.unlocked(store), unlessLockedSince: lockEpoch) else {

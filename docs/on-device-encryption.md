@@ -727,6 +727,19 @@ So the choice is between bounded-depth safety with clean payloads (this design) 
 readable mark in every duress vault. The repository is public, so a mark would be found. This design picks clean
 payloads.
 
+**As built** (`VaultDuressSlots`, `EncryptedVaultStore.makeDuressVault(password:)`, VAULT-51):
+
+- Only W's slot is written. V's isn't sealed again, so V keeps its generation, and two copies of the file show
+  only W's slot changed, as they would after the user saved in W.
+- The new password's key is derived as unlocking derives it (NFC, the file's parameters), off the main actor, then
+  the file is replaced under its lock and verified, like any save: W must open with the new key and decode to exactly
+  the empty vault, and V's key box must be unchanged.
+- It isn't an unlock attempt, so it doesn't touch the attempt counter or the unlock deadline.
+- Every list a duress vault gets, taken whole, is a uniformly random choice and ordering of ten of the other slots,
+  as the first vault's is, so a list doesn't show which kind of vault holds it.
+- A vault whose list isn't ten distinct slots other than its own (only a vault the app didn't write) makes no duress
+  vault, rather than guessing where one goes.
+
 ### Same passwords
 
 - A new password equal to the password of **the vault you're in** is refused: "must differ from the app lock
@@ -737,6 +750,9 @@ payloads.
 - If more than one slot opens at unlock, the most recently wrapped wins. That's the vault just created, which
   matches "the new password opens a new empty vault". The older one becomes unreachable but isn't destroyed. If
   the colliding password is the real one, the coercer already knew it.
+- **As built**, the check tries the new password's key on the open vault's own key box and nothing else, so its
+  result depends only on the open vault. A vault whose key is wrapped by the device key (password off) never
+  matches.
 
 ### Everything else for VAULT-23
 

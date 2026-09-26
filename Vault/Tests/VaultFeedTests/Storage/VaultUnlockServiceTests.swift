@@ -506,6 +506,93 @@ extension VaultUnlockServiceTests {
     }
 }
 
+// MARK: - Duress vaults
+
+extension VaultUnlockServiceTests {
+    private var realVault: TestVault {
+        TestVault(
+            password: "real",
+            slot: realSlot,
+            items: [uniqueVaultItem()],
+            duressSlots: [duressSlot, 0, 1, 2, 3, 5, 6, 7, 8, 9],
+        )
+    }
+
+    @Test
+    func unlock_withThePasswordOfADuressVaultMadeFromTheRealVault_opensTheDuressVault() async throws {
+        let sut = try makeSUT(vaults: [realVault])
+        try await sut.makeDuressVault(
+            fromSlot: realSlot,
+            password: "real",
+            newPassword: "duress",
+            wrappedAt: Date(timeIntervalSince1970: 1_790_000_100),
+        )
+
+        let result = try await sut.service.unlock(password: "duress")
+
+        #expect(result == .unlocked)
+        #expect(try await sut.session.retrieve(query: .init()).items.isEmpty)
+    }
+
+    /// A duress vault made by the store takes the same work to unlock as the real vault, and a wrong password the
+    /// same again: the same steps, a body of the same length, and the same deadline.
+    @Test
+    func everyPassword_withADuressVaultMadeByTheStore_doesTheSameWorkAndReturnsAtTheDeadline() async throws {
+        let timings = SpyUnlockWork.Timings(body: .milliseconds(80), bodyThatFails: .milliseconds(5))
+        var logs = [[String]]()
+        var bodyLengths = [[Int]]()
+        var returnedAfter = [Duration]()
+
+        for password in ["real", "duress", "wrong"] {
+            let sut = try makeSUT(vaults: [realVault], timings: timings)
+            try await sut.makeDuressVault(
+                fromSlot: realSlot,
+                password: "real",
+                newPassword: "duress",
+                wrappedAt: Date(timeIntervalSince1970: 1_790_000_100),
+            )
+            let start = sut.clock.now
+            _ = try await sut.service.unlock(password: password)
+            returnedAfter.append(start.duration(to: sut.clock.now))
+            logs.append(sut.log.value.filter { $0 != "reset the count" })
+            bodyLengths.append(sut.work.bodyLengths)
+        }
+
+        let expectedSteps = ["count the attempt", "derive"]
+            + VaultSlotFile.slotIndices.map { "try slot \($0)" }
+            + ["open a body"]
+        #expect(logs == Array(repeating: expectedSteps, count: 3))
+        #expect(bodyLengths == Array(repeating: [(1 << 20) - VaultSlotFile.bodyOffset], count: 3))
+        #expect(returnedAfter == Array(repeating: deadline, count: 3))
+    }
+
+    /// From inside a duress vault, a new duress vault can be given the real vault's password without anything
+    /// saying so. Then that password opens both slots, and unlocking opens the more recently wrapped: the new, empty
+    /// vault. The real vault is unreachable, but still there.
+    @Test
+    func unlock_realPasswordReusedForANewerDuressVault_opensTheNewerVault() async throws {
+        let sut = try makeSUT(vaults: [realVault])
+        let first = try await sut.makeDuressVault(
+            fromSlot: realSlot,
+            password: "real",
+            newPassword: "first",
+            wrappedAt: Date(timeIntervalSince1970: 1_790_000_100),
+        )
+        try await sut.makeDuressVault(
+            fromSlot: first,
+            password: "first",
+            newPassword: "real",
+            wrappedAt: Date(timeIntervalSince1970: 1_790_000_200),
+        )
+
+        let result = try await sut.service.unlock(password: "real")
+
+        #expect(result == .unlocked)
+        #expect(try await sut.session.retrieve(query: .init()).items.isEmpty)
+        #expect(try await sut.savedItemCount(inSlot: realSlot, password: "real") == 1)
+    }
+}
+
 // MARK: - Helpers
 
 extension VaultUnlockServiceTests {
@@ -514,6 +601,8 @@ extension VaultUnlockServiceTests {
         var slot: Int
         var items: [VaultItem]
         var wrappedAt = Date(timeIntervalSince1970: 1_790_000_000)
+        /// The slots its duress vaults go in: none unless the test makes one from it.
+        var duressSlots: [Int] = []
     }
 
     struct SUT {
@@ -539,6 +628,29 @@ extension VaultUnlockServiceTests {
             try await file.withLock { [contents] in try $0.write(contents) { _ in } }
         }
 
+        /// Makes a duress vault from the vault `password` opens in `slot`, as the open vault's store does, wrapped at
+        /// `wrappedAt`.
+        ///
+        /// - Returns: The slot the duress vault went in.
+        @discardableResult
+        func makeDuressVault(
+            fromSlot slot: Int,
+            password: String,
+            newPassword: String,
+            wrappedAt: Date,
+        ) async throws -> Int {
+            let contents = try #require(try await file.open())
+            let store = try EncryptedVaultStore(
+                file: file,
+                contents: contents,
+                slot: contents.openSlot(slot, with: contents.header.passwordKey(for: password)),
+                currentDate: { wrappedAt },
+            )
+            let target = await store.records.state.vault.duressSlots[0]
+            try await store.makeDuressVault(password: newPassword)
+            return target
+        }
+
         func savedItemCount(inSlot index: Int, password: String) async throws -> Int {
             let contents = try #require(try await file.open())
             let key = try contents.header.passwordKey(for: password)
@@ -557,10 +669,12 @@ extension VaultUnlockServiceTests {
     ) throws -> SUT {
         var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
         for vault in vaults {
+            var state = try EncryptedVaultStoreTests.state(items: vault.items)
+            state.vault.duressSlots = vault.duressSlots
             try contents.createVault(
                 inSlot: vault.slot,
                 rootKey: contents.header.passwordKey(for: vault.password),
-                payload: EncryptedVaultPayload.encode(EncryptedVaultStoreTests.state(items: vault.items)),
+                payload: EncryptedVaultPayload.encode(state),
                 wrappedAt: vault.wrappedAt,
             )
         }

@@ -36,9 +36,6 @@ import Foundation
 /// to the plain store. Nothing deletes the plain store before the encrypted vault is committed. See "Migration: plain
 /// to encrypted" in `docs/on-device-encryption.md`.
 public actor VaultEncryptionConverter {
-    /// How many duress slots each vault is given (L in the design).
-    static let duressSlotCount = 10
-
     /// What the app does around a conversion, outside storage.
     public struct Hooks: Sendable {
         /// Lets go of the plain store once the conversion has committed, so its database closes before its files
@@ -244,9 +241,7 @@ extension VaultEncryptionConverter {
     private func convert(_ plainStore: PersistedLocalVaultStore, password: String) async throws -> Converted {
         let realSlot = Int.random(in: VaultSlotFile.slotIndices)
         var state = try await plainStore.recordState()
-        state.vault.duressSlots = Array(
-            VaultSlotFile.slotIndices.filter { $0 != realSlot }.shuffled().prefix(Self.duressSlotCount),
-        )
+        state.vault.duressSlots = VaultDuressSlots.forFirstVault(inSlot: realSlot)
         // Checked again: the vault could have grown since the precondition was checked.
         guard try Self.fitsTheLargestSlot(state) else { throw VaultEncryptionError.vaultTooLarge }
         var payload = try EncryptedVaultPayload.encode(state)

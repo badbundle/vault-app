@@ -247,3 +247,28 @@ extension VaultStoreSession: VaultStoreKillphraseDeleter {
         }) ?? false
     }
 }
+
+// MARK: - Duress vault
+
+extension VaultStoreSession {
+    /// Makes a duress vault from the open vault, as `EncryptedVaultStore.makeDuressVault(password:)` describes.
+    ///
+    /// Locking waits for it to finish, as for any other call.
+    ///
+    /// - Throws: `VaultStoreSessionError.locked` if the vault is locked, `VaultDuressVaultError.notEncrypted` if the
+    ///   open vault is the plain store, or whatever making it threw.
+    public func makeDuressVault(password: String) async throws {
+        let store: EncryptedVaultStore
+        switch target {
+        case let .unlocked(encrypted):
+            store = encrypted
+        case .plain:
+            throw VaultDuressVaultError.notEncrypted
+        case .locked:
+            throw VaultStoreSessionError.locked
+        }
+        operationsInFlight += 1
+        defer { operationDidFinish() }
+        try await store.makeDuressVault(password: password)
+    }
+}
