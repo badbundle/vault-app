@@ -249,7 +249,7 @@ public final class AutoBackupServiceImpl: AutoBackupService {
             // Log the event
             if let hash = dataModel.currentPayloadHash {
                 backupEventLogger.exportedToAutoBackup(
-                    date: clock.currentDate,
+                    backupDate: clock.currentDate,
                     hash: hash,
                     providerID: provider.id,
                 )

@@ -38,6 +38,12 @@ struct BackupHomeView: View {
         .navigationTitle(Text("Backups"))
         .navigationBarTitleDisplayMode(.inline)
         .task {
+            // A backup PDF's file should only exist while the share sheet has it. Delete any left behind, if the
+            // app was closed with the sheet open, say.
+            BackupPDFTemporaryFiles(
+                fileManager: injector.fileManager,
+                directory: injector.fileManager.temporaryDirectory,
+            ).deleteAll()
             await dataModel.loadBackupPasswordStatus()
         }
         .sheet(isPresented: $isShowingPasswordSheet) {

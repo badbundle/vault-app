@@ -84,7 +84,7 @@ public final class DeviceTransferExportViewModel {
             payloadHash = hash
 
             // Log export event
-            backupEventLogger.exportedToDevice(date: currentDate, hash: hash)
+            backupEventLogger.exportedToDevice(backupDate: currentDate, hash: hash)
 
             // Start displaying first QR code
             state = .displayingQR(currentIndex: 0, totalCount: shards.count)

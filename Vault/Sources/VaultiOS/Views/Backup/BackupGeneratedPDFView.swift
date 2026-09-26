@@ -1,6 +1,7 @@
 import Foundation
 import PDFKit
 import SwiftUI
+import UIKit
 import VaultFeed
 
 /// Step two of a PDF backup: save the PDF that was just created.
@@ -17,7 +18,11 @@ struct BackupGeneratedPDFView: View {
 
     var body: some View {
         BackupSavePDFView(
-            viewModel: .init(pdf: pdf, backupEventLogger: injector.backupEventLogger),
+            viewModel: .init(
+                pdf: pdf,
+                backupEventLogger: injector.backupEventLogger,
+                files: .init(fileManager: injector.fileManager, directory: injector.fileManager.temporaryDirectory),
+            ),
             dismiss: dismiss,
         )
     }
@@ -31,7 +36,6 @@ struct BackupSavePDFView: View {
 
     @Environment(\.displayScale) private var displayScale
     @State private var selectedPageIndex: Int?
-    @State private var isSharing = false
     @State private var isConfirmingLeave = false
 
     private let previewTargetWidth = 120.0
@@ -68,7 +72,7 @@ struct BackupSavePDFView: View {
             titleVisibility: .visible,
         ) {
             Button("Save or Print Backup") {
-                isSharing = true
+                viewModel.share()
             }
             Button("Leave Without Saving", role: .destructive) {
                 dismiss()
@@ -78,7 +82,7 @@ struct BackupSavePDFView: View {
                 "The PDF only exists in Vault until you save, print or send it. If you leave now, your vault isn't backed up.",
             )
         }
-        .shareSheet(isPresented: $isSharing, items: [pdf.diskURL]) { completed in
+        .shareSheet(item: viewModel.fileBeingShared, excludedActivityTypes: Self.excludedShareActivities) { completed in
             viewModel.shareSheetFinished(completed: completed)
         }
         .animation(.default, value: viewModel.isSaved)
@@ -166,7 +170,7 @@ struct BackupSavePDFView: View {
 
             Section {
                 Button {
-                    isSharing = true
+                    viewModel.share()
                 } label: {
                     FormRow(
                         image: Image(systemName: "square.and.arrow.up"),
@@ -177,18 +181,37 @@ struct BackupSavePDFView: View {
                     }
                 }
             } footer: {
-                Text("Keeping copies in two places, like Files and on paper, protects you if one is lost.")
+                saveFooter("Keeping copies in two places, like Files and on paper, protects you if one is lost.")
             }
         } else {
             Section {
                 ProminentActionButton("Save or Print Backup", systemImage: "square.and.arrow.up", actionOptions: []) {
-                    isSharing = true
+                    viewModel.share()
                 }
             } footer: {
-                Text("Save it to Files or iCloud Drive, print a paper copy, or AirDrop it to another device.")
+                saveFooter("Save it to Files or iCloud Drive, print a paper copy, or AirDrop it to another device.")
             }
         }
     }
+
+    /// The save section's footer, with why the last try to share failed, if it did.
+    private func saveFooter(_ text: LocalizedStringKey) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(text)
+            if let error = viewModel.shareError {
+                Text(error.userDescription ?? error.userTitle)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    /// Share sheet activities the backup PDF isn't offered to, because they'd count it as saved when it isn't,
+    /// or not count it when it is.
+    ///
+    /// - Copy reports that it completed, but nothing is saved anywhere. It also puts the whole encrypted backup
+    ///   on the pasteboard, where Universal Clipboard can carry it to the user's other devices (MANIFESTO C7).
+    /// - Markup can save a copy to Files, but the share sheet reports that it didn't complete.
+    static let excludedShareActivities: [UIActivity.ActivityType] = [.copyToPasteboard, .markupAsPDF]
 
     // MARK: - Preview
 

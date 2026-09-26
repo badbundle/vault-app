@@ -32,12 +32,12 @@ struct BackupEventLoggerImplTests {
         let clock = EpochClockMock(currentTime: 100)
         let sut = makeSUT(defaults: defaults, clock: clock)
         let date = Date(timeIntervalSince1970: 1234)
-        sut.exportedToPDF(date: date, hash: .init(value: Data(hex: "1234")))
+        sut.exportedToPDF(backupDate: date, hash: .init(value: Data(hex: "1234")))
 
         let backup = sut.lastBackupEvent()
 
-        #expect(backup?.backupDate == clock.currentDate)
-        #expect(backup?.eventDate == date)
+        #expect(backup?.backupDate == date)
+        #expect(backup?.eventDate == clock.currentDate)
         #expect(backup?.payloadHash == .init(value: Data(hex: "1234")))
         #expect(backup?.kind == .exportedToPDF)
     }
@@ -49,11 +49,11 @@ struct BackupEventLoggerImplTests {
         let sut = makeSUT(defaults: defaults, clock: clock)
         let date = Date(timeIntervalSince1970: 1234)
 
-        sut.exportedToDevice(date: date, hash: .init(value: Data(hex: "1234")))
+        sut.exportedToDevice(backupDate: date, hash: .init(value: Data(hex: "1234")))
 
         let backup = sut.lastBackupEvent()
-        #expect(backup?.backupDate == clock.currentDate)
-        #expect(backup?.eventDate == date)
+        #expect(backup?.backupDate == date)
+        #expect(backup?.eventDate == clock.currentDate)
         #expect(backup?.payloadHash == .init(value: Data(hex: "1234")))
         #expect(backup?.kind == .exportedToDevice)
     }
@@ -65,13 +65,32 @@ struct BackupEventLoggerImplTests {
         let sut = makeSUT(defaults: defaults, clock: clock)
         let date = Date(timeIntervalSince1970: 1234)
 
-        sut.exportedToAutoBackup(date: date, hash: .init(value: Data(hex: "1234")), providerID: "icloud-drive")
+        sut.exportedToAutoBackup(backupDate: date, hash: .init(value: Data(hex: "1234")), providerID: "icloud-drive")
 
         let backup = sut.lastBackupEvent()
-        #expect(backup?.backupDate == clock.currentDate)
-        #expect(backup?.eventDate == date)
+        #expect(backup?.backupDate == date)
+        #expect(backup?.eventDate == clock.currentDate)
         #expect(backup?.payloadHash == .init(value: Data(hex: "1234")))
         #expect(backup?.kind == .exportedToAutoBackup(providerID: "icloud-drive"))
+    }
+
+    /// The backup is dated when the vault was exported into it, which is what its age goes by, and the event
+    /// when it was logged: for a PDF, when it was saved, which can be a while after it was made.
+    @Test
+    func exportedToPDF_datesBackupWhenMadeAndEventWhenSaved() throws {
+        let day: TimeInterval = 86400
+        let madeDate = Date(timeIntervalSince1970: 0)
+        let savedDate = madeDate.addingTimeInterval(3 * day)
+        let defaults = try testUserDefaults()
+        let sut = makeSUT(defaults: defaults, clock: EpochClockMock(currentTime: savedDate.timeIntervalSince1970))
+
+        sut.exportedToPDF(backupDate: madeDate, hash: .init(value: Data(hex: "1234")))
+
+        let backup = try #require(sut.lastBackupEvent())
+        #expect(backup.backupDate == madeDate)
+        #expect(backup.eventDate == savedDate)
+        // Eight days after it was made, though only five after it was saved.
+        #expect(backup.staleness(at: madeDate.addingTimeInterval(8 * day)) == .stale)
     }
 
     @Test
@@ -81,7 +100,7 @@ struct BackupEventLoggerImplTests {
         let sut = makeSUT(defaults: defaults)
         let date = Date(timeIntervalSince1970: 1234)
 
-        sut.exportedToPDF(date: date, hash: .init(value: Data(hex: "1234")))
+        sut.exportedToPDF(backupDate: date, hash: .init(value: Data(hex: "1234")))
 
         #expect(beforeKeys.symmetricDifference(defaults.keys) == ["vault.backup.last-event"])
     }
@@ -97,7 +116,7 @@ struct BackupEventLoggerImplTests {
             sut.loggedEventPublisher.sink { _ in
                 confirmation.confirm()
             }.store(in: &bag)
-            sut.exportedToPDF(date: date, hash: .init(value: Data(hex: "1234")))
+            sut.exportedToPDF(backupDate: date, hash: .init(value: Data(hex: "1234")))
         }
     }
 }

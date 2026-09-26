@@ -50,7 +50,6 @@ struct BackupExportView: View {
                             dataModel: dataModel,
                             clock: injector.clock,
                             defaults: injector.defaults,
-                            fileManager: injector.fileManager,
                         ),
                         navigationPath: $pdfNavigationPath,
                     )
