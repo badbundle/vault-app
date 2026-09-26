@@ -182,22 +182,28 @@ struct DetailEditorEncryptionSection<Editor: View>: View {
                     .font(.body)
                 }
             }
+            // On the row, not the section: a section applies its modifiers to its footer too, and two sheets for one
+            // tap cancel each other out.
+            .sheet(isPresented: $isShowingEditor) {
+                editorSheet
+            }
         } footer: {
             Text(explanation)
         }
-        .sheet(isPresented: $isShowingEditor) {
-            NavigationStack {
-                editor()
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                isShowingEditor = false
-                            } label: {
-                                Text("Done")
-                            }
+    }
+
+    private var editorSheet: some View {
+        NavigationStack {
+            editor()
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button {
+                            isShowingEditor = false
+                        } label: {
+                            Text("Done")
                         }
                     }
-            }
+                }
         }
     }
 }
