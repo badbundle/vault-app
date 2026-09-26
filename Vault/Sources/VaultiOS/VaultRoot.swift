@@ -279,6 +279,9 @@ public enum VaultRoot {
     public static let appLockService: AppLockService = .init(
         settings: appLockSettingsStore,
         authenticationService: deviceAuthenticationService,
+        // None until the encrypted vault's storage can set and change the App Lock Password (VAULT-47 and VAULT-48).
+        // Without one, Settings doesn't offer the password and the lock screen never asks for it.
+        passwordService: nil,
         purgeSensitiveData: purgeSensitiveDataForAppLock,
         didChangeSettings: reloadWidgetTimelines,
     )

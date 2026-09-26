@@ -100,7 +100,7 @@ private final class OverlayWindowPresenter<Overlay: View> {
             NotificationCenter.default.removeObserver(observer)
         }
         sceneObservers.removeAll()
-        window?.isHidden = true
+        hideWindow()
         window = nil
         hostingController = nil
     }
@@ -146,8 +146,18 @@ private final class OverlayWindowPresenter<Overlay: View> {
     private func overlayDidHide() {
         guard !isPresented else { return }
         isShownAheadOfPresentation = false
-        window?.isHidden = true
+        hideWindow()
         UIAccessibility.post(notification: .screenChanged, argument: nil)
+    }
+
+    /// Hides the window, giving the keyboard back to the scene's own window if the overlay had it.
+    private func hideWindow() {
+        guard let window else { return }
+        let wasKey = window.isKeyWindow
+        window.isHidden = true
+        if wasKey {
+            hostWindow?.makeKey()
+        }
     }
 
     // MARK: - Scene lifecycle
@@ -198,7 +208,46 @@ private final class OverlayWindowPresenter<Overlay: View> {
         DispatchQueue.main.async { [weak self] in
             guard let self, isShownAheadOfPresentation, !isPresented else { return }
             isShownAheadOfPresentation = false
-            window?.isHidden = true
+            hideWindow()
+        }
+    }
+}
+
+extension View {
+    /// Makes the window this view is in the key window while `isKey`, so a field in it can take the keyboard without
+    /// being tapped first. For a view in an overlay window, which doesn't become key by itself.
+    func makesWindowKey(_ isKey: Bool) -> some View {
+        background {
+            KeyWindowMaker(isKey: isKey)
+        }
+    }
+}
+
+private struct KeyWindowMaker: UIViewRepresentable {
+    var isKey: Bool
+
+    func makeUIView(context _: Context) -> ReportingView {
+        let view = ReportingView()
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ view: ReportingView, context _: Context) {
+        view.isKey = isKey
+        view.makeWindowKeyIfNeeded()
+    }
+
+    final class ReportingView: UIView {
+        var isKey = false
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            makeWindowKeyIfNeeded()
+        }
+
+        func makeWindowKeyIfNeeded() {
+            guard isKey, let window, !window.isHidden, !window.isKeyWindow else { return }
+            window.makeKey()
         }
     }
 }

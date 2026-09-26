@@ -15,26 +15,37 @@ public struct AppLockedState: Equatable, Sendable {
     public var isInProgress: Bool
     /// Why the last try at `step` didn't get the user past it, if it didn't.
     public var failure: AppUnlockFailure?
+    /// When the password can be tried again, if the user has to wait after wrong passwords. By `AppLockClock`.
+    public var passwordRetryAt: ContinuousClock.Instant?
 
-    public init(step: AppUnlockStep, isInProgress: Bool = false, failure: AppUnlockFailure? = nil) {
+    public init(
+        step: AppUnlockStep,
+        isInProgress: Bool = false,
+        failure: AppUnlockFailure? = nil,
+        passwordRetryAt: ContinuousClock.Instant? = nil,
+    ) {
         self.step = step
         self.isInProgress = isInProgress
         self.failure = failure
+        self.passwordRetryAt = passwordRetryAt
     }
 }
 
 /// One thing the user does to unlock the app. Unlocking takes every step, in order.
 ///
-/// Device authentication is the only step for now. An app lock password would be a second step after it, which the
-/// lock screen asks for once the first is passed.
+/// Device authentication always comes first. When the App Lock Password is set, the lock screen asks for it once
+/// device authentication is passed.
 public enum AppUnlockStep: Equatable, Sendable {
     /// Face ID, Touch ID or the device passcode.
     case deviceAuthentication
+    /// The App Lock Password.
+    case password
 
     /// Whether the app starts this step by itself as soon as it's in the foreground, rather than waiting for the user.
     var startsAutomatically: Bool {
         switch self {
         case .deviceAuthentication: true
+        case .password: false
         }
     }
 }
@@ -48,6 +59,8 @@ public enum AppUnlockFailure: Equatable, Sendable {
     case failed
     /// The device can't authenticate anyone, because it has no passcode.
     case unavailable
+    /// The App Lock Password was wrong.
+    case wrongPassword
 }
 
 /// Where a scene of the app is in its lifecycle: SwiftUI's `ScenePhase`, which this module can't use.

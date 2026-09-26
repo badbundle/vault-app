@@ -86,6 +86,7 @@ struct AppLockShieldView: View {
                     isOpening: isRevealing,
                     onOpened: doorDidOpen,
                     unlock: { await appLock.unlock() },
+                    unlockWithPassword: { await appLock.unlock(password: $0) },
                 )
             } else {
                 switch shownCover {
