@@ -13,13 +13,13 @@ the encrypted vault doesn't use SwiftData at all.
   `DataStore` silently ignores `delete(model:where:)` and `@Attribute(.unique)` upserts, which the killphrase,
   delete and update paths depend on. SwiftData in memory with an encrypted file works, but unlocking a
   5,000-item vault takes 1.1 s before the password is even derived.
-- The design that meets every point is a **single encrypted file of eight equal-size slots**. It holds the vault
-  as plain records, which are decoded into an in-memory record store while the vault is unlocked. There's a
-  random data key per vault, wrapped by a key derived from the password with Argon2id. Every change is written
+- The design that meets every point is a **single encrypted file of sixteen equal-size slots**. It holds the
+  vault as plain records, which are decoded into an in-memory record store while the vault is unlocked. There's
+  a random data key per vault, wrapped by a key derived from the password with Argon2id. Every change is written
   as an atomic, verified replacement of the whole file.
-- Measured on an M5 Max: deriving the key takes about 170 ms, trying all eight slots takes 0.02 ms, and loading
-  a 1,000-item vault takes about 9 ms. Saving a change takes about 17 ms at 1,000 items and 85 ms at 5,000,
-  including a full `F_FULLFSYNC`.
+- Deriving the key is calibrated to about 0.5 s on the device that creates the file. On an M5 Max, 8 passes take
+  170 ms. Trying all sixteen slots takes about 0.04 ms, and loading a 1,000-item vault about 9 ms. Saving a
+  change takes about 19 ms at 1,000 items and 90 ms at 5,000, including a full `F_FULLFSYNC`.
 - Users who never set an app lock password keep today's SQLite store, unchanged.
 
 What Bradley has to accept is listed under [Consequences](#consequences-to-accept). The main ones:
@@ -30,30 +30,60 @@ What Bradley has to accept is listed under [Consequences](#consequences-to-accep
   allows.
 - A forgotten password means restoring from a backup.
 - Turning the password off keeps the encrypted file, with its key wrapped by a device key. It doesn't convert
-  back to SQLite, because that can't be done without destroying the other slots.
+  back to SQLite, because that can't be done without destroying the other slots. Widgets, AutoFill and
+  QuickType work again once it's off.
 
 Two limits apply to any deniable design, not just this one. They're explained in
 [Residual limits](#residual-limits):
 
 - Someone holding copies of the file from two different times can see which slot changed.
-- A coercer who nests "make duress database" more than five levels deep eventually puts the real vault at risk.
+- A coercer who nests "make duress database" more than eleven levels deep eventually puts the real vault at risk.
   No finite design can prevent that without leaving a mark in the duress vault they're given.
+
+## Decisions
+
+Recorded after review. They supersede anything in the first draft that differs.
+
+1. **KDF:** Argon2id, from the PHC reference C code (CC0) vendored as a C target. There's no scrypt fallback.
+2. **Calibrated on the device, when the file is created.** The KDF parameters live in the file header, so they're
+   chosen on the device that creates the file, not fixed in advance:
+   - Memory stays at 64 MiB.
+   - Passes are calibrated to target about 0.5 s, with a floor of 3 and a ceiling of 32.
+   - The unlock deadline is set at the same time.
+   - The file has one parameter set, so the AutoFill extension checks its memory headroom before deriving.
+
+   See [Key derivation](#key-derivation).
+3. **Slots:** N = 16 and L = 10. That's a 16 MiB file, and the real vault is safe for eleven levels of nesting.
+4. **No "exclude from device backups" option** for now. It stays documented as a mitigation under
+   [Residual limits](#residual-limits).
+5. **Sub-issue 11 is in scope.** Turning the password off must bring widgets, AutoFill and QuickType back.
+   Otherwise it would be a lasting compromise.
+6. **Separate tickets**, outside this chain:
+   - The backup fields: VAULT-53.
+   - Keyboard learning: VAULT-54.
+   - Plaintext residue in today's store (WAL, failed-open archives, rehash files): VAULT-55.
+7. **Ownership:**
+   - The agent doing VAULT-21's lock state does sub-issue 1 (VAULT-40) on top of VAULT-21, then the VAULT-22 UI
+     and the system surfaces (VAULT-49 and VAULT-50).
+   - The storage core, sub-issues 2 to 9 (VAULT-41 to VAULT-48), is one PR each, in order.
+   - The duress storage (VAULT-51) and erase (VAULT-52) come later.
 
 ## Contents
 
-1. [What's on disk today](#whats-on-disk-today)
-2. [Approaches evaluated](#approaches-evaluated)
-3. [Design](#design)
-4. [Duress vault (VAULT-23)](#duress-vault-vault-23)
-5. [Erasing after failed attempts (VAULT-34)](#erasing-after-failed-attempts-vault-34)
-6. [Widgets, AutoFill and QuickType](#widgets-autofill-and-quicktype)
-7. [Backups, killphrases and everything else](#backups-killphrases-and-everything-else)
-8. [What's readable at rest](#whats-readable-at-rest)
-9. [Residual limits](#residual-limits)
-10. [Test strategy](#test-strategy)
-11. [Consequences to accept](#consequences-to-accept)
-12. [Sub-issues](#sub-issues)
-13. [Appendix: measurements](#appendix-measurements)
+1. [Decisions](#decisions)
+2. [What's on disk today](#whats-on-disk-today)
+3. [Approaches evaluated](#approaches-evaluated)
+4. [Design](#design)
+5. [Duress vault (VAULT-23)](#duress-vault-vault-23)
+6. [Erasing after failed attempts (VAULT-34)](#erasing-after-failed-attempts-vault-34)
+7. [Widgets, AutoFill and QuickType](#widgets-autofill-and-quicktype)
+8. [Backups, killphrases and everything else](#backups-killphrases-and-everything-else)
+9. [What's readable at rest](#whats-readable-at-rest)
+10. [Residual limits](#residual-limits)
+11. [Test strategy](#test-strategy)
+12. [Consequences to accept](#consequences-to-accept)
+13. [Sub-issues](#sub-issues)
+14. [Appendix: measurements](#appendix-measurements)
 
 ## What's on disk today
 
@@ -161,8 +191,8 @@ involved.
 
 - **Loading a 1,000-item vault takes about 9 ms**: decompressing 0.5 ms, decoding 5.7 ms, and filtering and
   sorting the feed 2.5 ms. At 5,000 items it takes about 45 ms.
-- **Saving takes about 17 ms at 1,000 items**: encoding, compressing, sealing and replacing the whole 8 MiB file
-  with `F_FULLFSYNC`. At 5,000 items it takes about 85 ms.
+- **Saving takes about 19 ms at 1,000 items**: encoding, compressing, sealing and replacing the whole 16 MiB file
+  with `F_FULLFSYNC`. At 5,000 items it takes about 90 ms.
 - **Search takes 2 ms at 1,000 items** and 10 ms at 5,000, against 4.7 ms and 33 ms for today's SQLite store.
 - **New state is published only after the file is committed**, so memory is never ahead of disk.
 - **The cost is a second implementation of the store's query and mutation semantics.** That's contained by
@@ -175,7 +205,7 @@ involved.
   doesn't fit:
   - It drops `showInQuickType` and `previewMode`. `VaultBackupItemDecoder` resets them to `true` and
     `.titleAndFirstLine`. This is also a live bug: restoring a backup turns QuickType back on for items the user
-    opted out, which C7 cares about. See [sub-issue 14](#sub-issues).
+    opted out, which C7 cares about. That's now VAULT-53.
   - It goes through domain decoding, so an item that fails to decode can't be carried.
   - It uses lzma: 105 ms at 1,000 typical items, 546 ms with heavy notes.
   - It uses CryptoSwift's AES-GCM: about 30 ms per MiB, against about 0.1 ms for CryptoKit.
@@ -200,7 +230,7 @@ involved.
                       ┌────────────────── App Group container ───────────────────┐
   no password ever →  │ vault-primary.sqlite (+wal, shm)      ← unchanged today    │
                       │                                                          │
-  password set     →  │ vault-slots.v1   header │ slot 0 │ slot 1 │ … │ slot 7    │
+  password set     →  │ vault-slots.v1   header │ slot 0 │ slot 1 │ … │ slot 15   │
                       │ vault-slots.lock  (flock, empty)                         │
                       │ vault-storage-state.json  (mode + transition journal)    │
                       └──────────────────────────────────────────────────────────┘
@@ -229,7 +259,8 @@ one-time, verified conversion. After that, turning the password on and off only 
 - `W_i` = HKDF-SHA256(ikm `K_pw`, salt `slotNonce_i`, info `"vault.slot.wrap.password.v1"`) for each slot `i`.
   In `encrypted(deviceKey)` mode it's HKDF-SHA256(ikm `D`, salt `slotNonce_i`,
   info `"vault.slot.wrap.device.v1"`), where `D` is a 256-bit keychain item. It's migratable, so a device backup
-  restores it with the file, and `.whenUnlocked` until sub-issue 11 decides what widgets need.
+  restores it with the file. Its accessibility class is set in sub-issue 11 to whatever widgets need to keep
+  working as they do today.
 - `K_i`, the data key, is 256 random bits per vault. It's sealed under `W_i` together with the body length, a
   generation counter and the time it was wrapped.
 - The body is sealed under `K_i` with AES-256-GCM (CryptoKit) and a fresh nonce on every save.
@@ -243,26 +274,52 @@ derivation test every slot. It also means the parameters can't be raised later f
 
 ### Key derivation
 
-**Argon2id, m = 64 MiB, p = 1, t = 8 provisionally** (about 170 ms on an M5 Max). It comes from the PHC
-reference implementation, vendored as a C target. The reference is CC0 or Apache-2.0, about 3,800 lines, and
-compiles without warnings.
+**Argon2id, m = 64 MiB, p = 1, with the number of passes `t` calibrated on the device that creates the file.**
+It comes from the PHC reference implementation, vendored as a C target. The reference is CC0 or Apache-2.0,
+about 3,800 lines, and compiles without warnings.
 
-- **Calibrate `t` before shipping.** On the oldest supported iPhone, derivation should take no more than about
-  0.4–0.5 s. The parameters are fixed per file, so this has to be settled before the format ships.
-- **Memory is 64 MiB** so the AutoFill extension can derive the key. Bitwarden warns about iOS AutoFill above
-  64 MiB of Argon2id memory ([Bitwarden: KDF algorithms](https://bitwarden.com/help/kdf-algorithms/)). A CLI
-  process deriving with 64 MiB peaks at a 75 MB footprint. If the AutoFill extension can't sustain that, drop to
-  32 MiB and double `t`.
-- **Why not scrypt.** Measured on the M5 Max, Argon2id fills 64 MiB three times in 68 ms. As a rough
-  memory-bandwidth bound, one Argon2id guess at t = 8 (about 1.5 GiB of memory traffic) moves about four times as
-  many bytes as scrypt N = 2¹⁶, r = 8, p = 3 (about 384 MiB) does in about the same time (197 ms), and Argon2id
-  resists time–memory trade-offs better. A GPU guessing Argon2id at t = 8 is bandwidth-bound at roughly 650
-  guesses per second per TB/s. That's a rough upper bound, not a measurement.
-- **Fallback, if Bradley doesn't want a C target:** scrypt N = 2¹⁶, r = 8, p = 3 (64 MiB), with our own
-  optimized ROMix. That's about 100 lines. The prototype matches RFC 7914's test vectors and CryptoSwift's
-  output, and is 2.4–2.7× faster than CryptoSwift. CryptoSwift itself, in the same time, would buy only about
-  40% of the attacker cost.
-- It's added as `VaultKeyDeriver.Signature.appLockV1`, next to the backup and item derivers.
+**Calibration.** The parameters live in the file header, so they're chosen when the file is created: at the
+first conversion (sub-issue 8), and again after an erase if a password is set anew. On that device:
+
+1. Run Argon2id with m = 64 MiB and t = 3 on a throwaway password and salt, three times. Take the fastest run,
+   so a busy moment can't make the choice too cheap. The time per pass is that run's time divided by 3.
+2. Choose `t` = clamp(⌊0.5 s ÷ time per pass⌋, 3, 32).
+   - The floor, 3 passes at 64 MiB, is RFC 9106's recommended profile for memory-constrained environments.
+   - The ceiling bounds unlock time if the file is later restored onto a slower iPhone, or if a much faster
+     device calibrates.
+   - At the M5 Max's roughly 21 ms per pass, this picks about 24 passes.
+3. Set the unlock deadline to 1.5 × `t` × the time per pass. That leaves about 0.25 s at the target for trying
+   the slots and decoding the vault (about 45 ms at 5,000 items). The deadline is device-local and kept in the
+   storage state file, not the header. If a derivation ever takes longer than the deadline, for example after a
+   restore onto a slower phone, the deadline is raised to 1.5 × the observed time. It never goes down. Real,
+   duress and wrong passwords derive identically, so this adjustment reveals nothing.
+4. Write m, `t` and p into the header. Every slot in the file uses them for the life of the file.
+
+Calibration adds about 0.3–1.5 s, once, to setting the password. It runs behind the setup flow's progress state.
+
+**Memory and the AutoFill extension.**
+
+- m is fixed at 64 MiB, not calibrated. Bitwarden warns about iOS AutoFill only above 64 MiB of Argon2id memory
+  ([Bitwarden: KDF algorithms](https://bitwarden.com/help/kdf-algorithms/)). A CLI process deriving with 64 MiB
+  peaked at a 75 MB footprint.
+- The file has one parameter set, and the extension's limit can't be measured from the app that creates the file.
+  So before deriving, the AutoFill extension checks `os_proc_available_memory()` against m plus a margin (16 MiB).
+  If there isn't enough headroom, the sheet tells the user to open Vault instead of risking a crash. The app can
+  always unlock.
+- It derives before building any vault UI, and releases the working memory straight after.
+- The unlock service (sub-issue 7) exposes the check. Sub-issue 10 uses it.
+
+**Why Argon2id.**
+
+- Measured on the M5 Max, Argon2id fills 64 MiB three times in 68 ms.
+- As a rough memory-bandwidth bound, one guess at 8 passes moves about 1.5 GiB. That's about four times what
+  scrypt N = 2¹⁶, r = 8, p = 3 (about 384 MiB) moves in about the same time (197 ms). Argon2id also resists
+  time–memory trade-offs better.
+- A GPU guessing at 8 passes is bandwidth-bound at roughly 650 guesses per second per TB/s. At the calibrated
+  ~0.5 s it's proportionally fewer. That's a rough upper bound, not a measurement.
+
+**API.** It's a new `Argon2idKeyDeriver` in `CryptoEngine`, parameterized by the header. It isn't a fixed
+`VaultKeyDeriver.Signature`, because its parameters differ from file to file.
 
 For comparison, the existing per-item password KDF (`Item.Secure.v1`) takes 733 ms on the M5 Max. The backup's
 `Secure.v1` spends about 13 s on PBKDF2 alone there, and minutes on an iPhone.
@@ -275,10 +332,10 @@ One file: a 128-byte plaintext header followed by `slotCount` slots of `slotSize
 Header (plaintext; same layout on every install, only the salt differs)
   0   8  magic "VLTSLOTS"
   8   2  format version = 1
-  10  2  slot count = 8
+  10  2  slot count = 16
   12  4  slot size in bytes (1 MiB × 2^k)
   16  2  KDF id (1 = Argon2id)
-  18  4  Argon2 memory KiB      22 4  Argon2 iterations      26 1  Argon2 lanes
+  18  4  Argon2 memory KiB (65,536)   22 4  Argon2 passes t (calibrated, 3–32)   26 1  Argon2 lanes (1)
   32  32 salt
   64  64 reserved, zero
 
@@ -301,10 +358,11 @@ Slot i (slotSize bytes; every byte looks random)
   the new size, and every other slot is copied byte for byte with random fill appended. Their key box carries
   their real body length, so they still open. Slots never shrink, because the app can't know what the others
   hold.
-- **Total size** is 8 MiB at the minimum. Rewriting it takes 6–7 ms on the M5 Max. At 16 MiB it takes 9 ms.
+- **Total size** is 16 MiB at the minimum (16 slots of 1 MiB). Rewriting it takes 9 ms on the M5 Max. After a
+  growth to 2 MiB slots it's 32 MiB.
 - **File protection** is `.complete` in password mode: only the foreground app and the AutoFill sheet read it,
   and both run while the device is unlocked. In `encrypted(deviceKey)` mode, use the same class as today's
-  store, so widgets behave as they do now once [sub-issue 11](#sub-issues) lands.
+  store, so widgets behave as they do now ([sub-issue 11](#sub-issues)).
 - **Device backups** keep including the file. It's ciphertext, and it's portable: the password plus the file
   are enough to restore on a new iPhone.
 
@@ -444,8 +502,7 @@ downgrade and back), the app offers to merge its items into the open vault inste
 
 1. Increment the persistent attempt counter (VAULT-22 and VAULT-34) **before** deriving. Force-quitting then
    can't skip a wrong attempt.
-2. Start a fixed deadline for the device, set when the password is set, for example twice the measured
-   derivation time.
+2. Start the device's fixed unlock deadline, set during calibration (see [Key derivation](#key-derivation)).
 3. Derive `K_pw` off the main actor.
 4. Try **every** slot's key box, with no early exit.
 5. If exactly one opens, open its body. If more than one opens, pick the most recently wrapped (see
@@ -454,7 +511,7 @@ downgrade and back), the app offers to merge its items into the open vault inste
    Argon2 working memory is `memset_s`'d before it's freed.
 7. Wait for the deadline. Then reset the counter and show the vault, or show the error.
 
-Wrong, real and duress passwords all run the same derivation and the same eight trials, and finish at the same
+Wrong, real and duress passwords all run the same derivation and the same sixteen trials, and finish at the same
 deadline. What differs afterwards is decoding time, which is proportional to what the vault shows anyway.
 
 **Lock.** This happens on background, or explicitly (VAULT-21):
@@ -481,7 +538,7 @@ changes.
 
 The format serves VAULT-23 directly:
 
-- **Eight slots always exist.** A file with a duress vault looks exactly like one without.
+- **Sixteen slots always exist.** A file with a duress vault looks exactly like one without.
 - **Unlock timing is identical,** as described above.
 - **Each vault is a full payload,** with its own items, tags, killphrases and per-vault settings: backup
   password, backup events, auto-backup configuration and the "backup password is set" record. VAULT-23 moves
@@ -489,8 +546,8 @@ The format serves VAULT-23 directly:
 
 ### Making a duress database, from any vault
 
-Each vault's payload carries `duressSlots`, a list of L = 4 distinct slot indices that never includes its own.
-The first vault, created at migration, gets four random slots ≠ `r`.
+Each vault's payload carries `duressSlots`, a list of L = 10 distinct slot indices that never includes its own.
+The first vault, created at migration, gets ten random slots ≠ `r`.
 
 "Make duress database" from vault V, with a new password:
 
@@ -502,14 +559,13 @@ The first vault, created at migration, gets four random slots ≠ `r`.
 4. Replace the file, as for any save. V keeps working with its password.
 
 From inside a duress vault, this behaves exactly as it does from the real vault: same steps, same timing, same
-payload shape. A payload shows only "four other slots", which is true of every vault.
+payload shape. A payload shows only "ten other slots", which is true of every vault.
 
-**The real vault is never touched for five levels of nesting.** Every entry the real vault writes excludes its
-own slot, so a chain R → D1 → … → D5 never targets R.
+**The real vault is never touched for eleven levels of nesting.** Every entry the real vault writes excludes
+its own slot, so a chain R → D1 → … → D11 never targets R. That's L + 1 levels at N = 16, L = 10.
 
-From the sixth level, an entry chosen by a duress vault, which can't know where R is, may name R's slot. The
-chance is 1/(N − L − 1) = 1/3 per creation at N = 8, L = 4. At N = 16 and L = 10 it's safe for eleven levels,
-then at most 1/5 per creation, with a 16 MiB file (9 ms per save). VAULT-23 should pick N and L.
+From the twelfth level, an entry chosen by a duress vault, which can't know where R is, may name R's slot. The
+chance is at most 1/(N − L − 1) = 1/5 per creation.
 
 **Why no finite design does better.** From inside a duress vault, the app knows exactly what someone holding
 that vault's password knows: the vault's contents.
@@ -576,10 +632,10 @@ and resets the counter.
 
 | Surface | `plain` | `encrypted(password)` | `encrypted(deviceKey)` |
 | --- | --- | --- | --- |
-| Widgets | As today | Locked placeholder. `OTPWidgetItemEntityQuery` returns nothing. `reloadAllTimelines()` when the password is turned on, so archived timelines with codes are replaced. | As today, once [sub-issue 11](#sub-issues) lands; locked until then |
-| Widget HOTP increment | As today | Unavailable | Sub-issue 11 |
-| AutoFill sheet (`prepareOneTimeCodeCredentialList`) | As today | Asks for the app lock password in the sheet, derives with 64 MiB, opens the slot. Writes (HOTP) go through the same `flock` and generation check. Never Face ID alone (C4). | Sub-issue 11 |
-| QuickType (`provideCredentialWithoutUserInteraction`) | As today | Identity store emptied when the password is turned on, and never written while it's on. Requests return `userInteractionRequired`. | Sub-issue 11 |
+| Widgets | As today | Locked placeholder. `OTPWidgetItemEntityQuery` returns nothing. `reloadAllTimelines()` when the password is turned on, so archived timelines with codes are replaced. | As today: the extension reads the slot file with the device key ([sub-issue 11](#sub-issues)) |
+| Widget HOTP increment | As today | Unavailable | As today (sub-issue 11) |
+| AutoFill sheet (`prepareOneTimeCodeCredentialList`) | As today | Asks for the app lock password in the sheet. Checks memory headroom, derives with 64 MiB, opens the slot. Writes (HOTP) go through the same `flock` and generation check. Never Face ID alone (C4). | As today (sub-issue 11) |
+| QuickType (`provideCredentialWithoutUserInteraction`) | As today | Identity store emptied when the password is turned on, and never written while it's on. Requests return `userInteractionRequired`. | Identity store synced again from the open vault when the password is turned off (sub-issue 11) |
 
 Residual: a configured widget's saved `OTPWidgetItemEntity` (issuer, account name) sits in the system's widget
 configuration, which the app can't edit. Turning on the password should tell users to remove existing widgets.
@@ -611,26 +667,33 @@ configuration, which the app can't edit. Turning on the password should tell use
 | Pending rehash files | Plaintext phrases (old-schema upgrades) | Removed; precondition of migration |
 | Failed-open archives | Plaintext copies of the vault | Removed, with confirmation |
 | `UserDefaults` and keychain settings | Dates, a payload hash, auto-backup configuration, the backup key | Same. VAULT-23 moves the per-vault parts into the payload. |
-| Keyboard learning from note editors | Words typed with autocorrection on | Same. Outside storage; see sub-issue 15. |
+| Keyboard learning from note editors | Words typed with autocorrection on | Same. Outside storage; separate ticket VAULT-54. |
 
 ## Residual limits
 
-1. **Offline guessing.** The password is only as strong as its entropy. With the KDF budget capped near a
-   second, an attacker with the file can make, as a rough upper bound, a few guesses per second per CPU core
-   and hundreds per second per GPU. A 6-digit PIN falls in about half an hour on one GPU. A random 4-word
-   passphrase takes more than 10,000 GPU-years. VAULT-22 should require a real password and say why. A device-bound secret would remove
-   this, at the cost of restoring to a new iPhone; it's rejected above.
+1. **Offline guessing.** The password is only as strong as its entropy. With derivation calibrated to about
+   0.5 s, an attacker with the file can make, as a rough upper bound, a few guesses per second per CPU core and
+   hundreds per second per GPU. A 6-digit PIN falls in about half an hour on one GPU. A random 4-word passphrase
+   takes more than 10,000 GPU-years. VAULT-22 should require a real password and say why. A device-bound secret
+   would remove this, at the cost of restoring to a new iPhone; it's rejected above.
 2. **Multiple snapshots.** Two copies of the file from different times, for example two iCloud backups or a
    seized phone plus an older backup, show which slot's bytes changed. Combined with a coerced duress password,
    which identifies the duress vault's slot, a change in another slot shows another vault is in use. Slots the
-   app can't open can't be re-randomized. Mitigations: use the duress vault now and then, or add an opt-in
-   "exclude the vault from device backups", which trades against restoring from a device backup.
-3. **Nested duress creation.** The real vault is guaranteed untouched for five levels at N = 8, L = 4. Beyond
+   app can't open can't be re-randomized.
+
+   Mitigations:
+   - Use the duress vault now and then.
+   - An opt-in "exclude the vault from device backups". It isn't offered for now, and it trades against
+     restoring from a device backup.
+3. **Nested duress creation.** The real vault is guaranteed untouched for eleven levels at N = 16, L = 10. Beyond
    that it isn't; see [Duress vault](#duress-vault-vault-23).
 4. **Slot size.** The slot size bucket reveals that some vault once exceeded the previous bucket. It starts at
    1 MiB, about 3,500 items, so this only applies to very large vaults.
-5. **Fixed KDF parameters.** Raising them later needs a new format version whose unlock derives under both
-   parameter sets (twice the time) during a transition, or an erase and re-create.
+5. **Fixed KDF parameters.** They're calibrated once, on the device that creates the file.
+   - Raising them later needs a new format version whose unlock derives under both parameter sets (twice the
+     time) during a transition, or an erase and re-create.
+   - Restoring the file onto a slower iPhone makes unlocking proportionally slower. The 32-pass ceiling bounds
+     it.
 6. **Memory.** Decrypted items can't be reliably zeroed after locking (see above).
 7. **Rollback.** Someone who can write the app's files can put back an older copy of the file. Local storage
    can't prevent this.
@@ -639,9 +702,14 @@ configuration, which the app can't edit. Turning on the password should tell use
 
 ## Test strategy
 
-- **KDF.** RFC 9106 Argon2id test vectors, or RFC 7914 for the fallback. Determinism, cancellation, and a
-  memory-high-water check. A calibration command in `vault-keygen-speedtest`, plus a run on the oldest
-  supported device before `t` is fixed.
+- **KDF.** RFC 9106 Argon2id test vectors and the reference repository's known-answer tests. Determinism,
+  cancellation, zeroing of working memory, and a memory high-water check.
+- **Calibration**, with an injected timer:
+  - Floor and ceiling clamping.
+  - The fastest of three runs is used.
+  - The deadline is computed and only ever raised.
+  - The header carries exactly the chosen parameters.
+  - A file created with one set of parameters opens on a "device" that would have calibrated differently.
 - **Format.**
   - Round-trip every field.
   - Wrong password, wrong slot and wrong header all fail closed.
@@ -678,8 +746,12 @@ configuration, which the app can't edit. Turning on the password should tell use
   - Password collisions resolve by recency.
 - **Concurrency.** Two stores on one file in-process (standing in for the app and AutoFill): a conflicting
   write is detected, never lost.
-- **Extensions.** The widget provider returns the locked state in password mode, and the QuickType store is
-  never called in that mode. Snapshots for the new locked states.
+- **Extensions.**
+  - The widget provider returns the locked state in password mode, and the QuickType store is never called in
+    that mode.
+  - In device-key mode, the extensions read the slot file and QuickType is synced again.
+  - The AutoFill headroom check refuses to derive when available memory is short.
+  - Snapshots for the new locked states.
 - **Performance guards.** Save and load at 1,000 items inside a budget, so the numbers above don't regress.
 
 ## Consequences to accept
@@ -689,76 +761,101 @@ configuration, which the app can't edit. Turning on the password should tell use
 2. A forgotten password means erasing and restoring from a backup. Setting the password should say so, and show
    the last backup date.
 3. Offline guessing is bounded only by the password's strength. VAULT-22 needs a minimum strength.
-4. Unlocking adds the derivation, about 0.2–0.5 s depending on the device, on top of device authentication.
-5. The encrypted file is at least 8 MiB. Every change rewrites it: about 17 ms at 1,000 items on the M5 Max,
+4. Unlocking adds the derivation, calibrated to about 0.5 s on the device that set the password, and finishes at
+   a fixed deadline of about 0.75 s. That's on top of device authentication.
+5. The encrypted file is at least 16 MiB. Every change rewrites it: about 19 ms at 1,000 items on the M5 Max,
    and likely somewhat more on a phone.
-6. Turning the password off keeps the encrypted file with a device-key wrap. Widgets and AutoFill come back
-   only once sub-issue 11 lands.
+6. Turning the password off keeps the encrypted file with a device-key wrap. Widgets, AutoFill and QuickType
+   work again as they do today (sub-issue 11).
 7. The duress limits above: snapshots, nesting depth, and item dates.
-8. KDF parameters are fixed when the file is created.
+8. KDF parameters are fixed when the file is created. A restore onto a slower iPhone unlocks proportionally
+   slower.
 9. No app downgrade after the password has been set.
 10. Users who never set a password are unaffected.
 
 ## Sub-issues
 
-These are in implementation order. Each is one PR with its own tests.
+These are in implementation order. Each is one PR with its own tests. Keys and owners are from the
+[Decisions](#decisions).
 
-1. **Make the vault store switchable at runtime.** Replace `VaultRoot`'s `static let vaultStore` with a
-   `VaultStoreSession` that implements the store protocols and forwards to the plain store, an unlocked
-   encrypted store, or `locked` (reads return nothing, writes throw). `VaultDataModel` purges items, tags and
-   caches when it locks. No behavior change: the plain store opens at launch as today. It coordinates with
-   VAULT-21's lock state. **Tests:** forwarding, locked behavior, purge. Prerequisite for VAULT-22.
-2. **Introduce `VaultRecord` and share the item and tag codecs.** `PersistedVaultItemEncoder` and
-   `PersistedVaultItemDecoder` (and the tag pair) produce and consume `VaultRecord`. The SwiftData store copies
-   records to and from `@Model` objects. Adds the schema parity test. No behavior change. **Tests:** round
-   trips, parity, and the existing suite.
-3. **Add the in-memory `RecordVaultStore`.** Implements every store protocol over records. The store test suite
-   becomes a contract suite run against both engines, plus the differential random-operation test. Not wired
-   into the app yet.
-4. **Add the app lock KDF.** The vendored Argon2id C target (or the scrypt fallback) and
-   `VaultKeyDeriver.Signature.appLockV1`. Also RFC test vectors, zeroing of working memory, a calibration
-   command in `vault-keygen-speedtest`, and on-device calibration before `t` is fixed. Can run in parallel with
-   2 and 3.
-5. **Add the slot file format.** A pure `VaultSlotFile`: header, slots, password and device-key wraps, body
-   seal and open, growth, random fill, AAD binding. **Tests:** round trip, tamper, wrong password, equal slot
-   lengths, no plaintext leakage.
-6. **Add `EncryptedVaultStore` persistence.** `RecordVaultStore` plus the atomic, verified whole-file
-   replacement, `flock` and generation conflicts, and failure handling (including killphrase returning
-   `false`). **Tests:** fault injection at every step, and concurrency.
-7. **Add the unlock and lock service.** Derive, try every slot, the deadline, the recency tie-break, zeroing,
-   and a hook for the attempt counter. **Tests:** operation counts per path and the deadline, with an injected
-   clock and the testing KDF. Part of VAULT-22.
-8. **Turn on encryption: convert plain to encrypted.** The state file and journal, preconditions (rehash
-   drained, archives, no load failure), verified conversion, launch recovery, and switching the session. **Tests:**
-   crash at every step, and SwiftData fixture migrations. Depends on 1–7. It's what VAULT-22's setup calls, so
-   it's part of VAULT-22.
-9. **Change the password, turn it off (device-key wrap), turn it back on.** Journaled. Needs the current
-   password (VAULT-22). **Tests:** crash at every step, and old and new password behavior. Part of VAULT-22.
-10. **Lock down system surfaces while the password is on.** Empty and gate the QuickType identity store, add the
-    widget locked state and empty entity query, reload timelines, and add password unlock in the AutoFill sheet,
-    with a check of the extension's memory headroom and cross-process `flock`. **Tests:** plus snapshots of the
-    locked states. Part of VAULT-22.
-11. **Bring back widgets, AutoFill and QuickType with the device key.** A keychain access group for the
-    extensions, and an extension reader for the slot file. It only matters after the password has been turned
-    off, and can be deferred.
-12. **Duress slots.** `duressSlots`, "make duress database" into a slot, the same-password rules, and a
-    per-vault settings section (backup password and record, backup events, auto-backup configuration and
-    retention). **Tests:** chain safety, payload shape equality, timing equality, auto-backup isolation. Part of
-    VAULT-23, and depends on 5–9. VAULT-23 also needs its own UI issues.
-13. **Erase as key destruction.** Journaled erase back to a fresh plain store. Part of VAULT-34, and depends on
-    8 and VAULT-22's attempt counter.
-14. **Fix: backups drop `showInQuickType` and `previewMode`.** Separate from this chain. Found while evaluating
-    the backup format: a restore turns QuickType back on for opted-out items (C7) and resets note previews. Add
-    both fields to `VaultBackupItem` as optional, defaulting to today's values when missing.
-15. **Audit text input traits.** Separate. Note bodies and other free-text fields use autocorrection, which
-    feeds the system keyboard's learned words. Decide field by field.
+1. **VAULT-40: Make the vault store switchable at runtime.** Lock agent, on top of VAULT-21.
+   - Replace `VaultRoot`'s `static let vaultStore` with a `VaultStoreSession` that implements the store protocols
+     and forwards to the plain store, an unlocked encrypted store, or `locked` (reads return nothing, writes
+     throw).
+   - `VaultDataModel` purges items, tags and caches when it locks.
+   - No behavior change: the plain store opens at launch as today.
+   - **Tests:** forwarding, locked behavior, purge. Prerequisite for VAULT-22.
+2. **VAULT-41: Introduce `VaultRecord` and share the item and tag codecs.** Storage core.
+   - `PersistedVaultItemEncoder` and `PersistedVaultItemDecoder` (and the tag pair) produce and consume
+     `VaultRecord`. The SwiftData store copies records to and from `@Model` objects.
+   - Adds the schema parity test. No behavior change.
+   - **Tests:** round trips, parity, and the existing suite.
+3. **VAULT-42: Add the in-memory `RecordVaultStore`.** Storage core.
+   - Implements every store protocol over records.
+   - The store test suite becomes a contract suite run against both engines, plus the differential
+     random-operation test.
+   - Not wired into the app yet.
+4. **VAULT-43: Add the Argon2id KDF with on-device calibration.** Storage core.
+   - The vendored PHC reference C target and an `Argon2idKeyDeriver` parameterized by the header.
+   - The calibration routine (fastest of three t = 3 runs, `t` clamped to 3–32 for about 0.5 s, and the
+     deadline) behind an injectable timer.
+   - Zeroing of working memory.
+   - **Tests:** RFC 9106 vectors and the reference known-answer tests.
+5. **VAULT-44: Add the slot file format.** Storage core.
+   - A pure `VaultSlotFile` with 16 slots: header, password and device-key wraps, body seal and open, growth,
+     random fill, AAD binding.
+   - **Tests:** round trip, tamper, wrong password, equal slot lengths, no plaintext leakage.
+6. **VAULT-45: Add `EncryptedVaultStore` persistence.** Storage core.
+   - `RecordVaultStore` plus the atomic, verified whole-file replacement, and `flock` and generation conflicts.
+   - Failure handling, including killphrase deletion returning `false`.
+   - **Tests:** fault injection at every step, and concurrency.
+7. **VAULT-46: Add the unlock and lock service.** Storage core.
+   - Derive, try every slot, hold to the deadline (raised if a derivation ever exceeds it), and break ties by
+     recency.
+   - Zeroing, a hook for the attempt counter, and the AutoFill memory headroom check.
+   - **Tests:** operation counts per path and the deadline, with an injected clock and the testing KDF.
+8. **VAULT-47: Turn on encryption: convert plain to encrypted.** Storage core.
+   - Calibration at file creation, and the state file and journal.
+   - Preconditions: rehash files drained, archives handled, no load failure.
+   - Verified conversion, launch recovery, and switching the session.
+   - **Tests:** crash at every step, and SwiftData fixture migrations. Depends on VAULT-40 and 2–7. It's what
+     VAULT-22's setup calls.
+9. **VAULT-48: Change the password, turn it off (device-key wrap), turn it back on.** Storage core.
+   - Journaled, and needs the current password (VAULT-22).
+   - **Tests:** crash at every step, and old and new password behavior.
+10. **VAULT-49: Lock down system surfaces while the password is on.** Lock agent.
+    - Empty and gate the QuickType identity store.
+    - Add the widget locked state and empty entity query, and reload timelines.
+    - Add password unlock in the AutoFill sheet, with the headroom check and cross-process `flock`.
+    - **Tests:** plus snapshots of the locked states.
+11. **VAULT-50: Bring back widgets, AutoFill and QuickType with the device key.** Lock agent. In scope.
+    - A keychain access group for the extensions and an extension reader for the slot file.
+    - QuickType identities are re-synced from the open vault when the password is turned off.
+12. **VAULT-51: Duress slots.** VAULT-23's storage part.
+    - `duressSlots` (L = 10), "make duress database" into a slot, and the same-password rules.
+    - A per-vault settings section: backup password and its record, backup events, auto-backup configuration
+      and retention.
+    - **Tests:** chain safety, payload shape equality, timing equality, auto-backup isolation. Depends on 5–9.
+      VAULT-23 also needs its own UI issues.
+13. **VAULT-52: Erase as key destruction.** VAULT-34's storage part.
+    - A journaled erase back to a fresh plain store.
+    - Depends on 8 and VAULT-22's attempt counter.
+
+Separate tickets, outside this chain:
+
+- **VAULT-53: backups drop `showInQuickType` and `previewMode`.** A restore turns QuickType back on for
+  opted-out items (C7) and resets note previews.
+- **VAULT-54: keyboard learning in free-text fields.** Note bodies and similar fields use autocorrection, which
+  feeds the system keyboard's learned words.
+- **VAULT-55: plaintext residue in today's plain store.** Killphrased items stay in the SQLite file until a WAL
+  checkpoint, and failed-open archives and the pending rehash files hold plaintext.
 
 **Dependencies:**
 
-- VAULT-22 depends on 1–10.
-- VAULT-23's storage work is 12, and depends on VAULT-22.
-- VAULT-34's storage work is 13, and depends on VAULT-22's attempt counter.
-- VAULT-21 is independent, but sub-issue 1's lock state should be the one VAULT-21 introduces.
+- VAULT-22 depends on 1–11 (VAULT-40 to VAULT-50).
+- VAULT-23's storage work is VAULT-51, and depends on VAULT-22.
+- VAULT-34's storage work is VAULT-52, and depends on VAULT-22's attempt counter.
+- VAULT-40 builds on VAULT-21's lock state.
 
 ## Appendix: measurements
 
@@ -784,7 +881,7 @@ an A15-class iPhone is estimated at about twice as slow.
 | Argon2id m=128 MiB, t=1 / 3; m=256 MiB, t=1 | 128–256 MiB | 46 / 139 / 92 ms |
 | CommonCrypto PBKDF2-SHA256, 1M iterations | — | 114 ms |
 | App today: `Item.Secure.v1` / `Backup.Fast.v1` | — | 733 / 4 ms |
-| Trying 8 slots (HKDF + AES-GCM open each) | — | 0.02 ms |
+| Trying 8 slots (HKDF + AES-GCM open each); 16 slots scale linearly to about 0.04 ms | — | 0.02 ms |
 
 The optimized scrypt matched RFC 7914's vectors and CryptoSwift's output. A process deriving with 64 MiB peaked
 at a 75 MB footprint.
@@ -803,7 +900,7 @@ at a 75 MB footprint.
 | --- | ---: | ---: | ---: | ---: |
 | SwiftData in memory: save (snapshot → encrypt → `F_FULLFSYNC`) | 4.8 ms | 10.9 ms | 82 ms | 452 ms |
 | SwiftData in memory: load (read → decrypt → rebuild → feed) | 4.1 ms | 17.9 ms | 175 ms | 1,142 ms |
-| Record store: save (encode → compress → seal → 8 MiB file) | ~8 ms | ~9 ms | ~17 ms | ~85 ms |
+| Record store: save (encode → compress → seal → 16 MiB file) | ~10 ms | ~11 ms | ~19 ms | ~90 ms |
 | Record store: load (decrypt → decompress → decode → feed) | <1 ms | ~1.5 ms | ~9 ms | ~45 ms |
 | Today's SQLite: update one item and save | 0.3 ms | 0.3 ms | 0.4 ms | 1.9 ms |
 | Today's SQLite: open container and fetch feed | 1.1 ms | 2.1 ms | 13 ms | 62 ms |
@@ -813,7 +910,8 @@ Record store figures are sums of measured components.
 
 ### Other measurements
 
-- **Writing the whole file atomically** with `F_FULLFSYNC`: 5 ms at 2 MiB, 6–7 ms at 8 MiB, 9 ms at 16 MiB.
+- **Writing the whole file atomically** with `F_FULLFSYNC`: 5 ms at 2 MiB, 6–7 ms at 8 MiB, 9 ms at 16 MiB (16
+  slots of 1 MiB, the minimum).
 - **Encrypting 1 MiB:** CryptoKit AES-GCM 0.1 ms, CryptoSwift AES-GCM 28 ms.
 - **Compressing 1,000 typical items:** lzma (the backup's) 105 ms, zlib 9 ms, lzfse 4 ms. Decompressing: zlib
   4 ms, lzfse 0.5 ms.
