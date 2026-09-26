@@ -167,8 +167,35 @@ public enum VaultRoot {
     public static let searchPassphraseKeyStore: some SearchPassphraseKeyStore<KeyData<32>> =
         SearchPassphraseKeyStoreImpl(secureStorage: secureStorage)
 
-    public static let vaultOtpAutofillStore: some VaultOTPAutofillStore =
-        VaultOTPAutofillStoreImpl(store: RealCredentialIdentityStore())
+    /// Whether the vault is in the plain store right now, with no change of
+    /// mode underway. Unlike `storageMode`, which is how it was at launch,
+    /// this follows the password being turned on while the app runs.
+    public nonisolated static var isVaultPlain: Bool {
+        VaultStorageState.isPlain(inDirectory: VaultSharedStorage.directory())
+    }
+
+    /// QuickType's identity store, which is kept empty while the vault is
+    /// encrypted: it holds codes' issuers and account names outside the app.
+    public static let vaultOtpAutofillStore: some VaultOTPAutofillStore = PlainVaultOnlyOTPAutofillStore(
+        base: VaultOTPAutofillStoreImpl(store: RealCredentialIdentityStore()),
+        isVaultPlain: { isVaultPlain },
+    )
+
+    /// What the AutoFill extension unlocks an encrypted vault with, in its own
+    /// process: the App Lock Password, counted against the same attempts as
+    /// the app. `nil` in the app, which gets its own with Settings, and while
+    /// the vault is plain.
+    @MainActor
+    public static let autofillPasswordService: EncryptedVaultPasswordService? = {
+        guard isAppExtension, storageMode == .password else { return nil }
+        return EncryptedVaultPasswordService(
+            directory: vaultStorageDirectory,
+            session: vaultStore,
+            purgeVaultContents: { @MainActor in
+                await vaultDataModel.purgeVaultContents()
+            },
+        )
+    }()
 
     @MainActor
     static let killphraseRehashService: KillphraseRehashService = makeKillphraseRehashService()

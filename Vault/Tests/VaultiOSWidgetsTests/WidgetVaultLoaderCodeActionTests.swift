@@ -36,6 +36,24 @@ struct WidgetVaultLoaderCodeActionTests {
         #expect(code == expected)
     }
 
+    /// While the vault is encrypted with the App Lock Password, a widget can't advance a counter, even with the
+    /// app lock's setting off.
+    @Test
+    func incrementAndRenderHOTPCode_vaultEncrypted_isUnavailable() async throws {
+        let item = makeHOTPVaultItem(counter: 4)
+        let store = IncrementingFakeStore(items: [item])
+        let loader = try WidgetVaultLoader(
+            appLockSettings: AppLockSettingsStore(userDefaults: .nonPersistent()),
+            isVaultPlain: { false },
+            makeStore: { store },
+        )
+
+        let code = try await loader.incrementAndRenderHOTPCode(id: item.id.rawValue)
+
+        #expect(code == nil)
+        #expect(await store.incrementedIDs == [])
+    }
+
     @Test
     func incrementAndRenderHOTPCode_ineligibleItemDoesNotIncrement() async throws {
         let item = makeHOTPVaultItem(counter: 1, lockState: .lockedWithNativeSecurity)

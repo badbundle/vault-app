@@ -54,10 +54,11 @@ public actor WidgetVaultLoader {
         self.isVaultPlain = isVaultPlain
     }
 
-    /// Whether the app lock is on. While it is, the widget shows no codes and the loader hands out no items: the
-    /// widget's actions can't copy a code, and its configuration can't list the vault's items.
-    public nonisolated var isAppLocked: Bool {
-        appLockSettings.isEnabled
+    /// Whether the widget shows the vault as locked: while the app lock is on, and while the vault is encrypted with
+    /// the App Lock Password, or being converted. The loader hands out no items then either, so the widget's actions
+    /// can't copy or advance a code, and its configuration can't list the vault's items.
+    public nonisolated var isLocked: Bool {
+        appLockSettings.isEnabled || !isVaultPlain()
     }
 
     /// All items that are currently eligible to appear in a widget. Hidden,
@@ -121,10 +122,10 @@ public actor WidgetVaultLoader {
         return GuardedPlainVaultStore(store: store, directory: directory)
     }
 
-    /// Every read goes through here, so none reaches the vault while the app lock is on, or opens the plain store
-    /// once the vault is encrypted, or while it's being converted. (What widgets show then is VAULT-49's.)
+    /// Every read goes through here, so none reaches the vault while it's locked: nothing opens the plain store once
+    /// the vault is encrypted, or while it's being converted.
     private func retrieveItems() async throws -> VaultRetrievalResult<VaultItem> {
-        guard !isAppLocked, isVaultPlain() else { return .empty() }
+        guard !isLocked else { return .empty() }
         let currentStore = try store ?? openStore()
         do {
             return try await currentStore.retrieve(query: .init())
