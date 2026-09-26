@@ -33,9 +33,12 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
 
     private let base: any SlotFileSystem
     private let state = SharedMutex(State())
+    /// Where each step is logged too, alongside what other test doubles log, so the test sees everything in one order.
+    private let sharedLog: SharedMutex<[String]>?
 
-    init(wrapping base: any SlotFileSystem) {
+    init(wrapping base: any SlotFileSystem, sharedLog: SharedMutex<[String]>? = nil) {
         self.base = base
+        self.sharedLog = sharedLog
     }
 
     /// Everything done so far, in order, naming the file each step was taken on (a temp file is `temp`).
@@ -58,6 +61,7 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
 
     func unlock(_ lock: SlotFileLock) {
         state.modify { $0.log.append("unlock") }
+        sharedLog?.modify { $0.append("unlock") }
         base.unlock(lock)
     }
 
@@ -112,6 +116,7 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
             state.stepsSinceInjecting += 1
             return (state.stepsSinceInjecting, state.fault)
         }
+        sharedLog?.modify { $0.append(name) }
         switch fault {
         case let .fail(atSteps) where atSteps.contains(number):
             throw InjectedFault()

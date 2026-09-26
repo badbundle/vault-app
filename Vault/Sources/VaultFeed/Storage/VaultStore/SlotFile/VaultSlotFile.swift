@@ -42,6 +42,10 @@ public struct VaultSlotFile: Equatable, Sendable {
         0 ..< slotCount
     }
 
+    /// Where a new vault's generation starts, chosen at random: so wide that the saves a vault makes in its lifetime
+    /// don't show, and a new vault's generation looks like one that's been saved for years.
+    static let firstGenerations = UInt64(1) ... UInt64(UInt32.max)
+
     static let slotNonceLength = 32
     static let keyBoxLength = 84
     /// Where the body box starts in a slot.
@@ -112,7 +116,8 @@ extension VaultSlotFile {
     public struct OpenedSlot: Sendable {
         /// The slot's index in the file.
         public let index: Int
-        /// Goes up by one on every write to the slot: creating it, saving and rewrapping.
+        /// Goes up by one on every write to the slot: saving and rewrapping. Creating a vault starts it at a random
+        /// value.
         public let generation: UInt64
         /// When the data key was last wrapped, in milliseconds since 1970: when the vault was created, or last
         /// rewrapped. Saves don't change it.
@@ -233,7 +238,8 @@ extension VaultSlotFile {
 extension VaultSlotFile {
     /// Creates a vault in slot `index`, replacing whatever was there, which can't be recovered afterwards.
     ///
-    /// The slot gets a new nonce and a new random data key, wrapped by `rootKey`, at generation 1. If the payload
+    /// The slot gets a new nonce and a new random data key, wrapped by `rootKey`, at a random first generation
+    /// (`firstGenerations`), so a new vault's generation doesn't show how new it is. If the payload
     /// doesn't fit, every slot grows first, as for `seal(_:in:compression:)`.
     ///
     /// - Parameter wrappedAt: Now. It breaks ties when a password opens more than one slot.
@@ -257,7 +263,7 @@ extension VaultSlotFile {
         let slotNonce = SlotRandom.bytes(count: Self.slotNonceLength)
         let slot = OpenedSlot(
             index: index,
-            generation: 1,
+            generation: UInt64.random(in: Self.firstGenerations),
             wrappedAtMilliseconds: Self.milliseconds(since1970: wrappedAt),
             slotNonce: slotNonce,
             wrapKey: rootKey.wrapKey(slotNonce: slotNonce),

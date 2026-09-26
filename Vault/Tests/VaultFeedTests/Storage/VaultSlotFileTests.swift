@@ -168,12 +168,26 @@ extension VaultSlotFileTests {
         let read = try VaultSlotFile(bytes: file.bytes)
         let opened = try read.openSlot(5, with: rootKey)
         #expect(opened.index == 5)
-        #expect(opened.generation == 1)
+        #expect(opened.generation == created.generation)
+        #expect(VaultSlotFile.firstGenerations.contains(created.generation))
         #expect(opened.wrappedAt == date)
         #expect(created.index == 5)
-        #expect(created.generation == 1)
         #expect(created.wrappedAt == date)
         #expect(try read.openPayload(of: opened) == payload)
+    }
+
+    /// A new vault's generation doesn't show how new it is: it starts somewhere random in a range far wider than
+    /// the saves a vault makes.
+    @Test
+    func createVault_startsEachVaultAtARandomGeneration() throws {
+        var file = try makeFile()
+
+        let generations = try (0 ..< 8).map { _ in
+            try file.createVault(inSlot: 3, rootKey: randomKey(), payload: payload("vault"), wrappedAt: date).generation
+        }
+
+        #expect(Set(generations).count == 8)
+        #expect(generations.allSatisfy(VaultSlotFile.firstGenerations.contains))
     }
 
     @Test(arguments: VaultSlotCompression.allCases)
@@ -607,8 +621,8 @@ extension VaultSlotFileTests {
 
         let read = try VaultSlotFile(bytes: file.bytes)
         let opened = try read.openSlot(0, with: rootKey)
-        #expect(sealed.generation == 2)
-        #expect(opened.generation == 2)
+        #expect(sealed.generation == created.generation + 1)
+        #expect(opened.generation == created.generation + 1)
         #expect(opened.wrappedAt == date)
         #expect(try read.openPayload(of: opened) == payload("second", version: 2))
     }
@@ -666,7 +680,7 @@ extension VaultSlotFileTests {
         try file.seal(payload("second"), in: created)
 
         let current = try VaultSlotFile(bytes: file.bytes).reopen(created)
-        #expect(current.generation == 2)
+        #expect(current.generation == created.generation + 1)
 
         try file.rewrap(current, with: randomKey(), wrappedAt: date)
         #expect(throws: VaultSlotFileError.slotDidNotOpen) {
@@ -807,8 +821,8 @@ extension VaultSlotFileTests {
             try read.openSlot(14, with: passwordKey)
         }
         let opened = try read.openSlot(14, with: deviceKey)
-        #expect(rewrapped.generation == 2)
-        #expect(opened.generation == 2)
+        #expect(rewrapped.generation == created.generation + 1)
+        #expect(opened.generation == created.generation + 1)
         #expect(opened.wrappedAt == later)
         #expect(try read.openPayload(of: opened) == payload("vault"))
     }

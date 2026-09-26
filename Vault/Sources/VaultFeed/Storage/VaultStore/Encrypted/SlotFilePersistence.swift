@@ -81,3 +81,70 @@ actor SlotFilePersistence: VaultRecordPersistence {
         guard saved == state else { throw EncryptedVaultStoreError.verificationFailed }
     }
 }
+
+// MARK: - Duress vault
+
+extension SlotFilePersistence {
+    /// Makes a duress vault, for `password`, where `placement` says, from this vault (VAULT-23).
+    ///
+    /// Derives the password's key as unlocking does, then, holding the file's lock:
+    ///
+    /// 1. Refuses the password if it opens this vault's own slot: it's this vault's App Lock Password. That's the one
+    ///    slot it tries. Refusing a password that opens any other slot would tell whoever holds this vault's password
+    ///    that another vault exists, and would let them test guesses at it here, without the unlock delay.
+    /// 2. Creates the new vault, empty, in `placement.slot`, with a new data key wrapped by the password's key at a
+    ///    time `wrapStamper` gives it after this vault's own wrap time, and the duress slots `placement` gives it.
+    ///    Whatever was in that slot is gone.
+    /// 3. Replaces the file as a save does, verifying first that it opens the new vault and that this vault's slot is
+    ///    as it was.
+    ///
+    /// This vault's slot isn't written, so it keeps working with its password, and the file shows no change in it.
+    /// The steps are the same whichever vault this is.
+    func makeDuressVault(
+        password: String,
+        placement: VaultDuressSlots.Placement,
+        wrapStamper: any VaultWrapStamping,
+        work: any VaultUnlockWork,
+    ) async throws {
+        guard let (header, _) = try file.readHeader() else { throw EncryptedVaultStoreError.fileMissing }
+        // The derivation unlocking uses, off the actor: about half a second on the device that created the file.
+        let key = try await Task.detached(priority: .userInitiated) {
+            try work.passwordKey(for: password, header: header)
+        }.value
+        let state = VaultRecordState(
+            items: [],
+            tags: [],
+            vault: VaultMetadata(duressSlots: placement.duressSlots),
+        )
+        var payload = try EncryptedVaultPayload.encode(state)
+        defer { SlotRandom.wipe(&payload.data) }
+        let slot = slot
+        try await file.withLock { [payload] file in
+            guard var contents = try file.read() else { throw EncryptedVaultStoreError.fileMissing }
+            let current: VaultSlotFile.OpenedSlot
+            do {
+                current = try contents.reopen(slot)
+            } catch {
+                throw EncryptedVaultStoreError.slotLost
+            }
+            guard work.openKeyBox(current.index, in: contents, with: key) == nil else {
+                throw VaultDuressVaultError.matchesAppLockPassword
+            }
+            // Later than every wrap this device has made, and than this vault's own, whatever the clock says:
+            // otherwise setting the clock back would make the new vault older than one a shared password also opens.
+            let wrappedAt = try wrapStamper.nextWrapStamp(rewrapping: current.wrappedAt)
+            let created = try contents.createVault(
+                inSlot: placement.slot,
+                rootKey: key,
+                payload: payload,
+                wrappedAt: wrappedAt,
+            )
+            try file.write(contents) { written in
+                try Self.verify(written, holds: state, in: created)
+                guard (try? written.reopen(current))?.generation == current.generation else {
+                    throw EncryptedVaultStoreError.verificationFailed
+                }
+            }
+        }
+    }
+}

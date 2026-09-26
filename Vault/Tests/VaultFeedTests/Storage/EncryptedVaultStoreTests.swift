@@ -94,6 +94,7 @@ extension EncryptedVaultStoreTests {
     func save_sealsTheSlotAtTheNextGenerationAndCopiesEveryOtherSlot() async throws {
         let fixture = try EncryptedVaultFixture()
         let before = try VaultSlotFile(bytes: fixture.bytes())
+        let firstGeneration = try fixture.savedSlot().generation
         let sut = try await fixture.openStore()
 
         try await sut.insert(item: uniqueVaultItem().makeWritable())
@@ -104,7 +105,7 @@ extension EncryptedVaultStoreTests {
         for index in VaultSlotFile.slotIndices where index != fixture.slotIndex {
             #expect(after.bytes[after.slotRange(index)] == before.bytes[before.slotRange(index)], "slot \(index)")
         }
-        #expect(try fixture.savedSlot().generation == 3)
+        #expect(try fixture.savedSlot().generation == firstGeneration + 2)
     }
 
     @Test
@@ -184,6 +185,7 @@ extension EncryptedVaultStoreTests {
     func save_crashingAtAnyStep_leavesTheOldOrNewVaultForTheNextLaunch(step: Int) async throws {
         let before = try Self.state(items: [uniqueVaultItem()])
         let fixture = try EncryptedVaultFixture(state: before)
+        let firstGeneration = try fixture.savedSlot().generation
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.file.fileSystem)
         let sut = try await fixture.through(fileSystem).openStore()
 
@@ -198,7 +200,7 @@ extension EncryptedVaultStoreTests {
             #expect(after.items.count == 2)
             #expect(after.items.first == before.items.first)
         }
-        #expect(try fixture.savedSlot().generation == (step <= Self.renameStep ? 1 : 2))
+        #expect(try fixture.savedSlot().generation == firstGeneration + (step <= Self.renameStep ? 0 : 1))
         #expect(try fixture.temporaryFileNames().isEmpty)
     }
 
