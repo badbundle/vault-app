@@ -4,9 +4,10 @@ import SwiftUI
 ///
 /// One drawing serves both the app icon (wheel at rest, door shut) and every frame
 /// of the lock animation (wheel spinning, door swinging on its left-hand hinge).
-/// The depth comes from layering alone: a metal gradient and a rim light clipped
-/// to the edges. No blur, shadow or material effects, so it renders the same on
-/// screen, in `ImageRenderer` and in snapshots.
+/// The door and wheel are the palette's two tones. The depth comes from layering
+/// gradients alone: a metal gradient and rim light on the door, and the turned
+/// metal of `VaultWheelView`. No blur, shadow or material effects, so it renders
+/// the same on screen, in `ImageRenderer` and in snapshots.
 public struct VaultLockGlyphView: View {
     public var wheelRotation: Angle
     /// 0 is shut; 1 is swung open by `metrics.doorOpenAngle`.
@@ -55,20 +56,13 @@ public struct VaultLockGlyphView: View {
 
     private func artwork(side: CGFloat) -> some View {
         let door = VaultDoorShape(metrics: metrics)
-        // Rotating the shape rather than the view keeps the light coming from
-        // above while the wheel turns.
-        let wheel = VaultWheelShape(metrics: metrics).rotation(wheelRotation)
-        let highlightWidth = side * metrics.highlightWidth
 
         return ZStack {
-            door.fill(palette.metalGradient)
+            door.fill(palette.door.faceGradient)
             door
-                .stroke(palette.highlightGradient, lineWidth: highlightWidth)
+                .stroke(palette.door.rimGradient, lineWidth: side * metrics.highlightWidth)
                 .clipShape(door)
-            wheel.fill(palette.metalGradient)
-            wheel
-                .stroke(palette.highlightGradient, lineWidth: highlightWidth)
-                .clipShape(wheel)
+            VaultWheelView(rotation: wheelRotation, metal: palette.wheel, metrics: metrics, side: side)
         }
     }
 }
