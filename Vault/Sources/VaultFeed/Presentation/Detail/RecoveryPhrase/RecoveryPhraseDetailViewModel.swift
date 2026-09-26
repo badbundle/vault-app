@@ -25,6 +25,7 @@ public final class RecoveryPhraseDetailViewModel: DetailViewModel {
     /// Even once unlocked, the words are masked until the user chooses to reveal them, so they aren't on screen the
     /// moment the item opens. Starts revealed only when creating, as there's nothing to hide yet.
     public var areWordsRevealed: Bool
+    public var editorFlow: DetailEditorFlow
     public let dataModel: VaultDataModel
     private let locale: Locale
     private let detailEditState = DetailEditState<RecoveryPhraseDetailEdits>()
@@ -71,6 +72,14 @@ public final class RecoveryPhraseDetailViewModel: DetailViewModel {
                 existingEncryptionKey: encryptionKey,
                 previewMode: metadata.previewMode,
             ))
+        }
+        editorFlow = Self.makeEditorFlow(mode: mode)
+    }
+
+    private static func makeEditorFlow(mode: Mode) -> DetailEditorFlow {
+        switch mode {
+        case .creating: DetailEditorFlow(steps: DetailEditorStep.allCases, style: .guided)
+        case .editing: DetailEditorFlow(steps: DetailEditorStep.allCases, style: .overview)
         }
     }
 
@@ -120,6 +129,24 @@ public final class RecoveryPhraseDetailViewModel: DetailViewModel {
 
     public func startEditing() {
         detailEditState.startEditing()
+        editorFlow = Self.makeEditorFlow(mode: mode)
+    }
+
+    /// Never includes the words, passphrase or description: the overview can be seen by anyone looking at the
+    /// screen, and those are the secret parts.
+    public func editorSummary(for step: DetailEditorStep) -> String {
+        let detail = editingModel.detail
+        let parts: [String] = switch step {
+        case .content:
+            [detail.standard.localizedTitle, "\(detail.wordCount) words"]
+        case .details:
+            [visibleTitle]
+        case .appearance:
+            [editorTagsSummary(tagsThatAreSelected)]
+        case .security:
+            [detail.viewConfig.localizedTitle, detail.passwordState == .required ? "Password Required" : "Encrypted"]
+        }
+        return parts.filter(\.isNotBlank).joined(separator: " · ")
     }
 
     public func didEncounterErrorPublisher() -> AnyPublisher<any Error, Never> {

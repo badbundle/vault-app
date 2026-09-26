@@ -178,17 +178,6 @@
         }
       }
     },
-    "codeDetail.input.key.enterText.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enter code from site"
-          }
-        }
-      }
-    },
     "codeDetail.input.key.error.title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -196,17 +185,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Invalid code"
-          }
-        }
-      }
-    },
-    "codeDetail.input.key.valid.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Valid"
           }
         }
       }

@@ -163,6 +163,7 @@ final class RecoveryPhraseDetailViewSnapshotTests {
         let viewModel = makeEditingViewModel(phrase: phraseWithUnknownWords)
         viewModel.isLocked = false
         viewModel.startEditing()
+        viewModel.showEditorStep(.content)
 
         snapshotScenarios(view: makeSUT(viewModel: viewModel), dynamicTypeSizes: [.medium], height: 1800)
     }

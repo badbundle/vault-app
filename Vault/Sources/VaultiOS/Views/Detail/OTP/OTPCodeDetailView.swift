@@ -11,17 +11,8 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
 
     @Environment(Pasteboard.self) private var pasteboard: Pasteboard
     @Environment(DeviceAuthenticationService.self) private var authenticationService
-    @State private var selectedColor: Color
     @State private var currentError: (any Error)?
     @State private var isShowingDeleteConfirmation = false
-    @State private var modal: Modal?
-
-    private enum Modal: IdentifiableSelf {
-        case editLock
-        case editPassphrase
-        case editKillphrase
-        case editTags
-    }
 
     init(
         editingExistingCode code: OTPAuthCode,
@@ -34,43 +25,53 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
         openInEditMode: Bool,
         presentationMode: Binding<PresentationMode>?,
     ) {
-        _navigationPath = navigationPath
-        _viewModel = .init(initialValue: .init(
-            mode: .editing(code: code, metadata: storedMetadata),
-            dataModel: dataModel,
-            editor: editor,
-        ))
-        self.previewGenerator = previewGenerator
-        self.copyActionHandler = copyActionHandler
-        self.presentationMode = presentationMode
-        _selectedColor = State(initialValue: storedMetadata.color?.color ?? VaultItemColor.default.color)
-
+        self.init(
+            viewModel: .init(
+                mode: .editing(code: code, metadata: storedMetadata),
+                dataModel: dataModel,
+                editor: editor,
+            ),
+            navigationPath: navigationPath,
+            previewGenerator: previewGenerator,
+            copyActionHandler: copyActionHandler,
+            presentationMode: presentationMode,
+        )
         if openInEditMode {
             viewModel.startEditing()
         }
     }
 
+    /// A new code, starting from scanning or entering its key.
     init(
-        newCodeWithContext initialCode: OTPAuthCode?,
+        newCodeWithEditor editor: any OTPCodeDetailEditor,
         navigationPath: Binding<NavigationPath>,
         dataModel: VaultDataModel,
-        editor: any OTPCodeDetailEditor,
         previewGenerator: PreviewGenerator,
         copyActionHandler: any VaultItemCopyActionHandler,
         presentationMode: Binding<PresentationMode>?,
     ) {
+        self.init(
+            viewModel: .init(mode: .creating(), dataModel: dataModel, editor: editor),
+            navigationPath: navigationPath,
+            previewGenerator: previewGenerator,
+            copyActionHandler: copyActionHandler,
+            presentationMode: presentationMode,
+        )
+        viewModel.startEditing()
+    }
+
+    init(
+        viewModel: OTPCodeDetailViewModel,
+        navigationPath: Binding<NavigationPath>,
+        previewGenerator: PreviewGenerator,
+        copyActionHandler: any VaultItemCopyActionHandler,
+        presentationMode: Binding<PresentationMode>?,
+    ) {
+        _viewModel = .init(initialValue: viewModel)
         _navigationPath = navigationPath
-        _viewModel = .init(initialValue: .init(
-            mode: .creating(initialCode: initialCode),
-            dataModel: dataModel,
-            editor: editor,
-        ))
         self.previewGenerator = previewGenerator
         self.copyActionHandler = copyActionHandler
         self.presentationMode = presentationMode
-        _selectedColor = .init(initialValue: VaultItemColor.default.color)
-
-        viewModel.startEditing()
     }
 
     var body: some View {
@@ -80,108 +81,19 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
             isShowingDeleteConfirmation: $isShowingDeleteConfirmation,
             navigationPath: $navigationPath,
             presentationMode: presentationMode,
+            editorKind: .code,
+            editorIdentity: identity,
         ) {
-            if viewModel.isInEditMode {
-                if viewModel.showsKeyEditingFields {
-                    keyEditingSection
-                }
-                nameEditingSection
-                editingActionsSection
-            } else {
-                if case let .editing(code, metadata) = viewModel.mode {
-                    codeInformationSection(code: code, metadata: metadata)
-                    descriptionSection
-                    MetadataDisclosureSection(
-                        tags: viewModel.tagsThatAreSelected,
-                        entries: viewModel.detailMenuItems,
-                    )
-                }
+            if case let .editing(code, metadata) = viewModel.mode {
+                codeInformationSection(code: code, metadata: metadata)
+                descriptionSection
+                MetadataDisclosureSection(
+                    tags: viewModel.tagsThatAreSelected,
+                    entries: viewModel.detailMenuItems,
+                )
             }
-        }
-        .animation(.snappy, value: viewModel.editingModel.detail.viewConfig)
-        .sheet(item: $modal, onDismiss: nil, content: { item in
-            switch item {
-            case .editLock:
-                NavigationStack {
-                    VaultDetailLockEditView(
-                        title: "Lock",
-                        description: "Locked codes require authentication to view or edit. You will need to authenticate every time before you can view or copy the code.",
-                        lockState: $viewModel.editingModel.detail.lockState,
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                modal = nil
-                            } label: {
-                                Text("Done")
-                            }
-                        }
-                    }
-                }
-            case .editPassphrase:
-                NavigationStack {
-                    VaultDetailPassphraseEditView(
-                        title: "Visibility",
-                        description: "Codes that require a passphrase are hidden from the main feed. You need to search exactly for your chosen passphrase each time to view this code.",
-                        hiddenWithPassphraseTitle: viewModel.strings.passphraseSubtitle,
-                        viewConfig: $viewModel.editingModel.detail.viewConfig,
-                        passphrase: $viewModel.editingModel.detail.searchPassphrase,
-                    )
-                    .interactiveDismissDisabled(!viewModel.editingModel.detail.isPassphraseValid)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                modal = nil
-                            } label: {
-                                Text("Done")
-                            }
-                            .disabled(!viewModel.editingModel.detail.isPassphraseValid)
-                        }
-                    }
-                }
-            case .editKillphrase:
-                NavigationStack {
-                    VaultDetailKillphraseEditView(
-                        title: "Killphrase",
-                        description: "A killphrase is a secret phrase that is used to immediately delete this code. In the search bar, search exactly for this text and the code will be immediately and quitely deleted. Combined with a search passphrase, you can delete an item without it being made visible.",
-                        hiddenWithKillphraseTitle: viewModel.strings.killphraseSubtitle,
-                        killphraseEnabled: $viewModel.editingModel.detail.killphraseEnabled,
-                        newKillphrase: $viewModel.editingModel.detail.newKillphrase,
-                    )
-                    .interactiveDismissDisabled(!viewModel.editingModel.detail.isKillphraseValid)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                modal = nil
-                            } label: {
-                                Text("Done")
-                            }
-                            .disabled(!viewModel.editingModel.detail.isKillphraseValid)
-                        }
-                    }
-                }
-            case .editTags:
-                NavigationStack {
-                    VaultDetailTagEditView(
-                        tagsThatAreSelected: viewModel.tagsThatAreSelected,
-                        remainingTags: viewModel.remainingTags,
-                        didAdd: { viewModel.editingModel.detail.tags.insert($0.id) },
-                        didRemove: { viewModel.editingModel.detail.tags.remove($0.id) },
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                modal = nil
-                            } label: {
-                                Text("Done")
-                            }
-                        }
-                    }
-                }
-            }
-        })
-        .onChange(of: selectedColor.hashValue) { _, _ in
-            viewModel.editingModel.detail.color = VaultItemColor(color: selectedColor)
+        } editorStep: { step in
+            editorStep(step)
         }
         .onDisappear {
             // Clear the state of the navigation path, if any.
@@ -194,128 +106,35 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
         }
     }
 
-    private var iconHeader: some View {
-        Image(systemName: "key.horizontal.fill")
-            .font(.title)
-            .foregroundStyle(selectedColor)
+    private var identity: DetailEditorItemIdentity {
+        let detail = viewModel.editingModel.detail
+        return DetailEditorItemIdentity(
+            systemImage: "key.horizontal.fill",
+            title: viewModel.visibleIssuerTitle,
+            subtitle: detail.accountNameTitle,
+            color: detail.color,
+        )
     }
 
-    private var iconEditingHeader: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "key.horizontal.fill")
-                .font(.title)
-                .foregroundStyle(selectedColor)
-
-            ColorPicker(selection: $selectedColor, supportsOpacity: false, label: {
-                EmptyView()
-            })
-            .labelsHidden()
-        }
-    }
-
-    private var nameEditingSection: some View {
-        Section {
-            LabeledTextField(
-                viewModel.strings.siteNameTitle,
-                text: $viewModel.editingModel.detail.issuerTitle,
-                status: .init(errorFrom: viewModel.editingModel.detail.$issuerTitle),
+    @ViewBuilder
+    private func editorStep(_ step: DetailEditorStep) -> some View {
+        switch step {
+        case .content:
+            OTPCodeKeyStep(viewModel: viewModel)
+        case .details:
+            OTPCodeNameStep(viewModel: viewModel)
+        case .appearance:
+            DetailEditorAppearanceStep(
+                identity: identity,
+                color: $viewModel.editingModel.detail.color,
+                selectedTags: viewModel.tagsThatAreSelected,
+                remainingTags: viewModel.remainingTags,
+                tagCountDescription: viewModel.strings.tagCount(tags: viewModel.editingModel.detail.tags.count),
+                addTag: { viewModel.editingModel.detail.tags.insert($0.id) },
+                removeTag: { viewModel.editingModel.detail.tags.remove($0.id) },
             )
-
-            LabeledTextField(
-                viewModel.strings.accountNameTitle,
-                text: $viewModel.editingModel.detail.accountNameTitle,
-                prompt: viewModel.strings.accountNameExample,
-            )
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-
-            LabeledTextField(
-                viewModel.strings.descriptionTitle,
-                text: $viewModel.editingModel.detail.description,
-                prompt: viewModel.strings.descriptionSubtitle,
-                kind: .multiline(minLines: 3),
-            )
-        } header: {
-            iconEditingHeader
-                .containerRelativeFrame(.horizontal)
-                .padding(.vertical, 2)
-                .padding(.bottom, 4)
-        }
-    }
-
-    private var keyEditingSection: some View {
-        Section {
-            LabeledTextField(
-                viewModel.strings.inputSecretTitle,
-                text: $viewModel.editingModel.detail.secretBase32String,
-                status: keyStatus,
-            )
-            .fontDesign(.monospaced)
-            .autocorrectionDisabled()
-
-            Picker(selection: $viewModel.editingModel.detail.codeType) {
-                ForEach(OTPAuthType.Kind.allCases) { authType in
-                    Text(viewModel.strings.codeKindTitle(kind: authType))
-                        .tag(authType)
-                }
-            } label: {
-                Text(viewModel.strings.inputCodeTypeTitle)
-            }
-
-            DisclosureGroup {
-                switch viewModel.editingModel.detail.codeType {
-                case .totp:
-                    Stepper(value: $viewModel.editingModel.detail.totpPeriodLength, in: 1 ... UInt64(Int.max)) {
-                        LabeledContent(
-                            viewModel.strings.inputTotpPeriodTitle,
-                            value: "\(viewModel.editingModel.detail.totpPeriodLength)",
-                        )
-                    }
-                case .hotp:
-                    Stepper(value: $viewModel.editingModel.detail.hotpCounterValue, in: 0 ... UInt64(Int.max)) {
-                        LabeledContent(
-                            viewModel.strings.inputHotpCounterTitle,
-                            value: "\(viewModel.editingModel.detail.hotpCounterValue)",
-                        )
-                    }
-                }
-
-                Picker(selection: $viewModel.editingModel.detail.algorithm) {
-                    ForEach(OTPAuthAlgorithm.allCases) { algorithm in
-                        Text(algorithm.stringValue)
-                            .tag(algorithm)
-                    }
-                } label: {
-                    Text(viewModel.strings.inputAlgorithmTitle)
-                }
-
-                Stepper(value: $viewModel.editingModel.detail.numberOfDigits, in: 1 ... UInt16.max) {
-                    LabeledContent(
-                        viewModel.strings.inputNumberOfDigitsTitle,
-                        value: "\(viewModel.editingModel.detail.numberOfDigits)",
-                    )
-                }
-            } label: {
-                Text(viewModel.strings.advancedSectionTitle)
-            }
-        } header: {
-            OTPKeyValidationView(
-                validationState: viewModel.editingModel.detail.$secretBase32String,
-                validTitle: viewModel.strings.inputKeyValidTitle,
-                invalidTitle: viewModel.strings.inputKeyEmptyTitle,
-                errorTitle: viewModel.strings.inputKeyErrorTitle,
-            )
-            .padding()
-            .frame(maxWidth: .infinity)
-        }
-    }
-
-    /// The header above the key already explains what's wrong, so the field only flags it.
-    private var keyStatus: LabeledTextField.Status {
-        switch viewModel.editingModel.detail.$secretBase32String {
-        case .valid: .valid()
-        case .invalid: .none
-        case .error: .error()
+        case .security:
+            OTPCodeSecurityStep(viewModel: viewModel)
         }
     }
 
@@ -347,82 +166,6 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
             } header: {
                 Text(viewModel.strings.descriptionTitle)
             }
-        }
-    }
-
-    @ViewBuilder
-    private var editingActionsSection: some View {
-        Section {
-            Button {
-                modal = .editPassphrase
-            } label: {
-                FormRow(
-                    image: Image(systemName: viewModel.editingModel.detail.viewConfig.systemIconName),
-                    color: .accentColor,
-                    style: .standard,
-                ) {
-                    LabeledContent("Visibility", value: viewModel.editingModel.detail.viewConfig.localizedTitle)
-                        .font(.body)
-                }
-            }
-
-            Toggle(isOn: $viewModel.editingModel.detail.showInQuickType) {
-                FormRow(
-                    image: Image(systemName: "keyboard"),
-                    color: .accentColor,
-                    style: .standard,
-                ) {
-                    Text("Show in QuickType")
-                        .font(.body)
-                }
-            }
-
-            Button {
-                modal = .editLock
-            } label: {
-                FormRow(
-                    image: Image(systemName: viewModel.editingModel.detail.lockState.systemIconName),
-                    color: .accentColor,
-                    style: .standard,
-                ) {
-                    LabeledContent("Lock", value: viewModel.editingModel.detail.lockState.localizedTitle)
-                        .font(.body)
-                }
-            }
-
-            Button {
-                modal = .editKillphrase
-            } label: {
-                FormRow(
-                    image: Image(systemName: viewModel.editingModel.detail.killphraseEnabledIcon),
-                    color: .accentColor,
-                    style: .standard,
-                ) {
-                    LabeledContent("Killphrase", value: viewModel.editingModel.detail.killphraseEnabledText)
-                        .font(.body)
-                }
-            }
-
-            Button {
-                modal = .editTags
-            } label: {
-                VaultDetailTagsRow(
-                    tags: viewModel.tagsThatAreSelected,
-                    countDescription: viewModel.strings.tagCount(tags: viewModel.editingModel.detail.tags.count),
-                )
-            }
-        }
-
-        if viewModel.shouldShowDeleteButton {
-            Section {
-                deleteButton
-            }
-        }
-    }
-
-    private var deleteButton: some View {
-        ProminentActionButton(localized(key: "action.delete.title"), systemImage: "trash.fill", role: .destructive) {
-            isShowingDeleteConfirmation = true
         }
     }
 

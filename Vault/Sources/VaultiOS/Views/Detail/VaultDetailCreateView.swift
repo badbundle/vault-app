@@ -12,15 +12,21 @@ struct VaultDetailCreateView<
     @Environment(VaultDataModel.self) private var dataModel
     @Environment(VaultInjector.self) private var injector
     @Environment(DeviceAuthenticationService.self) private var authenticationService
+    @Environment(\.presentationMode) private var presentationMode
 
     var body: some View {
         switch creatingItem {
         case .otpCode:
-            OTPCodeCreateView(
+            OTPCodeDetailView(
+                newCodeWithEditor: VaultDataModelEditorAdapter(
+                    dataModel: dataModel,
+                    keyDeriverFactory: injector.vaultKeyDeriverFactory,
+                ),
+                navigationPath: $navigationPath,
+                dataModel: dataModel,
                 previewGenerator: previewGenerator,
                 copyActionHandler: copyActionHandler,
-                navigationPath: $navigationPath,
-                intervalTimer: injector.intervalTimer,
+                presentationMode: presentationMode,
             )
         case .secureNote:
             SecureNoteDetailView(

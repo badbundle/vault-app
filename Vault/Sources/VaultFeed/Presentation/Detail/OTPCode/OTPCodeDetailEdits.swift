@@ -7,7 +7,7 @@ import VaultCore
 /// This is a partial edit to the code, as seen from the user's point of view.
 /// Fields are separated from the raw model type to make them easier to edit in place.
 /// From this model, they are merged with an existing model or written to a new model, as needed.
-public struct OTPCodeDetailEdits: EditableState, Sendable {
+public struct OTPCodeDetailEdits: DetailEditorEditableState, Sendable {
     public var relativeOrder: UInt64
 
     public var codeType: OTPAuthType.Kind
@@ -167,7 +167,34 @@ public struct OTPCodeDetailEdits: EditableState, Sendable {
     }
 
     public var isValid: Bool {
-        $secretBase32String.isValid && $issuerTitle.isValid && isPassphraseValid
+        DetailEditorStep.allCases.allSatisfy(isComplete)
+    }
+
+    public func isComplete(_ step: DetailEditorStep) -> Bool {
+        switch step {
+        case .content: $secretBase32String.isValid
+        case .details: $issuerTitle.isValid
+        case .appearance: true
+        case .security: isPassphraseValid && isKillphraseValid
+        }
+    }
+
+    /// Takes the key, and the names if the code has any, from a code that's been scanned. Everything else is kept.
+    public mutating func applyKey(from code: OTPAuthCode) {
+        codeType = code.type.kind
+        switch code.type {
+        case let .totp(period): totpPeriodLength = period
+        case let .hotp(counter): hotpCounterValue = counter
+        }
+        secretBase32String = code.data.secret.base32EncodedString
+        algorithm = code.data.algorithm
+        numberOfDigits = code.data.digits.value
+        if code.data.issuer.isNotEmpty {
+            issuerTitle = code.data.issuer
+        }
+        if code.data.accountName.isNotEmpty {
+            accountNameTitle = code.data.accountName
+        }
     }
 
     public var isPassphraseValid: Bool {

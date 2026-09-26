@@ -76,6 +76,8 @@ struct LabeledTextField: View {
             if let errorMessage {
                 Text(errorMessage)
                     .font(.footnote)
+                    // Like the label, never styled like the value.
+                    .fontDesign(nil)
                     .foregroundStyle(.red)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .transition(.opacity)
