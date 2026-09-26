@@ -11,7 +11,27 @@ struct AutoBackupViewSnapshotTests {
     func locked() {
         let sut = makeSUT(
             dataModel: anyVaultDataModel(),
-            viewModel: makeViewModel(),
+            viewModel: makeViewModelWithPrivateStatus(),
+        )
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
+    func locked_dark() {
+        let sut = makeSUT(
+            dataModel: anyVaultDataModel(),
+            viewModel: makeViewModelWithPrivateStatus(),
+        )
+
+        assertSnapshot(of: sut, colorScheme: .dark)
+    }
+
+    @Test
+    func authenticationFailed() async {
+        let sut = makeSUT(
+            dataModel: await passwordErrorDataModel(),
+            viewModel: makeViewModelWithPrivateStatus(),
         )
 
         assertSnapshot(of: sut, as: .image)
@@ -21,7 +41,7 @@ struct AutoBackupViewSnapshotTests {
     func passwordNotCreated() async {
         let sut = makeSUT(
             dataModel: await passwordNotCreatedDataModel(),
-            viewModel: makeViewModel(),
+            viewModel: makeViewModelWithPrivateStatus(),
         )
 
         assertSnapshot(of: sut, as: .image)
@@ -185,6 +205,16 @@ extension AutoBackupViewSnapshotTests {
         )
     }
 
+    /// A status whose header names the backup folder and describes an error, neither of which may
+    /// show until the page is unlocked.
+    private func makeViewModelWithPrivateStatus() -> AutoBackupViewModel {
+        makeViewModel(
+            status: .error(.writeFailed(reason: "The folder could not be reached")),
+            configuration: enabledConfiguration(providerID: "icloud-drive"),
+            providerStates: [configuredProviderState()],
+        )
+    }
+
     private func anyRun(trigger: AutoBackupRun.Trigger, progress: AutoBackupProgress) -> AutoBackupRun {
         AutoBackupRun(trigger: trigger, startedAt: Date(timeIntervalSince1970: 1_700_000_000), progress: progress)
     }
@@ -192,6 +222,14 @@ extension AutoBackupViewSnapshotTests {
     private func passwordNotCreatedDataModel() async -> VaultDataModel {
         let backupPasswordStore = BackupPasswordStoreMock()
         backupPasswordStore.fetchPasswordHandler = { nil }
+        let dataModel = anyVaultDataModel(backupPasswordStore: backupPasswordStore)
+        await dataModel.loadBackupPassword()
+        return dataModel
+    }
+
+    private func passwordErrorDataModel() async -> VaultDataModel {
+        let backupPasswordStore = BackupPasswordStoreMock()
+        backupPasswordStore.fetchPasswordHandler = { throw TestError() }
         let dataModel = anyVaultDataModel(backupPasswordStore: backupPasswordStore)
         await dataModel.loadBackupPassword()
         return dataModel
