@@ -14,7 +14,9 @@ import Foundation
 /// - **Clearing the system surfaces**: the app then clears QuickType and reloads the widgets
 ///   (`finishClearingSystemSurfaces(_:)`), once it can.
 /// - **Erasing**: it leaves the files alone and reports `.erasing`. The app opens no store, and finishes the erase
-///   with `VaultEraser`, which needs the keychain and the app's hooks as well as the files.
+///   with `VaultEraser`, which needs the keychain and the app's hooks as well as the files. It reports the same for
+///   the password mode with no vault left at all, neither the encrypted file nor the plain store: an erase that
+///   removed the vault but couldn't journal it.
 ///
 /// It never deletes the only copy of anything: an encrypted file goes only if the plain store is there to be the
 /// vault, and the plain store only if there's an encrypted file that reads as one. See "Migration: plain to
@@ -70,6 +72,11 @@ public struct VaultStorageRecovery: Sendable {
             }
             return .plain
         case .password:
+            guard try anyVaultIsLeft() else {
+                // An erase removed the vault but couldn't journal that it had, as it can if the disk is full. Nothing
+                // is left to open, so the erase has to finish, or the device is stuck with no vault.
+                return .erasing
+            }
             if case let .deletingPlainStore(archives) = state.transition {
                 try deletePlainStore(archives: archives)
                 state.transition = .clearingSystemSurfaces
@@ -77,6 +84,13 @@ public struct VaultStorageRecovery: Sendable {
             }
             return .password
         }
+    }
+
+    /// Whether there's still a vault to open: the encrypted file, or the plain store.
+    private func anyVaultIsLeft() throws -> Bool {
+        let names = try Set(fileSystem.contentsOfDirectory(at: directory).map(\.lastPathComponent))
+        let plainStoreFile = PersistedLocalVaultStoreFactory.storeFileURLs(storageDirectory: directory)[0]
+        return names.contains(EncryptedVaultFile.fileName) || names.contains(plainStoreFile.lastPathComponent)
     }
 
     /// Clears the QuickType identity store and reloads the widgets, if a committed conversion hadn't yet, then clears

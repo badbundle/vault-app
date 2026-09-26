@@ -142,6 +142,24 @@ struct VaultStorageRecoveryTests {
         }
     }
 
+    /// An erase removed the vault but couldn't journal it. No password can open anything, so rather than report the
+    /// password mode, which would leave the device with no vault for good, recovery reports the erase to finish.
+    @Test(arguments: [nil, VaultStorageState.Transition.clearingSystemSurfaces])
+    func recover_passwordModeWithNoVaultLeft_reportsAnEraseToFinish(
+        transition: VaultStorageState.Transition?,
+    ) async throws {
+        try await withTemporaryDirectory { directory in
+            try Self.write(
+                VaultStorageState(mode: .password, transition: transition, unlockDeadline: .seconds(1)),
+                in: directory,
+            )
+            try Data("encrypted".utf8)
+                .write(to: directory.appending(path: EncryptedVaultFile.temporaryFilePrefix + "a"))
+
+            #expect(try VaultStorageRecovery(directory: directory).recoverAtLaunch() == .erasing)
+        }
+    }
+
     @Test
     func recover_encrypted_touchesNothingButStrayStateTempFiles() async throws {
         try await withTemporaryDirectory { directory in

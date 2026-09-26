@@ -354,14 +354,16 @@ public enum VaultRoot {
 
     /// Erases every vault, back to a fresh plain store: what VAULT-34's lock
     /// screen does after too many wrong App Lock Passwords, when the user has
-    /// turned that on. `setup()` finishes an erase the app was stopped in the
-    /// middle of.
+    /// turned that on. Go through `eraseVault()`, which also keeps
+    /// `plainVaultStore` up to date.
     @MainActor
     static let vaultEraser: VaultEraser = .init(
         directory: vaultStorageDirectory,
         session: vaultStore,
         secureStorage: secureStorage,
         attemptCounter: AppLockPasswordAttemptCounter(),
+        defaults: defaults,
+        temporaryDirectory: fileManager.temporaryDirectory,
         hooks: .init(
             releasePlainStore: {
                 await releasePlainVaultStore()
@@ -372,14 +374,28 @@ public enum VaultRoot {
             reloadWidgets: {
                 await reloadWidgetTimelines()
             },
+            forgetVaultSettings: {
+                // Both read their settings at launch, before an interrupted
+                // erase finishes.
+                await autoBackupService.forgetConfiguration()
+                await vaultDataModel.reloadLastBackupEvent()
+            },
         ),
     )
 
-    /// The erase `setup()` is finishing, if the app was stopped in the middle
-    /// of one. The vault's views appear once it's done, so nothing reads the
-    /// vault, or the keychain items it deletes, before then.
+    /// Erases every vault (`VaultEraser`), then reads and writes the fresh
+    /// plain store it leaves, which the rehash services find here.
     @MainActor
-    public private(set) static var finishingErase: Task<Void, Never>?
+    static func eraseVault() async throws {
+        plainVaultStore = try await vaultEraser.erase()
+    }
+
+    /// Finishes an erase the app was stopped in the middle of, if there's one.
+    /// `setup()` starts it, and the vault's views wait for it.
+    @MainActor
+    static let interruptedErase: InterruptedEraseViewModel? = storageMode == .erasing
+        ? InterruptedEraseViewModel(erase: { try await eraseVault() })
+        : nil
 
     // MARK: - Auto-Backup
 
@@ -425,10 +441,11 @@ public enum VaultRoot {
     @MainActor
     public static func setup() {
         // Finish an erase the app was stopped in the middle of. It leaves a
-        // fresh, empty plain store. The vault's views wait for it.
-        if storageMode == .erasing {
-            finishingErase = Task {
-                try? await vaultEraser.erase()
+        // fresh, empty plain store. The vault's views wait for it, and it
+        // never runs twice.
+        if let interruptedErase {
+            Task {
+                await interruptedErase.finish()
             }
         }
         // Wire up auto-backup and widget reloads to trigger when vault data

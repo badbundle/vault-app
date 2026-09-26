@@ -133,6 +133,10 @@ extension VaultStorageStateFile: VaultUnlockDeadlineStoring {
         state.unlockDeadline = deadline
         try write(state)
     }
+
+    func isErasing() async throws -> Bool {
+        try read().transition == .erasing
+    }
 }
 
 // MARK: - Extensions

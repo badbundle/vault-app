@@ -67,6 +67,11 @@ public protocol AutoBackupService: Sendable {
     /// Call this after configuring a provider externally.
     func saveProviderConfiguration() async
 
+    /// Forgets everything auto-backup was set to, in memory and in storage: it's turned off, and forgets its provider,
+    /// the provider's folder and the last backup it made. For erasing the vault (`VaultEraser`), so the next backup
+    /// can't go where the erased vault's went, or clean them up.
+    func forgetConfiguration() async
+
     /// Notify the service that vault data has changed.
     /// This triggers a debounced backup if auto-backup is enabled.
     func notifyDataChanged()

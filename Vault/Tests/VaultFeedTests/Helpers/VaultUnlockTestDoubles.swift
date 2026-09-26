@@ -239,6 +239,7 @@ final class FakeUnlockDeadlineStore: VaultUnlockDeadlineStoring {
 
     private let deadline: SharedMutex<Duration>
     private let failsToRaise = SharedMutex(false)
+    private let erasing = SharedMutex(false)
 
     init(deadline: Duration) {
         self.deadline = SharedMutex(deadline)
@@ -250,6 +251,15 @@ final class FakeUnlockDeadlineStore: VaultUnlockDeadlineStoring {
 
     func failToRaise() {
         failsToRaise.modify { $0 = true }
+    }
+
+    /// Makes the storage state say an erase is underway.
+    func startErasing() {
+        erasing.modify { $0 = true }
+    }
+
+    func isErasing() async throws -> Bool {
+        erasing.value
     }
 
     func unlockDeadline() async throws -> Duration {

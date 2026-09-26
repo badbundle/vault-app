@@ -6,10 +6,14 @@ import Foundation
 /// Calibration sets it when the encrypted vault is created, at 1.5 times the expected key derivation, and it's kept
 /// with the storage state (VAULT-47), not in the file's header, because it belongs to the device. It's only ever
 /// raised.
+///
+/// The storage state also says whether an erase is underway, when nothing may unlock.
 public protocol VaultUnlockDeadlineStoring: Sendable {
     func unlockDeadline() async throws -> Duration
     /// Raises the deadline. It's never lowered.
     func raiseUnlockDeadline(to deadline: Duration) async throws
+    /// Whether an erase is underway (`VaultEraser`), so no vault may open, even with the right password.
+    func isErasing() async throws -> Bool
 }
 
 /// The time unlocking is measured and held with.

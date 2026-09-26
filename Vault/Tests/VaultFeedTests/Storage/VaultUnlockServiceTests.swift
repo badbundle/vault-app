@@ -193,6 +193,36 @@ extension VaultUnlockServiceTests {
         #expect(result == .unlocked)
     }
 
+    /// A vault that's being erased mustn't open again, even if removing its file keeps failing: the attempt is refused
+    /// with the right password too, and nothing is counted or tried.
+    @Test
+    func unlock_whileErasing_refusesWithoutCountingOrTrying() async throws {
+        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [uniqueVaultItem()])])
+        sut.deadlineStore.startErasing()
+
+        await #expect(throws: VaultUnlockError.erasing) {
+            try await sut.service.unlock(password: "real")
+        }
+
+        #expect(sut.log.value.isEmpty)
+        #expect(sut.clock.sleeps.isEmpty)
+        #expect(await sut.session.isLocked)
+    }
+
+    /// The storage state file, as the deadline store, says when an erase is underway.
+    @Test
+    func stateFile_asTheDeadlineStore_saysWhenAnEraseIsUnderway() async throws {
+        try await withTemporaryDirectory { directory in
+            let stateFile = VaultStorageStateFile(directory: directory)
+            try stateFile.write(VaultStorageState(mode: .password, unlockDeadline: deadline))
+            #expect(try await !stateFile.isErasing())
+
+            try stateFile.write(VaultStorageState(mode: .password, transition: .erasing, unlockDeadline: deadline))
+
+            #expect(try await stateFile.isErasing())
+        }
+    }
+
     @Test
     func unlock_whileTheUserMustWait_triesNothing() async throws {
         let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])])

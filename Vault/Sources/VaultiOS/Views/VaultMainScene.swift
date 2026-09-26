@@ -14,7 +14,7 @@ public struct VaultMainScene: Scene {
     @State private var vaultDataModel: VaultDataModel = VaultRoot.vaultDataModel
     @State private var injector: VaultInjector = VaultRoot.vaultInjector
     @State private var pendingOpenItemDetail: Identifier<VaultItem>?
-    @State private var isFinishingErase = VaultRoot.storageMode == .erasing
+    @State private var interruptedErase = VaultRoot.interruptedErase
     #if DEBUG
     @State private var isSeedingScreenshotVault = ScreenshotMode.isEnabled
     #endif
@@ -34,14 +34,11 @@ public struct VaultMainScene: Scene {
                 VaultStoreFailureView(message: failureMessage)
             } else {
                 AppLockContainer(appLock: appLockService, localSettings: localSettings) {
-                    if isFinishingErase {
+                    if let interruptedErase, interruptedErase.state != .erased {
                         // Keeps the vault off screen until an erase the app was
                         // stopped in the middle of has finished, so the navigation
                         // view's own setup never loads the keys it deletes.
-                        Color.clear.task {
-                            await VaultRoot.finishingErase?.value
-                            isFinishingErase = false
-                        }
+                        InterruptedEraseView(viewModel: interruptedErase)
                     } else {
                         #if DEBUG
                         if isSeedingScreenshotVault {

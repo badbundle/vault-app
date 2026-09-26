@@ -136,6 +136,9 @@ public enum VaultUnlockError: Error, Equatable, Sendable {
     case attemptUnderway
     /// The store session isn't locked: a vault is open already.
     case notLocked
+    /// An erase is underway (`VaultEraser`), so no vault may open, even with the right password. Finish the erase
+    /// instead.
+    case erasing
 }
 
 // MARK: - Unlocking
@@ -153,6 +156,8 @@ extension VaultUnlockService {
         isUnlocking = true
         defer { isUnlocking = false }
         guard await session.isLocked else { throw VaultUnlockError.notLocked }
+        // Nothing is counted: the attempt is refused whatever the password.
+        guard try await !deadlineStore.isErasing() else { throw VaultUnlockError.erasing }
         let lockEpoch = await session.lockEpoch
 
         let deadline = try await min(deadlineStore.unlockDeadline(), Self.maximumDeadline)

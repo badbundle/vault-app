@@ -5,6 +5,7 @@ import VaultCore
 @testable import VaultFeed
 
 /// Erasing every vault, from every kind of device, and finishing an erase that failed or crashed part way.
+@MainActor
 struct VaultEraserTests {
     /// The usual case: after too many wrong passwords at the lock screen, with the vault locked. The device has
     /// everything an erase removes: the encrypted file, the plain store's files as a conversion that was interrupted
@@ -26,6 +27,7 @@ struct VaultEraserTests {
                 "remove vault-slots.v1",
                 "remove the killphrase key from the keychain",
                 "reset the attempt count",
+                "forget the vault's settings",
                 "clear QuickType",
                 "reload widgets",
                 "create the plain store",
@@ -44,6 +46,23 @@ struct VaultEraserTests {
 
             let removals = harness.fileSystem.log.filter { $0.hasPrefix("remove ") }
             #expect(removals.first == "remove vault-slots.v1")
+        }
+    }
+
+    /// A writer that had stalled can put the encrypted file back after the erase first removed it, if the erase
+    /// couldn't take the lock then. The erase checks again, holding the lock, before it finishes.
+    @Test
+    func erase_removesAnEncryptedFileAStalledWriterPutBack() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try await VaultEraseHarness.encryptedDevice(in: directory)
+            let before = try harness.encryptedFileBytes()
+            let eraser = harness.makeEraser(whileReloadingWidgets: {
+                try? before.write(to: directory.appending(path: EncryptedVaultFile.fileName))
+            })
+
+            try await eraser.erase()
+
+            try await harness.expectErased()
         }
     }
 
@@ -95,8 +114,8 @@ struct VaultEraserTests {
         try await withTemporaryDirectory { directory in
             let store = try PersistedLocalVaultStoreFactory(storageDirectory: directory).makeVaultStoreOrThrow()
             try await VaultEncryptionConverterTests.seed(store)
-            let harness = VaultEraseHarness(directory: directory, session: VaultStoreSession(target: .plain(store)))
-            try await harness.seedKeychain()
+            let harness = try VaultEraseHarness(directory: directory, session: VaultStoreSession(target: .plain(store)))
+            try await harness.seedDevice()
 
             try await harness.erase()
 
@@ -110,7 +129,8 @@ struct VaultEraserTests {
     @Test
     func erase_withNothingToErase_twice_leavesAFreshPlainStore() async throws {
         try await withTemporaryDirectory { directory in
-            let harness = VaultEraseHarness(directory: directory)
+            let harness = try VaultEraseHarness(directory: directory)
+            try harness.defaults.set("kept", for: VaultEraseHarness.unrelatedSetting)
 
             try await harness.erase()
             try await harness.erase()
@@ -126,10 +146,11 @@ struct VaultEraserTests {
             let harness = try await VaultEraseHarness.encryptedDevice(in: directory)
             let eraser = harness.makeEraser()
 
-            async let first: Void = eraser.erase()
-            async let second: Void = eraser.erase()
-            _ = try await (first, second)
+            async let first = eraser.erase()
+            async let second = eraser.erase()
+            let (firstStore, secondStore) = try await (first, second)
 
+            #expect(firstStore === secondStore)
             #expect(harness.fileSystem.log.count { $0 == "clear QuickType" } == 1)
             try await harness.expectErased()
         }
@@ -177,11 +198,16 @@ extension VaultEraserTests {
                 await harness.session.lock()
                 harness.fileSystem.inject(.fail(atStep: step))
 
-                let result = await Result(asyncThrowingClosure: { try await harness.erase() })
+                var failed = false
+                do {
+                    try await harness.erase()
+                } catch {
+                    failed = true
+                }
 
                 let context = Comment(rawValue: "failing at step \(step), \(steps.names[step - 1])")
                 #expect(try !harness.fileNames().contains(EncryptedVaultFile.fileName), context)
-                if case .failure = result {
+                if failed {
                     #expect(await harness.session.isLocked, context)
                 }
                 harness.fileSystem.inject(nil)
@@ -217,8 +243,40 @@ extension VaultEraserTests {
                 } else {
                     #expect(outcome == .password, context)
                     #expect(try harness.encryptedFileBytes() == before, context)
-                    #expect(await harness.keychain.keys() == Set(VaultEraser.keychainKeys), context)
+                    #expect(await harness.keychain.keys() == Set(VaultEraseHarness.everySecureStorageKey), context)
                     #expect(harness.attemptStorage.hasRecord, context)
+                }
+            }
+        }
+    }
+
+    /// The journal can't be written, perhaps because the disk is full, so the erase removes the vault first to free
+    /// space, and then the app stops before the journal's in place. With no journal and no vault, the next launch still
+    /// finishes the erase, rather than leave a device in the password mode with nothing to open.
+    @Test
+    func erase_failingToJournalThenCrashing_isStillFinishedByTheNextLaunch() async throws {
+        let steps = try await Self.stepsOfAnErase()
+        // Each step of writing the first journal, up to its rename.
+        for failStep in 2 ... steps.journalRename {
+            // Every step through removing the vault and renaming the second journal into place, and one more.
+            for crashStep in failStep + 1 ... failStep + 16 {
+                try await withTemporaryDirectory { directory in
+                    let harness = try await VaultEraseHarness.encryptedDevice(in: directory)
+                    let before = try harness.encryptedFileBytes()
+                    harness.fileSystem.inject(.failThenCrash(failAtStep: failStep, crashAtStep: crashStep))
+
+                    _ = try? await harness.erase()
+                    let vaultWasRemoved = try !harness.fileNames().contains(EncryptedVaultFile.fileName)
+                    let outcome = try await harness.relaunch()
+
+                    let context = Comment(rawValue: "failing at step \(failStep), then crashing at step \(crashStep)")
+                    if vaultWasRemoved {
+                        #expect(outcome != .password, context)
+                        try await harness.expectErased(context)
+                    } else {
+                        #expect(outcome == .password, context)
+                        #expect(try harness.encryptedFileBytes() == before, context)
+                    }
                 }
             }
         }
@@ -227,39 +285,72 @@ extension VaultEraserTests {
 
 // MARK: - Harness
 
-/// A device to erase: its storage directory, keychain and count of wrong attempts, and a store session.
+/// A device to erase: its storage directory, keychain, count of wrong attempts, the app's defaults and temporary
+/// directory, and a store session.
 ///
 /// Every file operation, keychain removal and plain store creation an erase makes is a step of `fileSystem`, which
 /// can make it fail or crash. Hooks are recorded in its log too, in order with the steps.
+@MainActor
 struct VaultEraseHarness {
-    static let hookEntries: Set = ["release the plain store", "clear QuickType", "reload widgets"]
+    static let hookEntries: Set = [
+        "release the plain store",
+        "clear QuickType",
+        "reload widgets",
+        "forget the vault's settings",
+    ]
+    /// Every item the app keeps in `SecureStorage`, listed here rather than taken from `VaultEraser.keychainKeys`, so
+    /// that one the eraser misses shows. The attempt count is kept apart, by `AppLockPasswordAttemptCounter`.
+    static let everySecureStorageKey = [
+        VaultIdentifiers.SecureStorageKey.backupPassword,
+        VaultIdentifiers.SecureStorageKey.backupPasswordMetadata,
+        VaultIdentifiers.SecureStorageKey.killphraseKey,
+        VaultIdentifiers.SecureStorageKey.searchPassphraseKey,
+    ]
+    /// The vault's settings still kept in the app's defaults, which an erase clears.
+    static let vaultSettingsKeys = [
+        VaultIdentifiers.Backup.lastBackupEvent,
+        VaultIdentifiers.AutoBackup.configuration,
+        VaultIdentifiers.Preferences.PDF.userHint,
+    ]
+    /// A setting that isn't the vault's, which an erase keeps.
+    static let unrelatedSetting = Key<String>("vault.test.unrelated-setting")
     /// Text from the vault that must be in no file once it's erased.
     static let plaintextMarkers = ["Bank", plaintext].map { Data($0.utf8) }
     /// What the plain store's leftover files, the rehash files and the temp files hold.
     static let plaintext = "ERASED-VAULT-PLAINTEXT"
+    /// The app's temporary directory, inside the vault's directory so it's deleted with it.
+    static let temporaryDirectoryName = "tmp"
 
     let directory: URL
     let fileSystem: FaultInjectingSlotFileSystem
     let keychain: FaultInjectingSecureStorage
     let attemptStorage: FaultInjectingAttemptStorage
+    let userDefaults: UserDefaults
+    let defaults: Defaults
     let session: VaultStoreSession
 
-    init(directory: URL, session: VaultStoreSession = VaultStoreSession(target: .locked)) {
+    init(directory: URL, session: VaultStoreSession = VaultStoreSession(target: .locked)) throws {
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: LiveSlotFileSystem())
         self.directory = directory
         self.fileSystem = fileSystem
         keychain = FaultInjectingSecureStorage(faults: fileSystem)
         attemptStorage = FaultInjectingAttemptStorage(faults: fileSystem)
+        userDefaults = try testUserDefaults()
+        defaults = Defaults(userDefaults: userDefaults)
         self.session = session
+        try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
+    }
+
+    var temporaryDirectory: URL {
+        directory.appending(path: Self.temporaryDirectoryName)
     }
 
     /// A device with an encrypted vault, as a conversion leaves it, with its session unlocked on it, and everything
-    /// else an erase removes:
+    /// else an erase removes (`seedDevice()`), and:
     ///
     /// - the plain store's files, an archive and pending rehash files, as if deleting them after the conversion had
     ///   been interrupted, with the journal still saying so;
-    /// - temp files left by crashes while writing the encrypted file and the storage state;
-    /// - every keychain item, and ten wrong attempts in a row.
+    /// - temp files left by crashes while writing the encrypted file and the storage state.
     static func encryptedDevice(in directory: URL) async throws -> VaultEraseHarness {
         let conversion = try PlainVaultConversionHarness(directory: directory)
         try await VaultEncryptionConverterTests.seed(conversion.store)
@@ -278,8 +369,8 @@ struct VaultEraseHarness {
         try Data(plaintext.utf8).write(to: directory.appending(path: EncryptedVaultFile.temporaryFilePrefix + "a"))
         try Data("{}".utf8).write(to: directory.appending(path: VaultStorageStateFile.temporaryFilePrefix + "a"))
 
-        let harness = VaultEraseHarness(directory: directory, session: conversion.session)
-        try await harness.seedKeychain()
+        let harness = try VaultEraseHarness(directory: directory, session: conversion.session)
+        try await harness.seedDevice()
         return harness
     }
 
@@ -292,21 +383,48 @@ struct VaultEraseHarness {
             contents: contents,
             slot: contents.openSlot(vault.slotIndex, with: vault.rootKey),
         )
-        let harness = VaultEraseHarness(directory: directory, session: VaultStoreSession(target: .unlocked(store)))
-        try await harness.seedKeychain()
+        let harness = try VaultEraseHarness(directory: directory, session: VaultStoreSession(target: .unlocked(store)))
+        try await harness.seedDevice()
         return harness
     }
 
-    /// Puts every keychain item an erase deletes in the keychain, and ten wrong attempts in a row.
-    func seedKeychain() async throws {
-        for key in VaultEraser.keychainKeys {
+    /// Puts everything an erase clears outside the vault's directory on the device: every keychain item, ten wrong
+    /// attempts in a row, the vault's settings, and a backup PDF left in the temporary directory. And a setting an
+    /// erase keeps.
+    func seedDevice() async throws {
+        for key in Self.everySecureStorageKey {
             await keychain.store(data: Data(key.utf8), forKey: key)
         }
         attemptStorage.setCount(AppLockPasswordAttemptCounter.eraseThreshold)
+        try defaults.set(
+            VaultBackupEvent(
+                backupDate: Date(timeIntervalSince1970: 100),
+                eventDate: Date(timeIntervalSince1970: 200),
+                kind: .exportedToPDF,
+                payloadHash: .init(value: Data(repeating: 0xAB, count: 32)),
+            ),
+            for: Key<VaultBackupEvent>(VaultIdentifiers.Backup.lastBackupEvent),
+        )
+        try defaults.set(
+            AutoBackupConfiguration(
+                isEnabled: true,
+                retentionDays: .days30,
+                providerID: "icloud-drive",
+                providerConfigs: ["icloud-drive": Data("folder".utf8)],
+                lastBackupHash: "abc",
+                lastBackupDate: Date(timeIntervalSince1970: 200),
+            ),
+            for: Key<AutoBackupConfiguration>(VaultIdentifiers.AutoBackup.configuration),
+        )
+        try defaults.set("My old hint", for: Key<String>(VaultIdentifiers.Preferences.PDF.userHint))
+        try defaults.set("kept", for: Self.unrelatedSetting)
+        _ = try BackupPDFTemporaryFiles(fileManager: .default, directory: temporaryDirectory).write(anyGeneratedPDF())
     }
 
     /// An eraser, as the app makes one.
-    func makeEraser() -> VaultEraser {
+    ///
+    /// - Parameter whileReloadingWidgets: Runs as the widgets reload, after the vault is first removed.
+    func makeEraser(whileReloadingWidgets: @escaping @Sendable () -> Void = {}) -> VaultEraser {
         let fileSystem = fileSystem
         let directory = directory
         return VaultEraser(
@@ -315,10 +433,16 @@ struct VaultEraseHarness {
             session: session,
             secureStorage: keychain,
             attemptCounter: AppLockPasswordAttemptCounter(storage: attemptStorage, clock: FakeAppLockClock()),
+            defaults: defaults,
+            temporaryDirectory: temporaryDirectory,
             hooks: VaultEraser.Hooks(
                 releasePlainStore: { fileSystem.record("release the plain store") },
                 clearCredentialIdentities: { fileSystem.record("clear QuickType") },
-                reloadWidgets: { fileSystem.record("reload widgets") },
+                reloadWidgets: {
+                    fileSystem.record("reload widgets")
+                    whileReloadingWidgets()
+                },
+                forgetVaultSettings: { fileSystem.record("forget the vault's settings") },
             ),
             makePlainStore: {
                 try fileSystem.step("create the plain store")
@@ -373,8 +497,9 @@ struct VaultEraseHarness {
         VaultStorageStateFile(directory: directory, fileSystem: LiveSlotFileSystem())
     }
 
+    /// The files in the vault's directory, apart from the temporary directory.
     func fileNames() throws -> Set<String> {
-        try VaultStorageRecoveryTests.fileNames(in: directory)
+        try VaultStorageRecoveryTests.fileNames(in: directory).subtracting([Self.temporaryDirectoryName])
     }
 
     func encryptedFileBytes() throws -> Data {
@@ -382,7 +507,7 @@ struct VaultEraseHarness {
     }
 
     /// Only a fresh, empty plain store is left: no other file, nothing of the old vault in it, no keychain item, no
-    /// count of attempts, and nothing underway.
+    /// count of attempts, none of the vault's settings, no backup PDF, and nothing underway.
     func expectErased(_ context: Comment? = nil, sourceLocation: SourceLocation = #_sourceLocation) async throws {
         let names = try fileNames()
         #expect(names.contains("vault-primary.sqlite"), context, sourceLocation: sourceLocation)
@@ -402,6 +527,14 @@ struct VaultEraseHarness {
 
         #expect(await keychain.keys().isEmpty, context, sourceLocation: sourceLocation)
         #expect(!attemptStorage.hasRecord, context, sourceLocation: sourceLocation)
+        for key in Self.vaultSettingsKeys {
+            #expect(userDefaults.object(forKey: key) == nil, "\(key)", sourceLocation: sourceLocation)
+        }
+        #expect(defaults.get(for: Self.unrelatedSetting) == "kept", context, sourceLocation: sourceLocation)
+        let temporaryFiles = try FileManager.default.contentsOfDirectory(
+            atPath: temporaryDirectory.path(percentEncoded: false),
+        )
+        #expect(temporaryFiles.isEmpty, context, sourceLocation: sourceLocation)
         #expect(VaultStorageState.isPlain(inDirectory: directory), context, sourceLocation: sourceLocation)
         #expect(try VaultStorageRecovery(directory: directory).recoverAtLaunch() == .plain, context)
     }
