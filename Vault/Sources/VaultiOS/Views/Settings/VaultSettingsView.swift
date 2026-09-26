@@ -2,6 +2,11 @@ import SwiftUI
 import VaultFeed
 import VaultSettings
 
+/// The app's settings, one section per group.
+///
+/// Every section has a heading and a short footer, so each reads as a card of its own. Rows are
+/// single-line `FormRow`s with a prominent icon in their section's `SettingsIconColor`, so they're all the same
+/// height whether they hold a toggle, a picker or a button. The Danger Zone stays last.
 @MainActor
 struct VaultSettingsView: View {
     @Environment(VaultDataModel.self) private var dataModel
@@ -22,10 +27,12 @@ struct VaultSettingsView: View {
 
     var body: some View {
         Form {
-            viewOptionsSection
+            clipboardSection
             universalClipboardSection
             dangerSection
         }
+        // A little more room than the default between sections, so a footer doesn't run into the next heading.
+        .listSectionSpacing(.custom(28))
         .navigationTitle(viewModel.title)
         .sheet(item: $modal, onDismiss: nil) { item in
             switch item {
@@ -49,7 +56,7 @@ struct VaultSettingsView: View {
         }
     }
 
-    private var viewOptionsSection: some View {
+    private var clipboardSection: some View {
         Section {
             Picker(selection: $localSettings.state.pasteTimeToLive) {
                 ForEach(PasteTTL.defaultOptions) { option in
@@ -57,29 +64,31 @@ struct VaultSettingsView: View {
                         .tag(option)
                 }
             } label: {
-                FormRow(image: Image(systemName: "clock.fill"), color: .blue, style: .prominent) {
+                FormRow(image: Image(systemName: "timer"), color: SettingsIconColor.clipboard) {
                     Text(viewModel.pasteTTLTitle)
                 }
             }
+        } header: {
+            Text("Clipboard")
         } footer: {
-            Text("How long copied values stay on the clipboard before iOS automatically clears them.")
+            Text("How long anything you copy from Vault stays on the clipboard.")
         }
     }
 
     private var universalClipboardSection: some View {
         Section {
             Toggle(isOn: $localSettings.state.allowUniversalClipboardForPasswords) {
-                FormRow(image: Image(systemName: "key.fill"), color: .indigo, style: .prominent) {
+                FormRow(image: Image(systemName: "key.fill"), color: SettingsIconColor.universalClipboard) {
                     Text("Passwords")
                 }
             }
             Toggle(isOn: $localSettings.state.allowUniversalClipboardForOTPs) {
-                FormRow(image: Image(systemName: "number"), color: .indigo, style: .prominent) {
+                FormRow(image: Image(systemName: "number"), color: SettingsIconColor.universalClipboard) {
                     Text("One-time codes")
                 }
             }
             Toggle(isOn: $localSettings.state.allowUniversalClipboardForOther) {
-                FormRow(image: Image(systemName: "doc.on.clipboard"), color: .indigo, style: .prominent) {
+                FormRow(image: Image(systemName: "doc.on.clipboard"), color: SettingsIconColor.universalClipboard) {
                     Text("Other")
                 }
             }
@@ -97,15 +106,15 @@ struct VaultSettingsView: View {
             Button {
                 modal = .danger
             } label: {
-                FormRow(
-                    image: Image(systemName: "exclamationmark.triangle.fill"),
-                    color: .red,
-                    style: .prominent,
-                ) {
-                    Text("Danger Zone")
+                FormRow(image: Image(systemName: "trash.fill"), color: SettingsIconColor.danger) {
+                    Text("Delete All Data")
                 }
             }
             .tint(.red)
+        } header: {
+            Text("Danger Zone")
+        } footer: {
+            Text("Erase every item and tag from this device.")
         }
     }
 }

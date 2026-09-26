@@ -84,7 +84,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No expiry"
+            "value" : "Never"
           }
         }
       }
@@ -95,7 +95,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Clipboard Duration"
+            "value" : "Clear Clipboard"
           }
         }
       }

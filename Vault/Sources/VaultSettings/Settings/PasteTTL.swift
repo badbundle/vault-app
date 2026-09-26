@@ -34,7 +34,8 @@ extension PasteTTL {
             return localized(key: "pasteTTL.none")
         }
         let formatter = DateComponentsFormatter()
-        formatter.unitsStyle = .abbreviated
+        // Spelled out: "1 minute" reads better next to the setting than "1m", which VoiceOver reads as meters.
+        formatter.unitsStyle = .full
         formatter.allowedUnits = [.minute, .second]
         return formatter.string(from: duration) ?? "?"
     }
