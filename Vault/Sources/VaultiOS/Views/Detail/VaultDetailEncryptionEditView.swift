@@ -83,7 +83,7 @@ struct VaultDetailEncryptionEditView: View {
                     "Confirm Password",
                     text: $newEncryptionPasswordConfirm,
                     kind: .secure(),
-                    status: doPasswordsMatch ? .valid : .error(),
+                    status: .passwordConfirmation(matches: doPasswordsMatch),
                 )
             }
         }

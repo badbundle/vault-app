@@ -66,7 +66,7 @@ struct LabeledTextFieldSnapshotTests {
     func status() {
         let sut = Form {
             Section {
-                LabeledTextField("Valid", text: .constant("JBSWY3DPEHPK3PXP"), status: .valid)
+                LabeledTextField("Valid", text: .constant("JBSWY3DPEHPK3PXP"), status: .valid())
                 LabeledTextField("Error", text: .constant("ABC!"), status: .error())
                 LabeledTextField(
                     "Error With Message",

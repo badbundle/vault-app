@@ -27,13 +27,16 @@ struct LabeledTextField: View {
     }
 
     /// What the field reports about its current value.
+    ///
+    /// Each state shows an icon beside the field. `accessibilityDescription` is what VoiceOver reads for it, so it can
+    /// say what was checked ("Passwords match") rather than just "Valid" or "Invalid".
     enum Status: Equatable {
         /// Nothing to report.
         case none
         /// The value has been checked and is good, like a password confirmation that matches.
-        case valid
-        /// The value can't be used as it is, optionally with a message explaining why.
-        case error(message: String? = nil)
+        case valid(accessibilityDescription: String? = nil)
+        /// The value can't be used as it is, optionally with a message under the value explaining why.
+        case error(message: String? = nil, accessibilityDescription: String? = nil)
     }
 
     private var title: String
@@ -269,14 +272,8 @@ struct LabeledTextField: View {
             EmptyView()
         case .valid:
             statusIcon(systemName: "checkmark.circle.fill", color: .green)
-                .accessibilityLabel("Valid")
-        case .error(.none):
+        case .error:
             statusIcon(systemName: "exclamationmark.circle.fill", color: .red)
-                .accessibilityLabel("Invalid")
-        case .error(.some):
-            // VoiceOver reads the message instead.
-            statusIcon(systemName: "exclamationmark.circle.fill", color: .red)
-                .accessibilityHidden(true)
         }
     }
 
@@ -310,14 +307,20 @@ struct LabeledTextField: View {
         .accessibilityLabel(isRevealed.wrappedValue ? "Hide \(title)" : "Show \(title)")
     }
 
+    @ViewBuilder
     private func statusIcon(systemName: String, color: Color) -> some View {
-        Image(systemName: systemName)
+        let icon = Image(systemName: systemName)
             .foregroundStyle(color)
             .transition(.scale.combined(with: .opacity))
+        if let label = status.iconAccessibilityLabel {
+            icon.accessibilityLabel(label)
+        } else {
+            icon.accessibilityHidden(true)
+        }
     }
 
     private var errorMessage: String? {
-        if case let .error(.some(message)) = status {
+        if case let .error(.some(message), _) = status {
             message
         } else {
             nil
@@ -326,6 +329,27 @@ struct LabeledTextField: View {
 }
 
 extension LabeledTextField.Status {
+    /// Shows whether a password confirmation matches the password it confirms.
+    static func passwordConfirmation(matches: Bool) -> Self {
+        matches
+            ? .valid(accessibilityDescription: "Passwords match")
+            : .error(accessibilityDescription: "Passwords don't match")
+    }
+
+    /// What VoiceOver reads for the status icon, or `nil` when there's nothing for it to read.
+    ///
+    /// Without a description, an error with a message leaves the icon silent, because VoiceOver reads the message.
+    var iconAccessibilityLabel: String? {
+        switch self {
+        case .none:
+            nil
+        case let .valid(accessibilityDescription):
+            accessibilityDescription ?? "Valid"
+        case let .error(message, accessibilityDescription):
+            accessibilityDescription ?? (message == nil ? "Invalid" : nil)
+        }
+    }
+
     /// Flags a validation error, with its message. A value that's valid, or just not finished yet, isn't flagged.
     init(errorFrom validation: FieldValidationState) {
         if case let .error(message) = validation {
@@ -353,7 +377,12 @@ extension LabeledTextField.Status {
         Section {
             LabeledTextField("Key", text: $key, status: .error(message: "Invalid data"))
             LabeledTextField("Password", text: $password, kind: .secure(isRevealed: $isPasswordRevealed))
-            LabeledTextField("Confirm Password", text: $password, kind: .secure(), status: .valid)
+            LabeledTextField(
+                "Confirm Password",
+                text: $password,
+                kind: .secure(),
+                status: .passwordConfirmation(matches: true),
+            )
         }
 
         Section {

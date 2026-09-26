@@ -178,7 +178,7 @@ struct BackupKeyChangeView: View {
                     "Confirm Password",
                     text: $viewModel.newlyEnteredPasswordConfirm,
                     kind: .secure(),
-                    status: viewModel.passwordConfirmMatches ? .valid : .error(),
+                    status: .passwordConfirmation(matches: viewModel.passwordConfirmMatches),
                 )
                 .focused($focusedField, equals: .confirm)
                 .submitLabel(.done)

@@ -313,7 +313,7 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
     /// The header above the key already explains what's wrong, so the field only flags it.
     private var keyStatus: LabeledTextField.Status {
         switch viewModel.editingModel.detail.$secretBase32String {
-        case .valid: .valid
+        case .valid: .valid()
         case .invalid: .none
         case .error: .error()
         }
