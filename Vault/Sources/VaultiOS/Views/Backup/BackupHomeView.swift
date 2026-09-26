@@ -14,6 +14,12 @@ struct BackupHomeView: View {
     @Environment(DeviceAuthenticationService.self) var authenticationService
     @Environment(VaultInjector.self) var injector
     @State private var isShowingPasswordSheet = false
+    /// The latest value from the service's configuration publisher, which doesn't replay.
+    @State private var publishedAutoBackupEnabled: Bool?
+
+    private var isAutoBackupEnabled: Bool {
+        publishedAutoBackupEnabled ?? injector.autoBackupService.configuration.isEnabled
+    }
 
     var body: some View {
         Form {
@@ -53,8 +59,15 @@ struct BackupHomeView: View {
                 AutoBackupView(viewModel: .init(service: injector.autoBackupService))
             } label: {
                 FormRow(image: Image(systemName: "arrow.clockwise.icloud"), color: .accentColor) {
-                    Text("Auto-Backup")
+                    LabeledContent {
+                        Text(isAutoBackupEnabled ? "On" : "Off")
+                    } label: {
+                        Text("Auto-Backup")
+                    }
                 }
+            }
+            .onReceive(injector.autoBackupService.configurationPublisher) { configuration in
+                publishedAutoBackupEnabled = configuration.isEnabled
             }
         } footer: {
             Text("Automatically back up your vault to cloud storage when changes are made.")

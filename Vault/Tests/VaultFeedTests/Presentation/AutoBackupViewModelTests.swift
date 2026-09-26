@@ -36,9 +36,9 @@ struct AutoBackupViewModelTests {
         let service = AutoBackupServiceMock(status: .disabled, configuration: .init())
         let sut = makeSUT(service: service)
 
-        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.backingUp(anyRun()))
 
-        #expect(sut.status == .backingUp(.starting))
+        #expect(sut.status == .backingUp(anyRun()))
     }
 
     @Test
@@ -91,10 +91,12 @@ struct AutoBackupViewModelTests {
             availableProviders: [provider],
         )
         let sut = makeSUT(service: service)
+        #expect(!sut.hasLoadedProviderStates)
 
         await sut.onAppear()
 
         #expect(sut.providerStates.map(\.id) == ["provider-1"])
+        #expect(sut.hasLoadedProviderStates)
     }
 
     @Test
@@ -238,7 +240,7 @@ struct AutoBackupViewModelTests {
         let service = AutoBackupServiceMock(status: .disabled, configuration: .init())
         let sut = makeSUT(service: service)
 
-        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.backingUp(anyRun()))
         #expect(sut.isBackingUp)
 
         service.statusPublisherSubject.send(.cleaningUp)
@@ -249,28 +251,75 @@ struct AutoBackupViewModelTests {
     }
 
     @Test
-    func backupProgress_isNilUnlessBackingUp() {
+    func currentRun_isNilUnlessBackingUp() {
         let service = AutoBackupServiceMock(status: .idle, configuration: .init())
         let sut = makeSUT(service: service)
 
-        #expect(sut.backupProgress == nil)
+        #expect(sut.currentRun == nil)
 
         service.statusPublisherSubject.send(.cleaningUp)
-        #expect(sut.backupProgress == nil)
+        #expect(sut.currentRun == nil)
 
         service.statusPublisherSubject.send(.completed(Date()))
-        #expect(sut.backupProgress == nil)
+        #expect(sut.currentRun == nil)
     }
 
     @Test
-    func backupProgress_reflectsPublishedProgress() {
+    func currentRun_reflectsPublishedRun() {
         let service = AutoBackupServiceMock(status: .idle, configuration: .init())
         let sut = makeSUT(service: service)
-        let progress = AutoBackupProgress(phase: .rendering, phaseFraction: 0.4)
+        let run = anyRun(progress: .init(phase: .rendering, phaseFraction: 0.4))
 
-        service.statusPublisherSubject.send(.backingUp(progress))
+        service.statusPublisherSubject.send(.backingUp(run))
 
-        #expect(sut.backupProgress == progress)
+        #expect(sut.currentRun == run)
+    }
+
+    @Test
+    func lastBackupDate_prefersCompletedStatusOverConfiguration() {
+        let configuration = enabledConfiguration(lastBackupDate: Date(timeIntervalSince1970: 100))
+        let service = AutoBackupServiceMock(status: .idle, configuration: configuration)
+        let sut = makeSUT(service: service)
+
+        #expect(sut.lastBackupDate == Date(timeIntervalSince1970: 100))
+
+        service.statusPublisherSubject.send(.completed(Date(timeIntervalSince1970: 200)))
+
+        #expect(sut.lastBackupDate == Date(timeIntervalSince1970: 200))
+    }
+
+    @Test
+    func destinationName_quotesConfiguredFolder() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: enabledConfiguration(providerID: "files"))
+        let configured = makeSUT(
+            service: service,
+            initialProviderStates: [anyProviderState(id: "files", isConfigured: true)],
+        )
+        let unconfigured = makeSUT(
+            service: service,
+            initialProviderStates: [anyProviderState(id: "files", isConfigured: false)],
+        )
+
+        #expect(configured.destinationName == "“Vault Backups”")
+        #expect(unconfigured.destinationName == "your backup folder")
+    }
+
+    @Test
+    func scheduleSummary_describesRetention() {
+        var configuration = enabledConfiguration()
+        configuration.retentionDays = .days7
+        let sut = makeSUT(service: AutoBackupServiceMock(status: .idle, configuration: configuration))
+
+        #expect(sut.scheduleSummary.hasSuffix("Backups older than 7 days are deleted."))
+    }
+
+    @Test
+    func scheduleSummary_saysBackupsAreKeptForever() {
+        var configuration = enabledConfiguration()
+        configuration.retentionDays = .forever
+        let sut = makeSUT(service: AutoBackupServiceMock(status: .idle, configuration: configuration))
+
+        #expect(sut.scheduleSummary.hasSuffix("Old backups are never deleted."))
     }
 
     @Test
@@ -278,7 +327,7 @@ struct AutoBackupViewModelTests {
         let service = AutoBackupServiceMock(status: .idle, configuration: .init())
         let sut = makeSUT(service: service)
 
-        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.backingUp(anyRun()))
         #expect(!sut.showsBackupCompleteNotice)
 
         service.statusPublisherSubject.send(.completed(Date()))
@@ -290,7 +339,7 @@ struct AutoBackupViewModelTests {
         let service = AutoBackupServiceMock(status: .idle, configuration: .init())
         let sut = makeSUT(service: service)
 
-        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.backingUp(anyRun()))
         service.statusPublisherSubject.send(.completed(Date()))
         service.statusPublisherSubject.send(.cleaningUp)
         service.statusPublisherSubject.send(.completed(Date()))
@@ -317,7 +366,7 @@ struct AutoBackupViewModelTests {
         let service = AutoBackupServiceMock(status: .idle, configuration: .init())
         let sut = makeSUT(service: service)
 
-        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.backingUp(anyRun()))
         service.statusPublisherSubject.send(.error(.writeFailed(reason: "disk full")))
         #expect(!sut.showsBackupCompleteNotice)
 
@@ -330,11 +379,11 @@ struct AutoBackupViewModelTests {
     func statusPublisher_hidesCompletionNoticeWhenNewBackupStarts() {
         let service = AutoBackupServiceMock(status: .idle, configuration: .init())
         let sut = makeSUT(service: service)
-        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.backingUp(anyRun()))
         service.statusPublisherSubject.send(.completed(Date()))
         #expect(sut.showsBackupCompleteNotice)
 
-        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.backingUp(anyRun()))
 
         #expect(!sut.showsBackupCompleteNotice)
     }
@@ -343,7 +392,7 @@ struct AutoBackupViewModelTests {
     func statusPublisher_hidesCompletionNoticeAfterDuration() async throws {
         let service = AutoBackupServiceMock(status: .idle, configuration: .init())
         let sut = makeSUT(service: service, completionNoticeDuration: .milliseconds(1))
-        service.statusPublisherSubject.send(.backingUp(.starting))
+        service.statusPublisherSubject.send(.backingUp(anyRun()))
         service.statusPublisherSubject.send(.completed(Date()))
         #expect(sut.showsBackupCompleteNotice)
 
@@ -352,22 +401,95 @@ struct AutoBackupViewModelTests {
         #expect(!sut.showsBackupCompleteNotice)
     }
 
+    // MARK: - Status Header
+
     @Test
-    func footerText_explainsFeatureWhenDisabled() {
-        let service = AutoBackupServiceMock(status: .disabled, configuration: .init())
+    func statusHeader_isOffWhenDisabled() {
+        // Even a stale error doesn't matter while auto-backup is off.
+        let service = AutoBackupServiceMock(status: .error(.accessDenied), configuration: .init())
         let sut = makeSUT(service: service)
 
-        #expect(sut.footerText.contains("Enable to automatically back up"))
+        #expect(sut.statusHeader.title == "Auto-Backup Is Off")
+        #expect(sut.statusHeader.tone == .off)
     }
 
     @Test
-    func footerText_carriesLiveStatusWhenEnabled() {
-        var configuration = AutoBackupConfiguration()
-        configuration.isEnabled = true
-        let service = AutoBackupServiceMock(status: .backingUp(.starting), configuration: configuration)
+    func statusHeader_asksForFolderWhenNoDestinationIsConfigured() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: enabledConfiguration())
+        let sut = makeSUT(service: service, initialProviderStates: [anyProviderState(id: "files")])
+
+        #expect(sut.statusHeader.title == "Choose a Folder")
+        #expect(sut.statusHeader.tone == .attention)
+    }
+
+    @Test
+    func statusHeader_doesNotAskForFolderBeforeProvidersHaveLoaded() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: enabledConfiguration())
         let sut = makeSUT(service: service)
 
-        #expect(sut.footerText == sut.statusDescription)
+        #expect(!sut.hasLoadedProviderStates)
+        #expect(sut.statusHeader.title == "Auto-Backup Is On")
+    }
+
+    @Test
+    func statusHeader_isOnWithLastBackupDate() {
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let service = AutoBackupServiceMock(
+            status: .completed(date),
+            configuration: enabledConfiguration(providerID: "files"),
+        )
+        let sut = makeSUT(service: service, initialProviderStates: [anyProviderState(id: "files", isConfigured: true)])
+
+        #expect(sut.statusHeader.title == "Auto-Backup Is On")
+        #expect(sut.statusHeader.subtitle.contains(date.formatted(date: .abbreviated, time: .shortened)))
+        #expect(sut.statusHeader.tone == .healthy)
+    }
+
+    @Test
+    func statusHeader_isOnAndNamesFolderBeforeFirstBackup() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: enabledConfiguration(providerID: "files"))
+        let sut = makeSUT(service: service, initialProviderStates: [anyProviderState(id: "files", isConfigured: true)])
+
+        #expect(sut.statusHeader.subtitle == "Your vault is saved to “Vault Backups” whenever it changes.")
+    }
+
+    @Test
+    func statusHeader_isWorkingWhileBackingUp() {
+        let service = AutoBackupServiceMock(status: .idle, configuration: enabledConfiguration(providerID: "files"))
+        let sut = makeSUT(service: service, initialProviderStates: [anyProviderState(id: "files", isConfigured: true)])
+
+        service.statusPublisherSubject.send(.backingUp(anyRun()))
+
+        #expect(sut.statusHeader.title == "Backing Up")
+        #expect(sut.statusHeader.subtitle.contains("“Vault Backups”"))
+        #expect(sut.statusHeader.tone == .working)
+    }
+
+    /// Clean-up follows every backup and is usually over in a moment, so the headline doesn't flash for it.
+    @Test
+    func statusHeader_staysOnWhileCleaningUp() {
+        let configuration = enabledConfiguration(providerID: "files", lastBackupDate: Date(timeIntervalSince1970: 100))
+        let service = AutoBackupServiceMock(status: .idle, configuration: configuration)
+        let sut = makeSUT(service: service, initialProviderStates: [anyProviderState(id: "files", isConfigured: true)])
+
+        service.statusPublisherSubject.send(.cleaningUp)
+
+        #expect(sut.statusHeader.title == "Auto-Backup Is On")
+        #expect(sut.statusHeader.tone == .healthy)
+    }
+
+    @Test
+    func statusHeader_explainsFailureAndHowToRecover() {
+        let service = AutoBackupServiceMock(
+            status: .error(.writeFailed(reason: "The folder could not be reached.")),
+            configuration: enabledConfiguration(providerID: "files"),
+        )
+        let sut = makeSUT(service: service, initialProviderStates: [anyProviderState(id: "files", isConfigured: true)])
+
+        #expect(sut.statusHeader.title == "Last Backup Failed")
+        #expect(sut.statusHeader
+            .subtitle == "Failed to save backup: The folder could not be reached. Please try again later.")
+        #expect(sut.statusHeader.tone == .attention)
     }
 }
 
@@ -397,6 +519,21 @@ extension AutoBackupViewModelTests {
             isConfigured: isConfigured,
             folderSummary: isConfigured ? "Vault Backups" : nil,
         )
+    }
+
+    private func anyRun(progress: AutoBackupProgress = .starting) -> AutoBackupRun {
+        AutoBackupRun(trigger: .automatic, startedAt: Date(timeIntervalSince1970: 1_700_000_000), progress: progress)
+    }
+
+    private func enabledConfiguration(
+        providerID: String? = nil,
+        lastBackupDate: Date? = nil,
+    ) -> AutoBackupConfiguration {
+        var configuration = AutoBackupConfiguration()
+        configuration.isEnabled = true
+        configuration.providerID = providerID
+        configuration.lastBackupDate = lastBackupDate
+        return configuration
     }
 
     private func anyFolderURL() -> URL {

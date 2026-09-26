@@ -61,4 +61,23 @@ struct AutoBackupProgressTests {
         #expect(AutoBackupProgress(phase: .rendering, phaseFraction: -0.5).phaseFraction == 0)
         #expect(AutoBackupProgress(phase: .rendering, phaseFraction: 1.5).phaseFraction == 1)
     }
+
+    @Test
+    func stepNumber_countsPhasesInOrderFromOne() {
+        let stepNumbers = AutoBackupProgress.Phase.allCases.map(\.stepNumber)
+
+        #expect(stepNumbers == [1, 2, 3, 4])
+    }
+
+    @Test
+    func runWithProgress_keepsTriggerAndStartDate() {
+        let run = AutoBackupRun(trigger: .manual, startedAt: Date(timeIntervalSince1970: 100))
+
+        let later = run.with(progress: .init(phase: .saving))
+
+        #expect(later.trigger == .manual)
+        #expect(later.startedAt == Date(timeIntervalSince1970: 100))
+        #expect(later.progress == .init(phase: .saving))
+        #expect(run.progress == .starting)
+    }
 }

@@ -24,6 +24,21 @@ public struct AutoBackupProgress: Equatable, Sendable {
             }
         }
 
+        /// The phase as one step in a list of everything a backup does.
+        public var stepTitle: String {
+            switch self {
+            case .exporting: "Export your items and tags"
+            case .encrypting: "Encrypt with your backup password"
+            case .rendering: "Create the backup PDF"
+            case .saving: "Save to your backup folder"
+            }
+        }
+
+        /// Position of this phase among all phases, starting at 1.
+        public var stepNumber: Int {
+            (Self.allCases.firstIndex(of: self) ?? 0) + 1
+        }
+
         /// The slice of overall progress this phase occupies.
         var overallRange: ClosedRange<Double> {
             switch self {

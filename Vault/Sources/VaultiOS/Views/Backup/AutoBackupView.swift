@@ -27,20 +27,24 @@ struct AutoBackupView: View {
             case .notCreated:
                 createPasswordSection
             case .fetched:
+                headerSection
                 enabledSection
 
                 if viewModel.configuration.isEnabled {
-                    destinationSection
-
                     if viewModel.isDestinationConfigured {
-                        retentionSection
+                        settingsSection
+                        activitySection
                         backupNowSection
+                    } else {
+                        chooseFolderSection
                     }
                 }
             }
         }
         .navigationTitle("Auto-Backup")
         .navigationBarTitleDisplayMode(.inline)
+        .animation(.default, value: viewModel.statusHeader)
+        .animation(.default, value: viewModel.configuration.isEnabled)
         .fileImporter(
             isPresented: $isShowingFolderPicker,
             allowedContentTypes: [.folder],
@@ -101,6 +105,32 @@ struct AutoBackupView: View {
         }
     }
 
+    // MARK: - Header Section
+
+    /// Says plainly whether auto-backup is on and what it's doing, so nobody has to read the toggle
+    /// and footers to find out.
+    private var headerSection: some View {
+        let header = viewModel.statusHeader
+        return Section {
+            BackupHeroHeader(
+                title: header.title,
+                subtitle: header.subtitle,
+                systemImage: header.systemImage,
+                color: color(for: header.tone),
+                iconSize: 56,
+            )
+        }
+    }
+
+    private func color(for tone: AutoBackupViewModel.StatusHeader.Tone) -> Color {
+        switch tone {
+        case .off: .secondary
+        case .healthy: .green
+        case .working: .accentColor
+        case .attention: .orange
+        }
+    }
+
     // MARK: - Enabled Section
 
     private var enabledSection: some View {
@@ -113,66 +143,57 @@ struct AutoBackupView: View {
                     }
                 },
             )) {
-                FormRow(image: Image(systemName: viewModel.statusIconName), color: statusColor) {
+                FormRow(image: Image(systemName: "arrow.clockwise.icloud"), color: .accentColor) {
                     Text("Auto-Backup")
                 }
             }
-
-            if case let .error(error) = viewModel.status {
-                errorRow(error)
-            }
-        } footer: {
-            Text(viewModel.footerText)
         }
     }
 
-    // MARK: - Destination Section
+    // MARK: - Choose Folder Section
 
-    private var destinationSection: some View {
+    private var chooseFolderSection: some View {
         Section {
-            if let provider = viewModel.activeProvider, provider.isConfigured {
+            ProminentActionButton("Choose Folder", systemImage: "folder.fill", actionOptions: []) {
+                changeDestination()
+            }
+        } footer: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Backups are saved as encrypted PDFs in a folder you choose, such as one in iCloud Drive.")
+                if let error = viewModel.configureError {
+                    errorLabel(error)
+                }
+            }
+        }
+    }
+
+    // MARK: - Settings Section
+
+    /// What auto-backup is set up to do: where it saves to and how long it keeps backups.
+    private var settingsSection: some View {
+        Section {
+            if let provider = viewModel.activeProvider {
                 Button {
                     changeDestination()
                 } label: {
-                    LabeledContent {
-                        Text("Change")
-                    } label: {
-                        FormRow(image: Image(systemName: provider.iconSystemName), color: .green) {
-                            TextAndSubtitle(title: provider.displayName, subtitle: provider.folderSummary)
+                    FormRow(image: Image(systemName: provider.iconSystemName), color: .blue) {
+                        LabeledContent {
+                            HStack(spacing: 6) {
+                                Text(provider.folderSummary ?? provider.displayName)
+                                Image(systemName: "chevron.right")
+                                    .font(.footnote.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                                    .accessibilityHidden(true)
+                            }
+                        } label: {
+                            Text("Save To")
                         }
                     }
                 }
-            } else {
-                Button {
-                    changeDestination()
-                } label: {
-                    FormRow(image: Image(systemName: "folder.fill"), color: .accentColor) {
-                        Text("Choose Folder")
-                    }
-                }
+                .tint(.primary)
+                .accessibilityHint(Text("Choose a different folder"))
             }
 
-            if let error = viewModel.configureError {
-                errorRow(error)
-            }
-        } header: {
-            Text("Destination")
-        } footer: {
-            Text("Backups are saved as encrypted PDFs in a folder you choose.")
-        }
-    }
-
-    private func changeDestination() {
-        Task {
-            await viewModel.beginDestinationSelection()
-            isShowingFolderPicker = true
-        }
-    }
-
-    // MARK: - Retention Section
-
-    private var retentionSection: some View {
-        Section {
             Picker(selection: Binding(
                 get: { viewModel.configuration.retentionDays },
                 set: { retention in
@@ -189,43 +210,79 @@ struct AutoBackupView: View {
                     Text("Keep Backups For")
                 }
             }
+        } header: {
+            Text("Settings")
+        } footer: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(viewModel.scheduleSummary)
+                if let error = viewModel.configureError {
+                    errorLabel(error)
+                }
+            }
         }
     }
 
-    // MARK: - Backup Now Section
+    private func changeDestination() {
+        Task {
+            await viewModel.beginDestinationSelection()
+            isShowingFolderPicker = true
+        }
+    }
 
-    /// The row is driven by the service status so that auto-triggered backups show the same
-    /// progress as a tap on the button: both are the same operation on the same screen.
-    private var backupNowSection: some View {
+    // MARK: - Activity Section
+
+    /// The backup that's running, or the result of the last one.
+    ///
+    /// Driven by the service status so that automatic backups show the same detail as a tap on
+    /// Back Up Now: both are the same operation on the same screen.
+    private var activitySection: some View {
         Section {
-            if let progress = viewModel.backupProgress {
-                FormRow(image: Image(systemName: "arrow.clockwise.icloud"), color: .accentColor) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(progress.phase.localizedTitle)
-                        ProgressView(value: progress.fractionCompleted)
-                            .animation(.linear(duration: 0.2), value: progress.fractionCompleted)
-                    }
-                }
+            if let run = viewModel.currentRun {
+                AutoBackupProgressView(run: run, destinationName: viewModel.destinationName)
             } else if case .cleaningUp = viewModel.status {
-                FormRow(image: Image(systemName: "arrow.clockwise.icloud"), color: .accentColor) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Cleaning up old backups…")
-                        ProgressView(value: 1)
+                FormRow(image: Image(systemName: "trash"), color: .accentColor) {
+                    HStack {
+                        Text("Deleting old backups…")
+                        Spacer()
+                        ProgressView()
                     }
-                }
-            } else if viewModel.showsBackupCompleteNotice {
-                FormRow(image: Image(systemName: "checkmark.icloud"), color: .green) {
-                    Text("Backup Complete")
                 }
             } else {
-                // Only disable while the tap is in flight: the status row replaces this button as soon as
-                // the service reports progress, so the button's own spinner would only flash.
-                ProminentActionButton(
-                    "Backup Now",
-                    systemImage: "arrow.clockwise.icloud",
-                    actionOptions: [.disableButton],
-                ) {
-                    await viewModel.backupNow()
+                FormRow(image: Image(systemName: "clock"), color: .blue) {
+                    TextAndSubtitle(
+                        title: "Last Backup",
+                        subtitle: viewModel.lastBackupDate?.formatted(date: .abbreviated, time: .shortened)
+                            ?? "No automatic backups yet",
+                    )
+                }
+                .accessibilityElement(children: .combine)
+            }
+        } header: {
+            Text(viewModel.currentRun == nil ? "Activity" : "Backing Up")
+        }
+    }
+
+    // MARK: - Back Up Now Section
+
+    private var backupNowSection: some View {
+        Group {
+            if viewModel.showsBackupCompleteNotice {
+                Section {
+                    FormRow(image: Image(systemName: "checkmark.icloud"), color: .green) {
+                        Text("Backup Complete")
+                    }
+                }
+            } else if !viewModel.isBackingUp {
+                Section {
+                    // Only disable while the tap is in flight: the activity section takes over as soon as
+                    // the service reports progress, so the button's own spinner would only flash.
+                    ProminentActionButton(
+                        "Back Up Now",
+                        systemImage: "arrow.clockwise.icloud",
+                        actionOptions: [.disableButton],
+                    ) {
+                        await viewModel.backupNow()
+                    }
                 }
             }
         }
@@ -234,29 +291,12 @@ struct AutoBackupView: View {
 
     // MARK: - Helpers
 
-    private func errorRow(_ error: AutoBackupError) -> some View {
-        FormRow(
-            image: Image(systemName: "exclamationmark.triangle.fill"),
-            color: .orange,
-            alignment: .firstTextBaseline,
-        ) {
-            TextAndSubtitle(
-                title: error.errorDescription ?? "An error occurred",
-                subtitle: error.recoverySuggestion,
-            )
+    private func errorLabel(_ error: AutoBackupError) -> some View {
+        Label {
+            Text([error.errorDescription, error.recoverySuggestion].compactMap(\.self).joined(separator: ". "))
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
         }
-    }
-
-    private var statusColor: Color {
-        switch viewModel.status {
-        case .disabled:
-            .gray
-        case .idle, .completed:
-            .green
-        case .backingUp, .cleaningUp:
-            .accentColor
-        case .error:
-            .orange
-        }
+        .foregroundStyle(.orange)
     }
 }

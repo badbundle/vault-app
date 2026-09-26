@@ -37,6 +37,10 @@ public final class AutoBackupViewModel {
     /// `.completed` status itself, which is what the service rests on between backups.
     public internal(set) var showsBackupCompleteNotice = false
 
+    /// False until the providers have reported whether they're configured, so the screen doesn't flash
+    /// "choose a folder" for a destination that is already set up.
+    public private(set) var hasLoadedProviderStates: Bool
+
     private let service: any AutoBackupService
     private let providerStatesWereSeeded: Bool
     private let completionNoticeDuration: Duration
@@ -58,6 +62,7 @@ public final class AutoBackupViewModel {
         status = service.status
         configuration = service.configuration
         providerStates = initialProviderStates
+        hasLoadedProviderStates = !initialProviderStates.isEmpty
 
         service.statusPublisher
             .sink { [weak self] newStatus in
@@ -112,6 +117,7 @@ public final class AutoBackupViewModel {
             ))
         }
         providerStates = states
+        hasLoadedProviderStates = true
     }
 
     /// Marks the active provider as selected ahead of a folder pick and
@@ -160,13 +166,37 @@ public final class AutoBackupViewModel {
         }
     }
 
-    /// Progress of the in-flight backup, or nil when none is running.
-    public var backupProgress: AutoBackupProgress? {
-        if case let .backingUp(progress) = status {
-            progress
+    /// The in-flight backup, or nil when none is running.
+    public var currentRun: AutoBackupRun? {
+        if case let .backingUp(run) = status {
+            run
         } else {
             nil
         }
+    }
+
+    /// When the last successful auto-backup finished.
+    public var lastBackupDate: Date? {
+        if case let .completed(date) = status {
+            date
+        } else {
+            configuration.lastBackupDate
+        }
+    }
+
+    /// The folder backups are saved to, for use in a sentence.
+    public var destinationName: String {
+        activeProvider?.folderSummary.map { "“\($0)”" } ?? "your backup folder"
+    }
+
+    /// When auto-backup runs and how long it keeps backups, in a sentence.
+    public var scheduleSummary: String {
+        let retention = if configuration.retentionDays.shouldCleanup {
+            "Backups older than \(configuration.retentionDays.localizedTitle) are deleted."
+        } else {
+            "Old backups are never deleted."
+        }
+        return "A new encrypted backup is saved a few seconds after your vault changes. \(retention)"
     }
 
     private func apply(_ newStatus: AutoBackupStatus) {
@@ -203,44 +233,75 @@ public final class AutoBackupViewModel {
         showsBackupCompleteNotice = false
     }
 
-    public var statusIconName: String {
-        switch status {
-        case .disabled:
-            "icloud.slash"
-        case .idle:
-            "icloud"
-        case .backingUp, .cleaningUp:
-            "arrow.clockwise.icloud"
-        case .completed:
-            "checkmark.icloud"
-        case .error:
-            "exclamationmark.icloud"
+    /// The screen's headline: whether auto-backup is on and what it's doing right now.
+    public struct StatusHeader: Equatable, Sendable {
+        public enum Tone: Equatable, Sendable {
+            /// Auto-backup is off.
+            case off
+            /// Auto-backup is on and has nothing to report.
+            case healthy
+            /// A backup or clean-up is running.
+            case working
+            /// Auto-backup needs attention before it can back up.
+            case attention
         }
+
+        public var title: String
+        public var subtitle: String
+        public var systemImage: String
+        public var tone: Tone
     }
 
-    public var statusDescription: String {
-        switch status {
-        case .disabled:
-            "Automatic backups are disabled"
-        case .idle:
-            "Ready to back up when changes occur"
-        case .backingUp:
-            "Backing up..."
-        case .cleaningUp:
-            "Cleaning up old backups..."
-        case let .completed(date):
-            "Last backup: \(date.formatted(date: .abbreviated, time: .shortened))"
-        case .error:
-            "Backup failed"
-        }
-    }
-
-    /// When auto-backup is off the footer explains what the feature does; once it is on, the footer
-    /// carries the live status so the state is visible without a separate status row.
-    public var footerText: String {
+    public var statusHeader: StatusHeader {
         guard configuration.isEnabled else {
-            return "Enable to automatically back up your vault to cloud storage whenever changes are made."
+            return StatusHeader(
+                title: "Auto-Backup Is Off",
+                subtitle: "Turn it on to save an encrypted backup to a folder you choose whenever your vault changes.",
+                systemImage: "icloud.slash",
+                tone: .off,
+            )
         }
-        return statusDescription
+
+        switch status {
+        case .backingUp:
+            return StatusHeader(
+                title: "Backing Up",
+                subtitle: "Saving an encrypted copy of your vault to \(destinationName).",
+                systemImage: "arrow.clockwise.icloud",
+                tone: .working,
+            )
+        case let .error(error):
+            // Some descriptions come from the system and already end in a full stop.
+            let description = error.errorDescription.map { $0.hasSuffix(".") ? String($0.dropLast()) : $0 }
+            let explanation = [description, error.recoverySuggestion].compactMap(\.self)
+            return StatusHeader(
+                title: "Last Backup Failed",
+                subtitle: explanation.isEmpty ? "Something went wrong." : explanation.joined(separator: ". "),
+                systemImage: "exclamationmark.icloud",
+                tone: .attention,
+            )
+        case .disabled, .idle, .completed, .cleaningUp:
+            // Clean-up follows every backup and usually takes a moment, so it stays out of the headline
+            // rather than flashing past; the activity section shows it instead.
+            if hasLoadedProviderStates, !isDestinationConfigured {
+                return StatusHeader(
+                    title: "Choose a Folder",
+                    subtitle: "Auto-backup is on, but it needs a folder to save backups to.",
+                    systemImage: "exclamationmark.icloud",
+                    tone: .attention,
+                )
+            }
+            let subtitle = if let lastBackupDate {
+                "Last backed up \(lastBackupDate.formatted(date: .abbreviated, time: .shortened))."
+            } else {
+                "Your vault is saved to \(destinationName) whenever it changes."
+            }
+            return StatusHeader(
+                title: "Auto-Backup Is On",
+                subtitle: subtitle,
+                systemImage: "checkmark.icloud",
+                tone: .healthy,
+            )
+        }
     }
 }

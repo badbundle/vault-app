@@ -214,6 +214,28 @@ struct AutoBackupServiceImplTests {
         #expect(provider.writeCallCount == 2)
     }
 
+    @Test @LeakTracked
+    func triggerBackupIfNeeded_reportsAutomaticRun() async throws {
+        let clock = EpochClockMock(currentTime: 200)
+        let provider = BackupStorageProviderStub(id: "test")
+        let dataModel = anyVaultDataModel()
+        try await dataModel.store(backupPassword: anyBackupPassword())
+        await dataModel.setup()
+        let sut = try makeSUT(clock: clock, providers: [provider], dataModel: dataModel)
+        await Task.yield()
+        await sut.setRetention(.forever)
+        await sut.selectProvider(id: "test")
+        var statuses = [AutoBackupStatus]()
+        var bag = Set<AnyCancellable>()
+        sut.statusPublisher.sink { statuses.append($0) }.store(in: &bag)
+
+        await sut.setEnabled(true)
+
+        let runs = statuses.compactMap(backupRun)
+        #expect(runs.isNotEmpty)
+        #expect(runs.allSatisfy { $0.trigger == .automatic && $0.startedAt == clock.currentDate })
+    }
+
     // MARK: - Force Backup
 
     @Test @LeakTracked
@@ -324,14 +346,10 @@ struct AutoBackupServiceImplTests {
 
         await sut.forceBackup()
 
-        let progress = statuses.compactMap { status -> AutoBackupProgress? in
-            if case let .backingUp(progress) = status {
-                progress
-            } else {
-                nil
-            }
-        }
-        #expect(statuses.first == .backingUp(.starting))
+        let runs = statuses.compactMap(backupRun)
+        let progress = runs.map(\.progress)
+        #expect(statuses.first == .backingUp(.init(trigger: .manual, startedAt: clock.currentDate)))
+        #expect(runs.allSatisfy { $0.trigger == .manual && $0.startedAt == clock.currentDate })
         #expect(statuses.last == .completed(clock.currentDate))
         #expect(statuses.count == progress.count + 1, "Only progress precedes completion")
         let fractions = progress.map(\.fractionCompleted)
@@ -372,7 +390,7 @@ struct AutoBackupServiceImplTests {
         await second.value
 
         #expect(provider.writeCallCount == 2)
-        let starts = statuses.indices.filter { statuses[$0] == .backingUp(.starting) }
+        let starts = statuses.indices.filter { backupRun(statuses[$0])?.progress == .starting }
         let completions = statuses.indices.filter {
             if case .completed = statuses[$0] {
                 true
@@ -588,6 +606,14 @@ extension AutoBackupServiceImplTests {
             defaults: Defaults(userDefaults: userDefaults),
             providers: providers,
         ))
+    }
+
+    private func backupRun(_ status: AutoBackupStatus) -> AutoBackupRun? {
+        if case let .backingUp(run) = status {
+            run
+        } else {
+            nil
+        }
     }
 }
 
