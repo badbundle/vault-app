@@ -78,6 +78,46 @@ public final class HOTPCodePublisher: OTPCodePublisher {
     }
 }
 
+// MARK: - Next code
+
+/// Renders the code after the current one while it's due to show, and publishes `nil` the rest of the time.
+public protocol OTPNextCodePublisher {
+    @MainActor func renderedNextCodePublisher() -> AnyPublisher<String?, Never>
+}
+
+public final class OTPNextCodePublisherMock: OTPNextCodePublisher {
+    public init() {}
+    public let subject = PassthroughSubject<String?, Never>()
+    public func renderedNextCodePublisher() -> AnyPublisher<String?, Never> {
+        subject.eraseToAnyPublisher()
+    }
+}
+
+/// The time-based code of the period after the current one, while `window` is open.
+public final class TOTPNextCodePublisher: OTPNextCodePublisher {
+    private let window: TOTPNextCodeWindow
+    private let totpGenerator: TOTPGenerator
+
+    public init(window: TOTPNextCodeWindow, totpGenerator: TOTPGenerator) {
+        self.window = window
+        self.totpGenerator = totpGenerator
+    }
+
+    @MainActor
+    public func renderedNextCodePublisher() -> AnyPublisher<String?, Never> {
+        let generator = totpGenerator
+        return window.openPeriodPublisher
+            .map { openPeriod in
+                // The next period starts as this one ends.
+                guard let openPeriod, let code = try? generator.code(epochSeconds: UInt64(openPeriod.endTime)) else {
+                    return nil
+                }
+                return OTPCodeRenderer().render(code: code, digits: generator.digits)
+            }
+            .eraseToAnyPublisher()
+    }
+}
+
 // MARK: - Helpers
 
 extension Publisher where Output == BigUInt {

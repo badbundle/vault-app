@@ -44,6 +44,7 @@ public enum VaultIdentifiers {
             public static let settingsPasteTTL = "vault.preferences.general.settings-paste-ttl"
             public static let hideWhileScreenCaptured = "vault.preferences.general.hide-while-screen-captured"
             public static let codeTapAction = "vault.preferences.general.code-tap-action"
+            public static let showsNextCode = "vault.preferences.general.shows-next-code"
         }
 
         /// What a new item starts with.

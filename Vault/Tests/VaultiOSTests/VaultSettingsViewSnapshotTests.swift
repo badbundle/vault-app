@@ -67,6 +67,15 @@ struct VaultSettingsViewSnapshotTests {
     }
 
     @Test(arguments: [ColorScheme.light, .dark])
+    func showNextCodeOn(colorScheme: ColorScheme) throws {
+        let sut = try makeSUT { state in
+            state.showsNextCode = true
+        }
+
+        assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
+
+    @Test(arguments: [ColorScheme.light, .dark])
     func appLockOn(colorScheme: ColorScheme) throws {
         let sut = try makeSUT(isAppLockEnabled: true)
 

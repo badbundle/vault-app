@@ -47,6 +47,31 @@ struct OTPCodePreviewCodeSizeSnapshotTests {
         assertSnapshot(of: sut, as: .image, named: "\(digits)-digits")
     }
 
+    /// The TOTP card's next code fits in the room its bar row leaves, where the
+    /// HOTP card has its refresh button, even in the tightest case, and leaves
+    /// the code the same size.
+    @Test(arguments: [6, 8])
+    func codeMatchesAcrossTypes_withNextCodeShowing(digits: Int) {
+        let sut = makeSUT(
+            issuer: "Legacy VPN Gateway",
+            code: String(repeating: "0", count: digits),
+            nextCode: String(repeating: "9", count: digits),
+            cardWidth: 175,
+        )
+        .environment(\.showsNextCode, true)
+
+        assertSnapshot(of: sut, as: .image, named: "\(digits)-digits")
+    }
+
+    @Test
+    func codeMatchesAcrossTypes_withNextCodeShowingAtLargerTextSize() {
+        let sut = makeSUT(issuer: "Legacy VPN Gateway", nextCode: "999999")
+            .environment(\.showsNextCode, true)
+            .dynamicTypeSize(.xxLarge)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
     // MARK: - Helpers
 
     /// - Parameter cardWidth: One column of the feed's two-column grid: 198pt
@@ -54,6 +79,7 @@ struct OTPCodePreviewCodeSizeSnapshotTests {
     private func makeSUT(
         issuer: String = "Issuer",
         code: String = "123456",
+        nextCode: String? = nil,
         cardWidth: CGFloat = 198,
     ) -> some View {
         HStack(alignment: .top, spacing: 8) {
@@ -65,7 +91,7 @@ struct OTPCodePreviewCodeSizeSnapshotTests {
             .frame(width: cardWidth)
 
             TOTPCodePreviewView(
-                previewViewModel: makePreviewViewModel(issuer: issuer, code: code),
+                previewViewModel: makePreviewViewModel(issuer: issuer, code: code, nextCode: nextCode),
                 timerView: Color.blue,
                 behaviour: .normal,
             )
@@ -74,13 +100,18 @@ struct OTPCodePreviewCodeSizeSnapshotTests {
         .padding(8)
     }
 
-    private func makePreviewViewModel(issuer: String, code: String) -> OTPCodePreviewViewModel {
+    private func makePreviewViewModel(
+        issuer: String,
+        code: String,
+        nextCode: String? = nil,
+    ) -> OTPCodePreviewViewModel {
         OTPCodePreviewViewModel(
             accountName: "bradley@example.com",
             issuer: issuer,
             color: .default,
             isLocked: false,
             fixedCodeState: .visible(code),
+            fixedNextCode: nextCode,
         )
     }
 }

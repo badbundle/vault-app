@@ -17,4 +17,8 @@ extension EnvironmentValues {
     ///
     /// For the code's own page, whose badge already shows the icon and names from the card.
     @Entry var showsCodeOnly = false
+
+    /// Whether a time-based code shows the code after it in the last seconds of its countdown: the Show Next Code
+    /// setting, which only the app itself follows.
+    @Entry var showsNextCode = false
 }

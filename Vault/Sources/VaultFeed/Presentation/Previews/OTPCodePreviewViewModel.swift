@@ -12,6 +12,14 @@ public final class OTPCodePreviewViewModel {
     public let isLocked: Bool
     public private(set) var code: OTPCodeState = .notReady
     private var obfuscatedCode: OTPCodeState?
+    private var upcomingCode: String?
+
+    /// The code after the current one, near the end of the current one's countdown, to show beside it.
+    ///
+    /// Only while the current code itself shows: whatever hides that (the item's lock, privacy, expiry) hides this.
+    public var nextCode: String? {
+        code.isVisible ? upcomingCode : nil
+    }
 
     public var visibleIssuer: String {
         if issuer.isNotEmpty {
@@ -29,20 +37,24 @@ public final class OTPCodePreviewViewModel {
         color: VaultItemColor,
         isLocked: Bool,
         fixedCodeState: OTPCodeState,
+        fixedNextCode: String? = nil,
     ) {
         self.accountName = accountName
         self.issuer = issuer
         self.color = color
         self.isLocked = isLocked
         code = fixedCodeState
+        upcomingCode = fixedNextCode
     }
 
+    /// - Parameter nextCodePublisher: The code after the current one while it's due to show, for a code that has one.
     public init(
         accountName: String,
         issuer: String,
         color: VaultItemColor,
         isLocked: Bool,
         codePublisher: some OTPCodePublisher,
+        nextCodePublisher: (any OTPNextCodePublisher)? = nil,
     ) {
         self.accountName = accountName
         self.color = color
@@ -72,6 +84,12 @@ public final class OTPCodePreviewViewModel {
                 } else {
                     self.code = .visible(code)
                 }
+            }
+            .store(in: &cancellables)
+        nextCodePublisher?.renderedNextCodePublisher()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] nextCode in
+                self?.upcomingCode = nextCode
             }
             .store(in: &cancellables)
     }
