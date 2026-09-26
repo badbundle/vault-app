@@ -12,7 +12,6 @@ struct CreateItemPickerView: View {
     var onSelect: (CreatingItem) -> Void
 
     @State private var contentHeight: CGFloat = 0
-    @ScaledMetric(relativeTo: .title3) private var iconSize: Double = 44
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -64,46 +63,17 @@ struct CreateItemPickerView: View {
 
     private func option(
         _ item: CreatingItem,
-        title: LocalizedStringKey,
-        subtitle: LocalizedStringKey,
+        title: String,
+        subtitle: String,
         systemImage: String,
     ) -> some View {
         Button {
             onSelect(item)
         } label: {
-            HStack(spacing: 14) {
-                Image(systemName: systemImage)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: iconSize, height: iconSize)
-                    .background(Color.accentColor, in: .rect(cornerRadius: 12))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.headline)
-                    Text(subtitle)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                .multilineTextAlignment(.leading)
-                // The sheet's height comes from measuring this content, so
-                // the first pass lays it out in a zero-height sheet and the
-                // text would truncate to one line, which then becomes the
-                // measured height. Sizing the text to its own height breaks
-                // the loop and lets the subtitle wrap.
-                .fixedSize(horizontal: false, vertical: true)
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.fill.quaternary, in: .rect(cornerRadius: 20))
-            // The whole row is the target, not just the text.
-            .contentShape(.rect(cornerRadius: 20))
+            OptionCardLabel(title: title, subtitle: subtitle, systemImage: systemImage)
+                .padding(16)
+                .background(.fill.quaternary, in: .rect(cornerRadius: 20))
+                .contentShape(.rect(cornerRadius: 20))
         }
         .buttonStyle(.plain)
     }

@@ -8,17 +8,8 @@ struct SecureNoteDetailView: View {
     @Binding private var navigationPath: NavigationPath
 
     @Environment(\.presentationMode) private var presentationMode
-    @State private var selectedColor: Color
-    @State private var modal: Modal?
-
-    private enum Modal: IdentifiableSelf {
-        case editLock
-        case editPassphrase
-        case editKillphrase
-        case editEncryption
-        case editPreviewMode
-        case editTags
-    }
+    @State private var currentError: (any Error)?
+    @State private var isShowingDeleteConfirmation = false
 
     init(
         editingExistingNote note: SecureNote,
@@ -29,14 +20,14 @@ struct SecureNoteDetailView: View {
         editor: any SecureNoteDetailEditor,
         openInEditMode: Bool,
     ) {
-        _navigationPath = navigationPath
-        _viewModel = .init(initialValue: .init(
-            mode: .editing(note: note, metadata: storedMetadata, existingKey: encryptionKey),
-            dataModel: dataModel,
-            editor: editor,
-        ))
-        _selectedColor = State(initialValue: storedMetadata.color?.color ?? VaultItemColor.default.color)
-
+        self.init(
+            viewModel: .init(
+                mode: .editing(note: note, metadata: storedMetadata, existingKey: encryptionKey),
+                dataModel: dataModel,
+                editor: editor,
+            ),
+            navigationPath: navigationPath,
+        )
         if openInEditMode {
             viewModel.startEditing()
         }
@@ -47,19 +38,17 @@ struct SecureNoteDetailView: View {
         navigationPath: Binding<NavigationPath>,
         dataModel: VaultDataModel,
     ) {
-        _navigationPath = navigationPath
-        _viewModel = .init(initialValue: .init(
-            mode: .creating,
-            dataModel: dataModel,
-            editor: editor,
-        ))
-        _selectedColor = .init(initialValue: VaultItemColor.default.color)
-
+        self.init(
+            viewModel: .init(mode: .creating, dataModel: dataModel, editor: editor),
+            navigationPath: navigationPath,
+        )
         viewModel.startEditing()
     }
 
-    @State private var currentError: (any Error)?
-    @State private var isShowingDeleteConfirmation = false
+    init(viewModel: SecureNoteDetailViewModel, navigationPath: Binding<NavigationPath>) {
+        _viewModel = .init(initialValue: viewModel)
+        _navigationPath = navigationPath
+    }
 
     var body: some View {
         GeometryReader { reader in
@@ -69,171 +58,61 @@ struct SecureNoteDetailView: View {
                 isShowingDeleteConfirmation: $isShowingDeleteConfirmation,
                 navigationPath: $navigationPath,
                 presentationMode: presentationMode,
+                editorKind: .note,
+                editorIdentity: identity,
             ) {
-                if viewModel.isInEditMode {
-                    noteContentsEditingSection
-                    editingActionsSection
-                } else {
-                    noteContentsSection(size: reader.size)
-                    MetadataDisclosureSection(
-                        tags: viewModel.tagsThatAreSelected,
-                        entries: viewModel.detailEntries,
-                    )
-                }
+                noteContentsSection(size: reader.size)
+                MetadataDisclosureSection(
+                    tags: viewModel.tagsThatAreSelected,
+                    entries: viewModel.detailEntries,
+                )
+            } editorStep: { step in
+                editorStep(step)
             }
         }
-        .ignoresSafeArea(.keyboard)
-        .animation(.snappy, value: viewModel.editingModel.detail.viewConfig)
-        .onChange(of: selectedColor.hashValue) { _, _ in
-            viewModel.editingModel.detail.color = VaultItemColor(color: selectedColor)
-        }
-        .sheet(item: $modal, onDismiss: nil) { item in
-            switch item {
-            case .editLock:
-                NavigationStack {
-                    VaultDetailLockEditView(
-                        title: "Lock",
-                        description: "Locked notes require authentication to view or edit. The title and first line of the note will be visible in the preview.",
-                        lockState: $viewModel.editingModel.detail.lockState,
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                modal = nil
-                            } label: {
-                                Text("Done")
-                            }
-                        }
-                    }
-                }
-            case .editPassphrase:
-                NavigationStack {
-                    VaultDetailPassphraseEditView(
-                        title: "Visibility",
-                        description: "Notes that require a passphrase are hidden from the main feed. You need to search exactly for your chosen passphrase each time to view this note.",
-                        hiddenWithPassphraseTitle: viewModel.strings.passphraseSubtitle,
-                        viewConfig: $viewModel.editingModel.detail.viewConfig,
-                        passphrase: $viewModel.editingModel.detail.searchPassphrase,
-                    )
-                    .interactiveDismissDisabled(!viewModel.editingModel.detail.isPassphraseValid)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                modal = nil
-                            } label: {
-                                Text("Done")
-                            }
-                            .disabled(!viewModel.editingModel.detail.isPassphraseValid)
-                        }
-                    }
-                }
-            case .editKillphrase:
-                NavigationStack {
-                    VaultDetailKillphraseEditView(
-                        title: "Killphrase",
-                        description: "A killphrase is a secret phrase that is used to immediately delete this note. In the search bar, search exactly for this text and the note will be immediately and quitely deleted. Combined with a search passphrase, you can delete an item without it being made visible.",
-                        hiddenWithKillphraseTitle: viewModel.strings.killphraseSubtitle,
-                        killphraseEnabled: $viewModel.editingModel.detail.killphraseEnabled,
-                        newKillphrase: $viewModel.editingModel.detail.newKillphrase,
-                    )
-                    .interactiveDismissDisabled(!viewModel.editingModel.detail.isKillphraseValid)
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                modal = nil
-                            } label: {
-                                Text("Done")
-                            }
-                            .disabled(!viewModel.editingModel.detail.isKillphraseValid)
-                        }
-                    }
-                }
-            case .editEncryption:
-                NavigationStack {
-                    VaultDetailEncryptionEditView(
-                        title: "Encryption",
-                        description: "Locks this note cryptographically on your device. Password is required on every view.",
-                        encryptionInitiallyEnabled: viewModel.editingModel.detail.encrypted,
-                        didSetNewEncryptionPassword: { newPassword in
-                            viewModel.editingModel.detail.newEncryptionPassword = newPassword
-                        },
-                        didRemoveEncryption: {
-                            viewModel.editingModel.detail.newEncryptionPassword = ""
-                            viewModel.editingModel.detail.existingEncryptionKey = nil
-                        },
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                modal = nil
-                            } label: {
-                                Text("Done")
-                            }
-                        }
-                    }
-                }
-            case .editPreviewMode:
-                NavigationStack {
-                    VaultDetailNotePreviewEditView(
-                        title: "Preview",
-                        description: "Controls what appears in the note's preview tile. Hiding fields keeps content off the main feed.",
-                        isEncrypted: viewModel.editingModel.detail.encrypted,
-                        previewMode: $viewModel.editingModel.detail.previewMode,
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                modal = nil
-                            } label: {
-                                Text("Done")
-                            }
-                        }
-                    }
-                }
-            case .editTags:
-                NavigationStack {
-                    VaultDetailTagEditView(
-                        tagsThatAreSelected: viewModel.tagsThatAreSelected,
-                        remainingTags: viewModel.remainingTags,
-                        didAdd: { viewModel.editingModel.detail.tags.insert($0.id) },
-                        didRemove: { viewModel.editingModel.detail.tags.remove($0.id) },
-                    )
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                modal = nil
-                            } label: {
-                                Text("Done")
-                            }
-                        }
-                    }
-                }
-            }
+        // Viewing, the note fills the screen whether or not the keyboard is up. Editing, the keyboard has to push
+        // the text up, so what's being typed stays in view.
+        .ignoresSafeArea(viewModel.isInEditMode ? [] : .keyboard)
+    }
+
+    private var noteSymbol: String {
+        viewModel.editingModel.detail.lockState.isLocked ? "lock.doc.fill" : "doc.text.fill"
+    }
+
+    private var identity: DetailEditorItemIdentity {
+        let detail = viewModel.editingModel.detail
+        return DetailEditorItemIdentity(
+            systemImage: noteSymbol,
+            title: detail.titleLine.isNotBlank ? detail.titleLine : viewModel.strings.noteEmptyTitleTitle,
+            subtitle: detail.textFormat.localizedString,
+            color: detail.color,
+        )
+    }
+
+    @ViewBuilder
+    private func editorStep(_ step: DetailEditorStep) -> some View {
+        switch step {
+        case .content:
+            SecureNoteContentStep(viewModel: viewModel)
+        case .details:
+            // Not one of a note's steps: its first line is its title.
+            EmptyView()
+        case .appearance:
+            DetailEditorAppearanceStep(
+                identity: identity,
+                color: $viewModel.editingModel.detail.color,
+                selectedTags: viewModel.tagsThatAreSelected,
+                remainingTags: viewModel.remainingTags,
+                tagCountDescription: viewModel.strings.tagCount(tags: viewModel.editingModel.detail.tags.count),
+                addTag: { viewModel.editingModel.detail.tags.insert($0.id) },
+                removeTag: { viewModel.editingModel.detail.tags.remove($0.id) },
+            )
+        case .security:
+            SecureNoteSecurityStep(viewModel: viewModel)
         }
     }
 
-    // MARK: Title
-
-    private var noteIconHeader: some View {
-        Image(systemName: viewModel.editingModel.detail.lockState.isLocked ? "lock.doc.fill" : "doc.text.fill")
-            .font(.title)
-            .foregroundStyle(selectedColor)
-    }
-
-    private var noteIconEditingHeader: some View {
-        VStack(spacing: 6) {
-            Image(systemName: viewModel.editingModel.detail.lockState.isLocked ? "lock.doc.fill" : "doc.text.fill")
-                .font(.title)
-                .foregroundStyle(selectedColor)
-
-            ColorPicker(selection: $selectedColor, supportsOpacity: false, label: {
-                EmptyView()
-            })
-            .labelsHidden()
-        }
-    }
-
-    // MARK: Contents
+    // MARK: - Viewing
 
     private func noteContentsSection(size: CGSize) -> some View {
         Section {
@@ -253,129 +132,11 @@ struct SecureNoteDetailView: View {
                     .listRowInsets(EdgeInsets(vertical: 12, horizontal: 16))
             }
         } header: {
-            noteIconHeader
+            Image(systemName: noteSymbol)
+                .font(.title)
+                .foregroundStyle((viewModel.editingModel.detail.color ?? .default).color)
                 .containerRelativeFrame(.horizontal)
                 .padding(.vertical, 2)
-        }
-    }
-
-    private var noteContentsEditingSection: some View {
-        Section {
-            LabeledTextField(
-                viewModel.strings.noteContentsTitle,
-                text: $viewModel.editingModel.detail.contents,
-                prompt: "The first line is the note's title",
-                kind: .multiline(minLines: 16),
-            )
-            .font(.subheadline)
-            .fontDesign(.monospaced)
-        } header: {
-            noteIconEditingHeader
-                .containerRelativeFrame(.horizontal)
-                .padding(.vertical, 2)
-                .padding(.bottom, 4)
-        }
-    }
-
-    @ViewBuilder
-    private var editingActionsSection: some View {
-        Section {
-            Picker(selection: $viewModel.editingModel.detail.textFormat) {
-                ForEach(TextFormat.allCases, id: \.self) { format in
-                    Text(format.localizedString)
-                        .tag(format)
-                }
-            } label: {
-                FormRow(image: Image(systemName: "text.justify.left"), color: .accentColor, style: .standard) {
-                    Text("Text Format")
-                }
-            }
-
-            Button {
-                modal = .editPassphrase
-            } label: {
-                FormRow(
-                    image: Image(systemName: viewModel.editingModel.detail.viewConfig.systemIconName),
-                    color: .accentColor,
-                    style: .standard,
-                ) {
-                    LabeledContent("Visibility", value: viewModel.editingModel.detail.viewConfig.localizedTitle)
-                        .font(.body)
-                }
-            }
-
-            Button {
-                modal = .editPreviewMode
-            } label: {
-                FormRow(
-                    image: Image(systemName: "rectangle.dashed"),
-                    color: .accentColor,
-                    style: .standard,
-                ) {
-                    LabeledContent("Preview", value: viewModel.editingModel.detail.previewMode.localizedTitle)
-                        .font(.body)
-                }
-            }
-
-            Button {
-                modal = .editLock
-            } label: {
-                FormRow(
-                    image: Image(systemName: viewModel.editingModel.detail.lockState.systemIconName),
-                    color: .accentColor,
-                    style: .standard,
-                ) {
-                    LabeledContent("Lock", value: viewModel.editingModel.detail.lockState.localizedTitle)
-                        .font(.body)
-                }
-            }
-
-            Button {
-                modal = .editKillphrase
-            } label: {
-                FormRow(
-                    image: Image(systemName: viewModel.editingModel.detail.killphraseEnabledIcon),
-                    color: .accentColor,
-                    style: .standard,
-                ) {
-                    LabeledContent("Killphrase", value: viewModel.editingModel.detail.killphraseEnabledText)
-                        .font(.body)
-                }
-            }
-
-            Button {
-                modal = .editEncryption
-            } label: {
-                FormRow(
-                    image: Image(systemName: "lock.iphone"),
-                    color: .accentColor,
-                    style: .standard,
-                ) {
-                    LabeledContent("Encryption", value: viewModel.editingModel.detail.encryptionEnabledText)
-                        .font(.body)
-                }
-            }
-
-            Button {
-                modal = .editTags
-            } label: {
-                VaultDetailTagsRow(
-                    tags: viewModel.tagsThatAreSelected,
-                    countDescription: viewModel.strings.tagCount(tags: viewModel.editingModel.detail.tags.count),
-                )
-            }
-        }
-
-        if viewModel.shouldShowDeleteButton {
-            Section {
-                deleteButton
-            }
-        }
-    }
-
-    private var deleteButton: some View {
-        ProminentActionButton(localized(key: "action.delete.title"), systemImage: "trash.fill", role: .destructive) {
-            isShowingDeleteConfirmation = true
         }
     }
 }

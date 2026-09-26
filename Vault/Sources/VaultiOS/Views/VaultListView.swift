@@ -80,6 +80,11 @@ struct VaultListView<
                     modal = .creatingItem(creatingItem)
                 }
             case let .creatingItem(creatingItem):
+                // The editor sizes the sheet to each step. Every view shown
+                // here sets its detents, because this sheet follows the
+                // picker: without them the picker's fitted detent leaks into
+                // this presentation and a tap on the sheet's empty space
+                // dismisses it.
                 NavigationStack(path: $navigationPath) {
                     VaultDetailCreateView(
                         creatingItem: creatingItem,
@@ -88,10 +93,6 @@ struct VaultListView<
                         navigationPath: $navigationPath,
                     )
                 }
-                // Explicit because this sheet follows the picker: without
-                // it the picker's fitted detent leaks into this presentation
-                // and a tap on the sheet's empty space dismisses it.
-                .presentationDetents([.large])
             }
         }
         .onReceive(openDetailSubject, perform: { vaultItemEncryptedPayload in

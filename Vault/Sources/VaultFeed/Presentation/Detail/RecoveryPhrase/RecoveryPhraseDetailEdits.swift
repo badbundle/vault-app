@@ -7,7 +7,7 @@ import VaultKeygen
 ///
 /// A recovery phrase is always encrypted and always locked, so unlike other items there's no way to turn either
 /// off: the edits are only valid once there's a password, and the lock state is fixed.
-public struct RecoveryPhraseDetailEdits: EditableState {
+public struct RecoveryPhraseDetailEdits: DetailEditorEditableState {
     public var relativeOrder: UInt64
 
     /// Stored in plaintext, alongside the encrypted item.
@@ -90,7 +90,15 @@ public struct RecoveryPhraseDetailEdits: EditableState {
     }
 
     public var isValid: Bool {
-        isEncrypted && hasAllWords && isSearchPassphraseValid
+        DetailEditorStep.allCases.allSatisfy(isComplete)
+    }
+
+    public func isComplete(_ step: DetailEditorStep) -> Bool {
+        switch step {
+        case .content: hasAllWords
+        case .details, .appearance: true
+        case .security: isEncrypted && isSearchPassphraseValid && isKillphraseValid
+        }
     }
 
     /// Recovery phrases are always locked, this can't be changed.

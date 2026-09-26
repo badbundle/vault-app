@@ -15,6 +15,7 @@ public final class OTPCodeDetailViewModel: DetailViewModel {
 
     public let mode: Mode
     public var isLocked: Bool
+    public var editorFlow: DetailEditorFlow
     public let dataModel: VaultDataModel
     private let editor: any OTPCodeDetailEditor
     private let detailEditState = DetailEditState<OTPCodeDetailEdits>()
@@ -56,6 +57,20 @@ public final class OTPCodeDetailViewModel: DetailViewModel {
                 showInQuickType: metadata.showInQuickType,
             ))
         }
+        editorFlow = Self.makeEditorFlow(mode: mode)
+    }
+
+    /// A new code starts with its key, and a code that came with one starts on naming it. An existing code's key
+    /// can't be changed, so its editor has no key step.
+    private static func makeEditorFlow(mode: Mode) -> DetailEditorFlow {
+        switch mode {
+        case .creating(.none):
+            DetailEditorFlow(steps: DetailEditorStep.allCases, style: .guided)
+        case .creating(.some):
+            DetailEditorFlow(steps: DetailEditorStep.allCases, style: .guided, startingAt: .details)
+        case .editing:
+            DetailEditorFlow(steps: [.details, .appearance, .security], style: .overview)
+        }
     }
 
     public var allTags: [VaultItemTag] {
@@ -74,14 +89,6 @@ public final class OTPCodeDetailViewModel: DetailViewModel {
     public var isInitialCreation: Bool {
         switch mode {
         case .creating: true
-        case .editing: false
-        }
-    }
-
-    public var showsKeyEditingFields: Bool {
-        switch mode {
-        case .creating(.none): true
-        case .creating(.some): false
         case .editing: false
         }
     }
@@ -180,6 +187,30 @@ public final class OTPCodeDetailViewModel: DetailViewModel {
 
     public func startEditing() {
         detailEditState.startEditing()
+        editorFlow = Self.makeEditorFlow(mode: mode)
+    }
+
+    /// Fills the key in from a scanned code, with its names if it has them, and moves on to naming the code.
+    public func applyScannedCode(_ code: OTPAuthCode) {
+        editingModel.detail.applyKey(from: code)
+        if editorFlow.currentStep == .content {
+            continueInEditor()
+        }
+    }
+
+    public func editorSummary(for step: DetailEditorStep) -> String {
+        let detail = editingModel.detail
+        let parts: [String] = switch step {
+        case .content:
+            [strings.codeKindTitle(kind: detail.codeType)]
+        case .details:
+            [visibleIssuerTitle, detail.accountNameTitle]
+        case .appearance:
+            [editorTagsSummary(tagsThatAreSelected)]
+        case .security:
+            [detail.viewConfig.localizedTitle, editorLockSummary(detail.lockState)]
+        }
+        return parts.filter(\.isNotBlank).joined(separator: " · ")
     }
 
     public func saveChanges() async {
@@ -270,9 +301,7 @@ extension OTPCodeDetailViewModel {
         public let inputSecretTitle = localized(key: "codeDetail.field.secret.title")
         public let inputEnterCodeManually = localized(key: "codeDetail.input.enterCodeManually.title")
         public let inputPickScannerImage = localized(key: "codeDetail.input.pickScannerImage.title")
-        public let inputKeyValidTitle = localized(key: "codeDetail.input.key.valid.title")
         public let inputKeyErrorTitle = localized(key: "codeDetail.input.key.error.title")
-        public let inputKeyEmptyTitle = localized(key: "codeDetail.input.key.enterText.title")
         public let visibilitySectionTitle = localized(key: "itemDetail.visibilitySection.title")
         public let visibilityTitle = localized(key: "itemDetail.visibility.title")
         public let visibilitySubtitle = localized(key: "itemDetail.visibility.subtitle")

@@ -19,6 +19,7 @@ public final class SecureNoteDetailViewModel: DetailViewModel {
 
     private let mode: Mode
     public var isLocked: Bool
+    public var editorFlow: DetailEditorFlow
     public let dataModel: VaultDataModel
     private let detailEditState = DetailEditState<SecureNoteDetailEdits>()
     private let didEncounterErrorSubject = PassthroughSubject<any Error, Never>()
@@ -54,6 +55,16 @@ public final class SecureNoteDetailViewModel: DetailViewModel {
                 previewMode: metadata.previewMode,
             ))
         }
+        editorFlow = Self.makeEditorFlow(mode: mode)
+    }
+
+    /// A note is named by its first line, so its editor has no details step.
+    private static func makeEditorFlow(mode: Mode) -> DetailEditorFlow {
+        let steps: [DetailEditorStep] = [.content, .appearance, .security]
+        return switch mode {
+        case .creating: DetailEditorFlow(steps: steps, style: .guided)
+        case .editing: DetailEditorFlow(steps: steps, style: .overview)
+        }
     }
 
     public var allTags: [VaultItemTag] {
@@ -86,6 +97,29 @@ public final class SecureNoteDetailViewModel: DetailViewModel {
 
     public func startEditing() {
         detailEditState.startEditing()
+        editorFlow = Self.makeEditorFlow(mode: mode)
+    }
+
+    public func editorSummary(for step: DetailEditorStep) -> String {
+        let detail = editingModel.detail
+        let parts: [String] = switch step {
+        case .content:
+            [
+                detail.titleLine.isNotBlank ? detail.titleLine : strings.noteEmptyTitleTitle,
+                detail.textFormat.localizedString,
+            ]
+        case .details:
+            []
+        case .appearance:
+            [editorTagsSummary(tagsThatAreSelected)]
+        case .security:
+            [
+                detail.viewConfig.localizedTitle,
+                editorLockSummary(detail.lockState),
+                detail.encrypted ? "Encrypted" : "",
+            ]
+        }
+        return parts.filter(\.isNotBlank).joined(separator: " · ")
     }
 
     public func didEncounterErrorPublisher() -> AnyPublisher<any Error, Never> {

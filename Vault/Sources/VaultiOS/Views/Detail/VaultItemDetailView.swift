@@ -3,15 +3,28 @@ import SwiftUI
 import VaultAppIcon
 import VaultFeed
 
+/// Why an item's contents are hidden right now.
+struct VaultItemHiddenNotice {
+    var title: String
+    var subtitle: String
+}
+
 /// The basis of a detail view with some of the editing state already bound to buttons etc.
+///
+/// Shows the item with `contents`, and while editing, its editor with a step from `editorStep` at a time.
 @MainActor
-struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>: View {
+struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View, EditorStepView: View>: View {
     @Bindable var viewModel: ChildViewModel
     @Binding var currentError: (any Error)?
     @Binding var isShowingDeleteConfirmation: Bool
     @Binding var navigationPath: NavigationPath
     var presentationMode: Binding<PresentationMode>?
+    var editorKind: DetailEditorItemKind
+    var editorIdentity: DetailEditorItemIdentity
+    /// Covers everything, the editor included, with a notice that the item is hidden.
+    var hiddenNotice: VaultItemHiddenNotice?
     @ViewBuilder var contents: () -> ContentsView
+    @ViewBuilder var editorStep: (DetailEditorStep) -> EditorStepView
 
     @Environment(DeviceAuthenticationService.self) private var authenticationService: DeviceAuthenticationService
     @Environment(\.colorScheme) private var colorScheme
@@ -28,11 +41,27 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
     }
 
     var body: some View {
-        Form {
+        Group {
             if viewModel.isLocked {
-                lockedSection
+                Form {
+                    lockedSection
+                }
+            } else if let hiddenNotice {
+                Form {
+                    hiddenSection(hiddenNotice)
+                }
+            } else if viewModel.isInEditMode {
+                DetailEditorView(
+                    viewModel: viewModel,
+                    kind: editorKind,
+                    identity: editorIdentity,
+                    delete: viewModel.shouldShowDeleteButton ? { isShowingDeleteConfirmation = true } : nil,
+                    stepContent: editorStep,
+                )
             } else {
-                contents()
+                Form {
+                    contents()
+                }
             }
         }
         .navigationTitle(viewModel.strings.title)
@@ -73,6 +102,12 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
         .toolbar {
             if viewModel.isLocked {
                 cancelImmediatelyItem
+            } else if isShowingOpenedEditorStep {
+                // A step opened from the editor's overview: back to the overview, which has Cancel and Done.
+                backToEditorOverviewItem
+                if viewModel.editingModel.isDirty {
+                    saveDirtyChangesItem
+                }
             } else {
                 // Only if this view is the root of the navigation stack should we show these actions.
                 // If it isn't, it implies going back to the original context is more likely the correct
@@ -99,6 +134,18 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
                     }
                 }
             }
+        }
+    }
+
+    private var isShowingOpenedEditorStep: Bool {
+        viewModel.isInEditMode && viewModel.editorFlow.style == .overview && !viewModel.editorFlow.isShowingOverview
+    }
+
+    private func hiddenSection(_ notice: VaultItemHiddenNotice) -> some View {
+        Section {
+            PlaceholderView(systemIcon: "eye.slash", title: notice.title, subtitle: notice.subtitle)
+                .padding()
+                .containerRelativeFrame(.horizontal)
         }
     }
 
@@ -245,6 +292,16 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
             } label: {
                 Text(viewModel.strings.cancelEditsTitle)
                     .tint(.red)
+            }
+        }
+    }
+
+    private var backToEditorOverviewItem: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            Button {
+                viewModel.goBackInEditor()
+            } label: {
+                Label("Back", systemImage: "chevron.left")
             }
         }
     }

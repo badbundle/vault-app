@@ -6,7 +6,7 @@ import VaultKeygen
 /// Encapsulates editing state for a given note.
 ///
 /// This is a partial edit, which will be merged with the current model to form an update.
-public struct SecureNoteDetailEdits: EditableState {
+public struct SecureNoteDetailEdits: DetailEditorEditableState {
     public var relativeOrder: UInt64
 
     @FieldValidated(validationLogic: .alwaysValid)
@@ -88,7 +88,15 @@ public struct SecureNoteDetailEdits: EditableState {
     }
 
     public var isValid: Bool {
-        $contents.isValid && isPassphraseValid
+        DetailEditorStep.allCases.allSatisfy(isComplete)
+    }
+
+    public func isComplete(_ step: DetailEditorStep) -> Bool {
+        switch step {
+        case .content: $contents.isValid
+        case .details, .appearance: true
+        case .security: isPassphraseValid && isKillphraseValid
+        }
     }
 
     public var isPassphraseValid: Bool {
