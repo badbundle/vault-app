@@ -37,6 +37,20 @@ struct VaultSettingsViewSnapshotTests {
 
         assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
     }
+
+    @Test(arguments: [ColorScheme.light, .dark])
+    func appLockOn(colorScheme: ColorScheme) throws {
+        let sut = try makeSUT(isAppLockEnabled: true)
+
+        assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
+
+    @Test(arguments: [ColorScheme.light, .dark])
+    func appLockWithoutPasscode(colorScheme: ColorScheme) throws {
+        let sut = try makeSUT(policy: .cannotAuthenticate)
+
+        assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
 }
 
 // MARK: - Helpers
@@ -45,13 +59,24 @@ extension VaultSettingsViewSnapshotTests {
     private func makeSUT(
         dynamicTypeSize: DynamicTypeSize = .medium,
         height: CGFloat = 1200,
+        isAppLockEnabled: Bool = false,
+        policy: some DeviceAuthenticationPolicy = .alwaysDeny,
         configure: (inout LocalSettingsState) -> Void = { _ in },
     ) throws -> some View {
         let localSettings = try LocalSettings(defaults: .nonPersistent())
         configure(&localSettings.state)
+        let authenticationService = DeviceAuthenticationService(policy: policy)
+        let appLockSettings = try AppLockSettingsStore(userDefaults: .nonPersistent())
+        appLockSettings.isEnabled = isAppLockEnabled
+        let appLock = AppLockService(
+            settings: appLockSettings,
+            authenticationService: authenticationService,
+            purgeSensitiveData: {},
+        )
         return VaultSettingsView(viewModel: .init(), localSettings: localSettings)
             .environment(anyVaultDataModel())
-            .environment(DeviceAuthenticationService(policy: .alwaysDeny))
+            .environment(authenticationService)
+            .environment(appLock)
             .dynamicTypeSize(dynamicTypeSize)
             .framedForTest(height: height)
     }

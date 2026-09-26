@@ -13,6 +13,15 @@ public final class DeviceAuthenticationService {
         case authenticated
     }
 
+    /// Whether a prompt this service asked for is up right now.
+    ///
+    /// The app is inactive while one is. The app lock's privacy cover stays away then, so the app isn't blanked out
+    /// behind its own Face ID prompts.
+    public private(set) var isAuthenticating = false
+    @ObservationIgnored private var promptsInProgress = 0 {
+        didSet { isAuthenticating = promptsInProgress > 0 }
+    }
+
     /// Does this user even have biometrics enabled?
     public var canAuthenticate: Bool {
         policy.canAuthenticate
@@ -24,6 +33,8 @@ public final class DeviceAuthenticationService {
             return .failure(.noAuthenticationSetup)
         }
 
+        promptsInProgress += 1
+        defer { promptsInProgress -= 1 }
         let authenticated = try await policy.authenticate(reason: reason)
         guard authenticated else {
             return .failure(.authenticationFailure)
@@ -34,6 +45,8 @@ public final class DeviceAuthenticationService {
 
     /// Throws if the user is not authenticated or for any other error.
     public func validateAuthentication(reason: String) async throws {
+        promptsInProgress += 1
+        defer { promptsInProgress -= 1 }
         let result = try await policy
             .authenticate(reason: reason)
         guard result else {

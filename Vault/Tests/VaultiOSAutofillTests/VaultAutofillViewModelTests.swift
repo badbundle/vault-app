@@ -3,6 +3,7 @@ import Foundation
 import FoundationExtensions
 import TestHelpers
 import Testing
+import VaultFeed
 import VaultSettings
 @testable import VaultiOSAutofill
 
@@ -70,6 +71,11 @@ extension VaultAutofillViewModelTests {
     private func makeSUT() throws -> VaultAutofillViewModel {
         try VaultAutofillViewModel(
             localSettings: LocalSettings(defaults: Defaults.nonPersistent()),
+            appLock: AppLockService(
+                settings: AppLockSettingsStore(userDefaults: .nonPersistent()),
+                authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
+                purgeSensitiveData: {},
+            ),
         )
     }
 }

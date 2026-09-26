@@ -18,11 +18,15 @@ final class VaultAutofillViewModel {
 
     private(set) var feature: DisplayedFeature?
     let localSettings: LocalSettings
+    /// The extension's own copy of the app lock: each time the extension comes up with the lock on, it starts locked.
+    let appLock: AppLockService
 
     init(
         localSettings: LocalSettings,
+        appLock: AppLockService,
     ) {
         self.localSettings = localSettings
+        self.appLock = appLock
     }
 
     func show(feature: DisplayedFeature) {

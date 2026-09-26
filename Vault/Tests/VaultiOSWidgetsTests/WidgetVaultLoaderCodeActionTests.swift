@@ -1,4 +1,5 @@
 import Foundation
+import TestHelpers
 import Testing
 import VaultCore
 import VaultFeed
@@ -112,6 +113,36 @@ struct WidgetVaultLoaderCodeActionTests {
         let code = try await loader.currentTOTPCode(id: item.id.rawValue)
 
         #expect(code == nil)
+    }
+
+    // MARK: - App lock
+
+    @Test
+    func currentTOTPCode_appLockOn_returnsNil() async throws {
+        let item = makeTOTPVaultItem()
+        let loader = try WidgetVaultLoader(store: IncrementingFakeStore(items: [item]), appLockSettings: appLockOn())
+
+        let code = try await loader.currentTOTPCode(id: item.id.rawValue)
+
+        #expect(code == nil)
+    }
+
+    @Test
+    func incrementAndRenderHOTPCode_appLockOn_doesNotIncrement() async throws {
+        let item = makeHOTPVaultItem(counter: 1)
+        let store = IncrementingFakeStore(items: [item])
+        let loader = try WidgetVaultLoader(store: store, appLockSettings: appLockOn())
+
+        let code = try await loader.incrementAndRenderHOTPCode(id: item.id.rawValue)
+
+        #expect(code == nil)
+        #expect(await store.incrementedIDs.isEmpty)
+    }
+
+    private func appLockOn() throws -> AppLockSettingsStore {
+        let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
+        settings.isEnabled = true
+        return settings
     }
 }
 

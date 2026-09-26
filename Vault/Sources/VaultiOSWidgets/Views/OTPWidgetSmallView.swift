@@ -36,7 +36,7 @@ struct OTPWidgetSmallView: View {
     // MARK: - Pieces
 
     private var icon: some View {
-        Image(systemName: "key.horizontal.fill")
+        Image(systemName: snapshot == .locked ? "lock.fill" : "key.horizontal.fill")
             .font(.caption2.weight(.semibold))
             .foregroundStyle(.secondary)
     }
@@ -69,7 +69,7 @@ struct OTPWidgetSmallView: View {
             Link(destination: WidgetDeepLink.openItemDetail(itemID: state.itemID)) {
                 content
             }
-        case .unavailable, .placeholder:
+        case .unavailable, .locked, .placeholder:
             content
         }
     }
@@ -95,7 +95,7 @@ struct OTPWidgetSmallView: View {
                 content
             }
             .buttonStyle(.plain)
-        case .unavailable, .placeholder:
+        case .unavailable, .locked, .placeholder:
             content
         }
     }
@@ -112,7 +112,7 @@ struct OTPWidgetSmallView: View {
             )
             .progressViewStyle(.linear)
             .tint(.accentColor)
-        case .hotp, .unavailable, .placeholder:
+        case .hotp, .unavailable, .locked, .placeholder:
             Color(.quaternarySystemFill)
         }
     }
@@ -125,7 +125,7 @@ struct OTPWidgetSmallView: View {
         // The persisted counter may already be stale, so the widget masks the
         // digits until the user taps to advance it.
         case let .hotp(state): .locked(code: String(repeating: "0", count: state.digits))
-        case .unavailable, .placeholder: .notReady
+        case .unavailable, .locked, .placeholder: .notReady
         }
     }
 
@@ -134,6 +134,7 @@ struct OTPWidgetSmallView: View {
         case let .totp(state): state.issuer.isEmpty ? state.accountName : state.issuer
         case let .hotp(state): state.issuer.isEmpty ? state.accountName : state.issuer
         case .unavailable: "Unavailable"
+        case .locked: "Vault Locked"
         case .placeholder: "—"
         }
     }
@@ -143,6 +144,7 @@ struct OTPWidgetSmallView: View {
         case let .totp(state): state.accountName
         case let .hotp(state): state.accountName
         case .unavailable: "Open Vault to set up"
+        case .locked: "Open Vault to see this code"
         case .placeholder: ""
         }
     }

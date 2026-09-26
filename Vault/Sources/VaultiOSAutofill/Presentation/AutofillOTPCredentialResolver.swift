@@ -11,8 +11,9 @@ struct AutofillOTPCredentialResolver {
     enum Outcome: Equatable {
         /// A rendered TOTP code, safe to return without interaction.
         case code(String)
-        /// The item is auth-gated or is an HOTP code (whose counter must
-        /// not increment without UI). The system shows the extension UI.
+        /// The app lock is on, the item is auth-gated, or it's an HOTP code
+        /// (whose counter must not increment without UI). The system shows
+        /// the extension UI.
         case userInteractionRequired
         /// The record identifier is missing, malformed, or matches no
         /// unlocked OTP item.
@@ -24,18 +25,27 @@ struct AutofillOTPCredentialResolver {
     private let retrieveItems: () async throws -> VaultRetrievalResult<VaultItem>
     private let copyActionHandler: any VaultItemCopyActionHandler
     private let clock: any EpochClock
+    private let isAppLockEnabled: Bool
 
     init(
         retrieveItems: @escaping () async throws -> VaultRetrievalResult<VaultItem>,
         copyActionHandler: any VaultItemCopyActionHandler,
         clock: any EpochClock,
+        isAppLockEnabled: Bool,
     ) {
         self.retrieveItems = retrieveItems
         self.copyActionHandler = copyActionHandler
         self.clock = clock
+        self.isAppLockEnabled = isAppLockEnabled
     }
 
     func resolve(recordIdentifier: String?) async -> Outcome {
+        // With the app lock on, no code leaves the vault until the user has
+        // authenticated in the extension's UI. The vault isn't even read.
+        guard !isAppLockEnabled else {
+            return .userInteractionRequired
+        }
+
         guard let recordIdentifier, let itemUUID = UUID(uuidString: recordIdentifier) else {
             return .notFound
         }

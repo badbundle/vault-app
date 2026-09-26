@@ -29,13 +29,17 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
             }
         case .showAllCodesSelector:
             NavigationStack {
-                VaultAutofillCodeSelectorView(
-                    localSettings: viewModel.localSettings,
-                    viewGenerator: generator,
-                    copyActionHandler: copyActionHandler,
-                    textToInsertSubject: viewModel.textToInsertSubject,
-                    cancelSubject: viewModel.cancelRequestSubject,
-                )
+                AppLockGate(appLock: viewModel.appLock) {
+                    viewModel.cancelRequestSubject.send(.userCancelled)
+                } content: {
+                    VaultAutofillCodeSelectorView(
+                        localSettings: viewModel.localSettings,
+                        viewGenerator: generator,
+                        copyActionHandler: copyActionHandler,
+                        textToInsertSubject: viewModel.textToInsertSubject,
+                        cancelSubject: viewModel.cancelRequestSubject,
+                    )
+                }
             }
         case let .unimplemented(name):
             Text("Unimplemented \(name)")

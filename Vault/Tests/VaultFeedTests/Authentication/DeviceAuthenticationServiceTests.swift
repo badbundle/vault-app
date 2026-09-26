@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import TestHelpers
 import Testing
 @testable import VaultFeed
@@ -249,6 +250,84 @@ struct DeviceAuthenticationServiceTests {
 
         _ = defaultPolicy
         _ = usingDevicePolicy
+    }
+
+    @Test
+    func authenticate_biometricFallbackAsksForThePasscode() async throws {
+        // "Enter Password" in the Face ID prompt.
+        let policy = DeviceAuthenticationPolicyMock(
+            canAuthenicateWithPasscode: true,
+            canAuthenticateWithBiometrics: true,
+        )
+        policy.authenticateWithBiometricsHandler = { _ in
+            throw LAError(.userFallback)
+        }
+        policy.authenticateWithPasscodeHandler = { reason in
+            #expect(reason == "reason")
+            return true
+        }
+        let sut = makeSUT(policy: policy)
+
+        let result = try await sut.authenticate(reason: "reason")
+
+        #expect(result == .success(.authenticated))
+        #expect(policy.authenticateWithBiometricsCallCount == 1)
+        #expect(policy.authenticateWithPasscodeCallCount == 1)
+    }
+
+    @Test
+    func authenticate_biometricCancelDoesNotAskForThePasscode() async throws {
+        let policy = DeviceAuthenticationPolicyMock(
+            canAuthenicateWithPasscode: true,
+            canAuthenticateWithBiometrics: true,
+        )
+        policy.authenticateWithBiometricsHandler = { _ in
+            throw LAError(.userCancel)
+        }
+        let sut = makeSUT(policy: policy)
+
+        await #expect(throws: LAError.self) {
+            try await sut.authenticate(reason: "reason")
+        }
+        #expect(policy.authenticateWithPasscodeCallCount == 0)
+    }
+
+    @Test
+    func isAuthenticating_isTrueOnlyWhileAPromptIsUp() async throws {
+        let policy = DeviceAuthenticationPolicyMock(
+            canAuthenicateWithPasscode: true,
+            canAuthenticateWithBiometrics: true,
+        )
+        let sut = makeSUT(policy: policy)
+        // Passes only if the service says it's authenticating while the prompt is up.
+        policy.authenticateWithBiometricsHandler = { _ in
+            await sut.isAuthenticating
+        }
+
+        #expect(!sut.isAuthenticating)
+        let result = try await sut.authenticate(reason: "reason")
+        #expect(result == .success(.authenticated))
+        #expect(!sut.isAuthenticating)
+
+        try await sut.validateAuthentication(reason: "reason")
+        #expect(!sut.isAuthenticating)
+    }
+
+    @Test
+    func isAuthenticating_isFalseAfterAPromptFails() async throws {
+        let policy = DeviceAuthenticationPolicyMock(
+            canAuthenicateWithPasscode: true,
+            canAuthenticateWithBiometrics: true,
+        )
+        policy.authenticateWithBiometricsHandler = { _ in
+            throw TestError()
+        }
+        let sut = makeSUT(policy: policy)
+
+        _ = try? await sut.authenticate(reason: "reason")
+        try? await sut.validateAuthentication(reason: "reason")
+
+        #expect(!sut.isAuthenticating)
     }
 
     @Test

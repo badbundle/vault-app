@@ -27,6 +27,10 @@ public enum OTPWidgetSnapshot: Sendable, Equatable {
     /// same way regardless of cause.
     case unavailable
 
+    /// The app lock is on, so the widget shows nothing of the vault: no code,
+    /// and not which item it's set up for.
+    case locked
+
     /// Live TOTP code valid until `periodEnd`. Progress bars use the
     /// `[periodStart, periodEnd]` interval directly.
     case totp(TOTP)

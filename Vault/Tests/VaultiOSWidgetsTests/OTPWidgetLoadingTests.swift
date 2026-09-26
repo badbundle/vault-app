@@ -1,4 +1,5 @@
 import Foundation
+import TestHelpers
 import Testing
 import VaultCore
 import VaultFeed
@@ -114,6 +115,49 @@ struct OTPWidgetLoadingTests {
     }
 
     @Test
+    func providerTimeline_appLockOn_isLockedWithoutReadingTheVault() async throws {
+        let item = makeOTPVaultItem(accountName: "account", issuer: "issuer")
+        let store = FakeVaultStoreReader(results: [.success(.init(items: [item]))])
+        let provider = try OTPWidgetProvider(loader: WidgetVaultLoader(store: store, appLockSettings: appLockOn()))
+        let entity = OTPWidgetItemEntity(id: item.id.rawValue, issuer: "issuer", accountName: "account")
+
+        let timeline = await provider.makeTimeline(for: .init(item: entity))
+
+        #expect(timeline.entries.map(\.snapshot) == [.locked])
+        #expect(await store.retrieveCallCount == 0)
+    }
+
+    @Test
+    func providerTimeline_appLockOff_showsTheCode() async throws {
+        let item = makeOTPVaultItem(accountName: "account", issuer: "issuer")
+        let store = FakeVaultStoreReader(results: [.success(.init(items: [item]))])
+        let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
+        let provider = OTPWidgetProvider(loader: WidgetVaultLoader(store: store, appLockSettings: settings))
+        let entity = OTPWidgetItemEntity(id: item.id.rawValue, issuer: "issuer", accountName: "account")
+
+        let timeline = await provider.makeTimeline(for: .init(item: entity))
+
+        guard case let .totp(totp) = timeline.entries.first?.snapshot else {
+            Issue.record("Expected a TOTP entry, got \(String(describing: timeline.entries.first?.snapshot))")
+            return
+        }
+        #expect(totp.itemID == item.id.rawValue)
+    }
+
+    @Test
+    func suggestedEntities_appLockOn_listNothing() async throws {
+        // The widget's configuration can't be used to list the vault's items while the lock is on.
+        let item = makeOTPVaultItem(accountName: "account", issuer: "issuer")
+        let store = FakeVaultStoreReader(results: [.success(.init(items: [item]))])
+        let query = try OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(store: store, appLockSettings: appLockOn()))
+
+        let entities = try await query.suggestedEntities()
+
+        #expect(entities == [])
+        #expect(await store.retrieveCallCount == 0)
+    }
+
+    @Test
     func providerTimeline_isUnavailableWhenSelectedItemFailsToLoad() async {
         let entity = OTPWidgetItemEntity(id: UUID(), issuer: "issuer", accountName: "account")
         let provider = OTPWidgetProvider(loader: WidgetVaultLoader(store: FakeVaultStoreReader(results: [
@@ -124,6 +168,12 @@ struct OTPWidgetLoadingTests {
 
         #expect(timeline.entries.first?.snapshot == .unavailable)
     }
+}
+
+private func appLockOn() throws -> AppLockSettingsStore {
+    let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
+    settings.isEnabled = true
+    return settings
 }
 
 private enum WidgetTestError: Error, Equatable {
