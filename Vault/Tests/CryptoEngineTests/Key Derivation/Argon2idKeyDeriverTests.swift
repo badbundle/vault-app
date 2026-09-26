@@ -101,6 +101,28 @@ struct Argon2idKeyDeriverTests {
     }
 
     @Test
+    func withKeyBytes_handsOverTheSameKeyAsKey() throws {
+        let sut = Argon2idKeyDeriver<32>(parameters: .fastForTesting)
+        let salt = Data(repeating: 0x01, count: 16)
+
+        let bytes = try sut.withKeyBytes(password: Data("password".utf8), salt: salt) { Data($0) }
+
+        #expect(try bytes == sut.key(password: Data("password".utf8), salt: salt).data)
+    }
+
+    @Test
+    func withKeyBytes_rethrowsTheBodysError() {
+        struct BodyError: Error {}
+        let sut = Argon2idKeyDeriver<32>(parameters: .fastForTesting)
+
+        #expect(throws: BodyError.self) {
+            try sut.withKeyBytes(password: Data("password".utf8), salt: Data(repeating: 0x01, count: 16)) { _ in
+                throw BodyError()
+            }
+        }
+    }
+
+    @Test
     func uniqueAlgorithmIdentifier_includesEveryParameter() {
         let sut = Argon2idKeyDeriver<32>(parameters: .init(memoryKiB: 65536, iterations: 7, parallelism: 1))
 
@@ -118,13 +140,13 @@ extension Argon2idKeyDeriverTests {
     func hash_wipesThePasswordBufferItIsGiven() throws {
         var password = Array("correct horse battery staple".utf8)
 
-        _ = try password.withUnsafeMutableBytes { buffer in
-            try Argon2id.hash(
+        try password.withUnsafeMutableBytes { buffer in
+            try Argon2id.withHash(
                 passwordBuffer: buffer,
                 salt: Data(repeating: 0x01, count: 16),
                 parameters: .fastForTesting,
                 length: 32,
-            )
+            ) { _ in }
         }
 
         #expect(password.allSatisfy { $0 == 0 })
