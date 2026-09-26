@@ -23,9 +23,10 @@ public final class EncryptedVaultStore: Sendable {
     let records: RecordVaultStore
     /// Where the vault is saved: its slot of the file.
     let persistence: SlotFilePersistence
-    private let currentDate: @Sendable () -> Date
     /// Derives a new password's key and tries it on a slot, as unlocking does.
     private let work: any VaultUnlockWork
+    /// Stamps the key wrap of a duress vault made from this one.
+    private let wrapStamper: any VaultWrapStamping
 
     /// The vault in `slot`, whose payload has already been read.
     ///
@@ -35,6 +36,7 @@ public final class EncryptedVaultStore: Sendable {
     ///   - state: The vault the slot's payload holds.
     ///   - work: What derives a password's key and tries it on a slot, when making a duress vault: the unlock
     ///     service's, so both derive the same way.
+    ///   - wrapStamper: What stamps the key wrap of a duress vault made from this one.
     init(
         file: EncryptedVaultFile,
         slot: VaultSlotFile.OpenedSlot,
@@ -42,6 +44,7 @@ public final class EncryptedVaultStore: Sendable {
         sortOrder: VaultStoreSortOrder = .relativeOrder,
         currentDate: @escaping @Sendable () -> Date = { Date() },
         work: any VaultUnlockWork = LiveVaultUnlockWork(),
+        wrapStamper: any VaultWrapStamping = VaultDeviceWrapStamper(),
     ) {
         let persistence = SlotFilePersistence(file: file, slot: slot)
         self.persistence = persistence
@@ -51,8 +54,8 @@ public final class EncryptedVaultStore: Sendable {
             currentDate: currentDate,
             persistence: persistence,
         )
-        self.currentDate = currentDate
         self.work = work
+        self.wrapStamper = wrapStamper
     }
 
     /// Reads the vault in `slot`.
@@ -70,6 +73,7 @@ public final class EncryptedVaultStore: Sendable {
         sortOrder: VaultStoreSortOrder = .relativeOrder,
         currentDate: @escaping @Sendable () -> Date = { Date() },
         work: any VaultUnlockWork = LiveVaultUnlockWork(),
+        wrapStamper: any VaultWrapStamping = VaultDeviceWrapStamper(),
     ) throws {
         try self.init(
             file: file,
@@ -78,6 +82,7 @@ public final class EncryptedVaultStore: Sendable {
             sortOrder: sortOrder,
             currentDate: currentDate,
             work: work,
+            wrapStamper: wrapStamper,
         )
     }
 }
@@ -193,7 +198,9 @@ extension EncryptedVaultStore {
     ///
     /// - A password that's this vault's own App Lock Password is refused. One that happens to open another slot is
     ///   accepted, without anything being tried against the other slots: refusing it would be an oracle. If a
-    ///   password opens more than one slot, unlocking opens the most recently wrapped, which is this new vault.
+    ///   password opens more than one slot, unlocking opens the most recently wrapped, which is this new vault: its
+    ///   wrap is stamped by `VaultWrapStamping`, later than every wrap this device has made and than this vault's
+    ///   own, whatever the device's clock says.
     /// - It derives the password's key as unlocking does, which takes about half a second.
     ///
     /// Never log, print or measure anything about it (MANIFESTO C3).
@@ -202,14 +209,15 @@ extension EncryptedVaultStore {
     ///   vault's duress slots aren't a valid list, or an error reading or replacing the file. The file is unchanged
     ///   when it throws.
     public func makeDuressVault(password: String) async throws {
+        let slot = await persistence.slot
         let placement = try await VaultDuressSlots.placement(
-            madeFromSlot: persistence.slot.index,
+            madeFromSlot: slot.index,
             duressSlots: records.state.vault.duressSlots,
         )
         try await persistence.makeDuressVault(
             password: password,
             placement: placement,
-            wrappedAt: currentDate(),
+            wrapStamper: wrapStamper,
             work: work,
         )
     }

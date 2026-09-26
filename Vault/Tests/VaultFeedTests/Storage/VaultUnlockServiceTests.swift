@@ -525,7 +525,7 @@ extension VaultUnlockServiceTests {
             fromSlot: realSlot,
             password: "real",
             newPassword: "duress",
-            wrappedAt: Date(timeIntervalSince1970: 1_790_000_100),
+            now: Date(timeIntervalSince1970: 1_790_000_100),
         )
 
         let result = try await sut.service.unlock(password: "duress")
@@ -549,7 +549,7 @@ extension VaultUnlockServiceTests {
                 fromSlot: realSlot,
                 password: "real",
                 newPassword: "duress",
-                wrappedAt: Date(timeIntervalSince1970: 1_790_000_100),
+                now: Date(timeIntervalSince1970: 1_790_000_100),
             )
             let start = sut.clock.now
             _ = try await sut.service.unlock(password: password)
@@ -576,13 +576,13 @@ extension VaultUnlockServiceTests {
             fromSlot: realSlot,
             password: "real",
             newPassword: "first",
-            wrappedAt: Date(timeIntervalSince1970: 1_790_000_100),
+            now: Date(timeIntervalSince1970: 1_790_000_100),
         )
         try await sut.makeDuressVault(
             fromSlot: first,
             password: "first",
             newPassword: "real",
-            wrappedAt: Date(timeIntervalSince1970: 1_790_000_200),
+            now: Date(timeIntervalSince1970: 1_790_000_200),
         )
 
         let result = try await sut.service.unlock(password: "real")
@@ -590,6 +590,92 @@ extension VaultUnlockServiceTests {
         #expect(result == .unlocked)
         #expect(try await sut.session.retrieve(query: .init()).items.isEmpty)
         #expect(try await sut.savedItemCount(inSlot: realSlot, password: "real") == 1)
+    }
+}
+
+// MARK: - Wrap times
+
+/// Which vault a shared password opens can't depend on the device's clock: setting it back before making a duress
+/// vault would otherwise make the new vault older than the real one, and a guess that matched the real vault's
+/// password would open it, with every unlock resetting the attempt counter.
+extension VaultUnlockServiceTests {
+    private static let longAgo = Date(timeIntervalSince1970: 0)
+
+    private static func milliseconds(_ date: Date) -> UInt64 {
+        UInt64(date.timeIntervalSince1970 * 1000)
+    }
+
+    @Test
+    func unlock_realPasswordReusedWithTheClockSetBack_stillOpensTheNewerVault() async throws {
+        let sut = try makeSUT(vaults: [realVault], wrapStamp: Self.milliseconds(realVault.wrappedAt))
+        let first = try await sut.makeDuressVault(
+            fromSlot: realSlot,
+            password: "real",
+            newPassword: "first",
+            now: Date(timeIntervalSince1970: 1_790_000_100),
+        )
+        try await sut.makeDuressVault(fromSlot: first, password: "first", newPassword: "real", now: Self.longAgo)
+
+        let result = try await sut.service.unlock(password: "real")
+
+        #expect(result == .unlocked)
+        #expect(try await sut.session.retrieve(query: .init()).items.isEmpty)
+        #expect(try await sut.savedItemCount(inSlot: realSlot, password: "real") == 1)
+    }
+
+    /// The real vault rewrapped after the duress vault was made, as a password change does, is newer than it. A
+    /// duress vault made from that older duress vault is still newer than both.
+    @Test
+    func unlock_realPasswordReusedAfterTheRealVaultWasRewrapped_opensTheNewerVault() async throws {
+        let sut = try makeSUT(vaults: [realVault], wrapStamp: Self.milliseconds(realVault.wrappedAt))
+        let first = try await sut.makeDuressVault(
+            fromSlot: realSlot,
+            password: "real",
+            newPassword: "first",
+            now: Date(timeIntervalSince1970: 1_790_000_100),
+        )
+        try await sut.rewrap(slot: realSlot, password: "real", now: Date(timeIntervalSince1970: 1_790_000_200))
+        try await sut.makeDuressVault(fromSlot: first, password: "first", newPassword: "real", now: Self.longAgo)
+
+        let result = try await sut.service.unlock(password: "real")
+
+        #expect(result == .unlocked)
+        #expect(try await sut.session.retrieve(query: .init()).items.isEmpty)
+    }
+
+    /// On a device without a stamp, as after a restore, opening the real vault raises the clock to its wrap time, so
+    /// a duress vault made after that, with the clock set back, is still newer than it.
+    @Test
+    func unlock_onADeviceWithoutAStamp_raisesTheClockToTheVaultThatOpens() async throws {
+        let realWrappedAt = Date(timeIntervalSince1970: 1_790_000_500)
+        var real = realVault
+        real.wrappedAt = realWrappedAt
+        let duress = TestVault(
+            password: "duress",
+            slot: duressSlot,
+            items: [],
+            wrappedAt: Date(timeIntervalSince1970: 1_790_000_100),
+            duressSlots: [12, 0, 1, 2, 3, 5, 6, 7, 8, 9],
+        )
+        let sut = try makeSUT(vaults: [real, duress], wrapStamp: nil)
+
+        #expect(try await sut.service.unlock(password: "real") == .unlocked)
+        #expect(sut.wrapStamp.value == Self.milliseconds(realWrappedAt))
+        await sut.service.lock()
+        try await sut.makeDuressVault(fromSlot: duressSlot, password: "duress", newPassword: "real", now: Self.longAgo)
+
+        #expect(try await sut.service.unlock(password: "real") == .unlocked)
+        #expect(try await sut.session.retrieve(query: .init()).items.isEmpty)
+    }
+
+    /// A wrong password opens nothing, so it raises nothing.
+    @Test
+    func unlock_withAWrongPassword_leavesTheStampAlone() async throws {
+        let sut = try makeSUT(vaults: [realVault], wrapStamp: nil)
+
+        _ = try await sut.service.unlock(password: "wrong")
+
+        #expect(sut.wrapStamp.value == nil)
     }
 }
 
@@ -618,6 +704,10 @@ extension VaultUnlockServiceTests {
         let deadlineStore: FakeUnlockDeadlineStore
         /// What the counter and the work did, in order.
         let log: SharedMutex<[String]>
+        /// The stamp the wrap stamper keeps, and what it says the time is.
+        let wrapStamp: InMemoryWrapStampStorage
+        let wrapDate: SharedMutex<Date>
+        let wrapStamper: VaultDeviceWrapStamper
 
         /// Flips a byte in the middle of the slot's body.
         func damageBody(ofSlot index: Int) async throws {
@@ -628,8 +718,8 @@ extension VaultUnlockServiceTests {
             try await file.withLock { [contents] in try $0.write(contents) { _ in } }
         }
 
-        /// Makes a duress vault from the vault `password` opens in `slot`, as the open vault's store does, wrapped at
-        /// `wrappedAt`.
+        /// Makes a duress vault from the vault `password` opens in `slot`, as the open vault's store does, with the
+        /// wrap stamper telling the time as `now`.
         ///
         /// - Returns: The slot the duress vault went in.
         @discardableResult
@@ -637,18 +727,33 @@ extension VaultUnlockServiceTests {
             fromSlot slot: Int,
             password: String,
             newPassword: String,
-            wrappedAt: Date,
+            now: Date,
         ) async throws -> Int {
+            wrapDate.modify { $0 = now }
             let contents = try #require(try await file.open())
             let store = try EncryptedVaultStore(
                 file: file,
                 contents: contents,
                 slot: contents.openSlot(slot, with: contents.header.passwordKey(for: password)),
-                currentDate: { wrappedAt },
+                wrapStamper: wrapStamper,
             )
             let target = await store.records.state.vault.duressSlots[0]
             try await store.makeDuressVault(password: newPassword)
             return target
+        }
+
+        /// Rewraps the vault `password` opens in `slot` with its password, as a password change does, stamped by
+        /// the wrap stamper with the time as `now`.
+        func rewrap(slot: Int, password: String, now: Date) async throws {
+            wrapDate.modify { $0 = now }
+            try await file.withLock { [wrapStamper] file in
+                var contents = try #require(try file.read())
+                let key = try contents.header.passwordKey(for: password)
+                let opened = try contents.openSlot(slot, with: key)
+                let stamp = try wrapStamper.nextWrapStamp(rewrapping: opened.wrappedAt)
+                try contents.rewrap(opened, with: key, wrappedAt: stamp)
+                try file.write(contents) { _ in }
+            }
         }
 
         func savedItemCount(inSlot index: Int, password: String) async throws -> Int {
@@ -665,6 +770,7 @@ extension VaultUnlockServiceTests {
         fileSystem: any SlotFileSystem = InMemorySlotFileSystem(),
         timings: SpyUnlockWork.Timings = .init(),
         availableMemory: Int? = nil,
+        wrapStamp: UInt64? = nil,
         purge: @escaping @Sendable (VaultStoreSession) async -> Void = { _ in },
     ) throws -> SUT {
         var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
@@ -688,6 +794,9 @@ extension VaultUnlockServiceTests {
         let attemptClock = FakeAppLockClock()
         let deadlineStore = FakeUnlockDeadlineStore(deadline: deadline)
         let work = SpyUnlockWork(log: log, clock: clock, timings: timings)
+        let wrapStamp = InMemoryWrapStampStorage(stamp: wrapStamp)
+        let wrapDate = SharedMutex(Date(timeIntervalSince1970: 1_790_000_000))
+        let wrapStamper = VaultDeviceWrapStamper.inMemory(storage: wrapStamp) { wrapDate.value }
         let service = VaultUnlockService(
             file: file,
             session: session,
@@ -697,6 +806,7 @@ extension VaultUnlockServiceTests {
             clock: clock,
             work: work,
             availableMemory: { availableMemory },
+            wrapStamper: wrapStamper,
         )
         return SUT(
             service: service,
@@ -709,6 +819,9 @@ extension VaultUnlockServiceTests {
             attemptClock: attemptClock,
             deadlineStore: deadlineStore,
             log: log,
+            wrapStamp: wrapStamp,
+            wrapDate: wrapDate,
+            wrapStamper: wrapStamper,
         )
     }
 }

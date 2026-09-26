@@ -69,6 +69,8 @@ public actor VaultEncryptionConverter {
     private let attemptCounter: AppLockPasswordAttemptCounter
     private let hooks: Hooks
     private let calibrate: @Sendable () throws -> AppLockKeyDerivationCalibration
+    /// Stamps the new vault's key wrap.
+    private let wrapStamper: any VaultWrapStamping
 
     /// - Parameters:
     ///   - directory: The vault's storage directory, where the plain store is and the encrypted file will be.
@@ -95,6 +97,7 @@ public actor VaultEncryptionConverter {
             attemptCounter: attemptCounter,
             hooks: hooks,
             calibrate: { try AppLockKeyDerivationCalibrator().calibrate() },
+            wrapStamper: VaultDeviceWrapStamper(),
         )
     }
 
@@ -108,6 +111,7 @@ public actor VaultEncryptionConverter {
         attemptCounter: AppLockPasswordAttemptCounter,
         hooks: Hooks,
         calibrate: @escaping @Sendable () throws -> AppLockKeyDerivationCalibration,
+        wrapStamper: any VaultWrapStamping,
     ) {
         self.directory = directory
         self.fileSystem = fileSystem
@@ -118,6 +122,7 @@ public actor VaultEncryptionConverter {
         self.attemptCounter = attemptCounter
         self.hooks = hooks
         self.calibrate = calibrate
+        self.wrapStamper = wrapStamper
     }
 }
 
@@ -226,7 +231,12 @@ extension VaultEncryptionConverter {
             try? stateFile.write(VaultStorageState(mode: .password, unlockDeadline: converted.unlockDeadline))
         }
         // If the app locked while converting, it stays locked: the vault opens with the password.
-        let store = EncryptedVaultStore(file: file, slot: converted.slot, state: converted.state)
+        let store = EncryptedVaultStore(
+            file: file,
+            slot: converted.slot,
+            state: converted.state,
+            wrapStamper: wrapStamper,
+        )
         _ = await session.switchTo(.unlocked(store), unlessLockedSince: lockEpoch)
     }
 
@@ -248,11 +258,14 @@ extension VaultEncryptionConverter {
         defer { SlotRandom.wipe(&payload.data) }
 
         let calibrate = calibrate
+        let wrapStamper = wrapStamper
         let (calibration, file, slot) = try await Task.detached(priority: .userInitiated) { [payload] in
             let calibration = try calibrate()
             var file = try VaultSlotFile(kdfParameters: calibration.parameters)
             let key = try file.header.passwordKey(for: password)
-            let slot = try file.createVault(inSlot: realSlot, rootKey: key, payload: payload, wrappedAt: Date())
+            // Later than any wrap this device has made before, whatever the clock says (`VaultWrapStamping`).
+            let wrappedAt = try wrapStamper.nextWrapStamp(rewrapping: .distantPast)
+            let slot = try file.createVault(inSlot: realSlot, rootKey: key, payload: payload, wrappedAt: wrappedAt)
             return (calibration, file, slot)
         }.value
         return Converted(file: file, slot: slot, state: state, unlockDeadline: calibration.unlockDeadline)

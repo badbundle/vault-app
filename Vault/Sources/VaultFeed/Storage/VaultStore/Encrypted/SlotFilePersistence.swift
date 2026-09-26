@@ -92,8 +92,9 @@ extension SlotFilePersistence {
     /// 1. Refuses the password if it opens this vault's own slot: it's this vault's App Lock Password. That's the one
     ///    slot it tries. Refusing a password that opens any other slot would tell whoever holds this vault's password
     ///    that another vault exists, and would let them test guesses at it here, without the unlock delay.
-    /// 2. Creates the new vault, empty, in `placement.slot`, with a new data key wrapped by the password's key, and
-    ///    the duress slots `placement` gives it. Whatever was in that slot is gone.
+    /// 2. Creates the new vault, empty, in `placement.slot`, with a new data key wrapped by the password's key at a
+    ///    time `wrapStamper` gives it after this vault's own wrap time, and the duress slots `placement` gives it.
+    ///    Whatever was in that slot is gone.
     /// 3. Replaces the file as a save does, verifying first that it opens the new vault and that this vault's slot is
     ///    as it was.
     ///
@@ -102,7 +103,7 @@ extension SlotFilePersistence {
     func makeDuressVault(
         password: String,
         placement: VaultDuressSlots.Placement,
-        wrappedAt: Date,
+        wrapStamper: any VaultWrapStamping,
         work: any VaultUnlockWork,
     ) async throws {
         guard let (header, _) = try file.readHeader() else { throw EncryptedVaultStoreError.fileMissing }
@@ -129,6 +130,9 @@ extension SlotFilePersistence {
             guard work.openKeyBox(current.index, in: contents, with: key) == nil else {
                 throw VaultDuressVaultError.matchesAppLockPassword
             }
+            // Later than every wrap this device has made, and than this vault's own, whatever the clock says:
+            // otherwise setting the clock back would make the new vault older than one a shared password also opens.
+            let wrappedAt = try wrapStamper.nextWrapStamp(rewrapping: current.wrappedAt)
             let created = try contents.createVault(
                 inSlot: placement.slot,
                 rootKey: key,

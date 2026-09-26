@@ -81,7 +81,7 @@ extension VaultEncryptionConverterTests {
             try await harness.encrypt()
             let session = VaultStoreSession(target: .locked)
             let service = VaultUnlockService(
-                directory: directory,
+                file: EncryptedVaultFile(directory: directory),
                 session: session,
                 attemptCounter: AppLockPasswordAttemptCounter(
                     storage: LoggingAttemptStorage(log: SharedMutex([])),
@@ -89,6 +89,7 @@ extension VaultEncryptionConverterTests {
                 ),
                 deadlineStore: harness.stateFile,
                 purgeVaultContents: {},
+                wrapStamper: .inMemory(),
             )
 
             #expect(try await service.unlock(password: "wrong") == .wrongPassword)

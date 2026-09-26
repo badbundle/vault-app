@@ -18,6 +18,8 @@ struct PlainVaultConversionHarness {
     /// What the attempt counter and the conversion's hooks did, in order.
     let log: SharedMutex<[String]>
     let attemptStorage: LoggingAttemptStorage
+    /// Where the conversion's wrap is stamped, in memory.
+    let wrapStamp = InMemoryWrapStampStorage()
     let converter: VaultEncryptionConverter
 
     /// - Parameters:
@@ -57,6 +59,7 @@ struct PlainVaultConversionHarness {
         self.fileSystem = fileSystem
         self.log = log
         self.attemptStorage = attemptStorage
+        let wrapStamper = VaultDeviceWrapStamper.inMemory(storage: wrapStamp)
         converter = VaultEncryptionConverter(
             directory: directory,
             fileSystem: fileSystem,
@@ -83,6 +86,7 @@ struct PlainVaultConversionHarness {
                     unlockDeadline: Self.unlockDeadline,
                 )
             },
+            wrapStamper: wrapStamper,
         )
     }
 

@@ -17,8 +17,9 @@ import os
 ///    a decoy instead, a random slot's body with a throwaway key, which fails.
 /// 6. Drops `K_pw` and every wrap key but the opened slot's. They're `SymmetricKey`s, which are zeroed when released.
 ///    The opened slot's wrap key and data key stay with its store until the vault locks.
-/// 7. Waits for the deadline. Then it resets the count and switches the store session to the vault, or reports a
-///    wrong password.
+/// 7. Waits for the deadline. Then it resets the count, raises the wrap stamp to the vault's wrap time
+///    (`VaultDeviceWrapStamper.noteWrap(at:)`), and switches the store session to the vault, or reports a wrong
+///    password.
 ///
 /// So real, duress and wrong passwords do the same work, and finish at the same deadline.
 ///
@@ -63,6 +64,8 @@ public actor VaultUnlockService {
     private let clock: any VaultUnlockClock
     private let work: any VaultUnlockWork
     private let availableMemory: @Sendable () -> Int?
+    /// Stamps key wraps, and is raised to every vault that opens.
+    private let wrapStamper: VaultDeviceWrapStamper
 
     private var isUnlocking = false
 
@@ -84,6 +87,7 @@ public actor VaultUnlockService {
             attemptCounter: attemptCounter,
             deadlineStore: deadlineStore,
             purgeVaultContents: purgeVaultContents,
+            wrapStamper: VaultDeviceWrapStamper(),
         )
     }
 
@@ -97,6 +101,7 @@ public actor VaultUnlockService {
         clock: any VaultUnlockClock = ContinuousClock(),
         work: any VaultUnlockWork = LiveVaultUnlockWork(),
         availableMemory: @escaping @Sendable () -> Int? = VaultUnlockService.processAvailableMemory,
+        wrapStamper: VaultDeviceWrapStamper,
     ) {
         self.file = file
         self.session = session
@@ -106,6 +111,7 @@ public actor VaultUnlockService {
         self.clock = clock
         self.work = work
         self.availableMemory = availableMemory
+        self.wrapStamper = wrapStamper
     }
 }
 
@@ -173,7 +179,16 @@ extension VaultUnlockService {
             return .wrongPassword
         case let .success(opened?):
             try await attemptCounter.reset()
-            let store = EncryptedVaultStore(file: file, slot: opened.slot, state: opened.state, work: work)
+            // So a wrap made from now on is later than this vault's, even on a device that's lost its stamp, as
+            // after a restore. Best effort: a vault that opened stays open.
+            try? wrapStamper.noteWrap(at: opened.slot.wrappedAt)
+            let store = EncryptedVaultStore(
+                file: file,
+                slot: opened.slot,
+                state: opened.state,
+                work: work,
+                wrapStamper: wrapStamper,
+            )
             // The session only switches if it hasn't locked since this attempt began, checked on the session itself,
             // so a lock can't slip in between the check and the switch.
             guard await session.switchTo(.unlocked(store), unlessLockedSince: lockEpoch) else {

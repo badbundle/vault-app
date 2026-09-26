@@ -184,6 +184,25 @@ extension DuressVaultTests {
         #expect(try fixture.slotsOpened(by: "real") == [realSlot, second].sorted())
         #expect(try fixture.slotBytes(realSlot) == realSlotBytes)
     }
+
+    /// Accepting a password that opens another vault takes exactly the steps a fresh password does, so nothing
+    /// about it shows the other vault is there.
+    @Test
+    func makeDuressVault_withAnotherVaultsPassword_takesTheSameStepsAsAFreshOne() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot, items: [uniqueVaultItem()])
+        let real = try fixture.open(slot: realSlot, password: "real")
+        let first = await real.records.state.vault.duressSlots[0]
+        try await real.makeDuressVault(password: "first")
+
+        var steps = [[String]]()
+        for password in ["real", "fresh"] {
+            let spied = try fixture.openSpied(slot: first, password: "first")
+            try await spied.store.makeDuressVault(password: password)
+            steps.append(spied.log.value)
+        }
+
+        #expect(steps[0] == steps[1])
+    }
 }
 
 // MARK: - Every vault alike
@@ -225,43 +244,34 @@ extension DuressVaultTests {
         #expect(duressSlots.count == realDuressSlots.count)
     }
 
-    /// Making one takes the same steps whichever vault it's made from: one derivation, a trial of that vault's own
-    /// slot, and one replacement of the file, in the same time.
+    /// Making one takes the same steps whichever vault it's made from, in the same order: the header read to derive
+    /// the key, the derivation, then, under the file's lock, the file read, the vault's own slot tried against the new
+    /// password, the wrap stamped, and the file replaced.
     @Test
     func makeDuressVault_takesTheSameStepsFromTheRealVaultAndADuressVault() async throws {
-        let fixture = try DuressFixture(realSlot: realSlot)
+        let fixture = try DuressFixture(realSlot: realSlot, items: [uniqueVaultItem(), uniqueVaultItem()])
         let real = try fixture.open(slot: realSlot, password: "real")
         let first = await real.records.state.vault.duressSlots[0]
         try await real.makeDuressVault(password: "first")
 
         // The duress vault makes its own first: the real vault's replaces it.
-        let spied = try [(first, "first"), (realSlot, "real")].map { slot, password in
-            let log = SharedMutex([String]())
-            let clock = ManualUnlockClock()
-            let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.fileSystem)
-            let store = try fixture.open(
-                slot: slot,
-                password: password,
-                fileSystem: fileSystem,
-                work: SpyUnlockWork(log: log, clock: clock),
-            )
-            return (store: store, password: password, log: log, clock: clock, fileSystem: fileSystem)
-        }
         var steps = [[String]]()
-        var elapsed = [Duration]()
-        for vault in spied {
-            let start = vault.clock.now
-
-            try await vault.store.makeDuressVault(password: "made from \(vault.password)")
-
-            let workSteps = vault.log.value.map { $0.hasPrefix("try slot") ? "try its own slot" : $0 }
-            steps.append(workSteps + vault.fileSystem.log)
-            elapsed.append(start.duration(to: vault.clock.now))
+        for (slot, password) in [(first, "first"), (realSlot, "real")] {
+            let spied = try fixture.openSpied(slot: slot, password: password)
+            try await spied.store.makeDuressVault(password: "made from \(password)")
+            steps.append(spied.log.value.map { $0.hasPrefix("try slot") ? "try its own slot" : $0 })
         }
 
-        let expected = ["derive", "try its own slot"] + Self.stepsOfMaking + ["unlock"]
+        let expected = [
+            "read the start of vault-slots.v1",
+            "derive",
+            "lock vault-slots.lock",
+            "read vault-slots.v1",
+            "try its own slot",
+            "stamp the wrap",
+        ]
+            + EncryptedVaultStoreTests.stepsOfASave.dropFirst(2) + ["unlock"]
         #expect(steps == [expected, expected])
-        #expect(elapsed[0] == elapsed[1])
     }
 
     /// The shape of a JSON value: its keys, and the kinds of its values, but not the values themselves.
@@ -342,10 +352,90 @@ extension DuressVaultTests {
         let fixture = try DuressFixture(realSlot: realSlot)
         let real = try fixture.open(slot: realSlot, password: "real")
         try fixture.replaceVault(inSlot: realSlot, password: "someone else")
+        let bytesBefore = try fixture.contents().bytes
 
         await #expect(throws: EncryptedVaultStoreError.slotLost) {
             try await real.makeDuressVault(password: "duress")
         }
+
+        #expect(try fixture.contents().bytes == bytesBefore)
+    }
+
+    /// A duress vault replaced by making another can't be written by a store that still holds it: its slot has a
+    /// new nonce and key, so the old wrap key doesn't open it, and the new vault is left alone.
+    @Test
+    func save_byAStoreHoldingADuressVaultThatWasReplaced_throwsSlotLost() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot)
+        let real = try fixture.open(slot: realSlot, password: "real")
+        let first = await real.records.state.vault.duressSlots[0]
+        try await real.makeDuressVault(password: "first")
+        let stale = try fixture.open(slot: first, password: "first")
+        try await real.makeDuressVault(password: "second")
+        let bytesBefore = try fixture.contents().bytes
+
+        await #expect(throws: EncryptedVaultStoreError.slotLost) {
+            try await stale.insert(item: uniqueVaultItem().makeWritable())
+        }
+
+        #expect(try fixture.contents().bytes == bytesBefore)
+        #expect(try fixture.slotsOpened(by: "second") == [first])
+    }
+}
+
+// MARK: - Wrap times
+
+extension DuressVaultTests {
+    /// A duress vault is stamped later than every wrap this device has made, even with the clock set back: otherwise
+    /// a password it shares with an older vault would open that one at the next unlock.
+    @Test
+    func makeDuressVault_withTheClockSetBack_isStampedAfterEveryEarlierWrap() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot)
+        let real = try fixture.open(slot: realSlot, password: "real")
+        let first = await real.records.state.vault.duressSlots[0]
+        try await real.makeDuressVault(password: "first")
+        let duress = try fixture.open(slot: first, password: "first")
+        let second = await duress.records.state.vault.duressSlots[0]
+        fixture.now.modify { $0 = Date(timeIntervalSince1970: 0) }
+
+        try await duress.makeDuressVault(password: "real")
+
+        let secondWrappedAt = try fixture.wrappedAt(slot: second, password: "real")
+        #expect(try secondWrappedAt > fixture.wrappedAt(slot: realSlot, password: "real"))
+        #expect(try secondWrappedAt > fixture.wrappedAt(slot: first, password: "first"))
+    }
+
+    /// Without a stamp to follow, as on a new device, it's still later than the vault it's made from.
+    @Test
+    func makeDuressVault_withoutAStampAndTheClockSetBack_isStampedAfterItsOwnVault() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot)
+        let real = try fixture.open(
+            slot: realSlot,
+            password: "real",
+            wrapStamper: .inMemory { Date(timeIntervalSince1970: 0) },
+        )
+        let first = await real.records.state.vault.duressSlots[0]
+
+        try await real.makeDuressVault(password: "first")
+
+        #expect(try fixture.wrappedAt(slot: first, password: "first") > fixture.wrappedAt(
+            slot: realSlot,
+            password: "real",
+        ))
+    }
+
+    /// If the stamp can't be saved, nothing is made: a later wrap could otherwise get the same time.
+    @Test
+    func makeDuressVault_whoseStampCannotBeSaved_changesNothing() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot)
+        fixture.wrapStamp.failToSave()
+        let real = try fixture.open(slot: realSlot, password: "real")
+        let bytesBefore = try fixture.contents().bytes
+
+        await #expect(throws: InMemoryWrapStampStorage.Failure.self) {
+            try await real.makeDuressVault(password: "duress")
+        }
+
+        #expect(try fixture.contents().bytes == bytesBefore)
     }
 }
 
@@ -389,8 +479,12 @@ extension DuressVaultTests {
 private struct DuressFixture {
     let fileSystem = InMemorySlotFileSystem()
     let file: EncryptedVaultFile
-    /// Each vault opened is given a later wrap time than the one before, so the most recent is always clear.
-    private let clock = SharedMutex(Date(timeIntervalSince1970: 1_790_000_000))
+    /// The real vault's wrap time.
+    static let realWrappedAt = Date(timeIntervalSince1970: 1_790_000_000)
+    /// The wrap stamp, which starts at the real vault's, as the conversion that made it left it.
+    let wrapStamp = InMemoryWrapStampStorage(stamp: 1_790_000_000_000)
+    /// What the wrap stamper says the time is.
+    let now = SharedMutex(Date(timeIntervalSince1970: 1_790_000_060))
 
     /// A file with the real vault in `realSlot`, with ten random duress slots unless given others, and every other
     /// slot random.
@@ -409,9 +503,16 @@ private struct DuressFixture {
             inSlot: realSlot,
             rootKey: contents.header.passwordKey(for: realPassword),
             payload: EncryptedVaultPayload.encode(state),
-            wrappedAt: nextDate(),
+            wrappedAt: Self.realWrappedAt,
         )
         try fileSystem.createFile(at: file.url, contents: contents.bytes)
+    }
+
+    /// Stamps wraps with the fixture's stamp and time, logging into `log` if given.
+    func wrapStamper(log: SharedMutex<[String]>? = nil) -> VaultDeviceWrapStamper {
+        let now = now
+        let storage = log.map { log in InMemoryWrapStampStorage(stamp: wrapStamp.value, log: log) } ?? wrapStamp
+        return .inMemory(storage: storage) { now.value }
     }
 
     /// The store for the vault `password` opens in `slot`, as unlocking would make it.
@@ -420,20 +521,37 @@ private struct DuressFixture {
         password: String,
         fileSystem: (any SlotFileSystem)? = nil,
         work: any VaultUnlockWork = LiveVaultUnlockWork(),
+        wrapStamper: VaultDeviceWrapStamper? = nil,
     ) throws -> EncryptedVaultStore {
         let contents = try contents()
         let file = EncryptedVaultFile(directory: file.directory, fileSystem: fileSystem ?? self.fileSystem)
-        let clock = clock
         return try EncryptedVaultStore(
             file: file,
             contents: contents,
             slot: contents.openSlot(slot, with: contents.header.passwordKey(for: password)),
-            currentDate: { clock.modify { date in
-                date += 60
-                return date
-            } },
             work: work,
+            wrapStamper: wrapStamper ?? self.wrapStamper(),
         )
+    }
+
+    /// The store for the vault `password` opens in `slot`, with its derivation and slot trials, its file steps and its
+    /// wrap stamps all logged into one log, in the order they happen.
+    func openSpied(slot: Int, password: String) throws -> (store: EncryptedVaultStore, log: SharedMutex<[String]>) {
+        let log = SharedMutex([String]())
+        let store = try open(
+            slot: slot,
+            password: password,
+            fileSystem: FaultInjectingSlotFileSystem(wrapping: fileSystem, sharedLog: log),
+            work: SpyUnlockWork(log: log, clock: ManualUnlockClock()),
+            wrapStamper: wrapStamper(log: log),
+        )
+        return (store, log)
+    }
+
+    /// When the vault `password` opens in `slot` was last wrapped.
+    func wrappedAt(slot: Int, password: String) throws -> Date {
+        let contents = try contents()
+        return try contents.openSlot(slot, with: contents.header.passwordKey(for: password)).wrappedAt
     }
 
     /// Writes a new vault into the slot, as if another process had replaced it.
@@ -443,7 +561,7 @@ private struct DuressFixture {
             inSlot: slot,
             rootKey: contents.header.passwordKey(for: password),
             payload: EncryptedVaultPayload.encode(.empty),
-            wrappedAt: nextDate(),
+            wrappedAt: Self.realWrappedAt,
         )
         fileSystem.setContents(contents.bytes, at: file.url)
     }
@@ -481,12 +599,5 @@ private struct DuressFixture {
         try fileSystem.contentsOfDirectory(at: file.directory)
             .map(\.lastPathComponent)
             .filter { $0.hasPrefix(EncryptedVaultFile.temporaryFilePrefix) }
-    }
-
-    private func nextDate() -> Date {
-        clock.modify { date in
-            date += 60
-            return date
-        }
     }
 }
