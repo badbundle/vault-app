@@ -30,8 +30,6 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
                 codeState: previewViewModel.code,
                 behaviour: behaviour,
             )
-            .frame(height: 12)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
         }
         .padding(16)
         .animation(.snappy, value: behaviour)
@@ -90,13 +88,13 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
             case .visible, .locked:
                 timerView
             case .finished, .notReady, .obfuscated:
-                Color(.quaternarySystemFill)
-                    .redacted(reason: .placeholder)
+                HorizontalTimerProgressBarView.empty
             case .error:
-                Color.red
+                HorizontalTimerProgressBarView.filled(.red)
             }
         case .editingState:
-            Color.white
+            // White on the card's accent background while editing, so the label takes the accent color.
+            HorizontalTimerProgressBarView.filled(.white, labelColor: .accentColor)
         }
     }
 

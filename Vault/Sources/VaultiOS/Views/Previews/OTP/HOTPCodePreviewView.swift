@@ -7,6 +7,8 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
     var previewViewModel: OTPCodePreviewViewModel
     var behaviour: VaultItemViewBehaviour
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Icon at top
@@ -48,14 +50,16 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
         case .normal:
             switch previewViewModel.code {
             case .visible, .locked:
-                Color.accentColor
+                HorizontalTimerProgressBarView.filled(.accentColor)
             case .notReady, .obfuscated:
-                Color(.quaternarySystemFill)
+                HorizontalTimerProgressBarView.empty
             case .error, .finished:
-                Color.red
+                HorizontalTimerProgressBarView.filled(.red)
             }
         case .editingState:
-            Color.accentColor
+            // White on the card's accent background while editing, as on a TOTP card, so the label takes the
+            // accent color.
+            HorizontalTimerProgressBarView.filled(.white, labelColor: .accentColor)
         }
     }
 
@@ -99,8 +103,6 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
                 codeState: previewViewModel.code,
                 behaviour: behaviour,
             )
-            .frame(height: 12)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
 
             buttonView
                 .disabled(!canLoadNextCode)
@@ -108,7 +110,7 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
         // The row takes only the bar's height, with the taller refresh button
         // rising into the space above it, so the rest of the card has exactly
         // the room it has in a TOTP card and lays out the same way.
-        .frame(height: 12, alignment: .bottom)
+        .frame(height: CodeStateTimerBarMetrics.height(for: dynamicTypeSize), alignment: .bottom)
         .animation(.snappy, value: canLoadNextCode)
     }
 

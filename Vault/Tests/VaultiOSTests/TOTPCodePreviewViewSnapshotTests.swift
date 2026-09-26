@@ -79,7 +79,81 @@ final class TOTPCodePreviewViewSnapshotTests {
         assertSnapshot(of: sut, as: .image)
     }
 
+    // MARK: - Bar labels
+
+    @Test
+    func barLabel_codeExpired() {
+        barLabelScenarios(view: makeBarLabelSUT(state: .obfuscated(.expiry)))
+    }
+
+    @Test
+    func barLabel_codeError() {
+        let error = PresentationError(userTitle: "Invalid code", debugDescription: "debugDescription")
+        barLabelScenarios(view: makeBarLabelSUT(state: .error(error, digits: 6)))
+    }
+
+    /// The countdown's fill ends partway through the label, which changes color where it does.
+    @Test
+    func barLabel_codeLocked() {
+        barLabelScenarios(view: makeBarLabelSUT(state: .locked(code: "123456")))
+    }
+
+    @Test
+    func barLabel_editing() {
+        barLabelScenarios(view: makeBarLabelSUT(behaviour: .editingState(message: "Tap to View")))
+    }
+
+    /// Past the largest size the bar grows to, it and its label stay that size.
+    @Test
+    func barLabel_accessibilitySize() {
+        let sut = makeBarLabelSUT(state: .obfuscated(.expiry))
+            .dynamicTypeSize(.accessibility3)
+
+        assertSnapshot(of: sut, colorScheme: .light)
+    }
+
     // MARK: - Helpers
+
+    /// A card whose timer is a real bar, part way through its countdown, which draws the bar's label.
+    private func makeBarLabelSUT(
+        state: OTPCodeState = .visible("123456"),
+        behaviour: VaultItemViewBehaviour = .normal,
+    ) -> some View {
+        let preview = OTPCodePreviewViewModel(
+            accountName: "Test",
+            issuer: "Issuer",
+            color: .default,
+            isLocked: false,
+            fixedCodeState: state,
+        )
+        return TOTPCodePreviewView(
+            previewViewModel: preview,
+            timerView: HorizontalTimerProgressBarView(fractionCompleted: 0.2, color: .blue),
+            behaviour: behaviour,
+        )
+        .frame(width: 250)
+    }
+
+    /// The label in light and dark mode, at the default and a large text size, and with Increase Contrast.
+    private func barLabelScenarios(view: some View, testName: String = #function) {
+        for colorScheme in [ColorScheme.light, .dark] {
+            for dynamicTypeSize in [DynamicTypeSize.large, .xxxLarge] {
+                assertSnapshot(
+                    of: view.dynamicTypeSize(dynamicTypeSize),
+                    colorScheme: colorScheme,
+                    named: "\(colorScheme)_\(dynamicTypeSize)",
+                    testName: testName,
+                )
+            }
+            assertSnapshot(
+                of: view,
+                colorScheme: colorScheme,
+                contrast: .increased,
+                named: "\(colorScheme)_increasedContrast",
+                testName: testName,
+            )
+        }
+    }
 
     private func makeSUT(
         accountName: String = "Test",

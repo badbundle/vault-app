@@ -82,7 +82,60 @@ final class HOTPCodePreviewViewSnapshotTests {
         assertSnapshot(of: sut, as: .image)
     }
 
+    // MARK: - Bar labels
+
+    @Test
+    func barLabel_codeExpired() {
+        barLabelScenarios(view: makeSUT(state: .obfuscated(.expiry)))
+    }
+
+    @Test
+    func barLabel_codeError() {
+        let error = PresentationError(userTitle: "Invalid code", debugDescription: "debugDescription")
+        barLabelScenarios(view: makeSUT(state: .error(error, digits: 6)))
+    }
+
+    @Test
+    func barLabel_codeLocked() {
+        barLabelScenarios(view: makeSUT(state: .locked(code: "123456")))
+    }
+
+    @Test
+    func barLabel_editing() {
+        barLabelScenarios(view: makeSUT(behaviour: .editingState(message: "Tap to View")))
+    }
+
+    /// Past the largest size the bar grows to, it and its label stay that size.
+    @Test
+    func barLabel_accessibilitySize() {
+        let sut = makeSUT(state: .obfuscated(.expiry))
+            .dynamicTypeSize(.accessibility3)
+
+        assertSnapshot(of: sut, colorScheme: .light)
+    }
+
     // MARK: - Helpers
+
+    /// The label in light and dark mode, at the default and a large text size, and with Increase Contrast.
+    private func barLabelScenarios(view: some View, testName: String = #function) {
+        for colorScheme in [ColorScheme.light, .dark] {
+            for dynamicTypeSize in [DynamicTypeSize.large, .xxxLarge] {
+                assertSnapshot(
+                    of: view.dynamicTypeSize(dynamicTypeSize),
+                    colorScheme: colorScheme,
+                    named: "\(colorScheme)_\(dynamicTypeSize)",
+                    testName: testName,
+                )
+            }
+            assertSnapshot(
+                of: view,
+                colorScheme: colorScheme,
+                contrast: .increased,
+                named: "\(colorScheme)_increasedContrast",
+                testName: testName,
+            )
+        }
+    }
 
     private func makeSUT(
         accountName: String = "Test",
