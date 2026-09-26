@@ -227,7 +227,7 @@ extension PersistedLocalVaultStore: VaultStoreWriter {
     public func insert(item: VaultItem.Write) async throws -> Identifier<VaultItem> {
         do {
             let record = try PersistedVaultItemEncoder(currentDate: currentDate).encode(item: item)
-            try store(record: record)
+            try modelContext.store(record: record)
 
             try modelContext.save()
             return Identifier(id: record.id)
@@ -244,7 +244,7 @@ extension PersistedLocalVaultStore: VaultStoreWriter {
             let encoder = PersistedVaultItemEncoder(currentDate: currentDate)
             let record = try encoder.encode(item: item, existing: existing)
             changesSecrets = record.changesSecrets(of: existing)
-            try store(record: record)
+            try modelContext.store(record: record)
 
             try modelContext.save()
         } catch {
@@ -379,7 +379,7 @@ extension PersistedLocalVaultStore: VaultTagStoreWriter {
     public func insertTag(item: VaultItemTag.Write) async throws -> Identifier<VaultItemTag> {
         do {
             let record = PersistedVaultTagEncoder().encode(tag: item)
-            try store(record: record)
+            try modelContext.store(record: record)
 
             try modelContext.save()
             return Identifier<VaultItemTag>(id: record.id)
@@ -393,7 +393,7 @@ extension PersistedLocalVaultStore: VaultTagStoreWriter {
         do {
             let existing = try fetchVaultItemTag(id: id)
             let record = PersistedVaultTagEncoder().encode(tag: item, existing: existing.makeRecord())
-            try store(record: record)
+            try modelContext.store(record: record)
 
             try modelContext.save()
         } catch {
@@ -443,7 +443,7 @@ extension PersistedLocalVaultStore: VaultStoreImporter {
             let tagEncoder = PersistedVaultTagEncoder()
             for tag in payload.tags {
                 let record = tagEncoder.encode(tag: tag.makeWritable(), writeUpdateContext: tag.makeImportingContext())
-                try store(record: record)
+                try modelContext.store(record: record)
             }
 
             let itemEncoder = PersistedVaultItemEncoder(currentDate: currentDate)
@@ -452,7 +452,7 @@ extension PersistedLocalVaultStore: VaultStoreImporter {
                     item: item.makeWritable(),
                     writeUpdateContext: item.makeImportingContext(),
                 )
-                try store(record: record)
+                try modelContext.store(record: record)
             }
 
             try modelContext.save()
@@ -462,29 +462,44 @@ extension PersistedLocalVaultStore: VaultStoreImporter {
         }
     }
 
+    /// Replaces the vault with the payload's items and tags, all or nothing.
+    ///
+    /// The replacement is staged in a context of its own and saved in one go, which SQLite writes in a single
+    /// transaction. If an item doesn't encode, or the save itself fails (a full disk, for example), the staged
+    /// context is thrown away and the vault is left exactly as it was.
     public func importAndOverrideVault(payload: VaultApplicationPayload) async throws {
-        do {
-            try deleteAllModels()
-            let tagEncoder = PersistedVaultTagEncoder()
-            for tag in payload.tags {
-                let record = tagEncoder.encode(tag: tag.makeWritable(), writeUpdateContext: tag.makeImportingContext())
-                try store(record: record)
-            }
-            let itemEncoder = PersistedVaultItemEncoder(currentDate: currentDate)
-            for item in payload.items {
-                let record = try itemEncoder.encode(
-                    item: item.makeWritable(),
-                    writeUpdateContext: item.makeImportingContext(),
-                )
-                try store(record: record)
-            }
+        // Staged away from `modelContext` so a failure never has to roll it back: SwiftData can crash rolling back
+        // a context that has deleted some models and then updated or inserted others.
+        let context = ModelContext(modelContainer)
 
-            try modelContext.save()
-        } catch {
-            modelContext.rollback()
-            throw error
+        // Items and tags the payload also has are updated in place, and only the rest are deleted. Deleting
+        // everything first would leave new models sharing their unique ids with ones waiting to be deleted.
+        let itemIDs = payload.items.reducedToSet(\.id.rawValue)
+        for item in try context.fetch(FetchDescriptor<PersistedVaultItem>()) where !itemIDs.contains(item.id) {
+            context.delete(item)
         }
-        // Everything that was in the vault before the import is gone.
+        let tagIDs = payload.tags.reducedToSet(\.id.id)
+        for tag in try context.fetch(FetchDescriptor<PersistedVaultTag>()) where !tagIDs.contains(tag.id) {
+            // The items that keep a tag being deleted get their tags from the payload below, so none keeps it.
+            context.delete(tag)
+        }
+
+        let tagEncoder = PersistedVaultTagEncoder()
+        for tag in payload.tags {
+            let record = tagEncoder.encode(tag: tag.makeWritable(), writeUpdateContext: tag.makeImportingContext())
+            try context.store(record: record)
+        }
+        let itemEncoder = PersistedVaultItemEncoder(currentDate: currentDate)
+        for item in payload.items {
+            let record = try itemEncoder.encode(
+                item: item.makeWritable(),
+                writeUpdateContext: item.makeImportingContext(),
+            )
+            try context.store(record: record)
+        }
+
+        try context.save()
+        // Only now is the old vault gone, so only now is there anything to scrub.
         scrubDeletedContent()
     }
 }
@@ -663,61 +678,15 @@ extension PersistedLocalVaultStore {
 // MARK: - Helpers
 
 extension PersistedLocalVaultStore {
-    /// Stores the item record: updates the stored item with its id in place, or inserts a new one.
-    ///
-    /// The record's tag ids are resolved to stored tags, and ids that name no stored tag are dropped. Tags inserted
-    /// but not yet saved count, so an import can store its tags and then items that carry them.
-    ///
-    /// An existing item is updated in place rather than replaced by a new model with the same id. SwiftData's
-    /// unique-id upsert merges to-many relationships instead of replacing them, so a replacement would keep tags
-    /// the record no longer has.
-    private func store(record: VaultItemRecord) throws {
-        let tagIDs = record.tagIDs
-        let tags = try modelContext.fetch(FetchDescriptor<PersistedVaultTag>(predicate: #Predicate {
-            tagIDs.contains($0.id)
-        }))
-        if let existing = try fetchVaultItemIfPresent(id: record.id) {
-            existing.apply(record, tags: tags, in: modelContext)
-        } else {
-            modelContext.insert(PersistedVaultItem(record: record, tags: tags))
-        }
-    }
-
-    /// Stores the tag record: updates the stored tag with its id in place, keeping the items that carry it, or
-    /// inserts a new one.
-    private func store(record: VaultTagRecord) throws {
-        if let existing = try fetchVaultItemTagIfPresent(id: record.id) {
-            existing.apply(record)
-        } else {
-            modelContext.insert(PersistedVaultTag(record: record))
-        }
-    }
-
-    private func fetchVaultItemIfPresent(id: UUID) throws -> PersistedVaultItem? {
-        var descriptor = FetchDescriptor<PersistedVaultItem>(predicate: #Predicate { item in
-            item.id == id
-        })
-        descriptor.fetchLimit = 1
-        return try modelContext.fetch(descriptor).first
-    }
-
-    private func fetchVaultItemTagIfPresent(id: UUID) throws -> PersistedVaultTag? {
-        var descriptor = FetchDescriptor<PersistedVaultTag>(predicate: #Predicate { tag in
-            tag.id == id
-        })
-        descriptor.fetchLimit = 1
-        return try modelContext.fetch(descriptor).first
-    }
-
     private func fetchVaultItem(id: Identifier<VaultItem>) throws -> PersistedVaultItem {
-        guard let existing = try fetchVaultItemIfPresent(id: id.rawValue) else {
+        guard let existing = try modelContext.fetchVaultItemIfPresent(id: id.rawValue) else {
             throw Error.modelNotFound
         }
         return existing
     }
 
     private func fetchVaultItemTag(id: Identifier<VaultItemTag>) throws -> PersistedVaultTag {
-        guard let existing = try fetchVaultItemTagIfPresent(id: id.id) else {
+        guard let existing = try modelContext.fetchVaultItemTagIfPresent(id: id.id) else {
             throw Error.modelNotFound
         }
         return existing
@@ -728,6 +697,54 @@ extension PersistedLocalVaultStore {
         itemDescriptor.fetchLimit = 1
         let result = try modelContext.fetch(itemDescriptor)
         return result.isNotEmpty
+    }
+}
+
+extension ModelContext {
+    /// Stores the item record: updates the stored item with its id in place, or inserts a new one.
+    ///
+    /// The record's tag ids are resolved to stored tags, and ids that name no stored tag are dropped. Tags inserted
+    /// but not yet saved count, so an import can store its tags and then items that carry them.
+    ///
+    /// An existing item is updated in place rather than replaced by a new model with the same id. SwiftData's
+    /// unique-id upsert merges to-many relationships instead of replacing them, so a replacement would keep tags
+    /// the record no longer has.
+    fileprivate func store(record: VaultItemRecord) throws {
+        let tagIDs = record.tagIDs
+        let tags = try fetch(FetchDescriptor<PersistedVaultTag>(predicate: #Predicate {
+            tagIDs.contains($0.id)
+        }))
+        if let existing = try fetchVaultItemIfPresent(id: record.id) {
+            existing.apply(record, tags: tags, in: self)
+        } else {
+            insert(PersistedVaultItem(record: record, tags: tags))
+        }
+    }
+
+    /// Stores the tag record: updates the stored tag with its id in place, keeping the items that carry it, or
+    /// inserts a new one.
+    fileprivate func store(record: VaultTagRecord) throws {
+        if let existing = try fetchVaultItemTagIfPresent(id: record.id) {
+            existing.apply(record)
+        } else {
+            insert(PersistedVaultTag(record: record))
+        }
+    }
+
+    fileprivate func fetchVaultItemIfPresent(id: UUID) throws -> PersistedVaultItem? {
+        var descriptor = FetchDescriptor<PersistedVaultItem>(predicate: #Predicate { item in
+            item.id == id
+        })
+        descriptor.fetchLimit = 1
+        return try fetch(descriptor).first
+    }
+
+    fileprivate func fetchVaultItemTagIfPresent(id: UUID) throws -> PersistedVaultTag? {
+        var descriptor = FetchDescriptor<PersistedVaultTag>(predicate: #Predicate { tag in
+            tag.id == id
+        })
+        descriptor.fetchLimit = 1
+        return try fetch(descriptor).first
     }
 }
 
