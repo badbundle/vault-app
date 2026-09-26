@@ -44,10 +44,10 @@ public enum VaultIdentifiers {
             public static let settingsPasteTTL = "vault.preferences.general.settings-paste-ttl"
         }
 
+        /// Earlier versions also stored `allow-passwords` and `allow-other`, though nothing was ever copied as either.
+        /// Don't reuse those keys for a new kind of value: an old choice would silently apply to it.
         public enum UniversalClipboard {
-            public static let allowPasswords = "vault.preferences.universal-clipboard.allow-passwords"
             public static let allowOTPs = "vault.preferences.universal-clipboard.allow-otps"
-            public static let allowOther = "vault.preferences.universal-clipboard.allow-other"
         }
     }
 

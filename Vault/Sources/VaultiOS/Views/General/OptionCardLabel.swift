@@ -11,16 +11,9 @@ struct OptionCardLabel: View {
     var subtitle: String
     var systemImage: String
 
-    @ScaledMetric(relativeTo: .title3) private var iconSize: Double = 44
-
     var body: some View {
         HStack(spacing: 14) {
-            Image(systemName: systemImage)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: iconSize, height: iconSize)
-                .background(Color.accentColor, in: .rect(cornerRadius: 12))
-                .accessibilityHidden(true)
+            OptionCardIcon(systemImage: systemImage)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)

@@ -6,7 +6,8 @@ import VaultSettings
 ///
 /// Every section has a heading and a short footer, so each reads as a card of its own. Rows are
 /// single-line `FormRow`s with a prominent icon in their section's `SettingsIconColor`, so they're all the same
-/// height whether they hold a toggle, a picker or a button. The Danger Zone stays last.
+/// height whether they hold a toggle, a picker or a button. A group of related options too big for a row opens a
+/// fitted sheet from a row that summarizes it. The Danger Zone stays last.
 @MainActor
 struct VaultSettingsView: View {
     @Environment(VaultDataModel.self) private var dataModel
@@ -17,6 +18,7 @@ struct VaultSettingsView: View {
     @State private var modal: Modal?
 
     private enum Modal: IdentifiableSelf {
+        case universalClipboard
         case danger
     }
 
@@ -28,7 +30,6 @@ struct VaultSettingsView: View {
     var body: some View {
         Form {
             clipboardSection
-            universalClipboardSection
             dangerSection
         }
         // A little more room than the default between sections, so a footer doesn't run into the next heading.
@@ -36,6 +37,8 @@ struct VaultSettingsView: View {
         .navigationTitle(viewModel.title)
         .sheet(item: $modal, onDismiss: nil) { item in
             switch item {
+            case .universalClipboard:
+                UniversalClipboardSheet(localSettings: localSettings)
             case .danger:
                 NavigationStack {
                     SettingsDangerView(viewModel: .init(
@@ -68,36 +71,21 @@ struct VaultSettingsView: View {
                     Text(viewModel.pasteTTLTitle)
                 }
             }
+
+            Button {
+                modal = .universalClipboard
+            } label: {
+                SheetRowLabel(
+                    title: "Universal Clipboard",
+                    value: localSettings.state.isUniversalClipboardAllowedForAny ? "On" : "Off",
+                    systemImage: "iphone.and.arrow.right.outward",
+                    color: SettingsIconColor.clipboard,
+                )
+            }
         } header: {
             Text("Clipboard")
         } footer: {
-            Text("How long anything you copy from Vault stays on the clipboard.")
-        }
-    }
-
-    private var universalClipboardSection: some View {
-        Section {
-            Toggle(isOn: $localSettings.state.allowUniversalClipboardForPasswords) {
-                FormRow(image: Image(systemName: "key.fill"), color: SettingsIconColor.universalClipboard) {
-                    Text("Passwords")
-                }
-            }
-            Toggle(isOn: $localSettings.state.allowUniversalClipboardForOTPs) {
-                FormRow(image: Image(systemName: "number"), color: SettingsIconColor.universalClipboard) {
-                    Text("One-time codes")
-                }
-            }
-            Toggle(isOn: $localSettings.state.allowUniversalClipboardForOther) {
-                FormRow(image: Image(systemName: "doc.on.clipboard"), color: SettingsIconColor.universalClipboard) {
-                    Text("Other")
-                }
-            }
-        } header: {
-            Text("Universal Clipboard")
-        } footer: {
-            Text(
-                "When enabled, copied values of the selected kind sync to your other Apple devices via Universal Clipboard. Values are always copied locally; this only controls cross-device sync.",
-            )
+            Text("How long copied codes stay on the clipboard, and whether they can reach your other devices.")
         }
     }
 
@@ -115,6 +103,34 @@ struct VaultSettingsView: View {
             Text("Danger Zone")
         } footer: {
             Text("Erase every item and tag from this device.")
+        }
+    }
+}
+
+/// The label of a Settings row that opens a sheet: the setting's name, a summary of its value and a chevron, so it
+/// reads like the rows around it rather than as a tinted button.
+private struct SheetRowLabel: View {
+    var title: String
+    var value: String
+    var systemImage: String
+    var color: Color
+
+    var body: some View {
+        FormRow(image: Image(systemName: systemImage), color: color) {
+            LabeledContent {
+                HStack(spacing: 8) {
+                    Text(value)
+                        .foregroundStyle(Color(uiColor: .secondaryLabel))
+                    Image(systemName: "chevron.forward")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(Color(uiColor: .tertiaryLabel))
+                        .accessibilityHidden(true)
+                }
+            } label: {
+                // Explicit, so the button doesn't tint it.
+                Text(title)
+                    .foregroundStyle(Color(uiColor: .label))
+            }
         }
     }
 }
