@@ -1,22 +1,27 @@
 import Foundation
-import SwiftData
 import VaultCore
 
+/// Encodes a `VaultItem.Write` as the `VaultItemRecord` a store persists.
+///
+/// This is the one place the persisted encoding of items is decided, so every store writes items the same way.
+/// Encoding is pure: storing the record, and resolving its tag ids to stored tags, is the store's job.
 struct PersistedVaultItemEncoder {
-    let context: ModelContext
     let currentDate: () -> Date
 
-    init(context: ModelContext, currentDate: @escaping () -> Date = { Date() }) {
-        self.context = context
+    init(currentDate: @escaping () -> Date = { Date() }) {
         self.currentDate = currentDate
     }
 
-    func encode(item: VaultItem.Write, writeUpdateContext: VaultItem.WriteUpdateContext) throws -> PersistedVaultItem {
+    /// Encodes an item whose id and dates are already known, as when importing.
+    func encode(item: VaultItem.Write, writeUpdateContext: VaultItem.WriteUpdateContext) throws -> VaultItemRecord {
         try encode(newData: item, writeUpdateContext: writeUpdateContext, existing: nil)
     }
 
-    /// Encodes the given item, inserting it in the encoder's `context`.
-    func encode(item: VaultItem.Write, existing: PersistedVaultItem? = nil) throws -> PersistedVaultItem {
+    /// Encodes a new item, or an update to the `existing` one.
+    ///
+    /// An update keeps the existing item's id and created date, moves its updated date to now, and keeps its
+    /// killphrase and search passphrase digests where the write leaves them `.unchanged`.
+    func encode(item: VaultItem.Write, existing: VaultItemRecord? = nil) throws -> VaultItemRecord {
         if let existing {
             let writeUpdateContext = VaultItem.WriteUpdateContext(
                 id: .init(id: existing.id),
@@ -33,29 +38,23 @@ struct PersistedVaultItemEncoder {
 // MARK: - Items
 
 extension PersistedVaultItemEncoder {
-    private func fetchTagsForItem(newData: VaultItem.Write) throws -> [PersistedVaultTag] {
-        let tagsForItemIds = newData.tags.map(\.id).reducedToSet()
-        let itemTagsPredicate = #Predicate<PersistedVaultTag> { tagsForItemIds.contains($0.id) }
-        return try context.fetch(.init(predicate: itemTagsPredicate))
-    }
-
     private func encode(
         newData: VaultItem.Write,
         writeUpdateContext: VaultItem.WriteUpdateContext?,
-        existing: PersistedVaultItem? = nil,
-    ) throws -> PersistedVaultItem {
+        existing: VaultItemRecord? = nil,
+    ) throws -> VaultItemRecord {
         let now = currentDate()
         let (noteDetails, otpDetails, encryptedItemDetails): (
-            PersistedNoteDetails?,
-            PersistedOTPDetails?,
-            PersistedEncryptedItemDetails?,
+            VaultItemRecord.NoteDetails?,
+            VaultItemRecord.OTPDetails?,
+            VaultItemRecord.EncryptedItemDetails?,
         ) = switch newData.item {
         case let .secureNote(note): (encodeSecureNoteDetails(newData: note), nil, nil)
         case let .otpCode(code): (nil, encodeOtpDetails(newData: code), nil)
         case let .encryptedItem(data): (nil, nil, encodeEncryptedItemDetails(newData: data))
         case .recoveryPhrase:
-            // Recovery phrases must only ever be persisted encrypted. Refuse before anything is created in the
-            // context, so a bug elsewhere can never write the words in plaintext.
+            // Recovery phrases must only ever be persisted encrypted. Refuse before any record exists, so a bug
+            // elsewhere can never write the words in plaintext.
             throw VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable
         }
         let updatedDate = switch writeUpdateContext?.updated {
@@ -79,7 +78,7 @@ extension PersistedVaultItemEncoder {
         case let .set(digest):
             (digest.salt, digest.digest)
         }
-        return try PersistedVaultItem(
+        return VaultItemRecord(
             id: writeUpdateContext?.id.id ?? UUID(),
             relativeOrder: newData.relativeOrder,
             createdDate: writeUpdateContext?.created ?? now,
@@ -97,7 +96,7 @@ extension PersistedVaultItemEncoder {
             },
             showInQuickType: newData.showInQuickType,
             previewMode: newData.previewMode.rawValue,
-            tags: fetchTagsForItem(newData: newData),
+            tagIDs: newData.tags.map(\.id).reducedToSet(),
             noteDetails: noteDetails,
             otpDetails: otpDetails,
             encryptedItemDetails: encryptedItemDetails,
@@ -133,8 +132,8 @@ extension PersistedVaultItemEncoder {
 extension PersistedVaultItemEncoder {
     private func encodeOtpDetails(
         newData: OTPAuthCode,
-    ) -> PersistedOTPDetails {
-        PersistedOTPDetails(
+    ) -> VaultItemRecord.OTPDetails {
+        VaultItemRecord.OTPDetails(
             accountName: newData.data.accountName,
             issuer: newData.data.issuer,
             algorithm: encodedOTPAlgorithm(newData.data.algorithm),
@@ -188,8 +187,8 @@ extension PersistedVaultItemEncoder {
 extension PersistedVaultItemEncoder {
     private func encodeSecureNoteDetails(
         newData: SecureNote,
-    ) -> PersistedNoteDetails {
-        PersistedNoteDetails(
+    ) -> VaultItemRecord.NoteDetails {
+        VaultItemRecord.NoteDetails(
             title: newData.title,
             contents: newData.contents,
             format: encodeTextFormat(newData.format),
@@ -207,8 +206,8 @@ extension PersistedVaultItemEncoder {
 // MARK: - Encrypted
 
 extension PersistedVaultItemEncoder {
-    private func encodeEncryptedItemDetails(newData: EncryptedItem) -> PersistedEncryptedItemDetails {
-        PersistedEncryptedItemDetails(
+    private func encodeEncryptedItemDetails(newData: EncryptedItem) -> VaultItemRecord.EncryptedItemDetails {
+        VaultItemRecord.EncryptedItemDetails(
             version: newData.version.stringValue,
             title: newData.title,
             data: newData.data,

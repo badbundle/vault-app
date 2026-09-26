@@ -1,18 +1,9 @@
 import Foundation
-import SwiftData
 import TestHelpers
 import Testing
 @testable import VaultFeed
 
-final class PersistedVaultTagDecoderTests {
-    private let context: ModelContext
-
-    init() throws {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: PersistedVaultItem.self, configurations: config)
-        context = ModelContext(container)
-    }
-}
+struct PersistedVaultTagDecoderTests {}
 
 // MARK: - Fields
 
@@ -20,10 +11,10 @@ extension PersistedVaultTagDecoderTests {
     @Test
     func decode_id() throws {
         let id = UUID()
-        let item = makePersistedTag(id: id)
+        let item = makeRecord(id: id)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.id.id == id)
     }
@@ -31,20 +22,20 @@ extension PersistedVaultTagDecoderTests {
     @Test
     func decode_name() throws {
         let name = "my tag name"
-        let item = makePersistedTag(title: name)
+        let item = makeRecord(title: name)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.name == name)
     }
 
     @Test
     func decode_colorNilIsTagDefault() throws {
-        let item = makePersistedTag(color: nil)
+        let item = makeRecord(color: nil)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.color == .tagDefault)
     }
@@ -52,10 +43,10 @@ extension PersistedVaultTagDecoderTests {
     @Test
     func decode_colorWithValues() throws {
         let color = PersistedColor(red: 0.5, green: 0.6, blue: 0.7)
-        let item = makePersistedTag(color: color)
+        let item = makeRecord(color: color)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.color.red == 0.5)
         #expect(decoded.color.green == 0.6)
@@ -65,12 +56,22 @@ extension PersistedVaultTagDecoderTests {
     @Test
     func decode_iconName() throws {
         let iconName = "my icon name"
-        let item = makePersistedTag(iconName: iconName)
+        let item = makeRecord(iconName: iconName)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.iconName == iconName)
+    }
+
+    @Test
+    func decode_iconNameNilIsDefault() throws {
+        let item = makeRecord(iconName: nil)
+        let sut = makeSUT()
+
+        let decoded = try sut.decode(record: item)
+
+        #expect(decoded.iconName == VaultItemTag.defaultIconName)
     }
 }
 
@@ -81,14 +82,12 @@ extension PersistedVaultTagDecoderTests {
         PersistedVaultTagDecoder()
     }
 
-    private func makePersistedTag(
+    private func makeRecord(
         id: UUID = UUID(),
         title: String = "Any",
         color: PersistedColor? = nil,
         iconName: String? = nil,
-    ) -> PersistedVaultTag {
-        let tag = PersistedVaultTag(id: id, title: title, color: color, iconName: iconName, items: [])
-        context.insert(tag)
-        return tag
+    ) -> VaultTagRecord {
+        VaultTagRecord(id: id, title: title, color: color, iconName: iconName)
     }
 }

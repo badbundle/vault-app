@@ -8,8 +8,8 @@ import VaultCore
 import VaultKeygen
 @testable import VaultFeed
 
-/// Recovery phrases through every layer that encodes and decodes them: SwiftData, the store, backup items and whole
-/// encrypted backups.
+/// Recovery phrases through every layer that encodes and decodes them: item records, the store, backup items and
+/// whole encrypted backups.
 ///
 /// At rest a recovery phrase is only ever an encrypted item, so each round trip decrypts what comes out the other
 /// side and checks the words (and everything else in the phrase) are exactly what went in.
@@ -21,20 +21,18 @@ struct RecoveryPhraseStorageTests {
         key = try VaultKeyDeriver.testing.createEncryptionKey(password: "password")
     }
 
-    // MARK: - SwiftData encoder and decoder
+    // MARK: - Item record encoder and decoder
 
     @Test(arguments: recoveryPhraseFixtures)
     func persistedItem_encodeDecode_roundTripsEncryptedPhrase(phrase: RecoveryPhrase) throws {
-        let context = try makeModelContext()
         let write = try makeEncryptedWrite(phrase: phrase)
 
-        let persisted = try PersistedVaultItemEncoder(context: context).encode(item: write)
-        context.insert(persisted)
-        let decoded = try PersistedVaultItemDecoder().decode(item: persisted)
+        let record = try PersistedVaultItemEncoder().encode(item: write)
+        let decoded = try PersistedVaultItemDecoder().decode(record: record)
 
-        #expect(persisted.encryptedItemDetails != nil)
-        #expect(persisted.noteDetails == nil)
-        #expect(persisted.otpDetails == nil)
+        #expect(record.encryptedItemDetails != nil)
+        #expect(record.noteDetails == nil)
+        #expect(record.otpDetails == nil)
         #expect(decoded.metadata.lockState == .lockedWithNativeSecurity)
         #expect(decoded.metadata.userDescription == "")
         #expect(decoded.metadata.previewMode == .titleOnly)
@@ -43,14 +41,12 @@ struct RecoveryPhraseStorageTests {
 
     @Test
     func persistedItem_encode_refusesPlaintextPhrase() throws {
-        let context = try makeModelContext()
         let write = VaultItem(metadata: anyVaultItemMetadata(), item: .recoveryPhrase(anyRecoveryPhrase()))
             .makeWritable()
 
         #expect(throws: VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable) {
-            try PersistedVaultItemEncoder(context: context).encode(item: write)
+            try PersistedVaultItemEncoder().encode(item: write)
         }
-        #expect(context.insertedModelsArray.isEmpty)
     }
 
     // MARK: - Store
@@ -315,14 +311,6 @@ struct RecoveryPhraseStorageTests {
 // MARK: - Helpers
 
 extension RecoveryPhraseStorageTests {
-    private func makeModelContext() throws -> ModelContext {
-        let container = try ModelContainer(
-            for: PersistedVaultItem.self,
-            configurations: ModelConfiguration(isStoredInMemoryOnly: true),
-        )
-        return ModelContext(container)
-    }
-
     private func makeStore() throws -> PersistedLocalVaultStore {
         let container = try ModelContainer(
             for: PersistedVaultItem.self, PersistedVaultTag.self,

@@ -1,18 +1,9 @@
 import Foundation
-import SwiftData
 import TestHelpers
 import Testing
 @testable import VaultFeed
 
-final class PersistedVaultTagEncoderTests {
-    private let context: ModelContext
-
-    init() throws {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: PersistedVaultItem.self, configurations: config)
-        context = ModelContext(container)
-    }
-}
+struct PersistedVaultTagEncoderTests {}
 
 // MARK: - Encoding
 
@@ -24,7 +15,7 @@ extension PersistedVaultTagEncoderTests {
         var seenIds = Set<UUID>()
         for _ in 1 ... 100 {
             let item = makeWritableVaultItemTag()
-            let encoded = encode(sut: sut, tag: item)
+            let encoded = sut.encode(tag: item)
             seenIds.insert(encoded.id)
         }
         #expect(seenIds.count == 100)
@@ -36,7 +27,7 @@ extension PersistedVaultTagEncoderTests {
         let sut = makeSUT()
         let item = makeWritableVaultItemTag(name: name)
 
-        let encoded = encode(sut: sut, tag: item)
+        let encoded = sut.encode(tag: item)
 
         #expect(encoded.title == name)
     }
@@ -47,11 +38,9 @@ extension PersistedVaultTagEncoderTests {
         let color = VaultItemColor(red: 0.5, green: 0.6, blue: 0.7)
         let item = makeWritableVaultItemTag(color: color)
 
-        let encoded = encode(sut: sut, tag: item)
+        let encoded = sut.encode(tag: item)
 
-        #expect(encoded.color?.red == 0.5)
-        #expect(encoded.color?.green == 0.6)
-        #expect(encoded.color?.blue == 0.7)
+        #expect(encoded.color == PersistedColor(red: 0.5, green: 0.6, blue: 0.7))
     }
 
     @Test
@@ -60,9 +49,46 @@ extension PersistedVaultTagEncoderTests {
         let sut = makeSUT()
         let item = makeWritableVaultItemTag(iconName: name)
 
-        let encoded = encode(sut: sut, tag: item)
+        let encoded = sut.encode(tag: item)
 
         #expect(encoded.iconName == name)
+    }
+
+    @Test
+    func encode_existingTagKeepsIDAndReplacesFields() {
+        let sut = makeSUT()
+        let existing = VaultTagRecord(
+            id: UUID(),
+            title: "Before",
+            color: PersistedColor(red: 0.1, green: 0.2, blue: 0.3),
+            iconName: "before.icon",
+        )
+        let item = makeWritableVaultItemTag(
+            name: "After",
+            color: VaultItemColor(red: 0.4, green: 0.5, blue: 0.6),
+            iconName: "after.icon",
+        )
+
+        let encoded = sut.encode(tag: item, existing: existing)
+
+        #expect(encoded == VaultTagRecord(
+            id: existing.id,
+            title: "After",
+            color: PersistedColor(red: 0.4, green: 0.5, blue: 0.6),
+            iconName: "after.icon",
+        ))
+    }
+
+    @Test
+    func encode_importingUsesContextID() {
+        let sut = makeSUT()
+        let id = Identifier<VaultItemTag>(id: UUID())
+        let item = makeWritableVaultItemTag(name: "Imported")
+
+        let encoded = sut.encode(tag: item, writeUpdateContext: .init(id: id))
+
+        #expect(encoded.id == id.id)
+        #expect(encoded.title == "Imported")
     }
 }
 
@@ -71,16 +97,6 @@ extension PersistedVaultTagEncoderTests {
 extension PersistedVaultTagEncoderTests {
     private func makeSUT() -> PersistedVaultTagEncoder {
         PersistedVaultTagEncoder()
-    }
-
-    private func encode(
-        sut: PersistedVaultTagEncoder,
-        tag: VaultItemTag.Write,
-        existing: PersistedVaultTag? = nil,
-    ) -> PersistedVaultTag {
-        let tag = sut.encode(tag: tag, existing: existing)
-        context.insert(tag)
-        return tag
     }
 
     private func makeWritableVaultItemTag(
@@ -93,16 +109,5 @@ extension PersistedVaultTagEncoderTests {
             color: color,
             iconName: iconName,
         )
-    }
-
-    private func makePersistedTag(
-        id: UUID = UUID(),
-        title: String = "Any",
-        color: PersistedColor? = nil,
-        iconName: String? = nil,
-    ) -> PersistedVaultTag {
-        let tag = PersistedVaultTag(id: id, title: title, color: color, iconName: iconName, items: [])
-        context.insert(tag)
-        return tag
     }
 }
