@@ -22,18 +22,21 @@ import os
 ///
 /// So real, duress and wrong passwords do the same work, and finish at the same deadline.
 ///
-/// **The deadline** is set when the vault is created, at 1.5 times the derivation calibration expected. If an
-/// attempt's work (steps 3 to 5) takes more than two thirds of it, for example after a restore onto a slower iPhone,
-/// the deadline is raised to 1.5 times that work, for that attempt and every later one, up to `maximumDeadline`. It's
-/// never lowered.
+/// **The deadline** is set when the vault is created, at 1.5 times the derivation calibration expected. If deriving
+/// the key and trying the slots (steps 3 and 4) take more than two thirds of it, for example after a restore onto a
+/// slower iPhone, the deadline is raised to 1.5 times that, for that attempt and every later one, up to
+/// `maximumDeadline`. It's never lowered.
 ///
 /// - The work is timed in the thread's CPU time, not on a clock, so time the app spends suspended, or the device
 ///   asleep, doesn't count. The work is one thread's computation, so its CPU time is how long it takes when it isn't
 ///   held up. When the device is busy, an attempt can overrun the deadline without raising it. That shows how busy
 ///   the device is, not what the password opened.
 /// - Only an attempt whose work finished and that's still wanted raises it.
-/// - Decoding a vault that opened is part of the work, so a very large vault can raise the deadline where a wrong
-///   password wouldn't. That's proportional to what the vault shows once it's open anyway.
+/// - Only work that's the same whatever the password counts. Opening and decoding a vault doesn't: the deadline is
+///   saved and every later attempt waits for it, so counting a large vault's decode would make every attempt, a
+///   duress one included, show how large the largest vault opened is. A decode too slow to fit the third of the
+///   deadline left for it overruns that one attempt instead, which is proportional to what the vault shows once
+///   it's open anyway.
 ///
 /// **Locking** (`lock()`) waits for any change already underway to finish saving, switches the store session to
 /// `locked`, and purges what the app read from the vault.
@@ -187,7 +190,8 @@ extension VaultUnlockService {
     }
 
     private struct Attempt: Sendable {
-        /// The thread CPU time the work took, or `nil` if the key couldn't be derived.
+        /// The thread CPU time deriving the key and trying the slots took, or `nil` if the key couldn't be derived.
+        /// It's the same whatever the password.
         var workDuration: Duration?
         /// The slot that opened and the vault in it, `nil` if no slot opened, or why the attempt failed.
         var outcome: Result<Opened?, any Error>
@@ -209,6 +213,7 @@ extension VaultUnlockService {
         } catch {
             return Attempt(workDuration: nil, outcome: .failure(error))
         }
+        let workDuration = work.threadCPUTime() - start
 
         // The same password opening more than one slot means the newer vault was made with a password that happened
         // to open an older one too. The newer one is the one the user just made (see "Same passwords"). Wrap times
@@ -218,12 +223,12 @@ extension VaultUnlockService {
             // A wrong password opens a body too, so every attempt does the same work. The throwaway key fails to
             // authenticate it.
             _ = try? work.openBody(of: decoySlot(in: contents), in: contents)
-            return Attempt(workDuration: work.threadCPUTime() - start, outcome: .success(nil))
+            return Attempt(workDuration: workDuration, outcome: .success(nil))
         }
         let outcome = Result<Opened?, any Error> {
             try Opened(slot: chosen, state: work.openBody(of: chosen, in: contents))
         }
-        return Attempt(workDuration: work.threadCPUTime() - start, outcome: outcome)
+        return Attempt(workDuration: workDuration, outcome: outcome)
     }
 
     /// A random slot, as if opened with a throwaway key: opening its body does the work of opening a real one, and

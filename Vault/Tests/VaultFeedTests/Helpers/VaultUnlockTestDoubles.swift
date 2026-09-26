@@ -136,7 +136,8 @@ final class SpyUnlockWork: VaultUnlockWork {
     func passwordKey(for password: String, header: VaultSlotFile.Header) throws -> VaultSlotRootKey {
         log.modify { $0.append("derive") }
         isDeriving.modify { $0 = true }
-        derivationGate.get { $0 }?.wait()
+        // Bounded, so a starved thread pool fails the test rather than hanging it.
+        _ = derivationGate.get { $0 }?.wait(timeout: .now() + 5)
         spend(timings.derivation)
         clock.advance(by: timings.suspendedDuringDerivation)
         if state.get({ $0.failsDerivation }) {

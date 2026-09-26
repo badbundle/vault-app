@@ -590,9 +590,10 @@ downgrade and back), the app offers to merge its items into the open vault inste
 Wrong, real and duress passwords all run the same derivation, the same sixteen trials and one body, and finish at
 the same deadline. What differs afterwards is decoding time, which is proportional to what the vault shows anyway.
 
-- **An attempt whose work takes more than two thirds of the deadline** (deriving, trying the slots and opening
-  a body, so decoding counts too) raises it to 1.5 times the work before the attempt waits, so that attempt is
-  held to the raised deadline too. The work is timed in the thread's CPU time, so time the app spends suspended,
+- **An attempt whose derivation and slot trials take more than two thirds of the deadline** raises it to 1.5
+  times that before the attempt waits, so that attempt is held to the raised deadline too. Only that work counts,
+  because it's the same whatever the password: the deadline is saved, so counting a vault's decode would make every
+  later attempt, a duress one included, show how large the largest vault opened is. The work is timed in the thread's CPU time, so time the app spends suspended,
   or the device asleep, doesn't count; only an attempt that finished its work and is still wanted raises it; and
   it goes no higher than 5 s, about 1.5 times 32 passes on an iPhone four times slower than an M5 Max. A stored
   deadline above that is taken as 5 s.

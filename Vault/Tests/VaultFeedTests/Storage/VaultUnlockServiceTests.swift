@@ -225,25 +225,34 @@ extension VaultUnlockServiceTests {
         #expect(sut.deadlineStore.current == deadline)
     }
 
-    /// For example after a restore onto a slower iPhone. The attempt holds to the raised deadline too. The work
-    /// includes opening the body, so a slow decode raises it as a slow derivation does.
+    /// For example after a restore onto a slower iPhone. The attempt holds to the raised deadline too.
     @Test(arguments: ["real", "wrong"])
-    func unlock_workLongerThanTwoThirdsOfTheDeadline_raisesIt(password: String) async throws {
+    func unlock_derivingAndTryingSlotsForMoreThanTwoThirdsOfTheDeadline_raisesIt(password: String) async throws {
         let sut = try makeSUT(
             vaults: [.init(password: "real", slot: realSlot, items: [])],
-            timings: .init(
-                derivation: .milliseconds(1800),
-                body: .milliseconds(184),
-                bodyThatFails: .milliseconds(184),
-            ),
+            timings: .init(derivation: .milliseconds(1984)),
         )
         let start = sut.clock.now
 
         _ = try await sut.service.unlock(password: password)
 
-        // 1,800 ms deriving, 16 ms trying slots and 184 ms opening a body: 2 s of work.
+        // 1,984 ms deriving and 16 ms trying slots: 2 s of work that's the same whatever the password.
         #expect(sut.deadlineStore.current == .seconds(3))
         #expect(sut.clock.sleeps == [start.advanced(by: .seconds(3))])
+    }
+
+    /// The saved deadline mustn't show how large a vault that opened is: every later attempt, a duress one included,
+    /// waits for it.
+    @Test
+    func unlock_openingAVaultThatDecodesSlowly_doesNotRaiseTheDeadline() async throws {
+        let sut = try makeSUT(
+            vaults: [.init(password: "real", slot: realSlot, items: [uniqueVaultItem()])],
+            timings: .init(body: .seconds(2)),
+        )
+
+        #expect(try await sut.service.unlock(password: "real") == .unlocked)
+
+        #expect(sut.deadlineStore.current == deadline)
     }
 
     @Test
@@ -401,7 +410,8 @@ extension VaultUnlockServiceTests {
                 await session.lock()
                 locked.signal()
             }
-            locked.wait()
+            // Bounded, so a starved thread pool fails the test rather than hanging it.
+            _ = locked.wait(timeout: .now() + 5)
         }
 
         await #expect(throws: CancellationError.self) {
@@ -623,7 +633,7 @@ final class GatedSlotFileSystem: SlotFileSystem {
         }
         if holds {
             isHolding.modify { $0 = true }
-            gate.wait()
+            _ = gate.wait(timeout: .now() + 5)
         }
         try base.createFile(at: url, contents: contents)
     }
