@@ -12,14 +12,18 @@ enum VaultStoreEngine: CaseIterable, Sendable, CustomTestStringConvertible {
     case swiftData
     /// `PersistedLocalVaultStore` on a SQLite file, as the app stores a vault with no app lock password.
     case swiftDataSQLite
-    /// `RecordVaultStore`, which holds an unlocked encrypted vault.
+    /// `RecordVaultStore`, which holds an unlocked encrypted vault, in memory only.
     case records
+    /// `EncryptedVaultStore`: the record store, saving to its slot of an encrypted vault file on every change. The
+    /// file is in memory, to keep the suite fast; `EncryptedVaultStoreTests` cover it on disk.
+    case encrypted
 
     var testDescription: String {
         switch self {
         case .swiftData: "SwiftData"
         case .swiftDataSQLite: "SwiftData on SQLite"
         case .records: "records"
+        case .encrypted: "encrypted"
         }
     }
 
@@ -50,6 +54,8 @@ enum VaultStoreEngine: CaseIterable, Sendable, CustomTestStringConvertible {
             return store
         case .records:
             return RecordVaultStore(sortOrder: sortOrder)
+        case .encrypted:
+            return try EncryptedVaultFixture().openStore(sortOrder: sortOrder)
         }
     }
 }
@@ -146,6 +152,52 @@ extension RecordVaultStore: ContractTestableVaultStore {
 
     func storedItemIDs() -> Set<UUID> {
         state.items.reducedToSet(\.id)
+    }
+}
+
+// MARK: - Encrypted
+
+/// Every way the suite looks inside the store also checks that what's saved in the file is exactly what's in memory.
+extension EncryptedVaultStore: ContractTestableVaultStore {
+    func updateSortOrder(_ order: VaultStoreSortOrder) async {
+        await records.updateSortOrder(order)
+    }
+
+    func updateCurrentDate(_ currentDate: @escaping @Sendable () -> Date) async {
+        await records.updateCurrentDate(currentDate)
+    }
+
+    func allVaultItems() async throws -> [VaultItem] {
+        let decoder = PersistedVaultItemDecoder()
+        return try await requireSavedState().items.map { try decoder.decode(record: $0) }
+    }
+
+    func allVaultTags() async throws -> [VaultItemTag] {
+        let decoder = PersistedVaultTagDecoder()
+        return try await requireSavedState().tags.map { try decoder.decode(record: $0) }
+    }
+
+    func corruptItemAlgorithm(id: Identifier<VaultItem>) async throws {
+        var state = await records.state
+        let index = try #require(state.items.firstIndex { $0.id == id.rawValue }, "Item not found")
+        state.items[index].otpDetails?.algorithm = "INVALID"
+        try await records.commit(state)
+    }
+
+    func storedItemIDs() async throws -> Set<UUID> {
+        try await requireSavedState().items.reducedToSet(\.id)
+    }
+
+    /// The state in memory, after checking the vault's slot of the file holds exactly the same.
+    func requireSavedState(sourceLocation: SourceLocation = #_sourceLocation) async throws -> VaultRecordState {
+        let persistence = try #require(await records.persistence as? SlotFilePersistence)
+        let contents = try #require(try persistence.file.open())
+        let slot = try contents.reopen(persistence.slot)
+        let saved = try EncryptedVaultPayload.decode(contents.openPayload(of: slot))
+        let state = await records.state
+        #expect(slot.generation == persistence.slot.generation, sourceLocation: sourceLocation)
+        #expect(saved == state, "The file doesn't hold what's in memory", sourceLocation: sourceLocation)
+        return state
     }
 }
 

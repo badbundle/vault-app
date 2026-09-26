@@ -26,7 +26,7 @@ public enum VaultSlotCompression: UInt32, CaseIterable, Sendable {
     func compress(_ data: Data) throws -> Data {
         switch self {
         case .none: Data(data)
-        case .lzfse: try StreamingCompression.process(data, operation: COMPRESSION_STREAM_ENCODE)
+        case .lzfse: try StreamingCompression.compress(data)
         }
     }
 
@@ -34,14 +34,41 @@ public enum VaultSlotCompression: UInt32, CaseIterable, Sendable {
     func decompress(_ data: Data) throws -> Data {
         switch self {
         case .none: Data(data)
-        case .lzfse: try StreamingCompression.process(data, operation: COMPRESSION_STREAM_DECODE)
+        case .lzfse: try StreamingCompression.decompress(data)
         }
     }
 }
 
-/// LZFSE through `compression_stream`, 64 KiB of output at a time.
+/// LZFSE through `compression_stream`, 64 KiB at a time.
+///
+/// The output's capacity is set before it's filled, so it never grows by reallocating, which would leave copies of
+/// the payload in freed memory. The 64 KiB scratch buffer is wiped before it's freed.
 private enum StreamingCompression {
-    static func process(_ input: Data, operation: compression_stream_operation) throws -> Data {
+    static let chunkSize = 1 << 16
+
+    /// LZFSE stores a block it can't shrink as it is, so the output is never more than a chunk longer than the
+    /// input.
+    static func compress(_ input: Data) throws -> Data {
+        var output = Data(capacity: input.count + chunkSize)
+        try process(input, operation: COMPRESSION_STREAM_ENCODE) { output.append($0) }
+        return output
+    }
+
+    /// Decompresses twice: once to measure the output, and again to fill it. Decompressing is the cheap direction.
+    static func decompress(_ input: Data) throws -> Data {
+        var length = 0
+        try process(input, operation: COMPRESSION_STREAM_DECODE) { length += $0.count }
+        var output = Data(capacity: length)
+        try process(input, operation: COMPRESSION_STREAM_DECODE) { output.append($0) }
+        return output
+    }
+
+    /// Runs `input` through the stream, handing each chunk of output to `receive`.
+    private static func process(
+        _ input: Data,
+        operation: compression_stream_operation,
+        receive: (UnsafeBufferPointer<UInt8>) -> Void,
+    ) throws {
         let stream = UnsafeMutablePointer<compression_stream>.allocate(capacity: 1)
         defer { stream.deallocate() }
         guard compression_stream_init(stream, operation, COMPRESSION_LZFSE) == COMPRESSION_STATUS_OK else {
@@ -49,23 +76,24 @@ private enum StreamingCompression {
         }
         defer { compression_stream_destroy(stream) }
 
-        let bufferSize = 1 << 16
-        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
-        defer { buffer.deallocate() }
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: chunkSize)
+        defer {
+            _ = memset_s(buffer, chunkSize, 0, chunkSize)
+            buffer.deallocate()
+        }
         let finalize = Int32(bitPattern: COMPRESSION_STREAM_FINALIZE.rawValue)
 
-        var output = Data()
         let finished = input.withUnsafeBytes { source -> Bool in
             // The source pointer can't be nil, even when there's nothing to read.
             stream.pointee.src_ptr = source.bindMemory(to: UInt8.self).baseAddress ?? UnsafePointer(buffer)
             stream.pointee.src_size = source.count
             while true {
                 stream.pointee.dst_ptr = buffer
-                stream.pointee.dst_size = bufferSize
+                stream.pointee.dst_size = chunkSize
                 let remaining = stream.pointee.src_size
                 let status = compression_stream_process(stream, finalize)
-                let produced = bufferSize - stream.pointee.dst_size
-                output.append(buffer, count: produced)
+                let produced = chunkSize - stream.pointee.dst_size
+                receive(UnsafeBufferPointer(start: buffer, count: produced))
                 switch status {
                 case COMPRESSION_STATUS_END:
                     return true
@@ -80,6 +108,5 @@ private enum StreamingCompression {
             }
         }
         guard finished else { throw VaultSlotFileError.compressionFailed }
-        return output
     }
 }

@@ -116,11 +116,123 @@ struct RecordVaultStoreTests {
     }
 }
 
+// MARK: - Persistence
+
+extension RecordVaultStoreTests {
+    @Test
+    func everyChange_isSavedBeforeItsPublished() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+
+        let tag = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
+        let id = try await sut.insert(item: uniqueVaultItem(tags: [tag]).makeWritable())
+        try await sut.incrementCounter(id: id)
+        try await sut.deleteTag(id: tag)
+        try await sut.delete(id: id)
+
+        let saved = persistence.saved
+        #expect(saved.count == 5)
+        #expect(saved.last == .empty)
+        #expect(await sut.state == .empty)
+    }
+
+    @Test
+    func failedSave_throwsAndLeavesTheStateUnchanged() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+        try await sut.insert(item: uniqueVaultItem().makeWritable())
+        let before = await sut.state
+        persistence.nextOutcome = .failure(TestError())
+
+        await #expect(throws: TestError.self) {
+            try await sut.insert(item: uniqueVaultItem().makeWritable())
+        }
+
+        #expect(await sut.state == before)
+    }
+
+    @Test
+    func conflictingSave_throwsAndTakesWhatTheOtherWriterSaved() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+        try await sut.insert(item: uniqueVaultItem().makeWritable())
+        let otherWriters = try VaultRecordState(
+            items: [PersistedVaultItemEncoder().encode(item: uniqueVaultItem().makeWritable())],
+            tags: [],
+        )
+        persistence.nextOutcome = .success(.conflict(saved: otherWriters))
+
+        await #expect(throws: EncryptedVaultStoreError.conflict) {
+            try await sut.insert(item: uniqueVaultItem().makeWritable())
+        }
+
+        #expect(await sut.state == otherWriters)
+    }
+
+    @Test
+    func deleteItemsMatchingKillphrase_returnsFalseWhenTheSaveFails() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+        let matching = uniqueVaultItem(killphrase: "red")
+        try await sut.importAndOverrideVault(payload: .init(userDescription: "", items: [matching], tags: []))
+        let before = await sut.state
+        persistence.nextOutcome = .failure(TestError())
+
+        let didDelete = await sut.deleteItems(matchingKillphrase: "red", using: testDigester)
+
+        #expect(!didDelete)
+        #expect(await sut.state == before)
+    }
+
+    @Test
+    func deleteItemsMatchingKillphrase_returnsFalseOnAConflict() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+        let matching = uniqueVaultItem(killphrase: "red")
+        try await sut.importAndOverrideVault(payload: .init(userDescription: "", items: [matching], tags: []))
+        let otherWriters = await sut.state
+        persistence.nextOutcome = .success(.conflict(saved: otherWriters))
+
+        let didDelete = await sut.deleteItems(matchingKillphrase: "red", using: testDigester)
+
+        #expect(!didDelete)
+        #expect(await sut.state == otherWriters)
+    }
+}
+
 // MARK: - Helpers
 
 extension RecordVaultStoreTests {
     /// An item holding a decrypted recovery phrase, which no store may write.
     private func plaintextRecoveryPhrase() -> VaultItem {
         VaultItem(metadata: anyVaultItemMetadata(), item: .recoveryPhrase(anyRecoveryPhrase()))
+    }
+
+    private struct TestError: Error {}
+
+    /// Records every state it's asked to save, and gives the outcome it's told to for the next one.
+    private final class ScriptedPersistence: VaultRecordPersistence {
+        private let log = SharedMutex([VaultRecordState]())
+        private let outcome = SharedMutex(Result<VaultRecordSaveOutcome, any Error>.success(.saved))
+
+        /// Every state saved, or attempted, in order.
+        var saved: [VaultRecordState] {
+            log.value
+        }
+
+        /// What the next save gives. Later saves succeed.
+        var nextOutcome: Result<VaultRecordSaveOutcome, any Error> {
+            get { outcome.value }
+            set { outcome.modify { $0 = newValue } }
+        }
+
+        func save(_ state: VaultRecordState) throws -> VaultRecordSaveOutcome {
+            log.modify { $0.append(state) }
+            let result = outcome.modify { outcome in
+                defer { outcome = .success(.saved) }
+                return outcome
+            }
+            return try result.get()
+        }
     }
 }

@@ -15,11 +15,12 @@ struct VaultRecordState: Equatable, Sendable {
 ///
 /// It implements every vault store protocol with the same behavior as `PersistedLocalVaultStore`, down to the
 /// quirks. `VaultStoreContractTests` run one suite against both stores, and `VaultStoreDifferentialTests` run random
-/// sequences of operations on both and compare every result. This is the store that holds an unlocked encrypted
-/// vault (see `docs/on-device-encryption.md`).
+/// sequences of operations on both and compare every result. It's what holds an unlocked encrypted vault, inside
+/// `EncryptedVaultStore` (see `docs/on-device-encryption.md`).
 ///
-/// Every change builds the new state from the current one and only then replaces it, so a change that fails part
-/// way through leaves the store exactly as it was.
+/// Every change builds the new state from the current one, saves it through `persistence` if there is one, and only
+/// then replaces it. So a change that fails part way through, or fails to save, leaves the store exactly as it was.
+/// Nothing between building the new state and publishing it suspends, so changes can't interleave.
 actor RecordVaultStore {
     enum Error: Swift.Error, Equatable {
         case itemNotFound
@@ -40,14 +41,19 @@ actor RecordVaultStore {
     /// The current time, for the created and updated dates of writes. Tests set it to make dates predictable.
     var currentDate: @Sendable () -> Date
 
+    /// Where each new state is saved before it's published, or `nil` to keep the vault in memory only.
+    private(set) var persistence: (any VaultRecordPersistence)?
+
     init(
         state: VaultRecordState = .empty,
         sortOrder: VaultStoreSortOrder = .relativeOrder,
         currentDate: @escaping @Sendable () -> Date = { Date() },
+        persistence: (any VaultRecordPersistence)? = nil,
     ) {
         self.state = state
         self.sortOrder = sortOrder
         self.currentDate = currentDate
+        self.persistence = persistence
     }
 }
 
@@ -178,7 +184,7 @@ extension RecordVaultStore: VaultStoreWriter {
         var newState = state
         let record = try PersistedVaultItemEncoder(currentDate: currentDate).encode(item: item)
         newState.upsert(record)
-        commit(newState)
+        try commit(newState)
         return Identifier(id: record.id)
     }
 
@@ -189,13 +195,13 @@ extension RecordVaultStore: VaultStoreWriter {
         }
         let record = try PersistedVaultItemEncoder(currentDate: currentDate).encode(item: item, existing: existing)
         newState.upsert(record)
-        commit(newState)
+        try commit(newState)
     }
 
     func delete(id: Identifier<VaultItem>) async throws {
         var newState = state
         newState.items.removeAll { $0.id == id.rawValue }
-        commit(newState)
+        try commit(newState)
     }
 }
 
@@ -214,7 +220,7 @@ extension RecordVaultStore: VaultStoreHOTPIncrementer {
         }
         otp.counter = otp.counter.map { $0 + 1 }
         newState.items[index].otpDetails = otp
-        commit(newState)
+        try commit(newState)
     }
 }
 
@@ -243,7 +249,7 @@ extension RecordVaultStore: VaultStoreReorderable {
         for index in newState.items.indices {
             newState.items[index].relativeOrder = relativeOrders[newState.items[index].id] ?? 0
         }
-        commit(newState)
+        try commit(newState)
     }
 }
 
@@ -287,7 +293,7 @@ extension RecordVaultStore: VaultTagStoreWriter {
         var newState = state
         let record = PersistedVaultTagEncoder().encode(tag: item)
         newState.upsert(record)
-        commit(newState)
+        try commit(newState)
         return Identifier(id: record.id)
     }
 
@@ -297,7 +303,7 @@ extension RecordVaultStore: VaultTagStoreWriter {
             throw Error.tagNotFound
         }
         newState.upsert(PersistedVaultTagEncoder().encode(tag: item, existing: existing))
-        commit(newState)
+        try commit(newState)
     }
 
     /// Deletes the tag and removes it from every item that carries it. Does nothing if there's no such tag.
@@ -307,7 +313,7 @@ extension RecordVaultStore: VaultTagStoreWriter {
         for index in newState.items.indices {
             newState.items[index].tagIDs.remove(id.id)
         }
-        commit(newState)
+        try commit(newState)
     }
 }
 
@@ -328,7 +334,7 @@ extension RecordVaultStore: VaultStoreImporter {
 
         var newState = state
         try newState.importing(tags: payload.tags, items: itemsToImport, currentDate: currentDate)
-        commit(newState)
+        try commit(newState)
     }
 
     /// Replaces the whole vault with the payload.
@@ -338,7 +344,7 @@ extension RecordVaultStore: VaultStoreImporter {
     func importAndOverrideVault(payload: VaultApplicationPayload) async throws {
         var newState = VaultRecordState.empty
         try newState.importing(tags: payload.tags, items: payload.items, currentDate: currentDate)
-        commit(newState)
+        try commit(newState)
     }
 }
 
@@ -346,7 +352,7 @@ extension RecordVaultStore: VaultStoreImporter {
 
 extension RecordVaultStore: VaultStoreDeleter {
     func deleteVault() async throws {
-        commit(.empty)
+        try commit(.empty)
     }
 }
 
@@ -370,7 +376,12 @@ extension RecordVaultStore: VaultStoreKillphraseDeleter {
 
         var newState = state
         newState.items.removeAll { idsToDelete.contains($0.id) }
-        commit(newState)
+        do {
+            try commit(newState)
+        } catch {
+            // A failure to save reads as "nothing matched", like every other way this finds nothing (MANIFESTO C2).
+            return false
+        }
         return true
     }
 }
@@ -378,8 +389,18 @@ extension RecordVaultStore: VaultStoreKillphraseDeleter {
 // MARK: - Helpers
 
 extension RecordVaultStore {
-    private func commit(_ newState: VaultRecordState) {
-        state = newState
+    /// Saves the new state, then publishes it.
+    ///
+    /// If another writer saved first, this takes what it saved as the state, so trying again starts from there, and
+    /// throws `EncryptedVaultStoreError.conflict`. Tests also call it, to save states the operations can't produce.
+    func commit(_ newState: VaultRecordState) throws {
+        switch try persistence?.save(newState) ?? .saved {
+        case .saved:
+            state = newState
+        case let .conflict(saved):
+            state = saved
+            throw EncryptedVaultStoreError.conflict
+        }
     }
 }
 

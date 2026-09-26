@@ -24,9 +24,12 @@ public struct VaultSlotFile: Equatable, Sendable {
     public static let slotCount = 16
     /// The slot size of a new file. It holds about 3,500 typical items once compressed.
     public static let minimumSlotSize = 1 << 20
-    /// The largest slot size growth goes to, 64 MiB, which makes a 1 GiB file. A payload that doesn't fit is
-    /// refused.
-    public static let maximumSlotSize = 1 << 26
+    /// The largest slot size growth goes to: 4 MiB, which holds about 14,000 typical items and makes a 64 MiB file.
+    /// A payload that doesn't fit is refused.
+    ///
+    /// It bounds memory as well as the file: a save holds the whole file twice at its peak, the new file and the copy
+    /// read back to verify it, which is 128 MiB at this size.
+    public static let maximumSlotSize = 1 << 22
 
     /// The indices of the slots.
     public static var slotIndices: Range<Int> {
@@ -239,7 +242,8 @@ extension VaultSlotFile {
         compression: VaultSlotCompression = .lzfse,
     ) throws -> OpenedSlot {
         precondition(Self.slotIndices.contains(index), "Slot index out of range")
-        let compressed = try compression.compress(payload.data)
+        var compressed = try compression.compress(payload.data)
+        defer { SlotRandom.wipe(&compressed) }
         let slotSize = try slotSize(fittingCompressedLength: compressed.count)
         let slotNonce = SlotRandom.bytes(count: Self.slotNonceLength)
         let slot = OpenedSlot(
@@ -274,7 +278,8 @@ extension VaultSlotFile {
         compression: VaultSlotCompression = .lzfse,
     ) throws -> OpenedSlot {
         let current = try requireUnchanged(slot)
-        let compressed = try compression.compress(payload.data)
+        var compressed = try compression.compress(payload.data)
+        defer { SlotRandom.wipe(&compressed) }
         let slotSize = try slotSize(fittingCompressedLength: compressed.count)
         let sealed = OpenedSlot(
             index: current.index,
