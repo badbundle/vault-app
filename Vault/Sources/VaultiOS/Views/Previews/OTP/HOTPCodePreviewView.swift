@@ -1,6 +1,5 @@
 import SwiftUI
 import VaultFeed
-import VaultiOSShared
 
 @MainActor
 struct HOTPCodePreviewView<ButtonView: View>: View {
@@ -18,7 +17,7 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
             labelsStack
 
             // Code section - prominent
-            codeText
+            OTPPreviewCodeText(codeState: previewViewModel.code, behaviour: behaviour)
                 .padding(.vertical, 12)
 
             Spacer(minLength: 0)
@@ -98,16 +97,6 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
         }
     }
 
-    private var codeText: some View {
-        OTPCodeTextView(codeState: behaviour != .normal ? .notReady : previewViewModel.code)
-            .font(.system(.largeTitle, design: .monospaced))
-            .fontWeight(.heavy)
-            .minimumScaleFactor(0.5)
-            .lineLimit(1)
-            .foregroundStyle(isEditing ? .white : .primary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
     private var timerSection: some View {
         HStack(alignment: .bottom, spacing: 4) {
             CodeStateTimerBarView(
@@ -121,6 +110,10 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
             buttonView
                 .disabled(!canLoadNextCode)
         }
+        // The row takes only the bar's height, with the taller refresh button
+        // rising into the space above it, so the rest of the card has exactly
+        // the room it has in a TOTP card and lays out the same way.
+        .frame(height: 12, alignment: .bottom)
         .animation(.snappy, value: canLoadNextCode)
     }
 

@@ -1,7 +1,6 @@
 import Combine
 import SwiftUI
 import VaultFeed
-import VaultiOSShared
 import VaultKeygen
 
 @MainActor
@@ -20,7 +19,7 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
             labelsStack
 
             // Code section - prominent
-            codeSection
+            OTPPreviewCodeText(codeState: previewViewModel.code, behaviour: behaviour)
                 .padding(.vertical, 12)
 
             Spacer(minLength: 0)
@@ -86,16 +85,6 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(isEditing ? .white.opacity(0.8) : previewViewModel.color.color.opacity(0.7))
         }
-    }
-
-    private var codeSection: some View {
-        OTPCodeTextView(codeState: behaviour != .normal ? .notReady : previewViewModel.code)
-            .font(.system(.largeTitle, design: .monospaced))
-            .fontWeight(.heavy)
-            .minimumScaleFactor(0.5)
-            .lineLimit(1)
-            .foregroundStyle(isEditing ? .white : .primary)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder
