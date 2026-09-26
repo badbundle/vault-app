@@ -1,8 +1,9 @@
 import Foundation
+import SwiftData
 
 // Copies between the SwiftData models and the plain records every store shares. Each copy is field for field, so
-// a record read back from a model it was written to is equal to the original (apart from tag ids that name no
-// stored tag, which the store drops).
+// a record read back from a model it was written to, or applied to, is equal to the original (apart from tag ids
+// that name no stored tag, which the store drops).
 
 // MARK: - Items
 
@@ -33,6 +34,65 @@ extension PersistedVaultItem {
             otpDetails: record.otpDetails.map(PersistedOTPDetails.init(record:)),
             encryptedItemDetails: record.encryptedItemDetails.map(PersistedEncryptedItemDetails.init(record:)),
         )
+    }
+
+    /// Updates this model in place to hold the record's fields, replacing its tags and details.
+    ///
+    /// A detail of the same kind is updated in place; one the record no longer has is deleted from `context`, so
+    /// no orphaned detail (an old secret, say) stays in the store.
+    ///
+    /// - Parameter tags: The stored tags that `record.tagIDs` name.
+    /// - Precondition: `record.id` is this item's id.
+    func apply(_ record: VaultItemRecord, tags: [PersistedVaultTag], in context: ModelContext) {
+        precondition(record.id == id, "An item record can only be applied to the item it describes")
+        relativeOrder = record.relativeOrder
+        createdDate = record.createdDate
+        updatedDate = record.updatedDate
+        userDescription = record.userDescription
+        visibility = record.visibility
+        searchableLevel = record.searchableLevel
+        searchPassphraseSalt = record.searchPassphraseSalt
+        searchPassphraseDigest = record.searchPassphraseDigest
+        killphraseSalt = record.killphraseSalt
+        killphraseDigest = record.killphraseDigest
+        lockState = record.lockState
+        color = record.color
+        showInQuickType = record.showInQuickType
+        previewMode = record.previewMode
+        self.tags = tags
+
+        if let note = record.noteDetails {
+            if let existing = noteDetails {
+                existing.apply(note)
+            } else {
+                noteDetails = PersistedNoteDetails(record: note)
+            }
+        } else if let existing = noteDetails {
+            noteDetails = nil
+            context.delete(existing)
+        }
+
+        if let otp = record.otpDetails {
+            if let existing = otpDetails {
+                existing.apply(otp)
+            } else {
+                otpDetails = PersistedOTPDetails(record: otp)
+            }
+        } else if let existing = otpDetails {
+            otpDetails = nil
+            context.delete(existing)
+        }
+
+        if let encrypted = record.encryptedItemDetails {
+            if let existing = encryptedItemDetails {
+                existing.apply(encrypted)
+            } else {
+                encryptedItemDetails = PersistedEncryptedItemDetails(record: encrypted)
+            }
+        } else if let existing = encryptedItemDetails {
+            encryptedItemDetails = nil
+            context.delete(existing)
+        }
     }
 
     /// The model's fields as a record.
@@ -69,6 +129,12 @@ extension PersistedNoteDetails {
     func makeRecord() -> VaultItemRecord.NoteDetails {
         VaultItemRecord.NoteDetails(title: title, contents: contents, format: format)
     }
+
+    func apply(_ record: VaultItemRecord.NoteDetails) {
+        title = record.title
+        contents = record.contents
+        format = record.format
+    }
 }
 
 extension PersistedOTPDetails {
@@ -99,6 +165,18 @@ extension PersistedOTPDetails {
             secretFormat: secretFormat,
         )
     }
+
+    func apply(_ record: VaultItemRecord.OTPDetails) {
+        accountName = record.accountName
+        issuer = record.issuer
+        algorithm = record.algorithm
+        authType = record.authType
+        counter = record.counter
+        digits = record.digits
+        period = record.period
+        secretData = record.secretData
+        secretFormat = record.secretFormat
+    }
 }
 
 extension PersistedEncryptedItemDetails {
@@ -124,6 +202,16 @@ extension PersistedEncryptedItemDetails {
             keygenSalt: keygenSalt,
             keygenSignature: keygenSignature,
         )
+    }
+
+    func apply(_ record: VaultItemRecord.EncryptedItemDetails) {
+        version = record.version
+        title = record.title
+        data = record.data
+        authentication = record.authentication
+        encryptionIV = record.encryptionIV
+        keygenSalt = record.keygenSalt
+        keygenSignature = record.keygenSignature
     }
 }
 

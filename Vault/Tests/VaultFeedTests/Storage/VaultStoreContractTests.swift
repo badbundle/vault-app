@@ -6,34 +6,30 @@ import Testing
 import VaultCore
 @testable import VaultFeed
 
-final class PersistedLocalVaultStoreTests {
-    private var sut: PersistedLocalVaultStore
-
-    init() async throws {
-        let container = try ModelContainer(
-            for: PersistedVaultItem.self,
-            configurations: .init(isStoredInMemoryOnly: true),
-        )
-        sut = PersistedLocalVaultStore(modelContainer: container)
-        await sut.updateSortOrder(.createdDate)
-    }
-
-    @Test
-    func retrieveAll_deliversEmptyOnEmptyStore() async throws {
+/// The behavior every vault store must have, run against each store (`VaultStoreEngine`).
+///
+/// Each test gets a new, empty store sorting by created date, so items come back in the order they were
+/// inserted unless the test changes the sort order.
+struct VaultStoreContractTests {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveAll_deliversEmptyOnEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let result = try await sut.retrieve(query: .init())
         #expect(result == .empty())
     }
 
-    @Test
-    func retrieveAll_hasNoSideEffectsOnEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveAll_hasNoSideEffectsOnEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let result1 = try await sut.retrieve(query: .init())
         #expect(result1 == .empty())
         let result2 = try await sut.retrieve(query: .init())
         #expect(result2 == .empty())
     }
 
-    @Test
-    func retrieveAll_deliversSingleCodeOnNonEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveAll_deliversSingleCodeOnNonEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = uniqueVaultItem().makeWritable()
         try await sut.insert(item: code)
 
@@ -42,8 +38,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveAll_deliversMultipleCodesOnNonEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveAll_deliversMultipleCodesOnNonEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             uniqueVaultItem().makeWritable(),
             uniqueVaultItem().makeWritable(),
@@ -58,8 +55,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveAll_hasNoSideEffectsOnNonEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveAll_hasNoSideEffectsOnNonEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             uniqueVaultItem().makeWritable(),
             uniqueVaultItem().makeWritable(),
@@ -77,8 +75,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result2.errors == [])
     }
 
-    @Test
-    func retrieveAll_doesNotReturnSearchOnlyItems() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveAll_doesNotReturnSearchOnlyItems(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             uniqueVaultItem(visibility: .onlySearch).makeWritable(),
             uniqueVaultItem(visibility: .onlySearch).makeWritable(),
@@ -93,8 +92,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors.isEmpty == true)
     }
 
-    @Test
-    func retrieveAll_returnsAlwaysVisibleItems() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveAll_returnsAlwaysVisibleItems(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             uniqueVaultItem(visibility: .always).makeWritable(),
             uniqueVaultItem(visibility: .onlySearch).makeWritable(),
@@ -109,8 +109,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveAll_relativeOrderReturnsItemsInRelativeOrder() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveAll_relativeOrderReturnsItemsInRelativeOrder(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         await sut.updateSortOrder(.relativeOrder)
 
         let codes: [VaultItem.Write] = [
@@ -139,8 +140,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveAll_returnsCorruptedItemsAsErrors() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveAll_returnsCorruptedItemsAsErrors(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             uniqueVaultItem().makeWritable(),
             uniqueVaultItem().makeWritable(),
@@ -160,8 +162,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [.failedToDecode(.invalidAlgorithm)])
     }
 
-    @Test
-    func retrieveAll_returnsAllItemsCorrupted() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveAll_returnsAllItemsCorrupted(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             uniqueVaultItem().makeWritable(),
             uniqueVaultItem().makeWritable(),
@@ -182,24 +185,27 @@ final class PersistedLocalVaultStoreTests {
         ])
     }
 
-    @Test
-    func retrieveMatchingQuery_returnsEmptyOnEmptyStoreAndEmptyQuery() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_returnsEmptyOnEmptyStoreAndEmptyQuery(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let query = VaultStoreQuery(filterText: "")
         let result = try await sut.retrieve(query: query)
         #expect(result.items == [])
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_returnsEmptyOnEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_returnsEmptyOnEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let query = VaultStoreQuery(filterText: "any")
         let result = try await sut.retrieve(query: query)
         #expect(result.items == [])
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_hasNoSideEffectsOnEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_hasNoSideEffectsOnEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let query = VaultStoreQuery(filterText: "any")
         let result1 = try await sut.retrieve(query: query)
         #expect(result1.items == [])
@@ -209,8 +215,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result2.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_returnsEmptyForNoQueryMatches() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_returnsEmptyForNoQueryMatches(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem().makeWritable(),
             anyOTPAuthCode().wrapInAnyVaultItem().makeWritable(),
@@ -225,8 +232,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_deliversSingleMatchOnMatchingQuery() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_deliversSingleMatchOnMatchingQuery(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem(userDescription: "yes").makeWritable(),
             anyOTPAuthCode().wrapInAnyVaultItem().makeWritable(),
@@ -242,8 +250,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_hasNoSideEffectsOnSingleMatch() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_hasNoSideEffectsOnSingleMatch(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem(userDescription: "yes").makeWritable(),
             anyOTPAuthCode().wrapInAnyVaultItem(userDescription: "no").makeWritable(),
@@ -264,8 +273,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result2.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_deliversMultipleMatchesOnMatchingQuery() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_deliversMultipleMatchesOnMatchingQuery(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem().makeWritable(),
             anyOTPAuthCode().wrapInAnyVaultItem().makeWritable(),
@@ -287,8 +297,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_matchesUserDescription() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_matchesUserDescription(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anyOTPAuthCode().wrapInAnyVaultItem().makeWritable(),
             uniqueVaultItem().makeWritable(),
@@ -311,8 +322,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_matchesOTPAccountName() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_matchesOTPAccountName(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem().makeWritable(),
             anyOTPAuthCode(accountName: "a").wrapInAnyVaultItem().makeWritable(),
@@ -330,8 +342,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_matchesOTPIssuer() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_matchesOTPIssuer(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem().makeWritable(),
             anyOTPAuthCode(issuerName: "a").wrapInAnyVaultItem().makeWritable(),
@@ -349,8 +362,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_matchesNoteDetailsTitle() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_matchesNoteDetailsTitle(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem().makeWritable(),
             anySecureNote(title: "a").wrapInAnyVaultItem().makeWritable(),
@@ -368,8 +382,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_skipsNonSearchableNoteTitle() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_skipsNonSearchableNoteTitle(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem().makeWritable(),
             anySecureNote(title: "a").wrapInAnyVaultItem(searchableLevel: .none).makeWritable(), // skipped
@@ -387,8 +402,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_matchesNoteDetailsContents() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_matchesNoteDetailsContents(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem().makeWritable(),
             anySecureNote(contents: "a").wrapInAnyVaultItem().makeWritable(),
@@ -406,8 +422,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_skipsNonSearchableNoteContents() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_skipsNonSearchableNoteContents(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem().makeWritable(),
             anySecureNote(contents: "a").wrapInAnyVaultItem(searchableLevel: .none).makeWritable(), // skipped
@@ -425,8 +442,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_matchesEncryptedItemTitle() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_matchesEncryptedItemTitle(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anyEncryptedItem(title: "a").wrapInAnyVaultItem().makeWritable(),
             anyEncryptedItem(title: "b").wrapInAnyVaultItem().makeWritable(),
@@ -444,8 +462,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_skipsNonSearchableEncryptedItemTitles() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_skipsNonSearchableEncryptedItemTitles(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anyEncryptedItem(title: "a").wrapInAnyVaultItem(searchableLevel: .none).makeWritable(), // skipped
             anyEncryptedItem(title: "b").wrapInAnyVaultItem().makeWritable(),
@@ -463,8 +482,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_filtersByTagsAsWell() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_filtersByTagsAsWell(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let tag1 = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
 
         let codes: [VaultItem.Write] = [
@@ -485,8 +505,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_combinesResultsFromDifferentFields() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_combinesResultsFromDifferentFields(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem(userDescription: "a").makeWritable(),
             anySecureNote(title: "aa").wrapInAnyVaultItem().makeWritable(),
@@ -505,8 +526,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_returnsMatchesForAllQueryStates() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_returnsMatchesForAllQueryStates(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote().wrapInAnyVaultItem(userDescription: "a", visibility: .onlySearch).makeWritable(),
             anySecureNote(title: "aa").wrapInAnyVaultItem(visibility: .always).makeWritable(),
@@ -525,8 +547,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_doesNotReturnNotesSearchingByContent() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_doesNotReturnNotesSearchingByContent(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote(contents: "aaa").wrapInAnyVaultItem(searchableLevel: .onlyTitle).makeWritable(),
             anySecureNote(contents: "aaa").wrapInAnyVaultItem(searchableLevel: .onlyPassphrase).makeWritable(),
@@ -543,8 +566,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_returnsNoteContentsIfEnabled() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_returnsNoteContentsIfEnabled(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote(contents: "aaa").wrapInAnyVaultItem(searchableLevel: .onlyTitle).makeWritable(),
             anySecureNote(contents: "aaa").wrapInAnyVaultItem(searchableLevel: .onlyPassphrase).makeWritable(),
@@ -560,8 +584,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_doesNotSearchContentsIfLocked() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_doesNotSearchContentsIfLocked(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote(contents: "aaa").wrapInAnyVaultItem(lockState: .notLocked).makeWritable(),
             anySecureNote(contents: "aaa").wrapInAnyVaultItem(lockState: .lockedWithNativeSecurity).makeWritable(),
@@ -577,8 +602,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_doesSearchTitleIfLocked() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_doesSearchTitleIfLocked(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote(title: "aaa").wrapInAnyVaultItem(lockState: .notLocked).makeWritable(),
             anySecureNote(title: "aaa").wrapInAnyVaultItem(lockState: .lockedWithNativeSecurity).makeWritable(),
@@ -594,8 +620,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_returnsItemsSearchingByTitle() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_returnsItemsSearchingByTitle(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anySecureNote(title: "aaa").wrapInAnyVaultItem(searchableLevel: .onlyTitle).makeWritable(),
             anyOTPAuthCode(accountName: "aaa").wrapInAnyVaultItem(searchableLevel: .onlyTitle).makeWritable(),
@@ -610,8 +637,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_titleOnlyMatchesOTPFields() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_titleOnlyMatchesOTPFields(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anyOTPAuthCode(accountName: "aaa").wrapInAnyVaultItem(searchableLevel: .onlyTitle).makeWritable(),
             anyOTPAuthCode(issuerName: "aaabbb").wrapInAnyVaultItem(searchableLevel: .onlyTitle).makeWritable(),
@@ -628,8 +656,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_requiresExactPassphraseMatchCaseInsensitive() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_requiresExactPassphraseMatchCaseInsensitive(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let digester = SearchPassphraseDigester(key: .zero())
         let codes: [VaultItem.Write] = [
             anySecureNote(title: "aaa").wrapInAnyVaultItem(
@@ -664,8 +693,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_returnsPassphraseMatches() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_returnsPassphraseMatches(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let digester = SearchPassphraseDigester(key: .zero())
         let codes: [VaultItem.Write] = [
             anySecureNote(title: "aaa").wrapInAnyVaultItem(searchableLevel: .full).makeWritable(),
@@ -697,8 +727,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_keepsOnlyPassphraseItemsHiddenWhenMatcherNil() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_keepsOnlyPassphraseItemsHiddenWhenMatcherNil(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let digester = SearchPassphraseDigester(key: .zero())
         // The hidden item's title matches the text query, so the text
         // predicate alone would leak it if searchableLevel were
@@ -722,8 +753,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(explicitNil.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_keepsOnlyPassphraseItemsHiddenForWrongPhrase() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_keepsOnlyPassphraseItemsHiddenForWrongPhrase(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let digester = SearchPassphraseDigester(key: .zero())
         let hiddenID = try await sut.insert(item: anySecureNote(title: "bbb").wrapInAnyVaultItem(
             searchableLevel: .onlyPassphrase,
@@ -741,8 +773,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingQuery_returnsCorruptedItemsAsErrors() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_returnsCorruptedItemsAsErrors(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anyOTPAuthCode(accountName: "aaa").wrapInAnyVaultItem().makeWritable(),
             anyOTPAuthCode(accountName: "aaa").wrapInAnyVaultItem().makeWritable(),
@@ -764,8 +797,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [.failedToDecode(.invalidAlgorithm)])
     }
 
-    @Test
-    func retrieveMatchingQuery_returnsAllItemsCorrupted() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingQuery_returnsAllItemsCorrupted(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes: [VaultItem.Write] = [
             anyOTPAuthCode(accountName: "aaa").wrapInAnyVaultItem().makeWritable(),
             anyOTPAuthCode(accountName: "aaa").wrapInAnyVaultItem().makeWritable(),
@@ -788,8 +822,9 @@ final class PersistedLocalVaultStoreTests {
         ])
     }
 
-    @Test
-    func retrieveMatchingTags_returnsMatchingAllItemsIfTagNotSpecified() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingTags_returnsMatchingAllItemsIfTagNotSpecified(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let tag1 = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
 
         let codes: [VaultItem.Write] = [
@@ -808,8 +843,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingTags_returnsMatchingAllTags() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingTags_returnsMatchingAllTags(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let tag1 = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
 
         let codes: [VaultItem.Write] = [
@@ -830,8 +866,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingTags_returnsMatchingTags_ANDSemantics() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingTags_returnsMatchingTags_ANDSemantics(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let tag1 = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
         let tag2 = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
 
@@ -856,8 +893,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result2.errors == [])
     }
 
-    @Test
-    func retrieveMatchingTags_returnsLimitedItemsMatchingTags() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingTags_returnsLimitedItemsMatchingTags(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let tag1 = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
         let tag2 = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
 
@@ -879,8 +917,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func retrieveMatchingTags_returnsLimitedItemsMatchingTagsMultiple() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveMatchingTags_returnsLimitedItemsMatchingTagsMultiple(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let tag1 = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
         let tag2 = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
         let codes: [VaultItem.Write] = [
@@ -901,15 +940,17 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func hasAnyItems_isFalseForNoItems() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func hasAnyItems_isFalseForNoItems(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let value = try await sut.hasAnyItems
 
         #expect(value == false)
     }
 
-    @Test
-    func hasAnyItems_returnsTrueForSingleItem() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func hasAnyItems_returnsTrueForSingleItem(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = anyOTPAuthCode().wrapInAnyVaultItem().makeWritable()
         try await sut.insert(item: code)
 
@@ -918,27 +959,31 @@ final class PersistedLocalVaultStoreTests {
         #expect(value == true)
     }
 
-    @Test
-    func hasAnyItems_returnsTrueForSingleLockedItem() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func hasAnyItems_returnsTrueForSingleLockedItem(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = anyOTPAuthCode().wrapInAnyVaultItem(visibility: .onlySearch, searchableLevel: .none).makeWritable()
         try await sut.insert(item: code)
 
         #expect(try await sut.hasAnyItems)
     }
 
-    @Test
-    func insert_deliversNoErrorOnEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func insert_deliversNoErrorOnEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         try await sut.insert(item: uniqueVaultItem().makeWritable())
     }
 
-    @Test
-    func insert_deliversNoErrorOnNonEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func insert_deliversNoErrorOnNonEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         try await sut.insert(item: uniqueVaultItem().makeWritable())
         try await sut.insert(item: uniqueVaultItem().makeWritable())
     }
 
-    @Test
-    func insert_doesNotOverrideExactSameEntryAsUsesNewIDToUnique() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func insert_doesNotOverrideExactSameEntryAsUsesNewIDToUnique(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = uniqueVaultItem().makeWritable()
 
         try await sut.insert(item: code)
@@ -949,8 +994,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func insert_returnsUniqueCodeIDAfterSuccessfulInsert() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func insert_returnsUniqueCodeIDAfterSuccessfulInsert(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = uniqueVaultItem().makeWritable()
 
         var ids = [Identifier<VaultItem>]()
@@ -964,8 +1010,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func insert_defaultRelativeOrderIsZero() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func insert_defaultRelativeOrderIsZero(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = uniqueVaultItem().makeWritable()
 
         try await sut.insert(item: code)
@@ -974,8 +1021,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.items.first?.metadata.relativeOrder == 0)
     }
 
-    @Test
-    func insert_keepsOnlyTagsThatAreStored() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func insert_keepsOnlyTagsThatAreStored(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let storedTagID = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
         let missingTagID = Identifier<VaultItemTag>(id: UUID())
         let code = uniqueVaultItem(tags: [storedTagID, missingTagID]).makeWritable()
@@ -986,8 +1034,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.items.map(\.metadata.tags) == [[storedTagID]])
     }
 
-    @Test
-    func deleteByID_hasNoEffectOnEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteByID_hasNoEffectOnEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         try await sut.delete(id: .new())
 
         let result = try await sut.retrieve(query: .init())
@@ -995,8 +1044,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func deleteByID_deletesSingleEntryMatchingID() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteByID_deletesSingleEntryMatchingID(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = uniqueVaultItem().makeWritable()
 
         let id = try await sut.insert(item: code)
@@ -1008,8 +1058,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func deleteByID_hasNoEffectOnNoMatchingCode() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteByID_hasNoEffectOnNoMatchingCode(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let otherCodes = [
             uniqueVaultItem().makeWritable(),
             uniqueVaultItem().makeWritable(),
@@ -1026,15 +1077,17 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func updateByID_deliversErrorIfCodeDoesNotAlreadyExist() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateByID_deliversErrorIfCodeDoesNotAlreadyExist(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         await #expect(throws: (any Error).self) {
             try await sut.update(id: Identifier<VaultItem>(), item: uniqueVaultItem().makeWritable())
         }
     }
 
-    @Test
-    func updateByID_hasNoEffectOnEmptyStorageIfCodeDoesNotAlreadyExist() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateByID_hasNoEffectOnEmptyStorageIfCodeDoesNotAlreadyExist(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         try? await sut.update(id: Identifier<VaultItem>(), item: uniqueVaultItem().makeWritable())
 
         let result = try await sut.retrieve(query: .init())
@@ -1042,8 +1095,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func updateByID_hasNoEffectOnNonEmptyStorageIfCodeDoesNotAlreadyExist() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateByID_hasNoEffectOnNonEmptyStorageIfCodeDoesNotAlreadyExist(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let codes = [
             uniqueVaultItem().makeWritable(),
             uniqueVaultItem().makeWritable(),
@@ -1060,8 +1114,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func updateByID_updatesDataForValidCode() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateByID_updatesDataForValidCode(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let initialCode = uniqueVaultItem().makeWritable()
         let id = try await sut.insert(item: initialCode)
 
@@ -1080,8 +1135,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func updateByID_hasNoSideEffectsOnOtherCodes() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateByID_hasNoSideEffectsOnOtherCodes(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let initialCodes = [
             uniqueVaultItem().makeWritable(),
             uniqueVaultItem().makeWritable(),
@@ -1101,8 +1157,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func updateByID_keepsDigestsLeftUnchanged() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateByID_keepsDigestsLeftUnchanged(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let killphrase = KillphraseDigest(salt: .random(count: 16), digest: .random(count: 32))
         let searchPassphrase = SearchPassphraseDigest(salt: .random(count: 16), digest: .random(count: 32))
         var initial = uniqueVaultItem().makeWritable()
@@ -1121,8 +1178,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(stored.metadata.searchPassphrase == searchPassphrase)
     }
 
-    @Test
-    func updateByID_keepsIDAndCreatedDate() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateByID_keepsIDAndCreatedDate(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let id = try await sut.insert(item: uniqueVaultItem().makeWritable())
         let before = try #require(try await sut.allVaultItems().first)
 
@@ -1134,18 +1192,47 @@ final class PersistedLocalVaultStoreTests {
         #expect(after.metadata.updated >= before.metadata.updated)
     }
 
-    @Test
-    func reorder_emptyItemsHasNoEffectOnEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateByID_removesTagsTheWriteNoLongerHas(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
+        let tagA = try await sut.insertTag(item: anyVaultItemTag(name: "A").makeWritable())
+        let tagB = try await sut.insertTag(item: anyVaultItemTag(name: "B").makeWritable())
+        let id = try await sut.insert(item: uniqueVaultItem(tags: [tagA, tagB]).makeWritable())
+
+        try await sut.update(id: id, item: uniqueVaultItem(tags: [tagA]).makeWritable())
+
+        let items = try await sut.retrieve(query: .init()).items
+        #expect(items.map(\.metadata.tags) == [[tagA]])
+    }
+
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateByID_canChangeTheKindOfItem(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
+        let note = VaultItem.Payload.secureNote(anySecureNote(title: "Note", contents: "Contents"))
+        let id = try await sut.insert(item: uniqueVaultItem(item: note).makeWritable())
+        let code = VaultItem.Payload.otpCode(anyOTPAuthCode(issuerName: "Issuer"))
+
+        try await sut.update(id: id, item: uniqueVaultItem(item: code).makeWritable())
+
+        let items = try await sut.allVaultItems()
+        #expect(items.map(\.item) == [code])
+    }
+
+    @Test(arguments: VaultStoreEngine.allCases)
+    func reorder_emptyItemsHasNoEffectOnEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         try await sut.reorder(items: [], to: .start)
     }
 
-    @Test
-    func reorder_nonEmptyItemsHasNoEffectOnEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func reorder_nonEmptyItemsHasNoEffectOnEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         try await sut.reorder(items: [.init(id: UUID())], to: .start)
     }
 
-    @Test
-    func reorder_reorderToAfterThrowsErrorIfItemDoesNotExist() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func reorder_reorderToAfterThrowsErrorIfItemDoesNotExist(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = uniqueVaultItem().makeWritable()
         let id = try await sut.insert(item: code)
 
@@ -1157,8 +1244,9 @@ final class PersistedLocalVaultStoreTests {
         }
     }
 
-    @Test
-    func reorder_reordersAllItemsIfMovingToStart() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func reorder_reordersAllItemsIfMovingToStart(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         await sut.updateSortOrder(.relativeOrder)
 
         let codes = [
@@ -1182,8 +1270,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func reorder_reordersAllIfMovingToAfterOtherItem() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func reorder_reordersAllIfMovingToAfterOtherItem(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         await sut.updateSortOrder(.relativeOrder)
 
         let codes = [
@@ -1207,16 +1296,18 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.errors == [])
     }
 
-    @Test
-    func exportVault_hasNoSideEffectsOnEmptyVault() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func exportVault_hasNoSideEffectsOnEmptyVault(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         _ = try await sut.exportVault(userDescription: "")
 
         let result = try await sut.retrieve(query: .init())
         #expect(result == .empty())
     }
 
-    @Test
-    func exportVault_hasNoSideEffectsOnNonEmptyVault() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func exportVault_hasNoSideEffectsOnNonEmptyVault(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let initialCodes = [
             uniqueVaultItem().makeWritable(),
             uniqueVaultItem().makeWritable(),
@@ -1232,8 +1323,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.items.count == 3)
     }
 
-    @Test
-    func exportVault_empty() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func exportVault_empty(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let export = try await sut.exportVault(userDescription: "my description!")
 
         #expect(export.userDescription == "my description!")
@@ -1241,8 +1333,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(export.tags == [])
     }
 
-    @Test
-    func exportVault_withContent() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func exportVault_withContent(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let items = [uniqueVaultItem(), uniqueVaultItem(), uniqueVaultItem()]
         var insertedIDs = [Identifier<VaultItem>]()
         for code in items {
@@ -1264,15 +1357,17 @@ final class PersistedLocalVaultStoreTests {
         #expect(export.tags.map(\.id) == insertedTagIDs)
     }
 
-    @Test
-    func retrieveTags_returnsNoTagsIfThereAreNone() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveTags_returnsNoTagsIfThereAreNone(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let tags = try await sut.retrieveTags()
 
         #expect(tags == [])
     }
 
-    @Test
-    func retrieveTags_returnsMultipleTags() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func retrieveTags_returnsMultipleTags(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let items = [
             VaultItemTag.Write(name: "any1", color: .tagDefault, iconName: "any"),
             VaultItemTag.Write(name: "any2", color: .tagDefault, iconName: "any"),
@@ -1288,19 +1383,22 @@ final class PersistedLocalVaultStoreTests {
         #expect(tags.map(\.id.id) == insertedIDs)
     }
 
-    @Test
-    func insertTag_deliversNoErrorOnEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func insertTag_deliversNoErrorOnEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         try await sut.insertTag(item: anyVaultItemTag().makeWritable())
     }
 
-    @Test
-    func insertTag_deliversNoErrorOnNonEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func insertTag_deliversNoErrorOnNonEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         try await sut.insertTag(item: anyVaultItemTag().makeWritable())
         try await sut.insertTag(item: anyVaultItemTag().makeWritable())
     }
 
-    @Test
-    func insertTag_doesNotOverrideExactSameEntryAsUsesNewIDToUnique() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func insertTag_doesNotOverrideExactSameEntryAsUsesNewIDToUnique(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = anyVaultItemTag().makeWritable()
 
         try await sut.insertTag(item: code)
@@ -1310,8 +1408,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.count == 2)
     }
 
-    @Test
-    func insertTag_returnsUniqueCodeIDAfterSuccessfulInsert() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func insertTag_returnsUniqueCodeIDAfterSuccessfulInsert(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = anyVaultItemTag().makeWritable()
 
         var ids = [UUID]()
@@ -1324,16 +1423,18 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.map(\.id.id) == ids)
     }
 
-    @Test
-    func deleteTag_hasNoEffectOnEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteTag_hasNoEffectOnEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         try await sut.deleteTag(id: .init(id: UUID()))
 
         let result = try await sut.retrieveTags()
         #expect(result == [])
     }
 
-    @Test
-    func deleteTag_deletesSingleEntryMatchingID() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteTag_deletesSingleEntryMatchingID(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = anyVaultItemTag().makeWritable()
 
         let id = try await sut.insertTag(item: code)
@@ -1344,8 +1445,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result == [])
     }
 
-    @Test
-    func deleteTag_hasNoEffectOnNoMatchingTag() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteTag_hasNoEffectOnNoMatchingTag(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let otherTags = [
             anyVaultItemTag().makeWritable(),
             anyVaultItemTag().makeWritable(),
@@ -1363,8 +1465,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.map(\.id) == insertedIds)
     }
 
-    @Test
-    func deleteTag_removesFromModels() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteTag_removesFromModels(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let otherTags = [
             anyVaultItemTag().makeWritable(),
             anyVaultItemTag().makeWritable(),
@@ -1391,15 +1494,17 @@ final class PersistedLocalVaultStoreTests {
         #expect(secondItem.metadata.tags == [insertedTagIds[1], insertedTagIds[2]])
     }
 
-    @Test
-    func updateTag_deliversErrorIfCodeDoesNotAlreadyExist() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateTag_deliversErrorIfCodeDoesNotAlreadyExist(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         await #expect(throws: (any Error).self) {
             try await sut.updateTag(id: .init(id: UUID()), item: anyVaultItemTag().makeWritable())
         }
     }
 
-    @Test
-    func updateTag_hasNoEffectOnEmptyStorageIfDoesNotAlreadyExist() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateTag_hasNoEffectOnEmptyStorageIfDoesNotAlreadyExist(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         await #expect(throws: (any Error).self) {
             try await sut.updateTag(id: .init(id: UUID()), item: anyVaultItemTag().makeWritable())
         }
@@ -1408,8 +1513,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result == [])
     }
 
-    @Test
-    func updateTag_hasNoEffectOnNonEmptyStorageIfDoesNotAlreadyExist() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateTag_hasNoEffectOnNonEmptyStorageIfDoesNotAlreadyExist(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let tags = [
             anyVaultItemTag().makeWritable(),
             anyVaultItemTag().makeWritable(),
@@ -1427,8 +1533,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.map { $0.makeWritable() } == tags)
     }
 
-    @Test
-    func updateTag_updatesDataForValidTag() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateTag_updatesDataForValidTag(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let initial = anyVaultItemTag().makeWritable()
         let id = try await sut.insertTag(item: initial)
 
@@ -1439,8 +1546,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.map(\.name) == ["this is the new name"])
     }
 
-    @Test
-    func updateTag_hasNoSideEffectsOnOtherTags() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateTag_hasNoSideEffectsOnOtherTags(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let initialTags = [
             anyVaultItemTag().makeWritable(),
             anyVaultItemTag().makeWritable(),
@@ -1461,8 +1569,9 @@ final class PersistedLocalVaultStoreTests {
         #expect(result.map(\.id) == insertedIds + [id])
     }
 
-    @Test
-    func updateTag_itemsCarryingTheTagKeepIt() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func updateTag_itemsCarryingTheTagKeepIt(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let tagID = try await sut.insertTag(item: anyVaultItemTag(name: "Before").makeWritable())
         try await sut.insert(item: uniqueVaultItem(tags: [tagID]).makeWritable())
 
@@ -1473,15 +1582,17 @@ final class PersistedLocalVaultStoreTests {
         #expect(try await sut.retrieveTags().map(\.name) == ["After"])
     }
 
-    @Test
-    func deleteVault_hasNoEffectOnEmptyStore() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteVault_hasNoEffectOnEmptyStore(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         try await sut.deleteVault()
 
-        try await assertStoreEmpty()
+        try await sut.assertStoreEmpty()
     }
 
-    @Test
-    func deleteVault_removesAllItems() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteVault_removesAllItems(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let tag1 = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
         let tag2 = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
         let codes: [VaultItem.Write] = [
@@ -1496,11 +1607,12 @@ final class PersistedLocalVaultStoreTests {
 
         try await sut.deleteVault()
 
-        try await assertStoreEmpty()
+        try await sut.assertStoreEmpty()
     }
 
-    @Test
-    func incrementCounter_throwsForNonTOTP() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func incrementCounter_throwsForNonTOTP(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let note = anySecureNote().wrapInAnyVaultItem().makeWritable()
         let id1 = try await sut.insert(item: note)
 
@@ -1509,8 +1621,9 @@ final class PersistedLocalVaultStoreTests {
         }
     }
 
-    @Test
-    func incrementCounter_incrementsHOTP() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func incrementCounter_incrementsHOTP(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let code = anyOTPAuthCode(type: .hotp(counter: 12)).wrapInAnyVaultItem().makeWritable()
         let id1 = try await sut.insert(item: code)
 
@@ -1524,17 +1637,19 @@ final class PersistedLocalVaultStoreTests {
         }
     }
 
-    @Test
-    func importAndMergeVault_importsEmptyToEmptyVault() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndMergeVault_importsEmptyToEmptyVault(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let payload = VaultApplicationPayload(userDescription: "", items: [], tags: [])
 
         try await sut.importAndMergeVault(payload: payload)
 
-        try await assertStoreEmpty()
+        try await sut.assertStoreEmpty()
     }
 
-    @Test
-    func importAndMergeVault_emptyToNonEmptyVault() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndMergeVault_emptyToNonEmptyVault(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 50))
         let item2 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 100))
         let item3 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 200))
@@ -1553,24 +1668,77 @@ final class PersistedLocalVaultStoreTests {
         let payload2 = VaultApplicationPayload(userDescription: "", items: [], tags: [])
         try await sut.importAndMergeVault(payload: payload2)
 
-        try await assertStoreContains(exactlyItems: items)
-        try await assertStoreContains(exactlyTags: tags)
+        try await sut.assertStoreContains(exactlyItems: items)
+        try await sut.assertStoreContains(exactlyTags: tags)
     }
 
-    @Test
-    func importAndMergeVault_linksItemsToTagsImportedWithThem() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndMergeVault_linksItemsToTagsImportedWithThem(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let tag = anyVaultItemTag(name: "Imported")
         let item = uniqueVaultItem(tags: [tag.id])
         let payload = VaultApplicationPayload(userDescription: "", items: [item], tags: [tag])
 
         try await sut.importAndMergeVault(payload: payload)
 
-        try await assertStoreContains(exactlyItems: [item])
-        try await assertStoreContains(exactlyTags: [tag])
+        try await sut.assertStoreContains(exactlyItems: [item])
+        try await sut.assertStoreContains(exactlyTags: [tag])
     }
 
-    @Test
-    func importAndOverrideVault_linksItemsToTagsImportedWithThem() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndMergeVault_newerItemReplacesItsTags(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
+        let tagA = anyVaultItemTag(name: "A")
+        let tagB = anyVaultItemTag(name: "B")
+        let older = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 100), tags: [tagA.id, tagB.id])
+        try await sut.importAndMergeVault(payload: .init(userDescription: "", items: [older], tags: [tagA, tagB]))
+
+        let newer = uniqueVaultItem(id: older.id, updatedDate: Date(timeIntervalSince1970: 200), tags: [tagB.id])
+        try await sut.importAndMergeVault(payload: .init(userDescription: "", items: [newer], tags: []))
+
+        try await sut.assertStoreContains(exactlyItems: [newer])
+    }
+
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndMergeVault_lastCopyOfAnItemInThePayloadWins(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
+        let tagA = anyVaultItemTag(name: "A")
+        let tagB = anyVaultItemTag(name: "B")
+        let first = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 100), userDescription: "First", tags: [
+            tagA.id,
+        ])
+        let second = uniqueVaultItem(
+            id: first.id,
+            updatedDate: Date(timeIntervalSince1970: 200),
+            userDescription: "Second",
+            tags: [tagB.id],
+        )
+
+        try await sut.importAndMergeVault(payload: .init(userDescription: "", items: [first, second], tags: [
+            tagA,
+            tagB,
+        ]))
+
+        try await sut.assertStoreContains(exactlyItems: [second])
+    }
+
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndOverrideVault_dropsTagsThePayloadDoesNotHave(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
+        let oldTag = try await sut.insertTag(item: anyVaultItemTag(name: "Old").makeWritable())
+        let id = try await sut.insert(item: uniqueVaultItem(tags: [oldTag]).makeWritable())
+        let restored = uniqueVaultItem(id: id, tags: [oldTag])
+
+        try await sut.importAndOverrideVault(payload: .init(userDescription: "", items: [restored], tags: []))
+
+        let items = try await sut.allVaultItems()
+        #expect(items.map(\.metadata.tags) == [[]])
+        try await sut.assertStoreContains(exactlyTags: [])
+    }
+
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndOverrideVault_linksItemsToTagsImportedWithThem(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         try await sut.insert(item: uniqueVaultItem().makeWritable())
         let tag = anyVaultItemTag(name: "Imported")
         let item = uniqueVaultItem(tags: [tag.id])
@@ -1578,12 +1746,13 @@ final class PersistedLocalVaultStoreTests {
 
         try await sut.importAndOverrideVault(payload: payload)
 
-        try await assertStoreContains(exactlyItems: [item])
-        try await assertStoreContains(exactlyTags: [tag])
+        try await sut.assertStoreContains(exactlyItems: [item])
+        try await sut.assertStoreContains(exactlyTags: [tag])
     }
 
-    @Test
-    func importAndMergeVault_importsNonEmptyToEmptyVault() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndMergeVault_importsNonEmptyToEmptyVault(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 50))
         let item2 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 100))
         let item3 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 200))
@@ -1599,12 +1768,13 @@ final class PersistedLocalVaultStoreTests {
 
         try await sut.importAndMergeVault(payload: payload)
 
-        try await assertStoreContains(exactlyItems: items)
-        try await assertStoreContains(exactlyTags: tags)
+        try await sut.assertStoreContains(exactlyItems: items)
+        try await sut.assertStoreContains(exactlyTags: tags)
     }
 
-    @Test
-    func importAndMergeVault_importsNonEmptyToNonEmptyVault() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndMergeVault_importsNonEmptyToNonEmptyVault(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 50))
         let item2 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 100))
         let item3 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 200))
@@ -1635,12 +1805,13 @@ final class PersistedLocalVaultStoreTests {
 
         try await sut.importAndMergeVault(payload: payload2)
 
-        try await assertStoreContains(exactlyItems: items1 + items2)
-        try await assertStoreContains(exactlyTags: tags1 + tags2)
+        try await sut.assertStoreContains(exactlyItems: items1 + items2)
+        try await sut.assertStoreContains(exactlyTags: tags1 + tags2)
     }
 
-    @Test
-    func importAndMergeVault_overridesItemWithSameIDAndLaterDate() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndMergeVault_overridesItemWithSameIDAndLaterDate(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let id1 = Identifier<VaultItem>.new()
         let item1 = uniqueVaultItem(id: id1, updatedDate: Date(timeIntervalSince1970: 50), userDescription: "ABC")
         let itemX = uniqueVaultItem()
@@ -1665,12 +1836,13 @@ final class PersistedLocalVaultStoreTests {
 
         try await sut.importAndMergeVault(payload: payload2)
 
-        try await assertStoreContains(exactlyItems: [item2, itemX])
-        try await assertStoreContains(exactlyTags: [tag2, tagX])
+        try await sut.assertStoreContains(exactlyItems: [item2, itemX])
+        try await sut.assertStoreContains(exactlyTags: [tag2, tagX])
     }
 
-    @Test
-    func importAndMergeVault_retainsExistingItemWithLaterUpdatedDate() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndMergeVault_retainsExistingItemWithLaterUpdatedDate(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let id1 = Identifier<VaultItem>.new()
         let item1 = uniqueVaultItem(id: id1, updatedDate: Date(timeIntervalSince1970: 60), userDescription: "ABC")
         let itemX = uniqueVaultItem()
@@ -1695,24 +1867,24 @@ final class PersistedLocalVaultStoreTests {
 
         try await sut.importAndMergeVault(payload: payload2)
 
-        try await assertStoreContains(exactlyItems: [item1, itemX])
-        try await assertStoreContains(
-            exactlyTags: [tag2, tagX],
-            message: "Tag is always updated, there is no date there.",
-        )
+        try await sut.assertStoreContains(exactlyItems: [item1, itemX])
+        // Tags are always updated: they have no date to compare.
+        try await sut.assertStoreContains(exactlyTags: [tag2, tagX])
     }
 
-    @Test
-    func importAndOverrideVault_importsEmptyToEmptyVault() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndOverrideVault_importsEmptyToEmptyVault(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let payload = VaultApplicationPayload(userDescription: "", items: [], tags: [])
 
         try await sut.importAndOverrideVault(payload: payload)
 
-        try await assertStoreEmpty()
+        try await sut.assertStoreEmpty()
     }
 
-    @Test
-    func importAndOverrideVault_importsEmptyToNonEmptyVault() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndOverrideVault_importsEmptyToNonEmptyVault(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 50))
         let item2 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 100))
         let item3 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 200))
@@ -1732,11 +1904,12 @@ final class PersistedLocalVaultStoreTests {
 
         try await sut.importAndOverrideVault(payload: payload2)
 
-        try await assertStoreEmpty()
+        try await sut.assertStoreEmpty()
     }
 
-    @Test
-    func importAndOverrideVault_importsNonEmptyToEmptyVault() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndOverrideVault_importsNonEmptyToEmptyVault(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 50))
         let item2 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 100))
         let item3 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 200))
@@ -1752,12 +1925,13 @@ final class PersistedLocalVaultStoreTests {
 
         try await sut.importAndOverrideVault(payload: payload1)
 
-        try await assertStoreContains(exactlyItems: items)
-        try await assertStoreContains(exactlyTags: tags)
+        try await sut.assertStoreContains(exactlyItems: items)
+        try await sut.assertStoreContains(exactlyTags: tags)
     }
 
-    @Test
-    func importAndOverrideVault_overridesExistingDataWithNew() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndOverrideVault_overridesExistingDataWithNew(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 50))
         let item2 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 100))
         let item3 = uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 200))
@@ -1788,20 +1962,22 @@ final class PersistedLocalVaultStoreTests {
 
         try await sut.importAndOverrideVault(payload: payload2)
 
-        try await assertStoreContains(exactlyItems: items2)
-        try await assertStoreContains(exactlyTags: tags2)
+        try await sut.assertStoreContains(exactlyItems: items2)
+        try await sut.assertStoreContains(exactlyTags: tags2)
     }
 
-    @Test
-    func deleteItemsMatchingKillphrase_hasNoEffectIfVaultEmpty() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteItemsMatchingKillphrase_hasNoEffectIfVaultEmpty(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let didDelete = await sut.deleteItems(matchingKillphrase: "a", using: testDigester)
 
         #expect(didDelete == false)
-        try await assertStoreContains(exactlyItems: [])
+        try await sut.assertStoreContains(exactlyItems: [])
     }
 
-    @Test
-    func deleteItemsMatchingKillphrase_deletesSingleItem() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteItemsMatchingKillphrase_deletesSingleItem(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(killphrase: "a")
         let item2 = uniqueVaultItem(killphrase: "b")
         let item3 = uniqueVaultItem(killphrase: "c")
@@ -1816,11 +1992,12 @@ final class PersistedLocalVaultStoreTests {
         let didDelete = await sut.deleteItems(matchingKillphrase: "a", using: testDigester)
 
         #expect(didDelete == true)
-        try await assertStoreContains(exactlyItems: [item2, item3])
+        try await sut.assertStoreContains(exactlyItems: [item2, item3])
     }
 
-    @Test
-    func deleteItemsMatchingKillphrase_deletesMultipleItems() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteItemsMatchingKillphrase_deletesMultipleItems(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(killphrase: "a")
         let item2 = uniqueVaultItem(killphrase: "a")
         let item3 = uniqueVaultItem(killphrase: "b")
@@ -1835,11 +2012,12 @@ final class PersistedLocalVaultStoreTests {
         let didDelete = await sut.deleteItems(matchingKillphrase: "a", using: testDigester)
 
         #expect(didDelete == true)
-        try await assertStoreContains(exactlyItems: [item3])
+        try await sut.assertStoreContains(exactlyItems: [item3])
     }
 
-    @Test
-    func deleteItemsMatchingKillphrase_deletesExactMatchOnly() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteItemsMatchingKillphrase_deletesExactMatchOnly(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(killphrase: "a")
         let item2 = uniqueVaultItem(killphrase: "aa")
         let item3 = uniqueVaultItem(killphrase: "aaa")
@@ -1854,11 +2032,12 @@ final class PersistedLocalVaultStoreTests {
         let didDelete = await sut.deleteItems(matchingKillphrase: "a", using: testDigester)
 
         #expect(didDelete == true)
-        try await assertStoreContains(exactlyItems: [item2, item3])
+        try await sut.assertStoreContains(exactlyItems: [item2, item3])
     }
 
-    @Test
-    func deleteItemsMatchingKillphrase_matchesQueryWithSurroundingWhitespace() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteItemsMatchingKillphrase_matchesQueryWithSurroundingWhitespace(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(killphrase: "phrase")
         let item2 = uniqueVaultItem(killphrase: "other")
         let payload = VaultApplicationPayload(
@@ -1873,11 +2052,12 @@ final class PersistedLocalVaultStoreTests {
         let didDelete = await sut.deleteItems(matchingKillphrase: "phrase ", using: testDigester)
 
         #expect(didDelete == true)
-        try await assertStoreContains(exactlyItems: [item2])
+        try await sut.assertStoreContains(exactlyItems: [item2])
     }
 
-    @Test
-    func deleteItemsMatchingKillphrase_doesNotDeleteEmptyKillphraseItems() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteItemsMatchingKillphrase_doesNotDeleteEmptyKillphraseItems(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(killphrase: nil)
         let item2 = uniqueVaultItem(killphrase: "a")
         let item3 = uniqueVaultItem(killphrase: "")
@@ -1892,11 +2072,12 @@ final class PersistedLocalVaultStoreTests {
         let didDelete = await sut.deleteItems(matchingKillphrase: "a", using: testDigester)
 
         #expect(didDelete == true)
-        try await assertStoreContains(exactlyItems: [item1, item3])
+        try await sut.assertStoreContains(exactlyItems: [item1, item3])
     }
 
-    @Test
-    func deleteItemsMatchingKillphrase_doesNotDeleteAnyItemsIfPhraseIsBlank() async throws {
+    @Test(arguments: VaultStoreEngine.allCases)
+    func deleteItemsMatchingKillphrase_doesNotDeleteAnyItemsIfPhraseIsBlank(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
         let item1 = uniqueVaultItem(killphrase: nil)
         let item2 = uniqueVaultItem(killphrase: "a")
         let item3 = uniqueVaultItem(killphrase: "")
@@ -1918,103 +2099,6 @@ final class PersistedLocalVaultStoreTests {
         #expect(spaceDidDelete == false)
         #expect(spacesDidDelete == false)
         #expect(newlineDidDelete == false)
-        try await assertStoreContains(exactlyItems: [item1, item2, item3])
-    }
-}
-
-// MARK: - Helpers
-
-extension PersistedLocalVaultStoreTests {
-    private func assertStoreContains(
-        item: VaultItem,
-        file _: StaticString = #filePath,
-        line _: UInt = #line,
-    ) async throws {
-        let allItems = try await sut.allVaultItems()
-        let found = try #require(allItems.first(where: { $0.id == item.id }), "Item not in store")
-        #expect(found == item)
-    }
-
-    private func assertStoreContains(
-        exactlyItems: [VaultItem],
-        sourceLocation: SourceLocation = #_sourceLocation,
-    ) async throws {
-        let allItems = try await sut.allVaultItems()
-        let actualItems = allItems.sorted(by: { $0.metadata.updated < $1.metadata.updated })
-        let expectedItems = exactlyItems.sorted(by: { $0.metadata.updated < $1.metadata.updated })
-        #expect(
-            actualItems == expectedItems,
-            "Store does not contain exactly the specified items.",
-            sourceLocation: sourceLocation,
-        )
-    }
-
-    private func assertStoreContains(
-        exactlyTags: [VaultItemTag],
-        message _: String? = nil,
-        sourceLocation: SourceLocation = #_sourceLocation,
-    ) async throws {
-        let allItems = try await sut.allVaultTags()
-        let actualItems = allItems.sorted(by: { $0.name < $1.name })
-        let expectedItems = exactlyTags.sorted(by: { $0.name < $1.name })
-        #expect(
-            actualItems == expectedItems,
-            "Tags not equal",
-            sourceLocation: sourceLocation,
-        )
-    }
-
-    private func assertStoreContains(
-        tag: VaultItemTag,
-        file _: StaticString = #filePath,
-        line _: UInt = #line,
-    ) async throws {
-        let allItems = try await sut.allVaultTags()
-        let found = try #require(allItems.first(where: { $0.id == tag.id }), "Tag not in store")
-        #expect(found == tag)
-    }
-
-    private func assertStoreEmpty(sourceLocation: SourceLocation = #_sourceLocation) async throws {
-        let allItems = try await sut.allVaultItems()
-        let allTags = try await sut.allVaultTags()
-        #expect(allItems == [], "Store is not empty!", sourceLocation: sourceLocation)
-        #expect(allTags == [], "Store is not empty!", sourceLocation: sourceLocation)
-    }
-}
-
-extension PersistedLocalVaultStore {
-    fileprivate func allVaultItems() async throws -> [VaultItem] {
-        let descriptor = FetchDescriptor<PersistedVaultItem>(predicate: .true)
-        let result = try modelContext.fetch(descriptor)
-        let decoder = PersistedVaultItemDecoder()
-        return try result.map {
-            try decoder.decode(record: $0.makeRecord())
-        }
-    }
-
-    fileprivate func allVaultTags() async throws -> [VaultItemTag] {
-        let descriptor = FetchDescriptor<PersistedVaultTag>(predicate: .true)
-        let result = try modelContext.fetch(descriptor)
-        let decoder = PersistedVaultTagDecoder()
-        return try result.map {
-            try decoder.decode(record: $0.makeRecord())
-        }
-    }
-
-    fileprivate func corruptItemAlgorithm(id: Identifier<VaultItem>) async throws {
-        let uuid = id.rawValue
-        var descriptor = FetchDescriptor<PersistedVaultItem>(predicate: #Predicate { item in
-            item.id == uuid
-        })
-        descriptor.fetchLimit = 1
-        let existing = try #require(try? modelContext.fetch(descriptor).first, "Item not found")
-        existing.otpDetails?.algorithm = "INVALID"
-
-        modelContext.insert(existing)
-        try modelContext.save()
-    }
-
-    func updateSortOrder(_ order: VaultStoreSortOrder) {
-        sortOrder = order
+        try await sut.assertStoreContains(exactlyItems: [item1, item2, item3])
     }
 }
