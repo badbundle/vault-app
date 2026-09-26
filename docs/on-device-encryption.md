@@ -398,9 +398,11 @@ changes it for slots the app can't open, and `i` is 2 bytes. It's `VaultSlotFile
 - **Header limits.** Before deriving anything, a reader refuses Argon2id parameters outside 8 KiB–1 GiB of memory,
   1–32 passes and 1–8 lanes, and a slot size that isn't 1 MiB × 2^k up to 4 MiB or doesn't match the file's
   length. A changed header can't make unlocking run for hours or ask for gigabytes.
-- **Generations and wrap times.** Every write to a slot increments its generation: creating it, saving and
-  rewrapping. A write is refused if the slot's current key box doesn't open at the generation the writer loaded.
-  The wrapped-at time is set when a vault is created or rewrapped, and saves keep it.
+- **Generations and wrap times.** Creating a vault starts its generation at a random value between 1 and 2³² − 1,
+  so a new vault's doesn't show how new it is, and every save and rewrap increments it. A write is refused if the
+  slot's current key box doesn't open at the generation the writer loaded. The wrapped-at time is set when a vault
+  is created or rewrapped, and saves keep it. It's stamped by `VaultWrapStamping`, not read straight from the clock
+  (see [Same passwords](#same-passwords)).
 - **Rewrapping** (password change, or switching between the password and the device key) reseals the key box
   only. The slot nonce and body stay as they are.
 - **Unused slots** are random bytes. AES-GCM output is indistinguishable from random, so an empty slot, a real
@@ -641,8 +643,11 @@ the same deadline. What differs afterwards is decoding time, which is proportion
   or the device asleep, doesn't count; only an attempt that finished its work and is still wanted raises it; and
   it goes no higher than 5 s, about 1.5 times 32 passes on an iPhone four times slower than an M5 Max. A stored
   deadline above that is taken as 5 s.
-- **Ties** in the most recently wrapped slot go to the lowest index. Wrap times come from the device that wrapped
-  the key, so one whose clock was set wrong can make a newer vault look older.
+- **Ties** in the most recently wrapped slot go to the lowest index. Wrap times are stamped by the device that
+  wrapped the key, and only ever go forward on that device (see [Same passwords](#same-passwords)). A file restored
+  from another device keeps that device's stamps.
+- **The wrap clock is raised** to the wrap time of every vault that opens (`VaultDeviceWrapStamper.noteWrap(at:)`), best
+  effort, so later wraps on this device follow it even where the stamp was lost.
 - **Failures after counting** (a vault that opens but can't be read, say) are reported at the deadline as well.
 - **The counter is only reset when a vault opens.** If resetting fails, the vault stays locked and the error is
   shown, rather than opening with a count that would carry on.
@@ -727,6 +732,22 @@ So the choice is between bounded-depth safety with clean payloads (this design) 
 readable mark in every duress vault. The repository is public, so a mark would be found. This design picks clean
 payloads.
 
+**As built** (`VaultDuressSlots`, `EncryptedVaultStore.makeDuressVault(password:)`, VAULT-51):
+
+- Only W's slot is written. V's isn't sealed again, so V keeps its generation, and two copies of the file show no
+  change in V's slot. They do show W's slot changed, and not as a save would change it: creating a vault gives the
+  slot a new nonce, and a save never does. So two copies show that a vault was created, or replaced, in that slot
+  between them (see [Residual limits](#residual-limits)). Reusing the old nonce would hide this, but a writer still
+  holding the vault that was replaced could then write over the new one, so it isn't done.
+- The new password's key is derived as unlocking derives it (NFC, the file's parameters), off the main actor, then
+  the file is replaced under its lock and verified, like any save: W must open with the new key and decode to exactly
+  the empty vault, and V's key box must be unchanged.
+- It isn't an unlock attempt, so it doesn't touch the attempt counter or the unlock deadline.
+- Every list a duress vault gets, taken whole, is a uniformly random choice and ordering of ten of the other slots,
+  as the first vault's is, so a list doesn't show which kind of vault holds it.
+- A vault whose list isn't ten distinct slots other than its own (only a vault the app didn't write) makes no duress
+  vault, rather than guessing where one goes.
+
 ### Same passwords
 
 - A new password equal to the password of **the vault you're in** is refused: "must differ from the app lock
@@ -737,6 +758,21 @@ payloads.
 - If more than one slot opens at unlock, the most recently wrapped wins. That's the vault just created, which
   matches "the new password opens a new empty vault". The older one becomes unreachable but isn't destroyed. If
   the colliding password is the real one, the coercer already knew it.
+- **Recency can't come from the wall clock.** A coercer inside a duress vault could otherwise set the clock back,
+  make a duress vault with a guess at another vault's password, lock, and unlock with the guess. The new vault
+  would be older than every other, so a right guess would open the vault it matched, and a wrong one the empty new
+  vault. Every unlock would succeed and reset the attempt counter: unlimited guessing, with no delay or erase, that
+  opens the real vault on a hit. So every wrap (creating the first vault at conversion, making a duress vault,
+  rewrapping) is stamped through `VaultWrapStamping` by `VaultDeviceWrapStamper`:
+  `max(now, the last stamp + 1 ms, the previous wrap time + 1 ms)`, where the previous wrap time is the slot's own,
+  or, for a vault made from another, that vault's. The stamp is saved before the wrap is made, in a keychain item on
+  this device only, in the App Group's access group. Every vault that opens raises it to its own wrap time.
+- **What's left:** a device whose stamp is gone, because its keychain was reset or it's a new device restored from
+  a backup, and where the user hasn't opened the real vault since. There a duress vault made with the clock set
+  back is stamped only after the duress vault it's made from, and can be older than the real vault.
+- **As built**, the check tries the new password's key on the open vault's own key box and nothing else, so its
+  result depends only on the open vault. A vault whose key is wrapped by the device key (password off) never
+  matches.
 
 ### Everything else for VAULT-23
 
@@ -756,7 +792,7 @@ order, idempotently, and journaled so a crash mid-erase finishes at next launch:
 
 1. Unlink `vault-slots.v1`, the temp files and the lock file.
 2. Delete the keychain items: device key, killphrase and search passphrase HMAC keys, backup password and its
-   record, attempt counter.
+   record, attempt counter, wrap stamp.
 3. Clear the storage state and the per-device settings Delete All Data clears.
 4. Clear the QuickType store and reload widgets.
 5. Create a fresh, empty `plain` store.
@@ -825,7 +861,8 @@ configuration, which the app can't edit. Turning on the password should tell use
 2. **Multiple snapshots.** Two copies of the file from different times, for example two iCloud backups or a
    seized phone plus an older backup, show which slot's bytes changed. Combined with a coerced duress password,
    which identifies the duress vault's slot, a change in another slot shows another vault is in use. Slots the
-   app can't open can't be re-randomized.
+   app can't open can't be re-randomized. They also show when a vault was created in a slot, or one replaced:
+   its slot nonce changes, which a save never does. So they show a duress vault made between the copies.
 
    Mitigations:
    - Use the duress vault now and then. Every save also re-seals it at the full slot size, which covers limit 4.
@@ -850,6 +887,9 @@ configuration, which the app can't edit. Turning on the password should tell use
    can't prevent this.
 8. **Surfaces outside storage.** Configured widget entities, keyboard learning, and item dates inside a duress
    vault.
+9. **A vault's own key box.** Anyone with a vault's password can read when its key was last wrapped, which for a
+   duress vault is when it was made, as its item dates show anyway. Its generation doesn't help: it starts at a
+   random value in a range far wider than a vault's saves, so a new vault's looks like a long-used one's.
 
 ## Test strategy
 

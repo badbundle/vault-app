@@ -19,7 +19,7 @@ struct VaultRecordState: Equatable, Sendable {
 /// Each field reads as its default when it's missing, so fields can be added later.
 struct VaultMetadata: Codable, Equatable, Sendable {
     /// The slots this vault's duress vaults go in, in order: ten distinct slots, never its own. Making a duress
-    /// vault uses the first (VAULT-51). A vault stored in the plain store has none.
+    /// vault uses the first, and hands on the rest (`VaultDuressSlots`). A vault stored in the plain store has none.
     var duressSlots: [Int] = []
 
     init(duressSlots: [Int] = []) {
