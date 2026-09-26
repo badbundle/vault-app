@@ -36,6 +36,10 @@ extension SettingsViewModel {
         localized(key: "pasteTTL.title")
     }
 
+    public var codeTapActionTitle: String {
+        localized(key: "codeTapAction.title")
+    }
+
     public var saveBackupTitle: String {
         localized(key: "saveBackup.title")
     }

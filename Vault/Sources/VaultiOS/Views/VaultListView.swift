@@ -121,27 +121,33 @@ struct VaultListView<
     }
 
     func interactableViewGenerator()
-        -> VaultItemOnTapDecoratorViewGenerator<Generator>
+        -> VaultItemMenuDecoratorViewGenerator<VaultItemOnTapDecoratorViewGenerator<Generator>>
     {
-        VaultItemOnTapDecoratorViewGenerator(generator: viewGenerator) { id in
-            if vaultItemFeedState.isEditing {
+        let tapHandler = tapHandler
+        let tappable = VaultItemOnTapDecoratorViewGenerator(generator: viewGenerator) { id in
+            try await tapHandler.tap(
+                id,
+                isEditing: vaultItemFeedState.isEditing,
+                codeTapAction: localSettings.state.codeTapAction,
+            )
+        }
+        return VaultItemMenuDecoratorViewGenerator(generator: tappable) { id, behaviour in
+            tapHandler.menuActions(for: id, isEditing: behaviour != .normal)
+        } perform: { action, id in
+            try await tapHandler.perform(action, on: id)
+        }
+    }
+
+    private var tapHandler: VaultItemTapHandler {
+        VaultItemTapHandler(
+            previewActionHandler: previewActionHandler,
+            authenticationService: authenticationService,
+            copy: { pasteboard.copy($0) },
+            showDetails: { id in
                 guard let item = dataModel.code(id: id) else { return }
                 modal = .detail(id, item, nil)
-            } else if let previewAction = previewActionHandler.previewActionForVaultItem(id: id) {
-                switch previewAction {
-                case let .copyText(copyAction):
-                    if copyAction.requiresAuthenticationToCopy {
-                        let result = try await authenticationService
-                            .authenticate(reason: "Authenticate to copy locked data")
-                        guard result == .success(.authenticated) else { return }
-                    }
-                    pasteboard.copy(copyAction)
-                case let .openItemDetail(id):
-                    guard let item = dataModel.code(id: id) else { return }
-                    modal = .detail(id, item, nil)
-                }
-            }
-        }
+            },
+        )
     }
 
     private func openPendingItemDetailIfPossible() {
