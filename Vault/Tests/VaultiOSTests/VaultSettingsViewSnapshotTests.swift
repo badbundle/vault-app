@@ -33,9 +33,19 @@ struct VaultSettingsViewSnapshotTests {
     func universalClipboardOn(colorScheme: ColorScheme) throws {
         let sut = try makeSUT { state in
             state.allowUniversalClipboardForOTPs = true
+            state.allowUniversalClipboardForNotes = true
         }
 
         assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
+
+    @Test
+    func universalClipboardCodesOnly() throws {
+        let sut = try makeSUT { state in
+            state.allowUniversalClipboardForOTPs = true
+        }
+
+        assertSnapshot(of: sut, as: .image)
     }
 
     @Test(arguments: [ColorScheme.light, .dark])

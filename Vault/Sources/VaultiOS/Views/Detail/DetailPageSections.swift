@@ -79,10 +79,8 @@ struct DetailPageDescriptionSection: View {
     var body: some View {
         Section {
             DetailPageCardLabel(title: title, systemImage: "text.quote") {
-                Text(text)
-                    .font(.body)
-                    .foregroundStyle(Color(uiColor: .label))
-                    .textSelection(.enabled)
+                // Selectable, with a copy that follows the clipboard settings: a description never leaves this device.
+                SelectableText(text, fontStyle: .normal, textStyle: .body, copyingAs: .detail, layout: .inline)
                     .padding(.top, 2)
             }
         }

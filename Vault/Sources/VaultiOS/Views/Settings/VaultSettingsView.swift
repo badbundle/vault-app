@@ -1,4 +1,5 @@
 import SwiftUI
+import VaultCore
 import VaultFeed
 import VaultSettings
 
@@ -70,7 +71,7 @@ struct VaultSettingsView: View {
             } label: {
                 SheetRowLabel(
                     title: "Universal Clipboard",
-                    value: localSettings.state.isUniversalClipboardAllowedForAny ? "On" : "Off",
+                    value: universalClipboardSummary,
                     systemImage: "iphone.and.arrow.right.outward",
                     color: SettingsIconColor.clipboard,
                 )
@@ -78,7 +79,17 @@ struct VaultSettingsView: View {
         } header: {
             Text("Clipboard")
         } footer: {
-            Text("How long copied codes stay on the clipboard, and whether they can reach your other devices.")
+            Text(
+                "How long copied codes, notes and details stay on the clipboard, and whether they can reach your other devices.",
+            )
+        }
+    }
+
+    private var universalClipboardSummary: String {
+        switch localSettings.state.universalClipboardSummary {
+        case .off: "Off"
+        case .on: "On"
+        case let .only(contentTypes): contentTypes.map(\.universalClipboardName).formatted(.list(type: .and)) + " Only"
         }
     }
 
@@ -96,6 +107,17 @@ struct VaultSettingsView: View {
             Text("Danger Zone")
         } footer: {
             Text("Erase every item and tag from this device.")
+        }
+    }
+}
+
+extension PasteboardContentType {
+    /// How the Universal Clipboard row names this kind of value when it's the only one on.
+    fileprivate var universalClipboardName: String {
+        switch self {
+        case .otp: "Codes"
+        case .note: "Notes"
+        case .detail: "Details"
         }
     }
 }

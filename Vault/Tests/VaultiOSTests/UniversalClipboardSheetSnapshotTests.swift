@@ -26,6 +26,15 @@ struct UniversalClipboardSheetSnapshotTests {
 
         assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
     }
+
+    @Test(arguments: [ColorScheme.light, .dark])
+    func notesOn(colorScheme: ColorScheme) throws {
+        let sut = try makeSUT { state in
+            state.allowUniversalClipboardForNotes = true
+        }
+
+        assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
 }
 
 // MARK: - Helpers

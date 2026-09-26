@@ -22,4 +22,13 @@ public enum VaultSharedStorage {
         }
         return url
     }
+
+    /// The App Group's defaults, for settings the extensions read too. Crashes if the entitlement is missing, for
+    /// the same reason as `directory(fileManager:)`.
+    public static func userDefaults() -> UserDefaults {
+        guard let userDefaults = UserDefaults(suiteName: appGroupID) else {
+            fatalError("Unable to access the defaults of App Group '\(appGroupID)'")
+        }
+        return userDefaults
+    }
 }

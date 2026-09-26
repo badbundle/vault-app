@@ -16,10 +16,7 @@ public struct AppLockSettingsStore: @unchecked Sendable { // swiftlint:disable:t
 
     /// The App Group's defaults, which the app and every extension read.
     public static func shared() -> AppLockSettingsStore {
-        guard let userDefaults = UserDefaults(suiteName: VaultSharedStorage.appGroupID) else {
-            fatalError("Unable to access the defaults of App Group '\(VaultSharedStorage.appGroupID)'")
-        }
-        return AppLockSettingsStore(userDefaults: userDefaults)
+        AppLockSettingsStore(userDefaults: VaultSharedStorage.userDefaults())
     }
 
     /// Whether the app asks for device authentication before it shows the vault. Off until the user turns it on.
