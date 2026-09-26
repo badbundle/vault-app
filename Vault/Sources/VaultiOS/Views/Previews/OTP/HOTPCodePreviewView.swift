@@ -8,8 +8,40 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
     var behaviour: VaultItemViewBehaviour
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.showsCodeOnly) private var showsCodeOnly
 
     var body: some View {
+        if showsCodeOnly {
+            codeOnly
+        } else {
+            card
+        }
+    }
+
+    /// Just the code, its bar and the refresh button, for the code's own page.
+    private var codeOnly: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            OTPPreviewCodeText(codeState: previewViewModel.code, behaviour: behaviour, isProminent: true)
+
+            HStack(spacing: 12) {
+                CodeStateTimerBarView(
+                    timerView: activeTimerView,
+                    codeState: previewViewModel.code,
+                    behaviour: behaviour,
+                )
+
+                buttonView
+                    .disabled(!canLoadNextCode)
+                    // Its own button, not part of the row's.
+                    .buttonStyle(.borderless)
+            }
+        }
+        .padding(.vertical, 8)
+        .animation(.snappy, value: behaviour)
+        .animation(.snappy, value: canLoadNextCode)
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 // Icon at top

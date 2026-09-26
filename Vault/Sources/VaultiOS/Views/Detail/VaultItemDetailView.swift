@@ -11,7 +11,12 @@ struct VaultItemHiddenNotice {
 
 /// The basis of a detail view with some of the editing state already bound to buttons etc.
 ///
-/// Shows the item with `contents`, and while editing, its editor with a step from `editorStep` at a time.
+/// Shows the item's badge with `contents` beneath it as cards, and while editing, its editor with a step from
+/// `editorStep` at a time. The editor's overview starts with the same badge, so Edit and Done change the cards under
+/// it rather than the whole page.
+///
+/// A locked item shows no badge until it's unlocked: the lock stands in for the item, and says no more about it than
+/// its tile in the feed does (a note's tile can hide its title).
 @MainActor
 struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View, EditorStepView: View>: View {
     @Bindable var viewModel: ChildViewModel
@@ -60,6 +65,7 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View, 
                 )
             } else {
                 Form {
+                    DetailItemBadgeSection(identity: editorIdentity)
                     contents()
                 }
             }
@@ -161,21 +167,12 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View, 
             }
 
             Section {
-                AsyncButton {
+                ProminentActionButton("Unlock", systemImage: "lock.open.fill") {
                     try await authenticationService.validateAuthentication(reason: "Unlock item")
                     if reduceMotion {
                         viewModel.isLocked = false
                     } else {
                         lockTransition = .unlock
-                    }
-                } label: {
-                    unlockRow {
-                        Text("Unlock")
-                            .foregroundStyle(Color.accentColor)
-                    }
-                } loading: {
-                    unlockRow {
-                        ProgressView()
                     }
                 }
                 .disabled(lockTransition != nil)
@@ -184,47 +181,26 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View, 
             // Without device authentication there's no way to unlock this item. It's still there, and can be
             // viewed again once a passcode is set up.
             Section {
-                FormRow(
-                    image: Image(systemName: "lock.trianglebadge.exclamationmark.fill"),
-                    color: .red,
-                    style: .standard,
-                ) {
-                    VStack(alignment: .leading) {
-                        Text("Passcode Required")
-                            .font(.headline)
-                            .foregroundStyle(.red)
-                        Text("Set up a passcode on this device to view this item.")
-                            .foregroundStyle(.secondary)
-                    }
-                }
+                DetailPageCardLabel(
+                    title: "Passcode Required",
+                    subtitle: "Set up a passcode on this device to view this item.",
+                    systemImage: "lock.trianglebadge.exclamationmark.fill",
+                    tint: .red,
+                )
             }
         } else {
             Section {
-                FormRow(
-                    image: Image(systemName: "lock.trianglebadge.exclamationmark.fill"),
-                    color: .red,
-                    style: .standard,
-                ) {
-                    VStack(alignment: .leading) {
-                        Text("No authentication")
-                            .font(.headline)
-                            .foregroundStyle(.red)
-                        Text(
-                            "This item is not protected due to no authentication being available. Add a passcode to your device to protect this item.",
-                        )
-                        .foregroundStyle(.secondary)
-                    }
-                }
+                DetailPageCardLabel(
+                    title: "No Authentication",
+                    subtitle: "This item is not protected due to no authentication being available. Add a passcode to your device to protect this item.",
+                    systemImage: "lock.trianglebadge.exclamationmark.fill",
+                    tint: .red,
+                )
             }
 
             Section {
-                Button {
+                ProminentActionButton("Dismiss", systemImage: "xmark") {
                     viewModel.isLocked = false
-                } label: {
-                    FormRow(image: Image(systemName: "xmark.circle.fill"), color: .accentColor) {
-                        Text("Dismiss")
-                            .foregroundStyle(Color.accentColor)
-                    }
                 }
             }
         }
@@ -266,10 +242,6 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View, 
             }
         }
         .accessibilityHidden(true)
-    }
-
-    private func unlockRow(@ViewBuilder content: @escaping () -> some View) -> some View {
-        FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor, content: content)
     }
 
     private var cancelCreationItem: some ToolbarContent {

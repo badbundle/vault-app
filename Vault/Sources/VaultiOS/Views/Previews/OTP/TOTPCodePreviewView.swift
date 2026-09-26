@@ -9,7 +9,32 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
     var timerView: TimerBar
     var behaviour: VaultItemViewBehaviour
 
+    @Environment(\.showsCodeOnly) private var showsCodeOnly
+
     var body: some View {
+        if showsCodeOnly {
+            codeOnly
+        } else {
+            card
+        }
+    }
+
+    /// Just the code and its timer, for the code's own page.
+    private var codeOnly: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            OTPPreviewCodeText(codeState: previewViewModel.code, behaviour: behaviour, isProminent: true)
+
+            CodeStateTimerBarView(
+                timerView: activeTimerView,
+                codeState: previewViewModel.code,
+                behaviour: behaviour,
+            )
+        }
+        .padding(.vertical, 8)
+        .animation(.snappy, value: behaviour)
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 // Icon at top

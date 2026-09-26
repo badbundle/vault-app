@@ -31,7 +31,7 @@ final class OTPCodeDetailViewSnapshotTests {
                 previewMode: .titleAndFirstLine,
             ),
             editor: OTPCodeDetailEditorMock(),
-            previewGenerator: VaultItemPreviewViewGeneratorMock.defaultMock(),
+            previewGenerator: makeCodePreviewGenerator(),
             copyActionHandler: VaultItemCopyActionHandlerMock(),
             openInEditMode: false,
             presentationMode: .none,
@@ -63,7 +63,7 @@ final class OTPCodeDetailViewSnapshotTests {
                 previewMode: .titleAndFirstLine,
             ),
             editor: OTPCodeDetailEditorMock(),
-            previewGenerator: VaultItemPreviewViewGeneratorMock.defaultMock(),
+            previewGenerator: makeCodePreviewGenerator(),
             copyActionHandler: VaultItemCopyActionHandlerMock(),
             openInEditMode: false,
             presentationMode: .none,
@@ -95,7 +95,7 @@ final class OTPCodeDetailViewSnapshotTests {
                 previewMode: .titleAndFirstLine,
             ),
             editor: OTPCodeDetailEditorMock(),
-            previewGenerator: VaultItemPreviewViewGeneratorMock.defaultMock(),
+            previewGenerator: makeCodePreviewGenerator(),
             copyActionHandler: VaultItemCopyActionHandlerMock(),
             openInEditMode: false,
             presentationMode: .none,
@@ -127,7 +127,7 @@ final class OTPCodeDetailViewSnapshotTests {
                 previewMode: .titleAndFirstLine,
             ),
             editor: OTPCodeDetailEditorMock(),
-            previewGenerator: VaultItemPreviewViewGeneratorMock.defaultMock(),
+            previewGenerator: makeCodePreviewGenerator(),
             copyActionHandler: VaultItemCopyActionHandlerMock(),
             openInEditMode: false,
             presentationMode: .none,
@@ -159,9 +159,45 @@ final class OTPCodeDetailViewSnapshotTests {
                 previewMode: .titleAndFirstLine,
             ),
             editor: OTPCodeDetailEditorMock(),
-            previewGenerator: VaultItemPreviewViewGeneratorMock.defaultMock(),
+            previewGenerator: makeCodePreviewGenerator(),
             copyActionHandler: VaultItemCopyActionHandlerMock(),
             openInEditMode: true,
+            presentationMode: .none,
+        )
+
+        snapshotScenarios(view: sut)
+    }
+
+    /// A counter-based code, with its refresh button beside the bar.
+    @Test
+    func hotpCode() {
+        let sut = OTPCodeDetailView(
+            editingExistingCode: .init(
+                type: .hotp(counter: 3),
+                data: .init(secret: .empty(), accountName: "bmackey", issuer: "Legacy VPN"),
+            ),
+            navigationPath: .constant(NavigationPath()),
+            dataModel: anyVaultDataModel(),
+            storedMetadata: .init(
+                id: .new(),
+                created: fixedTestDate(),
+                updated: fixedTestDate(),
+                relativeOrder: .min,
+                userDescription: "",
+                tags: [],
+                visibility: .always,
+                searchableLevel: .full,
+                searchPassphrase: nil,
+                killphrase: nil,
+                lockState: .notLocked,
+                color: .init(red: 0.45, green: 0.45, blue: 0.5),
+                showInQuickType: true,
+                previewMode: .titleAndFirstLine,
+            ),
+            editor: OTPCodeDetailEditorMock(),
+            previewGenerator: makeCodePreviewGenerator(isHOTP: true),
+            copyActionHandler: VaultItemCopyActionHandlerMock(),
+            openInEditMode: false,
             presentationMode: .none,
         )
 
@@ -250,11 +286,37 @@ extension OTPCodeDetailViewSnapshotTests {
                 previewMode: .titleAndFirstLine,
             ),
             editor: OTPCodeDetailEditorMock(),
-            previewGenerator: VaultItemPreviewViewGeneratorMock.defaultMock(),
+            previewGenerator: makeCodePreviewGenerator(),
             copyActionHandler: VaultItemCopyActionHandlerMock(),
             openInEditMode: openInEditMode,
             presentationMode: .none,
         )
+    }
+
+    /// Draws a code's preview as the app does, with a fixed code and, for a TOTP code, a countdown partway through.
+    private func makeCodePreviewGenerator(isHOTP: Bool = false) -> VaultItemPreviewViewGeneratorMock {
+        .mockGenerating { _, _, behaviour in
+            let viewModel = OTPCodePreviewViewModel(
+                accountName: "",
+                issuer: "",
+                color: .default,
+                isLocked: false,
+                fixedCodeState: .visible("123456"),
+            )
+            if isHOTP {
+                HOTPCodePreviewView(
+                    buttonView: OTPCodeButtonIcon(isError: false),
+                    previewViewModel: viewModel,
+                    behaviour: behaviour,
+                )
+            } else {
+                TOTPCodePreviewView(
+                    previewViewModel: viewModel,
+                    timerView: HorizontalTimerProgressBarView(fractionCompleted: 0.6, color: .blue),
+                    behaviour: behaviour,
+                )
+            }
+        }
     }
 
     private func makePasteboard() -> Pasteboard {

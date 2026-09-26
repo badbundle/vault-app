@@ -69,12 +69,16 @@ struct RecoveryPhraseDetailView: View {
             editorIdentity: identity,
             hiddenNotice: isContentHidden ? hiddenNotice : nil,
         ) {
-            headerSection
+            if viewModel.editingModel.detail.contents.isNotBlank {
+                // Encrypted with the words, so it's as private as they are.
+                DetailPageDescriptionSection(title: "Description", text: viewModel.editingModel.detail.contents)
+                    .privacySensitive()
+            }
             wordsSection
             if viewModel.editingModel.detail.seedPassphrase.isNotEmpty {
                 seedPassphraseSection
             }
-            MetadataDisclosureSection(
+            DetailPageInfoSections(
                 tags: viewModel.tagsThatAreSelected,
                 entries: viewModel.detailEntries,
             )
@@ -142,37 +146,24 @@ struct RecoveryPhraseDetailView: View {
 
     // MARK: - Viewing
 
-    private var headerSection: some View {
-        Section {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(viewModel.visibleTitle)
-                    .font(.title2.bold())
-                    .multilineTextAlignment(.leading)
-                if viewModel.editingModel.detail.contents.isNotBlank {
-                    Text(viewModel.editingModel.detail.contents)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .privacySensitive()
-                }
-                RecoveryPhraseValidationBadge(summary: viewModel.validationSummary())
-            }
-            .padding(.vertical, 4)
-        } header: {
-            Image(systemName: "list.number")
-                .font(.title)
-                .foregroundStyle((viewModel.editingModel.detail.color ?? .default).color)
-                .containerRelativeFrame(.horizontal)
-                .padding(.vertical, 2)
-        }
-    }
-
+    /// The words, headed by whether they make a valid phrase: a card with its icon in the validation's color.
     private var wordsSection: some View {
-        Section {
+        let summary = viewModel.validationSummary()
+        return Section {
+            DetailPageCardLabel(
+                title: summary.title,
+                subtitle: summary.detail,
+                systemImage: summary.systemIconName,
+                tint: validationColor(summary.kind),
+            )
+            .accessibilityElement(children: .combine)
+            // The words go with their heading.
+            .listRowSeparator(.hidden)
+
             RecoveryPhraseWordGridView(
                 words: viewModel.editingModel.detail.words,
                 isRevealed: viewModel.areWordsRevealed,
-                highlightedPositions: viewModel.validationSummary().unknownWordPositions,
+                highlightedPositions: summary.unknownWordPositions,
                 wordNumberLabel: viewModel.strings.wordNumber,
                 toggleRevealed: {
                     withAnimation(.snappy) {
@@ -182,38 +173,45 @@ struct RecoveryPhraseDetailView: View {
             )
             .privacySensitive()
             .listRowInsets(EdgeInsets(vertical: 12, horizontal: 12))
-        } header: {
-            Text(viewModel.editingModel.detail.standard.localizedTitle)
         } footer: {
             Text(viewModel.areWordsRevealed ? "Tap a word to hide them all." : "Tap a word to reveal them all.")
         }
     }
 
+    private func validationColor(_ kind: RecoveryPhraseValidationSummary.Kind) -> Color {
+        switch kind {
+        case .valid: .green
+        case .warning: .orange
+        case .neutral: .gray
+        }
+    }
+
     private var seedPassphraseSection: some View {
         Section {
-            HStack {
-                Group {
-                    if isSeedPassphraseRevealed {
-                        Text(verbatim: viewModel.editingModel.detail.seedPassphrase)
-                    } else {
-                        Text(verbatim: String(repeating: "•", count: 8))
-                            .accessibilityLabel(Text("Hidden"))
+            DetailPageCardLabel(title: "Passphrase", systemImage: "key.fill") {
+                HStack(alignment: .firstTextBaseline) {
+                    Group {
+                        if isSeedPassphraseRevealed {
+                            Text(verbatim: viewModel.editingModel.detail.seedPassphrase)
+                        } else {
+                            Text(verbatim: String(repeating: "•", count: 8))
+                                .accessibilityLabel(Text("Hidden"))
+                        }
                     }
-                }
-                .font(.body.monospaced())
-                .privacySensitive()
-                .frame(maxWidth: .infinity, alignment: .leading)
+                    .font(.body.monospaced())
+                    .foregroundStyle(Color(uiColor: .label))
+                    .privacySensitive()
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                Button {
-                    isSeedPassphraseRevealed.toggle()
-                } label: {
-                    Image(systemName: isSeedPassphraseRevealed ? "eye.slash" : "eye")
-                        .accessibilityLabel(Text(isSeedPassphraseRevealed ? "Hide Passphrase" : "Show Passphrase"))
+                    Button {
+                        isSeedPassphraseRevealed.toggle()
+                    } label: {
+                        Image(systemName: isSeedPassphraseRevealed ? "eye.slash" : "eye")
+                            .accessibilityLabel(Text(isSeedPassphraseRevealed ? "Hide Passphrase" : "Show Passphrase"))
+                    }
+                    .buttonStyle(.borderless)
                 }
-                .buttonStyle(.borderless)
             }
-        } header: {
-            Text("Passphrase")
         }
     }
 }

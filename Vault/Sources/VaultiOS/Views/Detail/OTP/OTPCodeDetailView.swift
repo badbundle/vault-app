@@ -85,9 +85,14 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
             editorIdentity: identity,
         ) {
             if case let .editing(code, metadata) = viewModel.mode {
-                codeInformationSection(code: code, metadata: metadata)
-                descriptionSection
-                MetadataDisclosureSection(
+                codeSection(code: code, metadata: metadata)
+                if viewModel.editingModel.detail.description.isNotBlank {
+                    DetailPageDescriptionSection(
+                        title: viewModel.strings.descriptionTitle,
+                        text: viewModel.editingModel.detail.description,
+                    )
+                }
+                DetailPageInfoSections(
                     tags: viewModel.tagsThatAreSelected,
                     entries: viewModel.detailMenuItems,
                 )
@@ -138,34 +143,18 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
         }
     }
 
-    private func codeInformationSection(code: OTPAuthCode, metadata: VaultItem.Metadata) -> some View {
-        Section {} header: {
+    /// The live code, which copies when tapped. The page's badge already shows the rest of the code's card.
+    private func codeSection(code: OTPAuthCode, metadata: VaultItem.Metadata) -> some View {
+        Section {
             copyableViewGenerator().makeVaultPreviewView(
                 item: .otpCode(code),
                 metadata: metadata,
                 behaviour: .normal,
             )
-            .frame(maxWidth: 240)
-            .fixedSize(horizontal: false, vertical: true)
-            .containerRelativeFrame(.horizontal)
-            .padding(.vertical, 8)
-        }
-    }
-
-    @ViewBuilder
-    private var descriptionSection: some View {
-        if viewModel.editingModel.detail.description.isNotBlank {
-            Section {
-                Text(viewModel.editingModel.detail.description)
-                    .foregroundStyle(.primary)
-                    .textSelection(.enabled)
-                    .font(.callout)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 8)
-            } header: {
-                Text(viewModel.strings.descriptionTitle)
-            }
+            .environment(\.showsCodeOnly, true)
+            .accessibilityHint("Copies the code")
+        } footer: {
+            Text("Tap the code to copy it.")
         }
     }
 
