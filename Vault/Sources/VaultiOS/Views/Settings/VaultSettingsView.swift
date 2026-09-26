@@ -41,21 +41,10 @@ struct VaultSettingsView: View {
             case .universalClipboard:
                 UniversalClipboardSheet(localSettings: localSettings)
             case .danger:
-                NavigationStack {
-                    SettingsDangerView(viewModel: .init(
-                        dataModel: dataModel,
-                        authenticationService: authenticationService,
-                    ))
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button {
-                                modal = nil
-                            } label: {
-                                Text("Done")
-                            }
-                        }
-                    }
-                }
+                SettingsDangerView(viewModel: .init(
+                    dataModel: dataModel,
+                    authenticationService: authenticationService,
+                ))
             }
         }
     }

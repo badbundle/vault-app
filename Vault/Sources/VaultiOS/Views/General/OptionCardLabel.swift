@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-/// A large, tappable choice: an icon on an accent square, a title with a subtitle beneath, and a chevron.
+/// A large, tappable choice: an icon on a colored square, a title with a subtitle beneath, and a chevron.
 ///
 /// The new-item picker offers each kind of item this way, and an item's editor offers each of its parts the same way,
 /// so choosing what to make and choosing what to change look alike. It draws no background: the container gives it
@@ -10,10 +10,11 @@ struct OptionCardLabel: View {
     var title: String
     var subtitle: String
     var systemImage: String
+    var color: Color = .accentColor
 
     var body: some View {
         HStack(spacing: 14) {
-            OptionCardIcon(systemImage: systemImage)
+            OptionCardIcon(systemImage: systemImage, color: color)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)

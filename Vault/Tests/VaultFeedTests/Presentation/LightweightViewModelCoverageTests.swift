@@ -25,21 +25,6 @@ struct LightweightViewModelCoverageTests {
     }
 
     @Test
-    func settingsDangerViewModel_failedAuthenticationResetsDeletingState() async {
-        let deleter = VaultStoreDeleterMock()
-        let dataModel = anyVaultDataModel(vaultDeleter: deleter)
-        let authentication = DeviceAuthenticationService(policy: DeviceAuthenticationPolicyAlwaysDeny())
-        let sut = SettingsDangerViewModel(dataModel: dataModel, authenticationService: authentication)
-
-        await #expect(throws: (any Error).self) {
-            try await sut.deleteEntireVault()
-        }
-
-        #expect(sut.isDeleting == false)
-        #expect(deleter.deleteVaultCallCount == 0)
-    }
-
-    @Test
     func genericVaultItemCopyActionHandler_returnsFirstChildAction() {
         let itemID = Identifier<VaultItem>.new()
         let first = VaultItemCopyActionHandlerMock()

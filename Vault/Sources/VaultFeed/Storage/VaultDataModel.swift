@@ -165,6 +165,12 @@ public final class VaultDataModel {
     /// Use this to trigger auto-backup or other side effects.
     public var onDataChanged: (() -> Void)?
 
+    /// Callback invoked once every item and tag has been deleted.
+    ///
+    /// Use this to clear anything that shows vault data outside the app, such as widgets. `onDataChanged` isn't called
+    /// for a deletion, so an empty vault isn't auto-backed up.
+    public var onVaultDeleted: (() -> Void)?
+
     // MARK: - Init
 
     private let vaultStore: any VaultStore
@@ -556,9 +562,12 @@ extension VaultDataModel {
 extension VaultDataModel {
     public func deleteVault() async throws {
         try await vaultDeleter.deleteVault()
-        try await vaultOtpAutofillStore.removeAll()
+        // Reload and notify before clearing AutoFill, so nothing keeps showing items that are already gone if that
+        // fails.
         await reloadItems()
         await reloadTags()
+        onVaultDeleted?()
+        try await vaultOtpAutofillStore.removeAll()
     }
 }
 
