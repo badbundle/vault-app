@@ -71,7 +71,9 @@ public enum VaultRoot {
     static let isAppExtension = Bundle.main.bundleURL.pathExtension == "appex"
 
     /// How the vault was stored on this device when the process started: in
-    /// the plain SQLite store, or encrypted with the App Lock Password.
+    /// the plain SQLite store, or encrypted with the App Lock Password. Or
+    /// `erasing`, if the app was stopped in the middle of an erase: no store
+    /// opens until `setup()` has finished it.
     ///
     /// The app first finishes or undoes any change of mode it was stopped in
     /// the middle of (`VaultStorageRecovery`). The AutoFill extension only
@@ -80,7 +82,7 @@ public enum VaultRoot {
     /// a conversion, so it also checks the state on every call
     /// (`GuardedPlainVaultStore`).
     @MainActor
-    static let storageMode: VaultStorageState.Mode = {
+    static let storageMode: VaultStorageRecovery.Outcome = {
         #if DEBUG
         if ScreenshotMode.isEnabled {
             return .plain
@@ -348,6 +350,37 @@ public enum VaultRoot {
         }
     }
 
+    // MARK: - Erasing
+
+    /// Erases every vault, back to a fresh plain store: what VAULT-34's lock
+    /// screen does after too many wrong App Lock Passwords, when the user has
+    /// turned that on. `setup()` finishes an erase the app was stopped in the
+    /// middle of.
+    @MainActor
+    static let vaultEraser: VaultEraser = .init(
+        directory: vaultStorageDirectory,
+        session: vaultStore,
+        secureStorage: secureStorage,
+        attemptCounter: AppLockPasswordAttemptCounter(),
+        hooks: .init(
+            releasePlainStore: {
+                await releasePlainVaultStore()
+            },
+            clearCredentialIdentities: {
+                try? await vaultOtpAutofillStore.removeAll()
+            },
+            reloadWidgets: {
+                await reloadWidgetTimelines()
+            },
+        ),
+    )
+
+    /// The erase `setup()` is finishing, if the app was stopped in the middle
+    /// of one. The vault's views appear once it's done, so nothing reads the
+    /// vault, or the keychain items it deletes, before then.
+    @MainActor
+    public private(set) static var finishingErase: Task<Void, Never>?
+
     // MARK: - Auto-Backup
 
     @MainActor
@@ -391,6 +424,13 @@ public enum VaultRoot {
     /// Call this at app startup to wire up connections between components.
     @MainActor
     public static func setup() {
+        // Finish an erase the app was stopped in the middle of. It leaves a
+        // fresh, empty plain store. The vault's views wait for it.
+        if storageMode == .erasing {
+            finishingErase = Task {
+                try? await vaultEraser.erase()
+            }
+        }
         // Wire up auto-backup and widget reloads to trigger when vault data
         // changes. The OTP widget reads items from the shared App Group
         // container and only refreshes when the system or this hook asks it to.

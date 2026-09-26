@@ -26,6 +26,9 @@ public struct VaultStorageState: Codable, Equatable, Sendable {
         /// which the app does at its next launch if it was stopped first
         /// (`VaultStorageRecovery.finishClearingSystemSurfaces(_:)`).
         case clearingSystemSurfaces
+        /// Erasing every vault, back to a fresh plain store (`VaultEraser`), whatever the mode says. Nothing may open
+        /// a store until the erase has finished: the app finishes it at launch.
+        case erasing
     }
 
     public var mode: Mode
