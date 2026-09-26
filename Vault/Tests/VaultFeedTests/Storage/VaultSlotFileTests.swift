@@ -203,7 +203,7 @@ extension VaultSlotFileTests {
     @Test
     func openSlot_passwordOpensOnlyTheSlotItCreated() throws {
         var file = try makeFile()
-        let password = Data("correct horse battery staple".utf8)
+        let password = "correct horse battery staple"
         try file.createVault(
             inSlot: 9,
             rootKey: file.header.passwordKey(for: password),
@@ -224,12 +224,12 @@ extension VaultSlotFileTests {
         var file = try makeFile()
         try file.createVault(
             inSlot: 9,
-            rootKey: file.header.passwordKey(for: Data("correct horse battery staple".utf8)),
+            rootKey: file.header.passwordKey(for: "correct horse battery staple"),
             payload: payload("real"),
             wrappedAt: date,
         )
 
-        let wrongKey = try file.header.passwordKey(for: Data("correct horse battery stapler".utf8))
+        let wrongKey = try file.header.passwordKey(for: "correct horse battery stapler")
 
         for index in VaultSlotFile.slotIndices {
             #expect(throws: VaultSlotFileError.slotDidNotOpen) {
@@ -241,8 +241,8 @@ extension VaultSlotFileTests {
     @Test
     func openSlot_eachPasswordOpensItsOwnSlot() throws {
         var file = try makeFile()
-        let first = Data("first password".utf8)
-        let second = Data("second password".utf8)
+        let first = "first password"
+        let second = "second password"
         try file.createVault(
             inSlot: 2,
             rootKey: file.header.passwordKey(for: first),
@@ -329,16 +329,31 @@ extension VaultSlotFileTests {
     @Test
     func passwordKey_isArgon2idOfThePasswordWithTheHeadersParametersAndSalt() throws {
         let file = try makeFile()
-        let password = Data("password".utf8)
 
-        let rootKey = try file.header.passwordKey(for: password)
+        let rootKey = try file.header.passwordKey(for: "password")
 
         let expected = try Argon2idKeyDeriver<32>(parameters: parameters).key(
-            password: password,
+            password: Data("password".utf8),
             salt: file.header.salt,
         )
         #expect(rootKey.kind == .password)
         #expect(bytes(of: rootKey.key) == expected.data)
+    }
+
+    /// Keyboards can compose an accented letter as one character or as a letter and a combining accent.
+    @Test
+    func passwordKey_isTheSameHoweverThePasswordsAccentsAreComposed() throws {
+        let file = try makeFile()
+
+        let composed = try file.header.passwordKey(for: "caf\u{E9}")
+        let decomposed = try file.header.passwordKey(for: "cafe\u{301}")
+
+        let expected = try Argon2idKeyDeriver<32>(parameters: parameters).key(
+            password: Data("caf\u{E9}".utf8),
+            salt: file.header.salt,
+        )
+        #expect(bytes(of: composed.key) == expected.data)
+        #expect(bytes(of: decomposed.key) == expected.data)
     }
 
     @Test
@@ -801,8 +816,8 @@ extension VaultSlotFileTests {
     @Test
     func rewrap_changesThePassword() throws {
         var file = try makeFile()
-        let oldPassword = Data("old password".utf8)
-        let newPassword = Data("new password".utf8)
+        let oldPassword = "old password"
+        let newPassword = "new password"
         let created = try file.createVault(
             inSlot: 12,
             rootKey: file.header.passwordKey(for: oldPassword),
@@ -854,7 +869,7 @@ extension VaultSlotFileTests {
         let marker = "PLAINTEXT-MARKER-\(UUID().uuidString)"
         let items = (0 ..< 200).map { #"{"issuer":"\#(marker)-\#($0)","secret":"\#(marker)"}"# }
         let payload = VaultSlotPayload(version: 1, data: Data("[\(items.joined(separator: ","))]".utf8))
-        let password = Data("password-\(UUID().uuidString)".utf8)
+        let password = "password-\(UUID().uuidString)"
         var file = try makeFile()
         let rootKey = try file.header.passwordKey(for: password)
 
@@ -872,7 +887,7 @@ extension VaultSlotFileTests {
             ("marker", Data(marker.utf8)),
             ("marker prefix", Data("PLAINTEXT-MARKER-".utf8)),
             ("field name", Data(#""issuer""#.utf8)),
-            ("password", password),
+            ("password", Data(password.utf8)),
             ("password key", bytes(of: rootKey.key)),
             ("wrap key", bytes(of: sealed.wrapKey)),
             ("data key", bytes(of: sealed.dataKey)),

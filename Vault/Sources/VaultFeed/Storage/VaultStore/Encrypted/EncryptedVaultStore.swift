@@ -10,8 +10,10 @@ import VaultCore
 /// fails leaves both as they were and throws.
 ///
 /// - If another app or extension saved the vault since this store last read or saved it, the store takes what the
-///   other writer saved and makes the change again on top of it, so neither writer's change is lost. Only if that
-///   keeps happening does the change fail, with `EncryptedVaultStoreError.conflict`.
+///   other writer saved and makes the change again on top of it, so each writer's change is applied once. An update
+///   to an item the other writer changed too replaces it, as the later save does in the SQLite store, but keeps a
+///   HOTP counter it advanced. Only if conflicts keep happening does the change fail, with
+///   `EncryptedVaultStoreError.conflict`.
 /// - Deleting by killphrase returns `false` whatever the failure, the same as when nothing matches (MANIFESTO C2).
 ///
 /// It behaves exactly as `RecordVaultStore` does, which it's built on. Finding the slot a password opens, within the

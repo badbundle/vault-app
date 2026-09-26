@@ -32,6 +32,10 @@ final class InMemorySlotFileSystem: SlotFileSystem {
         state.get { $0.files[url.path] }
     }
 
+    func prefix(of url: URL, length: Int) throws -> (bytes: Data, fileSize: Int)? {
+        try contents(of: url).map { (Data($0.prefix(length)), $0.count) }
+    }
+
     func createFile(at url: URL, contents: Data) throws {
         try state.modify { state in
             guard state.files[url.path] == nil else { throw POSIXError(.EEXIST) }

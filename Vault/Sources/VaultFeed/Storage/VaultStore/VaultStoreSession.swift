@@ -27,6 +27,9 @@ public final actor VaultStoreSession {
     }
 
     private var target: Target
+    /// Counts the times the session has locked. Something that set out to unlock at one count mustn't switch to a
+    /// vault once the count has moved on (`switchTo(_:unlessLockedSince:)`).
+    public private(set) var lockEpoch = 0
     /// Calls that reached a store and haven't returned yet.
     private var operationsInFlight = 0
     private var waitingForOperations = [CheckedContinuation<Void, Never>]()
@@ -47,7 +50,19 @@ public final actor VaultStoreSession {
     /// one has finished, so the old store isn't in use any more.
     public func switchTo(_ newTarget: Target) async {
         target = newTarget
+        if case .locked = newTarget {
+            lockEpoch += 1
+        }
         await waitForOperationsInFlight()
+    }
+
+    /// Switches to `newTarget`, unless the session has locked since `lockEpoch` was `epoch`: that lock wins.
+    ///
+    /// - Returns: Whether it switched.
+    public func switchTo(_ newTarget: Target, unlessLockedSince epoch: Int) async -> Bool {
+        guard lockEpoch == epoch else { return false }
+        await switchTo(newTarget)
+        return true
     }
 
     /// Switch to `locked`, once every call already underway has finished.

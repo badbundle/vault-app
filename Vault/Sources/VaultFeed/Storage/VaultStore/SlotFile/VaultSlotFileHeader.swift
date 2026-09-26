@@ -134,12 +134,18 @@ extension VaultSlotFile {
 extension VaultSlotFile.Header {
     /// Derives `K_pw` from the app lock password, with this file's parameters and salt.
     ///
+    /// The password is used as its UTF-8 in Unicode's composed form (NFC), so it derives the same key however the
+    /// keyboard put its accents together. Setting, trying and changing a password all derive through here, so they
+    /// always agree.
+    ///
     /// It takes as long as calibration chose, about half a second on the device that created the file, so call it
     /// off the main actor. The key goes straight from the derivation's wiped buffer into a `SymmetricKey`, which is
-    /// zeroed when it's released.
-    public func passwordKey(for password: Data) throws -> VaultSlotRootKey {
+    /// zeroed when it's released, and the password's bytes are wiped.
+    public func passwordKey(for password: String) throws -> VaultSlotRootKey {
+        var bytes = Data(password.precomposedStringWithCanonicalMapping.utf8)
+        defer { SlotRandom.wipe(&bytes) }
         let deriver = Argon2idKeyDeriver<32>(parameters: kdfParameters)
-        let key = try deriver.withKeyBytes(password: password, salt: salt) { SymmetricKey(data: $0) }
+        let key = try deriver.withKeyBytes(password: bytes, salt: salt) { SymmetricKey(data: $0) }
         return .password(derivedKey: key)
     }
 }

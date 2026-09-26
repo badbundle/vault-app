@@ -65,35 +65,109 @@ final class ManualUnlockClock: VaultUnlockClock {
     }
 }
 
-/// The real unlock work, logging each step into a log it can share with the other doubles.
-///
-/// Deriving the key can take as long as the test says, on the test's clock.
+/// The real unlock work, logging each step into a log it can share with the other doubles, and taking the time the
+/// test gives each step, on the test's clock and in thread CPU time.
 final class SpyUnlockWork: VaultUnlockWork {
+    /// How long each step takes.
+    struct Timings: Sendable {
+        var derivation = Duration.milliseconds(300)
+        var keyBox = Duration.milliseconds(1)
+        /// Opening a body that opens and decoding its vault.
+        var body = Duration.milliseconds(40)
+        /// Opening a body that doesn't open, such as the decoy.
+        var bodyThatFails = Duration.milliseconds(5)
+        /// Time that passes during the derivation with the thread not running, as when the app is suspended. It
+        /// passes on the clock, but not in CPU time.
+        var suspendedDuringDerivation = Duration.zero
+    }
+
+    struct DerivationFailure: Error {}
+
+    private struct State {
+        var cpuTime = Duration.zero
+        var bodyLengths = [Int]()
+        var failsDerivation = false
+    }
+
     private let live = LiveVaultUnlockWork()
     private let log: SharedMutex<[String]>
     private let clock: ManualUnlockClock
-    private let derivationDuration: Duration
+    private let timings: Timings
+    private let state = SharedMutex(State())
+    private let derivationGate = SharedMutex<DispatchSemaphore?>(nil)
+    private let isDeriving = SharedMutex(false)
 
-    init(log: SharedMutex<[String]>, clock: ManualUnlockClock, derivationDuration: Duration = .zero) {
+    init(log: SharedMutex<[String]>, clock: ManualUnlockClock, timings: Timings = Timings()) {
         self.log = log
         self.clock = clock
-        self.derivationDuration = derivationDuration
+        self.timings = timings
     }
 
-    func passwordKey(for password: Data, header: VaultSlotFile.Header) throws -> VaultSlotRootKey {
+    /// The length of every body opened, in order.
+    var bodyLengths: [Int] {
+        state.get { $0.bodyLengths }
+    }
+
+    func failDerivation() {
+        state.modify { $0.failsDerivation = true }
+    }
+
+    /// Holds the next derivation until `releaseDerivation()`.
+    func holdDerivation() {
+        derivationGate.modify { $0 = DispatchSemaphore(value: 0) }
+    }
+
+    func releaseDerivation() {
+        derivationGate.get { $0 }?.signal()
+    }
+
+    /// Waits (for up to 5 seconds) until a derivation is underway.
+    func waitUntilDeriving() async {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !isDeriving.value, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
+    func threadCPUTime() -> Duration {
+        state.get { $0.cpuTime }
+    }
+
+    func passwordKey(for password: String, header: VaultSlotFile.Header) throws -> VaultSlotRootKey {
         log.modify { $0.append("derive") }
-        clock.advance(by: derivationDuration)
+        isDeriving.modify { $0 = true }
+        derivationGate.get { $0 }?.wait()
+        spend(timings.derivation)
+        clock.advance(by: timings.suspendedDuringDerivation)
+        if state.get({ $0.failsDerivation }) {
+            throw DerivationFailure()
+        }
         return try live.passwordKey(for: password, header: header)
     }
 
     func openKeyBox(_ index: Int, in file: VaultSlotFile, with key: VaultSlotRootKey) -> VaultSlotFile.OpenedSlot? {
         log.modify { $0.append("try slot \(index)") }
+        spend(timings.keyBox)
         return live.openKeyBox(index, in: file, with: key)
     }
 
     func openBody(of slot: VaultSlotFile.OpenedSlot, in file: VaultSlotFile) throws -> VaultRecordState {
         log.modify { $0.append("open a body") }
-        return try live.openBody(of: slot, in: file)
+        state.modify { $0.bodyLengths.append(slot.bodyLength) }
+        do {
+            let vault = try live.openBody(of: slot, in: file)
+            spend(timings.body)
+            return vault
+        } catch {
+            spend(timings.bodyThatFails)
+            throw error
+        }
+    }
+
+    /// Takes `duration` of CPU time, which passes on the clock too.
+    private func spend(_ duration: Duration) {
+        state.modify { $0.cpuTime += duration }
+        clock.advance(by: duration)
     }
 }
 
@@ -112,9 +186,15 @@ final class LoggingAttemptStorage: AppLockPasswordAttemptStorage {
 
     private let log: SharedMutex<[String]>
     private let state = SharedMutex(State())
+    private let whileRemoving = SharedMutex<(@Sendable () -> Void)?>(nil)
 
     init(log: SharedMutex<[String]>) {
         self.log = log
+    }
+
+    /// Runs `action` while the count is being reset, before `remove()` returns.
+    func doWhileRemoving(_ action: @escaping @Sendable () -> Void) {
+        whileRemoving.modify { $0 = action }
     }
 
     /// Makes the counter find `count` wrong attempts in a row, the latest at `latestAt`.
@@ -148,12 +228,16 @@ final class LoggingAttemptStorage: AppLockPasswordAttemptStorage {
             state.record = nil
         }
         log.modify { $0.append("reset the count") }
+        whileRemoving.get { $0 }?()
     }
 }
 
 /// A deadline kept in memory.
 final class FakeUnlockDeadlineStore: VaultUnlockDeadlineStoring {
+    struct RaiseFailure: Error {}
+
     private let deadline: SharedMutex<Duration>
+    private let failsToRaise = SharedMutex(false)
 
     init(deadline: Duration) {
         self.deadline = SharedMutex(deadline)
@@ -163,11 +247,18 @@ final class FakeUnlockDeadlineStore: VaultUnlockDeadlineStoring {
         deadline.value
     }
 
+    func failToRaise() {
+        failsToRaise.modify { $0 = true }
+    }
+
     func unlockDeadline() async throws -> Duration {
         deadline.value
     }
 
     func raiseUnlockDeadline(to newDeadline: Duration) async throws {
+        if failsToRaise.value {
+            throw RaiseFailure()
+        }
         deadline.modify { $0 = max($0, newDeadline) }
     }
 }

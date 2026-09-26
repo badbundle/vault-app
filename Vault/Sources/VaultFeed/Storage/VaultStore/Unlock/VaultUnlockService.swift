@@ -6,7 +6,7 @@ import os
 
 /// Unlocks the encrypted vault with the app lock password, and locks it again.
 ///
-/// **Unlocking** (`unlock(password:)`):
+/// **Unlocking** (`unlock(password:)`), from a locked session:
 ///
 /// 1. Counts the attempt with `AppLockPasswordAttemptCounter`, before anything is derived. If the user has to wait
 ///    after their last wrong attempts, it says how long, and tries nothing.
@@ -15,14 +15,25 @@ import os
 /// 4. Tries every slot's key box, with no early exit.
 /// 5. Opens one body: the slot that opened, or the most recently wrapped if more than one did. If none did, it opens
 ///    a decoy instead, a random slot's body with a throwaway key, which fails.
-/// 6. Drops `K_pw` and the wrap keys it didn't keep. They're `SymmetricKey`s, which are zeroed when released.
+/// 6. Drops `K_pw` and every wrap key but the opened slot's. They're `SymmetricKey`s, which are zeroed when released.
+///    The opened slot's wrap key and data key stay with its store until the vault locks.
 /// 7. Waits for the deadline. Then it resets the count and switches the store session to the vault, or reports a
 ///    wrong password.
 ///
-/// So real, duress and wrong passwords do the same work, and finish at the same deadline. The deadline is set when
-/// the vault is created, at 1.5 times the derivation calibration expected. If a derivation takes longer than it, for
-/// example after a restore onto a slower iPhone, the deadline is raised to 1.5 times that derivation, for that
-/// attempt and every later one. It's never lowered.
+/// So real, duress and wrong passwords do the same work, and finish at the same deadline.
+///
+/// **The deadline** is set when the vault is created, at 1.5 times the derivation calibration expected. If an
+/// attempt's work (steps 3 to 5) takes more than two thirds of it, for example after a restore onto a slower iPhone,
+/// the deadline is raised to 1.5 times that work, for that attempt and every later one, up to `maximumDeadline`. It's
+/// never lowered.
+///
+/// - The work is timed in the thread's CPU time, not on a clock, so time the app spends suspended, or the device
+///   asleep, doesn't count. The work is one thread's computation, so its CPU time is how long it takes when it isn't
+///   held up. When the device is busy, an attempt can overrun the deadline without raising it. That shows how busy
+///   the device is, not what the password opened.
+/// - Only an attempt whose work finished and that's still wanted raises it.
+/// - Decoding a vault that opened is part of the work, so a very large vault can raise the deadline where a wrong
+///   password wouldn't. That's proportional to what the vault shows once it's open anyway.
 ///
 /// **Locking** (`lock()`) waits for any change already underway to finish saving, switches the store session to
 /// `locked`, and purges what the app read from the vault.
@@ -32,8 +43,14 @@ import os
 public actor VaultUnlockService {
     /// The memory the AutoFill extension keeps free on top of the key derivation's and the file's.
     static let memoryMargin = 16 << 20
-    /// A derivation that takes longer than the deadline raises it to this multiple of the derivation.
+    /// An attempt whose work takes more than two thirds of the deadline raises it to this multiple of the work.
     static let deadlineMultiplier = 1.5
+    /// The longest the deadline goes: raised no further, and a longer one read from storage is taken as this.
+    ///
+    /// The derivation's passes are capped at 32 (`AppLockKeyDerivation.passesRange`). Those take about 0.7 s on an
+    /// M5 Max, and perhaps 3 s on an iPhone four times slower; 1.5 times that is about 4.5 s. A deadline beyond this
+    /// hides nothing a real device needs hiding, and would make every unlock wait.
+    static let maximumDeadline = Duration.seconds(5)
 
     private let file: EncryptedVaultFile
     private let session: VaultStoreSession
@@ -42,11 +59,9 @@ public actor VaultUnlockService {
     private let purgeVaultContents: @Sendable () async -> Void
     private let clock: any VaultUnlockClock
     private let work: any VaultUnlockWork
-    private let availableMemory: @Sendable () -> Int
+    private let availableMemory: @Sendable () -> Int?
 
     private var isUnlocking = false
-    /// Counts locks. An attempt that was underway when the vault locked is thrown away.
-    private var lockGeneration = 0
 
     /// - Parameters:
     ///   - directory: The directory the encrypted vault file is in.
@@ -69,6 +84,7 @@ public actor VaultUnlockService {
         )
     }
 
+    /// - Parameter availableMemory: The memory the process can still use, or `nil` if it has no limit.
     init(
         file: EncryptedVaultFile,
         session: VaultStoreSession,
@@ -77,7 +93,7 @@ public actor VaultUnlockService {
         purgeVaultContents: @escaping @Sendable () async -> Void,
         clock: any VaultUnlockClock = ContinuousClock(),
         work: any VaultUnlockWork = LiveVaultUnlockWork(),
-        availableMemory: @escaping @Sendable () -> Int = VaultUnlockService.processAvailableMemory,
+        availableMemory: @escaping @Sendable () -> Int? = VaultUnlockService.processAvailableMemory,
     ) {
         self.file = file
         self.session = session
@@ -105,6 +121,8 @@ public enum VaultUnlockError: Error, Equatable, Sendable {
     case noEncryptedVault
     /// Another attempt is still underway.
     case attemptUnderway
+    /// The store session isn't locked: a vault is open already.
+    case notLocked
 }
 
 // MARK: - Unlocking
@@ -121,39 +139,41 @@ extension VaultUnlockService {
         guard !isUnlocking else { throw VaultUnlockError.attemptUnderway }
         isUnlocking = true
         defer { isUnlocking = false }
-        let generation = lockGeneration
+        guard await session.isLocked else { throw VaultUnlockError.notLocked }
+        let lockEpoch = await session.lockEpoch
 
-        let deadline = try await deadlineStore.unlockDeadline()
+        let deadline = try await min(deadlineStore.unlockDeadline(), Self.maximumDeadline)
         guard let contents = try await file.open() else { throw VaultUnlockError.noEncryptedVault }
         // The erase after too many wrong attempts (VAULT-52) will use `reachesEraseThreshold`.
         if case let .delayed(remaining) = try await attemptCounter.countAttempt() {
             return .mustWait(remaining)
         }
         let start = clock.now
-        let attempt = await Task.detached(priority: .userInitiated) { [work, clock] in
-            Self.attempt(password: password, contents: contents, work: work, clock: clock)
+        let attempt = await Task.detached(priority: .userInitiated) { [work] in
+            Self.attempt(password: password, contents: contents, work: work)
         }.value
 
-        let heldUntil = max(deadline, attempt.derivationDuration * Self.deadlineMultiplier)
-        if heldUntil > deadline {
-            // This attempt waits for the raised deadline either way, and if saving it failed, the next one raises it
-            // again.
-            try? await deadlineStore.raiseUnlockDeadline(to: heldUntil)
+        let raisedDeadline = attempt.workDuration.map { min($0 * Self.deadlineMultiplier, Self.maximumDeadline) }
+        var heldUntil = deadline
+        if let raisedDeadline, raisedDeadline > deadline, await isStillWanted(since: lockEpoch) {
+            heldUntil = raisedDeadline
+            // Raised before the wait, so the time it takes is inside the deadline. If saving it failed, the next slow
+            // attempt raises it again.
+            try? await deadlineStore.raiseUnlockDeadline(to: raisedDeadline)
         }
         // Cancelling cuts the wait short, and then the result is thrown away, so ending early reveals nothing.
         try? await clock.sleep(until: start.advanced(by: heldUntil))
-        try requireStillWanted(since: generation)
+        guard await isStillWanted(since: lockEpoch) else { throw CancellationError() }
 
         switch attempt.outcome {
         case .success(nil):
             return .wrongPassword
         case let .success(opened?):
             try await attemptCounter.reset()
-            try requireStillWanted(since: generation)
-            await session.switchTo(.unlocked(EncryptedVaultStore(file: file, slot: opened.slot, state: opened.state)))
-            if generation != lockGeneration {
-                // The vault locked while the session was switching: that lock wins.
-                await session.lock()
+            let store = EncryptedVaultStore(file: file, slot: opened.slot, state: opened.state)
+            // The session only switches if it hasn't locked since this attempt began, checked on the session itself,
+            // so a lock can't slip in between the check and the switch.
+            guard await session.switchTo(.unlocked(store), unlessLockedSince: lockEpoch) else {
                 throw CancellationError()
             }
             return .unlocked
@@ -162,18 +182,13 @@ extension VaultUnlockService {
         }
     }
 
-    private func requireStillWanted(since generation: Int) throws {
-        guard generation == lockGeneration, !Task.isCancelled else { throw CancellationError() }
-    }
-
-    /// The bytes a password derives its key from: its UTF-8, in Unicode's composed form (NFC), so it derives the
-    /// same key however the keyboard put its accents together. Setting a password must use the same.
-    static func keyMaterial(for password: String) -> Data {
-        Data(password.precomposedStringWithCanonicalMapping.utf8)
+    private func isStillWanted(since lockEpoch: Int) async -> Bool {
+        await session.lockEpoch == lockEpoch && !Task.isCancelled
     }
 
     private struct Attempt: Sendable {
-        var derivationDuration: Duration
+        /// The thread CPU time the work took, or `nil` if the key couldn't be derived.
+        var workDuration: Duration?
         /// The slot that opened and the vault in it, `nil` if no slot opened, or why the attempt failed.
         var outcome: Result<Opened?, any Error>
     }
@@ -183,38 +198,32 @@ extension VaultUnlockService {
         var state: VaultRecordState
     }
 
-    /// Derives the key, tries every slot, and opens one body. Runs off the actor.
-    private static func attempt(
-        password: String,
-        contents: VaultSlotFile,
-        work: any VaultUnlockWork,
-        clock: any VaultUnlockClock,
-    ) -> Attempt {
-        let start = clock.now
+    /// Derives the key, tries every slot, and opens one body. Runs off the actor, all on one thread.
+    private static func attempt(password: String, contents: VaultSlotFile, work: any VaultUnlockWork) -> Attempt {
+        let start = work.threadCPUTime()
         let opened: [VaultSlotFile.OpenedSlot]
         do {
-            var keyMaterial = keyMaterial(for: password)
-            defer { SlotRandom.wipe(&keyMaterial) }
-            let key = try work.passwordKey(for: keyMaterial, header: contents.header)
+            let key = try work.passwordKey(for: password, header: contents.header)
             // Every slot, with no early exit. The key is released at the end of this scope.
             opened = VaultSlotFile.slotIndices.compactMap { work.openKeyBox($0, in: contents, with: key) }
         } catch {
-            return Attempt(derivationDuration: start.duration(to: clock.now), outcome: .failure(error))
+            return Attempt(workDuration: nil, outcome: .failure(error))
         }
-        let derivationDuration = start.duration(to: clock.now)
 
         // The same password opening more than one slot means the newer vault was made with a password that happened
-        // to open an older one too. The newer one is the one the user just made (see "Same passwords").
+        // to open an older one too. The newer one is the one the user just made (see "Same passwords"). Wrap times
+        // come from the clock of the device that wrapped the key, so one set wrong can make a newer vault look older.
+        // Slots wrapped in the same millisecond go to the lowest index.
         guard let chosen = opened.max(by: { $0.wrappedAt < $1.wrappedAt }) else {
             // A wrong password opens a body too, so every attempt does the same work. The throwaway key fails to
             // authenticate it.
             _ = try? work.openBody(of: decoySlot(in: contents), in: contents)
-            return Attempt(derivationDuration: derivationDuration, outcome: .success(nil))
+            return Attempt(workDuration: work.threadCPUTime() - start, outcome: .success(nil))
         }
         let outcome = Result<Opened?, any Error> {
             try Opened(slot: chosen, state: work.openBody(of: chosen, in: contents))
         }
-        return Attempt(derivationDuration: derivationDuration, outcome: outcome)
+        return Attempt(workDuration: work.threadCPUTime() - start, outcome: outcome)
     }
 
     /// A random slot, as if opened with a throwaway key: opening its body does the work of opening a real one, and
@@ -242,7 +251,6 @@ extension VaultUnlockService {
     /// Once the session is locked, nothing holds the vault's store any more, and its keys are zeroed as it's
     /// released.
     public func lock() async {
-        lockGeneration += 1
         await session.lock()
         await purgeVaultContents()
     }
@@ -256,25 +264,22 @@ extension VaultUnlockService {
     ///
     /// The AutoFill extension checks this before it asks for the password, and tells the user to open Vault instead
     /// if there isn't enough (VAULT-49). The app can always unlock.
-    public func hasMemoryHeadroomToUnlock() async throws -> Bool {
-        let needed = try await memoryNeededToUnlock()
-        let available = availableMemory()
-        // No figure at all means the process has no memory limit, as in the simulator.
-        return available == 0 || available >= needed
+    public func hasMemoryHeadroomToUnlock() throws -> Bool {
+        guard let (header, fileSize) = try file.readHeader() else { throw VaultUnlockError.noEncryptedVault }
+        let needed = Int(header.kdfParameters.memoryKiB) * 1024 + fileSize + Self.memoryMargin
+        guard let available = availableMemory() else { return true }
+        return available >= needed
     }
 
-    /// Read in its own scope, so the file read to find out is released before the memory left is measured.
-    private func memoryNeededToUnlock() async throws -> Int {
-        guard let contents = try await file.open() else { throw VaultUnlockError.noEncryptedVault }
-        return Int(contents.header.kdfParameters.memoryKiB) * 1024 + contents.bytes.count + Self.memoryMargin
-    }
-
-    /// The memory this process can still use before the system stops it, or 0 if there's no limit.
-    static let processAvailableMemory: @Sendable () -> Int = {
-        #if os(iOS)
+    /// The memory this process can still use before the system stops it, or `nil` if it has no limit.
+    ///
+    /// On an iPhone every app and extension has a limit, and `os_proc_available_memory()` gives 0 once it's over
+    /// it. The simulator and other platforms have none.
+    static let processAvailableMemory: @Sendable () -> Int? = {
+        #if os(iOS) && !targetEnvironment(simulator)
         Int(os_proc_available_memory())
         #else
-        0
+        nil
         #endif
     }
 }

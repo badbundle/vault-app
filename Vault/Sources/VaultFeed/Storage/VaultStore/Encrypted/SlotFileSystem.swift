@@ -12,6 +12,9 @@ protocol SlotFileSystem: Sendable {
     func unlock(_ lock: SlotFileLock)
     /// The file's contents, or `nil` if there's no file.
     func contents(of url: URL) throws -> Data?
+    /// The file's first `length` bytes, or all of it if it's shorter, and its size, or `nil` if there's no file.
+    /// Reads no more of it.
+    func prefix(of url: URL, length: Int) throws -> (bytes: Data, fileSize: Int)?
     /// Creates a file with these contents, readable only while the device is unlocked. Fails if the file exists.
     func createFile(at url: URL, contents: Data) throws
     /// Flushes the file to permanent storage, including the drive's own cache (`F_FULLFSYNC`).
@@ -62,6 +65,19 @@ struct LiveSlotFileSystem: SlotFileSystem {
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
             return nil
         }
+    }
+
+    func prefix(of url: URL, length: Int) throws -> (bytes: Data, fileSize: Int)? {
+        let handle: FileHandle
+        do {
+            handle = try FileHandle(forReadingFrom: url)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile || error.code == .fileNoSuchFile {
+            return nil
+        }
+        defer { try? handle.close() }
+        let bytes = try handle.read(upToCount: length) ?? Data()
+        let fileSize = try handle.seekToEnd()
+        return (bytes, Int(fileSize))
     }
 
     func createFile(at url: URL, contents: Data) throws {

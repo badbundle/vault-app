@@ -196,13 +196,28 @@ extension RecordVaultStore: VaultStoreWriter {
         }
     }
 
+    /// Replaces the item, as the last save does in the SQLite store.
+    ///
+    /// If another writer saved first, the update is made again on top of what it saved, with one exception: a HOTP
+    /// counter the update left as it found it keeps any advance the other writer made, such as AutoFill using a code.
+    /// Otherwise the counter would go back, and the next code would be one already used.
     func update(id: Identifier<VaultItem>, item: VaultItem.Write) async throws {
         let encoder = PersistedVaultItemEncoder(currentDate: currentDate)
+        // The item's counter when the update was first worked out, before any other writer's change.
+        var counterFirstFound: Int64?? = .none
         try await change { state in
             guard let existing = state.items.first(where: { $0.id == id.rawValue }) else {
                 throw Error.itemNotFound
             }
-            try state.upsert(encoder.encode(item: item, existing: existing))
+            var record = try encoder.encode(item: item, existing: existing)
+            if case let .some(firstFound) = counterFirstFound {
+                if let advanced = existing.otpDetails?.counter, record.otpDetails?.counter == firstFound {
+                    record.otpDetails?.counter = advanced
+                }
+            } else {
+                counterFirstFound = .some(existing.otpDetails?.counter)
+            }
+            state.upsert(record)
         }
     }
 
@@ -405,8 +420,9 @@ extension RecordVaultStore {
     ///
     /// Changes take turns, so each starts from the state the one before it saved. If another writer (the AutoFill
     /// extension, say) saved first, this takes what it saved and works the change out again on top of it: every
-    /// change is a function of the state, so neither writer's change is lost. After `conflictAttempts` tries it
-    /// throws `EncryptedVaultStoreError.conflict`, holding what the other writer saved.
+    /// change is a function of the state, so each writer's change is applied once. Two changes to the same item end
+    /// as the later one leaves it, as in the SQLite store (see `update(id:item:)` for HOTP counters). After
+    /// `conflictAttempts` tries it throws `EncryptedVaultStoreError.conflict`, holding what the other writer saved.
     ///
     /// Tests also call it, to save states the operations can't produce.
     @discardableResult

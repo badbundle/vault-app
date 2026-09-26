@@ -56,30 +56,34 @@ extension VaultUnlockServiceTests {
         #expect(!sut.log.value.contains("reset the count"))
     }
 
-    /// Real, duress and wrong passwords take the same steps, the same number of times, and finish at the same
-    /// deadline.
+    /// Real, duress and wrong passwords take the same steps, the same number of times, open a body of the same
+    /// length, and return at the deadline, even though opening a body that opens takes longer than the decoy.
     @Test
-    func everyPassword_doesTheSameWorkAndFinishesAtTheDeadline() async throws {
+    func everyPassword_doesTheSameWorkAndReturnsAtTheDeadline() async throws {
         let vaults: [TestVault] = [
             .init(password: "real", slot: realSlot, items: [uniqueVaultItem()]),
             .init(password: "duress", slot: duressSlot, items: []),
         ]
+        let timings = SpyUnlockWork.Timings(body: .milliseconds(80), bodyThatFails: .milliseconds(5))
         var logs = [[String]]()
-        var waits = [[Duration]]()
+        var bodyLengths = [[Int]]()
+        var returnedAfter = [Duration]()
 
         for password in ["real", "duress", "wrong"] {
-            let sut = try makeSUT(vaults: vaults)
+            let sut = try makeSUT(vaults: vaults, timings: timings)
             let start = sut.clock.now
             _ = try await sut.service.unlock(password: password)
+            returnedAfter.append(start.duration(to: sut.clock.now))
             logs.append(sut.log.value.filter { $0 != "reset the count" })
-            waits.append(sut.clock.sleeps.map { start.duration(to: $0) })
+            bodyLengths.append(sut.work.bodyLengths)
         }
 
         let expectedSteps = ["count the attempt", "derive"]
             + VaultSlotFile.slotIndices.map { "try slot \($0)" }
             + ["open a body"]
         #expect(logs == Array(repeating: expectedSteps, count: 3))
-        #expect(waits == Array(repeating: [deadline], count: 3))
+        #expect(bodyLengths == Array(repeating: [(1 << 20) - VaultSlotFile.bodyOffset], count: 3))
+        #expect(returnedAfter == Array(repeating: deadline, count: 3))
     }
 
     @Test
@@ -210,24 +214,130 @@ extension VaultUnlockServiceTests {
 
 extension VaultUnlockServiceTests {
     @Test
-    func unlock_derivationWithinTheDeadline_leavesItAlone() async throws {
-        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])], derivation: .seconds(0.6))
+    func unlock_workWithinTwoThirdsOfTheDeadline_leavesItAlone() async throws {
+        let sut = try makeSUT(
+            vaults: [.init(password: "real", slot: realSlot, items: [])],
+            timings: .init(derivation: .milliseconds(600)),
+        )
 
         _ = try await sut.service.unlock(password: "wrong")
 
         #expect(sut.deadlineStore.current == deadline)
     }
 
-    /// For example after a restore onto a slower iPhone. The attempt holds to the raised deadline too.
+    /// For example after a restore onto a slower iPhone. The attempt holds to the raised deadline too. The work
+    /// includes opening the body, so a slow decode raises it as a slow derivation does.
     @Test(arguments: ["real", "wrong"])
-    func unlock_derivationLongerThanTheDeadline_raisesIt(password: String) async throws {
-        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])], derivation: .seconds(2))
+    func unlock_workLongerThanTwoThirdsOfTheDeadline_raisesIt(password: String) async throws {
+        let sut = try makeSUT(
+            vaults: [.init(password: "real", slot: realSlot, items: [])],
+            timings: .init(
+                derivation: .milliseconds(1800),
+                body: .milliseconds(184),
+                bodyThatFails: .milliseconds(184),
+            ),
+        )
         let start = sut.clock.now
 
         _ = try await sut.service.unlock(password: password)
 
+        // 1,800 ms deriving, 16 ms trying slots and 184 ms opening a body: 2 s of work.
         #expect(sut.deadlineStore.current == .seconds(3))
         #expect(sut.clock.sleeps == [start.advanced(by: .seconds(3))])
+    }
+
+    @Test
+    func unlock_raisesTheDeadlineNoFurtherThanTheMaximum() async throws {
+        let sut = try makeSUT(
+            vaults: [.init(password: "real", slot: realSlot, items: [])],
+            timings: .init(derivation: .seconds(60)),
+        )
+        let start = sut.clock.now
+
+        _ = try await sut.service.unlock(password: "wrong")
+
+        #expect(sut.deadlineStore.current == VaultUnlockService.maximumDeadline)
+        #expect(sut.clock.sleeps == [start.advanced(by: VaultUnlockService.maximumDeadline)])
+    }
+
+    @Test
+    func unlock_takesAStoredDeadlineBeyondTheMaximumAsTheMaximum() async throws {
+        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])])
+        try await sut.deadlineStore.raiseUnlockDeadline(to: .seconds(600))
+        let start = sut.clock.now
+
+        _ = try await sut.service.unlock(password: "wrong")
+
+        #expect(sut.clock.sleeps == [start.advanced(by: VaultUnlockService.maximumDeadline)])
+    }
+
+    /// Time the app spends suspended mid-derivation passes on the clock, but isn't work.
+    @Test
+    func unlock_doesNotCountTimeSuspendedAsWork() async throws {
+        let sut = try makeSUT(
+            vaults: [.init(password: "real", slot: realSlot, items: [])],
+            timings: .init(suspendedDuringDerivation: .seconds(600)),
+        )
+
+        _ = try await sut.service.unlock(password: "wrong")
+
+        #expect(sut.deadlineStore.current == deadline)
+    }
+
+    /// For example, the AutoFill sheet dismissed mid-derivation.
+    @Test
+    func unlock_thatIsThrownAway_doesNotRaiseTheDeadline() async throws {
+        let sut = try makeSUT(
+            vaults: [.init(password: "real", slot: realSlot, items: [])],
+            timings: .init(derivation: .seconds(2)),
+        )
+        sut.work.holdDerivation()
+        let attempt = Task { try await sut.service.unlock(password: "real") }
+        await sut.work.waitUntilDeriving()
+
+        await sut.service.lock()
+        sut.work.releaseDerivation()
+
+        await #expect(throws: CancellationError.self) {
+            try await attempt.value
+        }
+        #expect(sut.deadlineStore.current == deadline)
+    }
+
+    @Test
+    func unlock_thatCantSaveTheRaisedDeadline_stillHoldsToIt() async throws {
+        let sut = try makeSUT(
+            vaults: [.init(password: "real", slot: realSlot, items: [])],
+            timings: .init(derivation: .seconds(2)),
+        )
+        sut.deadlineStore.failToRaise()
+        let start = sut.clock.now
+
+        let result = try await sut.service.unlock(password: "real")
+
+        #expect(result == .unlocked)
+        #expect(sut.deadlineStore.current == deadline)
+        #expect(sut.clock.sleeps.count == 1)
+        #expect(try #require(sut.clock.sleeps.first) > start.advanced(by: deadline))
+    }
+
+    @Test
+    func unlock_whoseDerivationFails_throwsAtTheDeadlineWithoutRaisingIt() async throws {
+        let sut = try makeSUT(
+            vaults: [.init(password: "real", slot: realSlot, items: [])],
+            timings: .init(derivation: .seconds(2)),
+        )
+        sut.work.failDerivation()
+        let start = sut.clock.now
+
+        await #expect(throws: SpyUnlockWork.DerivationFailure.self) {
+            try await sut.service.unlock(password: "real")
+        }
+
+        #expect(sut.clock.sleeps == [start.advanced(by: deadline)])
+        #expect(sut.deadlineStore.current == deadline)
+        #expect(!sut.log.value.contains("reset the count"))
+        #expect(await sut.session.isLocked)
     }
 }
 
@@ -279,6 +389,59 @@ extension VaultUnlockServiceTests {
         #expect(try await sut.savedItemCount(inSlot: realSlot, password: "real") == 1)
     }
 
+    /// The lock lands on the session between the attempt's last check and its switch. The switch is conditional on
+    /// the session itself, so the lock wins.
+    @Test
+    func lock_racingTheSwitchToTheVault_wins() async throws {
+        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [uniqueVaultItem()])])
+        let session = sut.session
+        sut.attemptStorage.doWhileRemoving {
+            let locked = DispatchSemaphore(value: 0)
+            Task.detached {
+                await session.lock()
+                locked.signal()
+            }
+            locked.wait()
+        }
+
+        await #expect(throws: CancellationError.self) {
+            try await sut.service.unlock(password: "real")
+        }
+
+        #expect(await sut.session.isLocked)
+        #expect(try await sut.session.retrieve(query: .init()).items == [])
+    }
+
+    @Test
+    func unlock_cancelledWhileWaitingForTheDeadline_throwsTheAttemptAway() async throws {
+        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])])
+        sut.clock.hold()
+        let attempt = Task { try await sut.service.unlock(password: "real") }
+        await sut.clock.waitUntilHolding()
+
+        attempt.cancel()
+        sut.clock.release()
+
+        await #expect(throws: CancellationError.self) {
+            try await attempt.value
+        }
+        #expect(await sut.session.isLocked)
+        #expect(!sut.log.value.contains("reset the count"))
+    }
+
+    @Test
+    func unlock_whileAVaultIsOpen_throwsWithoutCountingAnAttempt() async throws {
+        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])])
+        _ = try await sut.service.unlock(password: "real")
+        let steps = sut.log.value.count
+
+        await #expect(throws: VaultUnlockError.notLocked) {
+            try await sut.service.unlock(password: "real")
+        }
+
+        #expect(sut.log.value.count == steps)
+    }
+
     @Test
     func lock_duringAnAttempt_throwsTheAttemptAway() async throws {
         let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])])
@@ -304,10 +467,22 @@ extension VaultUnlockServiceTests {
     func hasMemoryHeadroomToUnlock_needsTheDerivationTheFileAndAMargin() async throws {
         let needed = Int(EncryptedVaultFixture.kdfParameters.memoryKiB) * 1024 + (128 + 16 * (1 << 20)) + (16 << 20)
 
-        for (available, expected) in [(needed, true), (needed - 1, false), (0, true)] {
+        // No figure means no limit, as in the simulator. On an iPhone, 0 means the process is over its limit.
+        for (available, expected) in [(needed, true), (needed - 1, false), (0, false), (nil, true)] {
             let sut = try makeSUT(vaults: [], availableMemory: available)
-            #expect(try await sut.service.hasMemoryHeadroomToUnlock() == expected, "\(available) bytes available")
+            #expect(try await sut.service.hasMemoryHeadroomToUnlock() == expected, "\(String(describing: available))")
         }
+    }
+
+    @Test
+    func hasMemoryHeadroomToUnlock_readsOnlyTheHeader() async throws {
+        let fileSystem = FaultInjectingSlotFileSystem(wrapping: InMemorySlotFileSystem())
+        let sut = try makeSUT(vaults: [], fileSystem: fileSystem, availableMemory: 0)
+        let steps = fileSystem.log.count
+
+        _ = try await sut.service.hasMemoryHeadroomToUnlock()
+
+        #expect(Array(fileSystem.log.dropFirst(steps)) == ["read the start of vault-slots.v1"])
     }
 
     @Test
@@ -337,6 +512,7 @@ extension VaultUnlockServiceTests {
         let file: EncryptedVaultFile
         let fileSystem: any SlotFileSystem
         let clock: ManualUnlockClock
+        let work: SpyUnlockWork
         /// Where the real attempt counter keeps its count, and the clock it times delays with.
         let attemptStorage: LoggingAttemptStorage
         let attemptClock: FakeAppLockClock
@@ -355,7 +531,7 @@ extension VaultUnlockServiceTests {
 
         func savedItemCount(inSlot index: Int, password: String) async throws -> Int {
             let contents = try #require(try await file.open())
-            let key = try contents.header.passwordKey(for: VaultUnlockService.keyMaterial(for: password))
+            let key = try contents.header.passwordKey(for: password)
             let slot = try contents.openSlot(index, with: key)
             return try EncryptedVaultPayload.decode(slot: slot, in: contents).items.count
         }
@@ -365,15 +541,15 @@ extension VaultUnlockServiceTests {
     private func makeSUT(
         vaults: [TestVault],
         fileSystem: any SlotFileSystem = InMemorySlotFileSystem(),
-        derivation: Duration = .zero,
-        availableMemory: Int = .max,
+        timings: SpyUnlockWork.Timings = .init(),
+        availableMemory: Int? = nil,
         purge: @escaping @Sendable (VaultStoreSession) async -> Void = { _ in },
     ) throws -> SUT {
         var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
         for vault in vaults {
             try contents.createVault(
                 inSlot: vault.slot,
-                rootKey: contents.header.passwordKey(for: VaultUnlockService.keyMaterial(for: vault.password)),
+                rootKey: contents.header.passwordKey(for: vault.password),
                 payload: EncryptedVaultPayload.encode(EncryptedVaultStoreTests.state(items: vault.items)),
                 wrappedAt: vault.wrappedAt,
             )
@@ -387,6 +563,7 @@ extension VaultUnlockServiceTests {
         let attemptStorage = LoggingAttemptStorage(log: log)
         let attemptClock = FakeAppLockClock()
         let deadlineStore = FakeUnlockDeadlineStore(deadline: deadline)
+        let work = SpyUnlockWork(log: log, clock: clock, timings: timings)
         let service = VaultUnlockService(
             file: file,
             session: session,
@@ -394,7 +571,7 @@ extension VaultUnlockServiceTests {
             deadlineStore: deadlineStore,
             purgeVaultContents: { await purge(session) },
             clock: clock,
-            work: SpyUnlockWork(log: log, clock: clock, derivationDuration: derivation),
+            work: work,
             availableMemory: { availableMemory },
         )
         return SUT(
@@ -403,6 +580,7 @@ extension VaultUnlockServiceTests {
             file: file,
             fileSystem: fileSystem,
             clock: clock,
+            work: work,
             attemptStorage: attemptStorage,
             attemptClock: attemptClock,
             deadlineStore: deadlineStore,
@@ -460,6 +638,10 @@ final class GatedSlotFileSystem: SlotFileSystem {
 
     func contents(of url: URL) throws -> Data? {
         try base.contents(of: url)
+    }
+
+    func prefix(of url: URL, length: Int) throws -> (bytes: Data, fileSize: Int)? {
+        try base.prefix(of: url, length: length)
     }
 
     func synchronizeFile(at url: URL) throws {

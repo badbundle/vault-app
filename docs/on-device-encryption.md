@@ -320,8 +320,9 @@ Calibration adds about 0.3–1.5 s, once, to setting the password. It runs behin
   always unlock.
 - It derives before building any vault UI, and releases the working memory straight after.
 - The unlock service (sub-issue 7) exposes the check, `hasMemoryHeadroomToUnlock()`: m, plus the file, which is
-  read before deriving, plus the margin. Sub-issue 10 uses it. `os_proc_available_memory()` returns 0 when the
-  process has no limit, as in the simulator, and the check passes then.
+  read before deriving, plus the margin. It reads only the file's header and size. Sub-issue 10 uses it. On an
+  iPhone, `os_proc_available_memory()` returning 0 means the process is already over its limit, so the check
+  fails. The simulator has no limit, and the check passes there.
 - **Opening the vault** after the derivation holds the file, the decompressed JSON and the decoded records. The
   derivation's 64 MiB is freed by then, and for any vault a slot can hold that's less than m plus the file, so
   the check above covers it.
@@ -458,8 +459,10 @@ with VAULT-51.
 2. Takes `flock(LOCK_EX)` on `vault-slots.lock` and reads the current file. If our slot's generation isn't the
    one we loaded, another process has written it: it stops with a conflict and reloads, then works the mutation
    out again on top of what the other process saved and goes back to this step. Every mutation is a function of
-   the records, so neither process's change is lost; a killphrase is matched again. After three conflicts in a
-   row it throws `EncryptedVaultStoreError.conflict`. If the slot doesn't open with our wrap key any more (it was
+   the records, so each process's change is applied once; a killphrase is matched again. An update to an item the
+   other process changed too replaces it, as the later save does in SQLite, but keeps a HOTP counter the other
+   process advanced if the update left the counter alone, so a used code isn't generated again. After three
+   conflicts in a row it throws `EncryptedVaultStoreError.conflict`. If the slot doesn't open with our wrap key any more (it was
    rewrapped or replaced), the store can't save again until the vault is unlocked again.
 3. Encodes, compresses and seals the body with generation + 1, reseals the key box, and builds the new file
    bytes with the other slots copied unchanged.
@@ -587,12 +590,22 @@ downgrade and back), the app offers to merge its items into the open vault inste
 Wrong, real and duress passwords all run the same derivation, the same sixteen trials and one body, and finish at
 the same deadline. What differs afterwards is decoding time, which is proportional to what the vault shows anyway.
 
-- **A derivation longer than the deadline** raises it to 1.5 times the derivation before the attempt waits, so
-  that attempt is held to the raised deadline too.
+- **An attempt whose work takes more than two thirds of the deadline** (deriving, trying the slots and opening
+  a body, so decoding counts too) raises it to 1.5 times the work before the attempt waits, so that attempt is
+  held to the raised deadline too. The work is timed in the thread's CPU time, so time the app spends suspended,
+  or the device asleep, doesn't count; only an attempt that finished its work and is still wanted raises it; and
+  it goes no higher than 5 s, about 1.5 times 32 passes on an iPhone four times slower than an M5 Max. A stored
+  deadline above that is taken as 5 s.
+- **Ties** in the most recently wrapped slot go to the lowest index. Wrap times come from the device that wrapped
+  the key, so one whose clock was set wrong can make a newer vault look older.
 - **Failures after counting** (a vault that opens but can't be read, say) are reported at the deadline as well.
 - **The counter is only reset when a vault opens.** If resetting fails, the vault stays locked and the error is
   shown, rather than opening with a count that would carry on.
-- **An attempt underway when the app locks** is thrown away, and the vault stays locked.
+- **An attempt underway when the app locks** is thrown away, and the vault stays locked. The session only
+  switches to the vault if it hasn't locked since the attempt began, checked on the session itself
+  (`switchTo(_:unlessLockedSince:)`), so a lock can't slip in between the check and the switch.
+- **Unlocking needs a locked session.** With a vault open already it refuses without counting an attempt.
+- **The opened slot's keys** stay with its store until the vault locks. Every other key is dropped at step 6.
 
 **Lock.** This happens on background, or explicitly (VAULT-21), through `VaultUnlockService.lock()`:
 

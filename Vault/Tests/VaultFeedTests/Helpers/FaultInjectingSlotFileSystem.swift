@@ -68,6 +68,11 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         return data
     }
 
+    func prefix(of url: URL, length: Int) throws -> (bytes: Data, fileSize: Int)? {
+        try step("read the start of \(Self.name(url))")
+        return try base.prefix(of: url, length: length)
+    }
+
     func createFile(at url: URL, contents: Data) throws {
         try step("create \(Self.name(url))")
         try base.createFile(at: url, contents: contents)
