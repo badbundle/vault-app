@@ -32,7 +32,7 @@ public struct VaultMainScene: Scene {
             if let failureMessage = VaultRoot.vaultStoreLoadFailureMessage {
                 VaultStoreFailureView(message: failureMessage)
             } else {
-                AppLockContainer(appLock: appLockService) {
+                AppLockContainer(appLock: appLockService, localSettings: localSettings) {
                     #if DEBUG
                     if isSeedingScreenshotVault {
                         // Keeps the vault off screen until the demo data is in,

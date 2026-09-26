@@ -87,6 +87,25 @@ struct LocalSettingsTests {
     }
 
     @Test
+    func hidesVaultWhileScreenCaptured_isOnByDefault() throws {
+        let sut = try makeSUT(defaults: .nonPersistent())
+
+        #expect(sut.state.hidesVaultWhileScreenCaptured)
+    }
+
+    @Test
+    func hidesVaultWhileScreenCaptured_savesStateAfterTurningOffAndOn() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sut = try makeSUT(defaults: defaults)
+
+        sut.state.hidesVaultWhileScreenCaptured = false
+        #expect(try !makeSUT(defaults: defaults).state.hidesVaultWhileScreenCaptured)
+
+        sut.state.hidesVaultWhileScreenCaptured = true
+        #expect(try makeSUT(defaults: defaults).state.hidesVaultWhileScreenCaptured)
+    }
+
+    @Test
     func universalClipboard_savesStateAfterStateChanged() throws {
         let defaults = try Defaults.nonPersistent()
         let sutSave = try makeSUT(defaults: defaults)

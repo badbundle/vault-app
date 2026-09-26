@@ -2,17 +2,22 @@ import Foundation
 import SwiftUI
 import UIKit
 import VaultFeed
+import VaultSettings
 
-/// Keeps the vault behind the app lock.
+/// Keeps the vault behind the app lock, and out of screen recordings.
 ///
 /// Nothing of `content` is built while the app is locked, and a window of its own covers everything else in the
-/// scene, sheets included: the lock screen while the app is locked, and the privacy cover whenever the lock is on and
-/// the app isn't in the foreground. With the lock off, this is just `content`.
+/// scene, sheets included: the lock screen while the app is locked, otherwise whichever `AppCover` the scene needs.
+/// That's the privacy cover whenever the lock is on and the app isn't in the foreground, and the screen capture cover
+/// while the screen is recorded, mirrored or shared (unless the user has turned that off). Without either, this is
+/// just `content`.
 struct AppLockContainer<Content: View>: View {
     var appLock: AppLockService
+    var localSettings: LocalSettings
     @ViewBuilder var content: () -> Content
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.isSceneCaptured) private var isSceneCaptured
 
     var body: some View {
         ZStack {
@@ -23,10 +28,10 @@ struct AppLockContainer<Content: View>: View {
             }
         }
         .overlayWindow(
-            isPresented: appLock.isLocked || isCoverRequired,
-            coversScene: { phase in appLock.requiresPrivacyCover(in: phase) },
+            isPresented: appLock.isLocked || cover != nil,
+            coversScene: { phase in cover(in: phase) != nil },
             overlay: { didHide in
-                AppLockShieldView(appLock: appLock, isCoverRequired: isCoverRequired, didHide: didHide)
+                AppLockShieldView(appLock: appLock, cover: cover, didHide: didHide)
             },
         )
         .onChange(of: scenePhase, initial: true) { _, phase in
@@ -38,19 +43,28 @@ struct AppLockContainer<Content: View>: View {
         }
     }
 
-    private var isCoverRequired: Bool {
-        appLock.requiresPrivacyCover(in: AppScenePhase(scenePhase))
+    private var cover: AppCover? {
+        cover(in: AppScenePhase(scenePhase))
+    }
+
+    private func cover(in phase: AppScenePhase) -> AppCover? {
+        AppCover.required(
+            isPrivacyCoverRequired: appLock.requiresPrivacyCover(in: phase),
+            hidesVaultWhileScreenCaptured: localSettings.state.hidesVaultWhileScreenCaptured,
+            isScreenCaptured: isSceneCaptured,
+        )
     }
 }
 
 /// What the app lock's window shows: the lock screen while the app is locked, and the door opening once it's
-/// unlocked; otherwise the privacy cover.
+/// unlocked; otherwise the `cover`.
 ///
 /// Appears at once, so nothing shows before it, and fades away when it's no longer needed. Once it's gone it goes
 /// back to showing the privacy cover, ready for the window to show again the moment the app leaves the foreground.
 struct AppLockShieldView: View {
     var appLock: AppLockService
-    var isCoverRequired: Bool
+    /// What the scene needs covering with, as well as any lock screen.
+    var cover: AppCover?
     /// Called once it has faded away, so the window can go.
     var didHide: () -> Void
 
@@ -58,8 +72,10 @@ struct AppLockShieldView: View {
     @State private var lockedState = AppLockedState(step: .deviceAuthentication)
     /// Just unlocked: the lock screen stays for its door to open, and until it has faded away.
     @State private var isRevealing = false
-    /// The door has opened: the vault can come in once the app is in the foreground.
+    /// The door has opened: the vault can come in once nothing needs covering.
     @State private var hasOpened = false
+    /// The cover last asked for, kept on screen while it fades away.
+    @State private var shownCover = AppCover.privacy
     @State private var isShowing = true
 
     var body: some View {
@@ -72,11 +88,16 @@ struct AppLockShieldView: View {
                     unlock: { await appLock.unlock() },
                 )
             } else {
-                AppPrivacyCoverView()
+                switch shownCover {
+                case .privacy:
+                    AppPrivacyCoverView()
+                case .screenCapture:
+                    AppScreenCaptureCoverView()
+                }
             }
         }
         // Fully shown while it's needed, whatever an earlier fade left it at.
-        .opacity(appLock.isLocked || isCoverRequired || isShowing ? 1 : 0)
+        .opacity(appLock.isLocked || cover != nil || isShowing ? 1 : 0)
         .onChange(of: appLock.state, initial: true) { oldState, newState in
             if case let .locked(locked) = newState {
                 // Without its progress or failure: the door opens on a settled lock screen.
@@ -90,12 +111,8 @@ struct AppLockShieldView: View {
                 showAtOnce()
             }
         }
-        .onChange(of: isCoverRequired) { _, isCoverRequired in
-            if isCoverRequired {
-                showAtOnce()
-            } else if !appLock.isLocked, !isRevealing || hasOpened {
-                hide()
-            }
+        .onChange(of: cover, initial: true) { _, cover in
+            coverDidChange(to: cover)
         }
     }
 
@@ -107,6 +124,21 @@ struct AppLockShieldView: View {
         }
     }
 
+    private func coverDidChange(to cover: AppCover?) {
+        if let cover {
+            withTransaction(Transaction(animation: nil)) {
+                shownCover = cover
+            }
+            showAtOnce()
+            // Unlocked while being recorded: the capture cover takes over from the opened door.
+            if cover == .screenCapture, hasOpened {
+                finishRevealing()
+            }
+        } else if !appLock.isLocked, !isRevealing || hasOpened {
+            hide()
+        }
+    }
+
     private func showAtOnce() {
         withTransaction(Transaction(animation: nil)) {
             isShowing = true
@@ -115,9 +147,21 @@ struct AppLockShieldView: View {
 
     private func doorDidOpen() {
         hasOpened = true
-        // Still under the Face ID prompt, it waits for the app to come back to the foreground.
-        if !isCoverRequired {
+        switch cover {
+        case nil:
             hide()
+        case .screenCapture:
+            finishRevealing()
+        case .privacy:
+            // Still under the Face ID prompt, it waits for the app to come back to the foreground.
+            break
+        }
+    }
+
+    private func finishRevealing() {
+        withAnimation(.easeOut(duration: 0.3)) {
+            isRevealing = false
+            hasOpened = false
         }
     }
 
@@ -131,6 +175,7 @@ struct AppLockShieldView: View {
             // Ready for next time, out of sight.
             isRevealing = false
             hasOpened = false
+            shownCover = .privacy
             showAtOnce()
         }
     }

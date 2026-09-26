@@ -39,6 +39,15 @@ struct VaultSettingsViewSnapshotTests {
     }
 
     @Test(arguments: [ColorScheme.light, .dark])
+    func hideWhileRecordingOff(colorScheme: ColorScheme) throws {
+        let sut = try makeSUT { state in
+            state.hidesVaultWhileScreenCaptured = false
+        }
+
+        assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
+
+    @Test(arguments: [ColorScheme.light, .dark])
     func appLockOn(colorScheme: ColorScheme) throws {
         let sut = try makeSUT(isAppLockEnabled: true)
 
