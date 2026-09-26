@@ -25,22 +25,31 @@ public actor WidgetVaultLoader {
     private let makeStore: StoreFactory
     private var store: (any WidgetStore)?
     private let appLockSettings: AppLockSettingsStore
+    /// Whether the vault is in the plain store, with no change of mode underway.
+    private let isVaultPlain: @Sendable () -> Bool
 
     public init(store: (any WidgetStore)? = nil, appLockSettings: AppLockSettingsStore = .shared()) {
         if let store {
             self.store = store
             makeStore = { store }
+            isVaultPlain = { true }
         } else {
             self.store = nil
             makeStore = Self.makeSharedStore
+            isVaultPlain = { VaultStorageState.isPlain(inDirectory: VaultSharedStorage.directory()) }
         }
         self.appLockSettings = appLockSettings
     }
 
-    public init(appLockSettings: AppLockSettingsStore = .shared(), makeStore: @escaping StoreFactory) {
+    public init(
+        appLockSettings: AppLockSettingsStore = .shared(),
+        isVaultPlain: @escaping @Sendable () -> Bool = { true },
+        makeStore: @escaping StoreFactory,
+    ) {
         self.makeStore = makeStore
         store = nil
         self.appLockSettings = appLockSettings
+        self.isVaultPlain = isVaultPlain
     }
 
     /// Whether the app lock is on. While it is, the widget shows no codes and the loader hands out no items: the
@@ -108,9 +117,10 @@ public actor WidgetVaultLoader {
         ).makeVaultStoreOrThrow()
     }
 
-    /// Every read goes through here, so none reaches the vault while the app lock is on.
+    /// Every read goes through here, so none reaches the vault while the app lock is on, or opens the plain store
+    /// once the vault is encrypted, or while it's being converted. (What widgets show then is VAULT-49's.)
     private func retrieveItems() async throws -> VaultRetrievalResult<VaultItem> {
-        guard !isAppLocked else { return .empty() }
+        guard !isAppLocked, isVaultPlain() else { return .empty() }
         let currentStore = try store ?? openStore()
         do {
             return try await currentStore.retrieve(query: .init())

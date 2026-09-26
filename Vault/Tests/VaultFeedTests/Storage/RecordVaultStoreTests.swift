@@ -98,6 +98,20 @@ struct RecordVaultStoreTests {
     }
 
     @Test
+    func deleteVaultAndOverrideImports_keepTheVaultsMetadata() async throws {
+        let metadata = VaultMetadata(duressSlots: [1, 2, 3])
+        let sut = RecordVaultStore(state: VaultRecordState(items: [], tags: [], vault: metadata))
+        try await sut.insert(item: uniqueVaultItem().makeWritable())
+
+        try await sut.deleteVault()
+        #expect(await sut.state == VaultRecordState(items: [], tags: [], vault: metadata))
+
+        try await sut.importAndOverrideVault(payload: .init(userDescription: "", items: [uniqueVaultItem()], tags: []))
+        #expect(await sut.state.vault == metadata)
+        #expect(await sut.state.items.count == 1)
+    }
+
+    @Test
     func deleteItemsMatchingKillphrase_leavesItemsWithoutAMatchUntouched() async throws {
         let sut = RecordVaultStore()
         let matching = uniqueVaultItem(killphrase: "red")

@@ -1,9 +1,10 @@
 import Foundation
 
-/// The file operations that read and replace the encrypted vault file.
+/// The file operations in the vault's storage directory: reading and replacing the encrypted vault file and the
+/// storage state, and deleting the plain store once a conversion has committed.
 ///
-/// Each one is a step `EncryptedVaultFile` can fail at. Tests inject file systems that fail or stop at any step, to
-/// check that no failure loses data.
+/// Each one is a step `EncryptedVaultFile`, `VaultStorageStateFile` and `VaultEncryptionConverter` can fail at.
+/// Tests inject file systems that fail or stop at any step, to check that no failure loses data.
 protocol SlotFileSystem: Sendable {
     /// Takes an exclusive lock on the file at `url`, creating the file if it isn't there, or returns `nil` straight
     /// away if anyone else, in this process or another, holds it.
@@ -15,18 +16,41 @@ protocol SlotFileSystem: Sendable {
     /// The file's first `length` bytes, or all of it if it's shorter, and its size, or `nil` if there's no file.
     /// Reads no more of it.
     func prefix(of url: URL, length: Int) throws -> (bytes: Data, fileSize: Int)?
-    /// Creates a file with these contents, readable only while the device is unlocked. Fails if the file exists.
-    func createFile(at url: URL, contents: Data) throws
+    /// Creates a file with these contents and file protection. Fails if the file exists.
+    func createFile(at url: URL, contents: Data, protection: SlotFileProtection) throws
     /// Flushes the file to permanent storage, including the drive's own cache (`F_FULLFSYNC`).
     func synchronizeFile(at url: URL) throws
     /// Renames `source` to `destination` in one step, replacing the file there.
     func moveItem(at source: URL, replacing destination: URL) throws
     /// Flushes the directory to permanent storage, so a rename in it survives a power loss.
     func synchronizeDirectory(at url: URL) throws
-    /// Deletes the file.
+    /// Deletes the file, or the directory and everything in it. Does nothing if there's nothing there.
     func removeItem(at url: URL) throws
     /// Every file in the directory.
     func contentsOfDirectory(at url: URL) throws -> [URL]
+}
+
+extension SlotFileSystem {
+    /// Creates a file readable only while the device is unlocked, as the encrypted vault file is. Fails if the file
+    /// exists.
+    func createFile(at url: URL, contents: Data) throws {
+        try createFile(at: url, contents: contents, protection: .complete)
+    }
+}
+
+/// When a file's contents can be read.
+enum SlotFileProtection: Sendable {
+    /// Only while the device is unlocked.
+    case complete
+    /// Once the device has been unlocked after starting up, as the plain store is, so widgets can read it.
+    case completeUntilFirstUserAuthentication
+
+    var writingOption: Data.WritingOptions {
+        switch self {
+        case .complete: .completeFileProtection
+        case .completeUntilFirstUserAuthentication: .completeFileProtectionUntilFirstUserAuthentication
+        }
+    }
 }
 
 /// A lock taken with `SlotFileSystem.tryLock(_:)`.
@@ -80,8 +104,8 @@ struct LiveSlotFileSystem: SlotFileSystem {
         return (bytes, Int(fileSize))
     }
 
-    func createFile(at url: URL, contents: Data) throws {
-        try contents.write(to: url, options: [.withoutOverwriting, .completeFileProtection])
+    func createFile(at url: URL, contents: Data, protection: SlotFileProtection) throws {
+        try contents.write(to: url, options: [.withoutOverwriting, protection.writingOption])
     }
 
     func synchronizeFile(at url: URL) throws {
@@ -101,7 +125,11 @@ struct LiveSlotFileSystem: SlotFileSystem {
     }
 
     func removeItem(at url: URL) throws {
-        guard unlink(url.path) == 0 else { throw POSIXError(Self.code(errno)) }
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch let error as CocoaError where error.code == .fileNoSuchFile {
+            return
+        }
     }
 
     func contentsOfDirectory(at url: URL) throws -> [URL] {

@@ -36,7 +36,7 @@ final class InMemorySlotFileSystem: SlotFileSystem {
         try contents(of: url).map { (Data($0.prefix(length)), $0.count) }
     }
 
-    func createFile(at url: URL, contents: Data) throws {
+    func createFile(at url: URL, contents: Data, protection _: SlotFileProtection) throws {
         try state.modify { state in
             guard state.files[url.path] == nil else { throw POSIXError(.EEXIST) }
             state.files[url.path] = contents
@@ -56,9 +56,10 @@ final class InMemorySlotFileSystem: SlotFileSystem {
 
     func synchronizeDirectory(at _: URL) throws {}
 
+    /// Removes the file, and any file under it as a directory.
     func removeItem(at url: URL) throws {
-        try state.modify { state in
-            guard state.files.removeValue(forKey: url.path) != nil else { throw POSIXError(.ENOENT) }
+        state.modify { state in
+            state.files = state.files.filter { path, _ in path != url.path && !path.hasPrefix(url.path + "/") }
         }
     }
 

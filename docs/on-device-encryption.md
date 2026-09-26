@@ -257,8 +257,17 @@ involved.
 | `encrypted(password)` | App lock password set | Slot file | Device authentication, then the password |
 | `encrypted(deviceKey)` | Password turned off after being on | Slot file, with the open vault's key wrapped by a keychain device key | Device authentication only |
 
-The mode lives in `vault-storage-state.json`, written atomically with `F_FULLFSYNC`, together with the journal
-for in-progress transitions. It isn't secret: the lock screen already shows whether a password is set.
+The mode lives in `vault-storage-state.json` (`VaultStorageState`, VAULT-47), written atomically with
+`F_FULLFSYNC`, together with the journal for in-progress transitions and the device's unlock deadline. It isn't
+secret: the lock screen already shows whether a password is set.
+
+- **No file means `plain`**, so a device that never set a password has none, and going back to `plain` removes it.
+- **It's readable once the device has been unlocked after starting up**, like the plain store, so the widgets can
+  tell the vault is encrypted while the device is locked.
+- **Only the app recovers** from a transition a crash interrupted, at launch, before it opens any store. The
+  AutoFill and widget extensions only read the state. Anything but a settled `plain`, including a file they can't
+  read, counts as encrypted, so they never open the plain store then: the AutoFill extension's store session
+  starts locked, and the widget loader returns nothing. (What they show is VAULT-49's.)
 
 `plain` exists so that users who never opt in carry no new risk. The first time the password is set, there's a
 one-time, verified conversion. After that, turning the password on and off only rewraps keys.
@@ -522,7 +531,7 @@ Steps:
 1. Derive `K_pw` with a fresh salt. Choose the real vault's slot `r` uniformly at random, never a fixed index,
    and generate `K_r`.
 2. Snapshot the SQLite store to `[VaultItemRecord]`.
-3. Build the file in memory: the header, slot `r` sealed (its `duressSlots` are four random slots ≠ `r`), the
+3. Build the file in memory: the header, slot `r` sealed (its `duressSlots` are ten random slots ≠ `r`), the
    other slots random.
 4. Write the journal: `migrating(temp: name)`.
 5. Write the temp file and call `F_FULLFSYNC`. **Verify** it by running the full unlock path against it with the
@@ -537,8 +546,29 @@ Steps:
 At launch:
 
 - Journal `migrating`, or `plain` with a stray slot file: the SQLite store was never touched and is still the
-  truth. Delete the slot file and any temp files. The UI never said the password was set.
+  truth. Delete the slot file and any temp files. The UI never said the password was set. If the SQLite store
+  isn't there, something else has gone wrong (a lost state file, say), and the slot file might be the only copy of
+  the vault, so nothing is deleted and the app shows its failure screen.
 - Journal `encrypted(password), cleanup: plain`: finish deleting the SQLite files. This is idempotent.
+
+**As built** (`VaultEncryptionConverter`, `VaultStorageRecovery`, VAULT-47), the steps above run in a slightly
+different order:
+
+- The attempt counter is reset first, so a count left in the keychain doesn't carry over to the new password.
+- The journal says `migrating` before the snapshot, so the extensions already stay away from the SQLite store
+  while it's taken, and the store session is locked, so the app's own writes finish first.
+- The size of the vault is checked against the largest slot before deriving anything. A vault too large for it
+  refuses with its own error (`vaultTooLarge`), which the UI can explain.
+- The failed-open archives are confirmed by the caller, and their names go in the committing journal, so recovery
+  deletes exactly those.
+- The commit is the committing journal's rename, followed by a successful directory flush. If the flush fails,
+  the conversion is undone rather than trust a rename that might not survive a power loss. A crash after the
+  rename, though, leaves it committed.
+- "Close the SwiftData container" is a hook the app provides, `releasePlainStore`, called once the session has
+  switched away from the plain store. Clearing the QuickType identity store and reloading the widgets are hooks
+  too.
+- Any failure before the commit deletes the encrypted file, removes the journal and switches the session back to
+  the plain store. A failure deleting the SQLite files after the commit is left for the next launch.
 
 **No step deletes the source before a verified copy is committed.**
 

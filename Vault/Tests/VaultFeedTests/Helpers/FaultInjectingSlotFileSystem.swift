@@ -73,9 +73,9 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         return try base.prefix(of: url, length: length)
     }
 
-    func createFile(at url: URL, contents: Data) throws {
+    func createFile(at url: URL, contents: Data, protection: SlotFileProtection) throws {
         try step("create \(Self.name(url))")
-        try base.createFile(at: url, contents: contents)
+        try base.createFile(at: url, contents: contents, protection: protection)
     }
 
     func synchronizeFile(at url: URL) throws {
@@ -125,6 +125,14 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
     }
 
     private static func name(_ url: URL) -> String {
-        isTemporary(url) ? "temp" : url.lastPathComponent
+        if isTemporary(url) {
+            "temp"
+        } else if url.lastPathComponent.hasPrefix(VaultStorageStateFile.temporaryFilePrefix) {
+            "state temp"
+        } else if url.lastPathComponent.hasPrefix(PersistedLocalVaultStoreArchives.directoryNamePrefix) {
+            "archive"
+        } else {
+            url.lastPathComponent
+        }
     }
 }
