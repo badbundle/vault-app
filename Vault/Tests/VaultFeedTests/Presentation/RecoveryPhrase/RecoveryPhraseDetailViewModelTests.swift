@@ -330,6 +330,12 @@ struct RecoveryPhraseDetailViewModelTests {
         #expect(makeSUTEditing(phrase: anyRecoveryPhrase(title: "  ")).visibleTitle == "Untitled")
         #expect(makeSUTEditing(phrase: anyRecoveryPhrase(title: "Mine")).visibleTitle == "Mine")
     }
+
+    /// Names each word's field for VoiceOver, and each word in the grid.
+    @Test(arguments: [(1, "Word 1"), (3, "Word 3"), (24, "Word 24")])
+    func strings_wordNumberNamesTheWordByItsPosition(number: Int, expected: String) {
+        #expect(makeSUTCreating().strings.wordNumber(number) == expected)
+    }
 }
 
 // MARK: - Helpers

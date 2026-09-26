@@ -136,6 +136,9 @@ struct RecoveryPhraseWordsStep: View {
             TextField(text: wordBinding(at: index)) {
                 Text(viewModel.strings.wordNumber(index + 1))
             }
+            // VoiceOver doesn't read a text field's label, which only shows as the placeholder while the field is
+            // empty, so the field is named for it too. The number beside it is hidden from VoiceOver.
+            .accessibilityLabel(viewModel.strings.wordNumber(index + 1))
             .font(.body.monospaced())
             .secretTextInput(SecretTextInput(capitalization: .never, isASCIIOnly: usesASCIIKeyboard))
             .privacySensitive()
