@@ -14,6 +14,7 @@ struct ThirdPartyLibrariesLoaderTests {
         #expect(loaded.map(\.name) == [
             "SwiftUI-Shimmer",
             "CryptoSwift",
+            "Argon2",
             "SnapshotTesting",
             "swiftui-toasts",
             "Defaults",

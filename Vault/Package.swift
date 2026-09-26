@@ -203,9 +203,21 @@ let package = Package(
         ),
         .target(
             name: "CryptoEngine",
-            dependencies: ["FoundationExtensions", "CryptoSwift", "BigInt"],
+            dependencies: ["FoundationExtensions", "CryptoSwift", "BigInt", "CArgon2"],
             swiftSettings: swiftSettings,
             plugins: targetPlugins,
+        ),
+        // The Argon2 reference implementation (CC0), vendored unmodified. Provenance and the upstream commit are in
+        // its README. Lanes run one after another, so it never starts threads.
+        .target(
+            name: "CArgon2",
+            exclude: ["LICENSE", "README.md"],
+            cSettings: [
+                .define("ARGON2_NO_THREADS"),
+                // Fully optimized in every configuration. Unlocking gets a fixed time budget, so a faster
+                // derivation buys more passes, and more cost for anyone guessing the password.
+                .unsafeFlags(["-O3"]),
+            ],
         ),
         .testTarget(
             name: "CryptoEngineTests",
