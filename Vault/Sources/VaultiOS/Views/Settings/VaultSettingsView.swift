@@ -124,7 +124,7 @@ extension PasteboardContentType {
 
 /// The label of a Settings row that opens a sheet: the setting's name, a summary of its value and a chevron, so it
 /// reads like the rows around it rather than as a tinted button.
-private struct SheetRowLabel: View {
+struct SheetRowLabel: View {
     var title: String
     var value: String
     var systemImage: String
