@@ -2,11 +2,38 @@ import Foundation
 import SwiftUI
 import VaultFeed
 
+extension EnvironmentValues {
+    /// What Back does on the first step of a walkthrough, which has no step of its own to go back to.
+    ///
+    /// The new-item sheet sets it to return to choosing the kind of item. Without it, the first step has no Back.
+    @Entry var goBackFromFirstEditorStep: GoBackFromFirstEditorStepAction?
+}
+
+/// Goes back from the first step of a walkthrough, to whatever came before the editor.
+struct GoBackFromFirstEditorStepAction: Equatable, Sendable {
+    /// Identifies where Back goes, so the environment only changes when that does, not every time the closure is
+    /// made again.
+    var id: UUID
+    var action: @MainActor () -> Void
+
+    @MainActor
+    func callAsFunction() {
+        action()
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 /// An item's editor, the same for every kind of item.
 ///
 /// Creating an item walks through its steps one at a time, each like its own bottom sheet: the sheet fits the step,
 /// changing height as the next one slides in, with Back and Continue along the bottom. Editing an item starts on an
 /// overview instead, which opens any step straight away.
+///
+/// While walking through, each step reports the height it needs to the sheet's `fittedSheetHeightReporter`, and the
+/// new-item sheet sizes itself to it.
 ///
 /// The steps swap within the one sheet, rather than stacking sheets, so the item's lock and hiding (which cover the
 /// whole sheet) always cover whichever step is showing.
@@ -19,13 +46,13 @@ struct DetailEditorView<ViewModel: DetailViewModel, StepContent: View>: View {
     @ViewBuilder var stepContent: (DetailEditorStep) -> StepContent
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.goBackFromFirstEditorStep) private var goBackFromFirstStep
+    @Environment(\.fittedSheetHeightReporter) private var sheetHeightReporter
     /// The step on screen, or `nil` for the overview. Follows the flow's step a moment later, so the outgoing screen
     /// can take on the new direction before it leaves.
     @State private var displayedStep: DetailEditorStep?
     @State private var direction: DetailEditorFlow.Direction = .forward
-    /// The height the sheet needs to show all of the current step.
-    @State private var fittedHeight: CGFloat = 0
-    @State private var measurementPass = 0
+    @State private var actionBarHeight: CGFloat = 0
 
     init(
         viewModel: ViewModel,
@@ -59,7 +86,6 @@ struct DetailEditorView<ViewModel: DetailViewModel, StepContent: View>: View {
                 AccessibilityNotification.ScreenChanged().post()
             }
         }
-        .presentationDetents(isGuided ? [fittedDetent] : [.large])
     }
 
     private var isGuided: Bool {
@@ -100,35 +126,38 @@ struct DetailEditorView<ViewModel: DetailViewModel, StepContent: View>: View {
         .environment(\.isInGuidedDetailEditor, isGuided)
         // Lets the sheet's glass show through while stepping through, like the new-item picker.
         .scrollContentBackground(isGuided ? .hidden : .automatic)
-        .onScrollGeometryChange(for: FittedHeightMeasurement.self) { geometry in
-            FittedHeightMeasurement(
-                pass: measurementPass,
-                height: geometry.contentSize.height + geometry.contentInsets.top + geometry.contentInsets.bottom,
-            )
-        } action: { _, measurement in
+        .onFittedSheetHeightChange(bottomBarHeight: isGuided ? actionBarHeight : 0) { height in
             // The outgoing step can still report while it slides away.
-            guard step == displayedStep else { return }
-            fittedHeight = measurement.height
-        }
-        // A new step's first measurement isn't reported as a change, so it's asked for again once it's on screen.
-        .onAppear {
-            measurementPass += 1
+            guard isGuided, step == displayedStep else { return }
+            sheetHeightReporter?(height)
         }
         .safeAreaBar(edge: .bottom) {
             if isGuided {
                 actionBar(for: step)
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        actionBarHeight = height
+                    }
             }
         }
     }
 
     private func actionBar(for step: DetailEditorStep) -> some View {
         let flow = viewModel.editorFlow
+        let isFirstStep = flow.steps.first == step
         let isLastStep = flow.steps.last == step
         return DetailEditorActionBar(
-            showsBackButton: flow.steps.first != step,
+            showsBackButton: !isFirstStep || goBackFromFirstStep != nil,
             primaryTitle: isLastStep ? kind.addTitle : "Continue",
             isPrimaryEnabled: isLastStep ? viewModel.editingModel.isValid : viewModel.isEditorStepComplete(step),
-            goBack: viewModel.goBackInEditor,
+            goBack: {
+                if isFirstStep, let goBackFromFirstStep {
+                    goBackFromFirstStep()
+                } else {
+                    viewModel.goBackInEditor()
+                }
+            },
             primaryAction: {
                 if isLastStep {
                     await viewModel.saveChanges()
@@ -146,16 +175,6 @@ struct DetailEditorView<ViewModel: DetailViewModel, StepContent: View>: View {
     }
 
     // MARK: - Presentation
-
-    /// Fits the sheet to the step, until the step is taller than the sheet can be.
-    private var fittedDetent: PresentationDetent {
-        fittedHeight > 0 ? .height(fittedHeight) : .large
-    }
-
-    private struct FittedHeightMeasurement: Equatable {
-        var pass: Int
-        var height: CGFloat
-    }
 
     private var transition: AnyTransition {
         if reduceMotion {

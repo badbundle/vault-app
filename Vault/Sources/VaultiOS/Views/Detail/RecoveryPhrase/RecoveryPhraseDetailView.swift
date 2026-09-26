@@ -217,8 +217,13 @@ struct RecoveryPhraseDetailView: View {
 }
 
 /// Explains why a recovery phrase can't be created on a device without a passcode.
+///
+/// Shown in the new-item sheet in place of a recovery phrase's first step, so it sits on the sheet's glass like the
+/// steps do.
 struct RecoveryPhrasePasscodeRequiredView: View {
     @Environment(\.dismiss) private var dismiss
+    /// Back to choosing another kind of item, when this is in the new-item sheet.
+    @Environment(\.goBackFromFirstEditorStep) private var goBack
 
     var body: some View {
         Form {
@@ -231,16 +236,27 @@ struct RecoveryPhrasePasscodeRequiredView: View {
                 .padding()
                 .containerRelativeFrame(.horizontal)
             }
+            .listRowBackground(DetailEditorRowBackground())
         }
+        .environment(\.isInGuidedDetailEditor, true)
+        .scrollContentBackground(.hidden)
+        .reportsFittedSheetHeight()
         .navigationTitle("Recovery Phrase")
         .navigationBarTitleDisplayMode(.inline)
-        .presentationDetents([.large])
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button {
-                    dismiss()
-                } label: {
-                    Text("Cancel")
+                if let goBack {
+                    Button {
+                        goBack()
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                    }
+                } else {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Cancel")
+                    }
                 }
             }
         }
