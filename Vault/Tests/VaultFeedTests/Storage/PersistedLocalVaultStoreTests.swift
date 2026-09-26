@@ -975,6 +975,18 @@ final class PersistedLocalVaultStoreTests {
     }
 
     @Test
+    func insert_keepsOnlyTagsThatAreStored() async throws {
+        let storedTagID = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
+        let missingTagID = Identifier<VaultItemTag>(id: UUID())
+        let code = uniqueVaultItem(tags: [storedTagID, missingTagID]).makeWritable()
+
+        try await sut.insert(item: code)
+
+        let result = try await sut.retrieve(query: .init())
+        #expect(result.items.map(\.metadata.tags) == [[storedTagID]])
+    }
+
+    @Test
     func deleteByID_hasNoEffectOnEmptyStore() async throws {
         try await sut.delete(id: .new())
 
@@ -1087,6 +1099,39 @@ final class PersistedLocalVaultStoreTests {
         let result = try await sut.retrieve(query: .init())
         #expect(result.items.map(\.item.otpCode) == initialCodes.map(\.item.otpCode) + [newCode.item.otpCode])
         #expect(result.errors == [])
+    }
+
+    @Test
+    func updateByID_keepsDigestsLeftUnchanged() async throws {
+        let killphrase = KillphraseDigest(salt: .random(count: 16), digest: .random(count: 32))
+        let searchPassphrase = SearchPassphraseDigest(salt: .random(count: 16), digest: .random(count: 32))
+        var initial = uniqueVaultItem().makeWritable()
+        initial.killphraseUpdate = .set(killphrase)
+        initial.searchPassphraseUpdate = .set(searchPassphrase)
+        let id = try await sut.insert(item: initial)
+
+        var updated = uniqueVaultItem(userDescription: "Updated").makeWritable()
+        updated.killphraseUpdate = .unchanged
+        updated.searchPassphraseUpdate = .unchanged
+        try await sut.update(id: id, item: updated)
+
+        let stored = try #require(try await sut.allVaultItems().first)
+        #expect(stored.metadata.userDescription == "Updated")
+        #expect(stored.metadata.killphrase == killphrase)
+        #expect(stored.metadata.searchPassphrase == searchPassphrase)
+    }
+
+    @Test
+    func updateByID_keepsIDAndCreatedDate() async throws {
+        let id = try await sut.insert(item: uniqueVaultItem().makeWritable())
+        let before = try #require(try await sut.allVaultItems().first)
+
+        try await sut.update(id: id, item: uniqueVaultItem(userDescription: "Updated").makeWritable())
+
+        let after = try #require(try await sut.allVaultItems().first)
+        #expect(after.id == id)
+        #expect(after.metadata.created == before.metadata.created)
+        #expect(after.metadata.updated >= before.metadata.updated)
     }
 
     @Test
@@ -1417,6 +1462,18 @@ final class PersistedLocalVaultStoreTests {
     }
 
     @Test
+    func updateTag_itemsCarryingTheTagKeepIt() async throws {
+        let tagID = try await sut.insertTag(item: anyVaultItemTag(name: "Before").makeWritable())
+        try await sut.insert(item: uniqueVaultItem(tags: [tagID]).makeWritable())
+
+        try await sut.updateTag(id: tagID, item: anyVaultItemTag(name: "After").makeWritable())
+
+        let items = try await sut.retrieve(query: .init()).items
+        #expect(items.map(\.metadata.tags) == [[tagID]])
+        #expect(try await sut.retrieveTags().map(\.name) == ["After"])
+    }
+
+    @Test
     func deleteVault_hasNoEffectOnEmptyStore() async throws {
         try await sut.deleteVault()
 
@@ -1498,6 +1555,31 @@ final class PersistedLocalVaultStoreTests {
 
         try await assertStoreContains(exactlyItems: items)
         try await assertStoreContains(exactlyTags: tags)
+    }
+
+    @Test
+    func importAndMergeVault_linksItemsToTagsImportedWithThem() async throws {
+        let tag = anyVaultItemTag(name: "Imported")
+        let item = uniqueVaultItem(tags: [tag.id])
+        let payload = VaultApplicationPayload(userDescription: "", items: [item], tags: [tag])
+
+        try await sut.importAndMergeVault(payload: payload)
+
+        try await assertStoreContains(exactlyItems: [item])
+        try await assertStoreContains(exactlyTags: [tag])
+    }
+
+    @Test
+    func importAndOverrideVault_linksItemsToTagsImportedWithThem() async throws {
+        try await sut.insert(item: uniqueVaultItem().makeWritable())
+        let tag = anyVaultItemTag(name: "Imported")
+        let item = uniqueVaultItem(tags: [tag.id])
+        let payload = VaultApplicationPayload(userDescription: "", items: [item], tags: [tag])
+
+        try await sut.importAndOverrideVault(payload: payload)
+
+        try await assertStoreContains(exactlyItems: [item])
+        try await assertStoreContains(exactlyTags: [tag])
     }
 
     @Test
@@ -1906,7 +1988,7 @@ extension PersistedLocalVaultStore {
         let result = try modelContext.fetch(descriptor)
         let decoder = PersistedVaultItemDecoder()
         return try result.map {
-            try decoder.decode(item: $0)
+            try decoder.decode(record: $0.makeRecord())
         }
     }
 
@@ -1915,7 +1997,7 @@ extension PersistedLocalVaultStore {
         let result = try modelContext.fetch(descriptor)
         let decoder = PersistedVaultTagDecoder()
         return try result.map {
-            try decoder.decode(item: $0)
+            try decoder.decode(record: $0.makeRecord())
         }
     }
 

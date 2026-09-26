@@ -1,20 +1,11 @@
 import Foundation
 import FoundationExtensions
-import SwiftData
 import TestHelpers
 import Testing
 import VaultCore
 @testable import VaultFeed
 
-struct PersistedVaultItemDecoderTests {
-    private let context: ModelContext
-
-    init() throws {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: PersistedVaultItem.self, configurations: config)
-        context = ModelContext(container)
-    }
-}
+struct PersistedVaultItemDecoderTests {}
 
 // MARK: - Generic
 
@@ -23,14 +14,39 @@ extension PersistedVaultItemDecoderTests {
     func decodeItem_missingItemDetail() throws {
         let sut = makeSUT()
 
-        let persistedItem = makePersistedItem(
+        let persistedItem = makeRecord(
             noteDetails: nil,
             otpDetails: nil,
         )
 
         #expect(throws: (any Error).self) {
-            try sut.decode(item: persistedItem)
+            try sut.decode(record: persistedItem)
         }
+    }
+
+    @Test
+    func decodeItem_moreThanOneDetailPrefersOTPThenNote() throws {
+        let sut = makeSUT()
+        let note = makeNoteDetails(title: "Note")
+        let encrypted = VaultItemRecord.EncryptedItemDetails(
+            version: "1.0.0",
+            title: "Encrypted",
+            data: Data(),
+            authentication: Data(),
+            encryptionIV: Data(),
+            keygenSalt: Data(),
+            keygenSignature: "",
+        )
+
+        let all = try sut.decode(record: makeRecord(noteDetails: note, encryptedItemDetails: encrypted))
+        let noteAndEncrypted = try sut.decode(record: makeRecord(
+            noteDetails: note,
+            otpDetails: nil,
+            encryptedItemDetails: encrypted,
+        ))
+
+        #expect(all.item.otpCode != nil)
+        #expect(noteAndEncrypted.item.secureNote?.title == "Note")
     }
 }
 
@@ -40,10 +56,10 @@ extension PersistedVaultItemDecoderTests {
     @Test
     func decodeMetadata_id() throws {
         let id = UUID()
-        let item = makePersistedItem(id: id)
+        let item = makeRecord(id: id)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.id.rawValue == id)
     }
@@ -51,10 +67,10 @@ extension PersistedVaultItemDecoderTests {
     @Test
     func decodeMetadata_createdDate() throws {
         let date = Date()
-        let item = makePersistedItem(createdDate: date)
+        let item = makeRecord(createdDate: date)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.metadata.created == date)
     }
@@ -62,10 +78,10 @@ extension PersistedVaultItemDecoderTests {
     @Test
     func decodeMetadata_updatedDate() throws {
         let date = Date()
-        let item = makePersistedItem(updatedDate: date)
+        let item = makeRecord(updatedDate: date)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.metadata.updated == date)
     }
@@ -73,30 +89,30 @@ extension PersistedVaultItemDecoderTests {
     @Test
     func decodeMetadata_userDescription() throws {
         let description = "my description \(UUID().uuidString)"
-        let item = makePersistedItem(userDescription: description)
+        let item = makeRecord(userDescription: description)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.metadata.userDescription == description)
     }
 
     @Test
     func decodeMetadata_colorIsNil() throws {
-        let item = makePersistedItem(color: nil)
+        let item = makeRecord(color: nil)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.metadata.color == nil)
     }
 
     @Test
     func decodeMetadata_decodesColorValues() throws {
-        let item = makePersistedItem(color: .init(red: 0.7, green: 0.6, blue: 0.5))
+        let item = makeRecord(color: .init(red: 0.7, green: 0.6, blue: 0.5))
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         let expectedColor = VaultItemColor(red: 0.7, green: 0.6, blue: 0.5)
         #expect(decoded.metadata.color == expectedColor)
@@ -104,13 +120,13 @@ extension PersistedVaultItemDecoderTests {
 
     @Test
     func decodeMetadata_decodesQuickTypeAndPreviewMode() throws {
-        let item = makePersistedItem(
+        let item = makeRecord(
             showInQuickType: false,
             previewMode: NotePreviewMode.hidden.rawValue,
         )
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.metadata.showInQuickType == false)
         #expect(decoded.metadata.previewMode == .hidden)
@@ -118,10 +134,10 @@ extension PersistedVaultItemDecoderTests {
 
     @Test
     func decodeMetadata_invalidPreviewModeDefaultsToTitleAndFirstLine() throws {
-        let item = makePersistedItem(previewMode: "INVALID")
+        let item = makeRecord(previewMode: "INVALID")
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.metadata.previewMode == .titleAndFirstLine)
     }
@@ -131,21 +147,21 @@ extension PersistedVaultItemDecoderTests {
         (VaultItemVisibility.onlySearch, "ONLY_SEARCH"),
     ])
     func decodeMetadata_decodesVisibilityLevels(expected: VaultItemVisibility, key: String) throws {
-        let item = makePersistedItem(visibility: key)
+        let item = makeRecord(visibility: key)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.metadata.visibility == expected)
     }
 
     @Test
     func decodeMetadata_throwsForInvalidVisibilityLevel() throws {
-        let item = makePersistedItem(visibility: "INVALID")
+        let item = makeRecord(visibility: "INVALID")
         let sut = makeSUT()
 
         #expect(throws: (any Error).self) {
-            try sut.decode(item: item)
+            try sut.decode(record: item)
         }
     }
 
@@ -156,21 +172,21 @@ extension PersistedVaultItemDecoderTests {
         (VaultItemSearchableLevel.onlyPassphrase, "ONLY_PASSPHRASE"),
     ])
     func decodeMetadata_decodesSearchableLevels(expected: VaultItemSearchableLevel, key: String) throws {
-        let item = makePersistedItem(searchableLevel: key)
+        let item = makeRecord(searchableLevel: key)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.metadata.searchableLevel == expected)
     }
 
     @Test
     func decodeMetadata_throwsForInvalidSearchableLevel() throws {
-        let item = makePersistedItem(searchableLevel: "INVALID")
+        let item = makeRecord(searchableLevel: "INVALID")
         let sut = makeSUT()
 
         #expect(throws: (any Error).self) {
-            try sut.decode(item: item)
+            try sut.decode(record: item)
         }
     }
 
@@ -178,10 +194,10 @@ extension PersistedVaultItemDecoderTests {
     func decodeMetadata_decodesSearchPassphraseDigest() throws {
         let salt = Data(repeating: 0x11, count: 16)
         let digest = Data(repeating: 0x22, count: 32)
-        let item = makePersistedItem(searchPassphraseSalt: salt, searchPassphraseDigest: digest)
+        let item = makeRecord(searchPassphraseSalt: salt, searchPassphraseDigest: digest)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.metadata.searchPassphrase == SearchPassphraseDigest(salt: salt, digest: digest))
     }
 
@@ -189,31 +205,31 @@ extension PersistedVaultItemDecoderTests {
     func decodeMetadata_decodesKillphraseDigest() throws {
         let salt = Data(repeating: 0xAB, count: 16)
         let digest = Data(repeating: 0xCD, count: 32)
-        let item = makePersistedItem(killphraseSalt: salt, killphraseDigest: digest)
+        let item = makeRecord(killphraseSalt: salt, killphraseDigest: digest)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.metadata.killphrase == KillphraseDigest(salt: salt, digest: digest))
     }
 
     @Test
     func decodeMetadata_decodesKillphraseAsNilWhenOnlyOneSideStored() throws {
-        let item = makePersistedItem(
+        let item = makeRecord(
             killphraseSalt: Data(repeating: 0xAB, count: 16),
             killphraseDigest: nil,
         )
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.metadata.killphrase == nil)
     }
 
     @Test
     func decodeMetadata_decodesEmptyItemTags() throws {
-        let item = makePersistedItem(tags: [])
+        let item = makeRecord(tagIDs: [])
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.metadata.tags == [])
     }
 
@@ -221,47 +237,47 @@ extension PersistedVaultItemDecoderTests {
     func decodeMetadata_decodesItemTags() throws {
         let id1 = UUID()
         let id2 = UUID()
-        let item = makePersistedItem(tags: [makePersistedTag(id: id1), makePersistedTag(id: id2)])
+        let item = makeRecord(tagIDs: [id1, id2])
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.metadata.tags == [.init(id: id1), .init(id: id2)])
     }
 
     @Test
     func decodeLockState_nilIsNotLocked() throws {
-        let item = makePersistedItem(lockState: nil)
+        let item = makeRecord(lockState: nil)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.metadata.lockState == .notLocked)
     }
 
     @Test
     func decodeLockState_notLocked() throws {
-        let item = makePersistedItem(lockState: "NOT_LOCKED")
+        let item = makeRecord(lockState: "NOT_LOCKED")
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.metadata.lockState == .notLocked)
     }
 
     @Test
     func decodeLockState_lockedNative() throws {
-        let item = makePersistedItem(lockState: "LOCKED_NATIVE")
+        let item = makeRecord(lockState: "LOCKED_NATIVE")
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.metadata.lockState == .lockedWithNativeSecurity)
     }
 
     @Test
     func decodeLockState_invalidValueThrows() throws {
-        let item = makePersistedItem(lockState: "INVALID")
+        let item = makeRecord(lockState: "INVALID")
         let sut = makeSUT()
 
         #expect(throws: (any Error).self) {
-            try sut.decode(item: item)
+            try sut.decode(record: item)
         }
     }
 }
@@ -279,85 +295,85 @@ extension PersistedVaultItemDecoderTests {
     ])
     func decodeOTP_digits(expectedDigits: OTPAuthDigits, value: Int32) throws {
         let sut = makeSUT()
-        let otpDetails = makePersistedOTPDetails(digits: value)
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(digits: value)
+        let item = makeRecord(otpDetails: otpDetails)
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.item.otpCode?.data.digits == expectedDigits)
     }
 
     @Test(arguments: [Int32(-33), Int32(333_333)])
     func decodeOTP_invalidDigits(value: Int32) throws {
         let sut = makeSUT()
-        let otpDetails = makePersistedOTPDetails(digits: value)
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(digits: value)
+        let item = makeRecord(otpDetails: otpDetails)
 
         #expect(throws: (any Error).self) {
-            try sut.decode(item: item)
+            try sut.decode(record: item)
         }
     }
 
     @Test
     func decodeOTP_accountName() throws {
         let accountName = UUID().uuidString
-        let otpDetails = makePersistedOTPDetails(accountName: accountName)
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(accountName: accountName)
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.item.otpCode?.data.accountName == accountName)
     }
 
     @Test
     func decodeOTP_issuer() throws {
         let issuerName = UUID().uuidString
-        let otpDetails = makePersistedOTPDetails(issuer: issuerName)
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(issuer: issuerName)
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.item.otpCode?.data.issuer == issuerName)
     }
 
     @Test
     func decodeOTP_authTypeTOTPWithPeriod() throws {
-        let otpDetails = makePersistedOTPDetails(authType: "totp", period: 69)
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(authType: "totp", period: 69)
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.item.otpCode?.type == .totp(period: 69))
     }
 
     @Test
     func decodeOTP_authTypeTOTPWithoutPeriodThrows() throws {
-        let otpDetails = makePersistedOTPDetails(authType: "totp", period: nil)
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(authType: "totp", period: nil)
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
         #expect(throws: (any Error).self) {
-            try sut.decode(item: item)
+            try sut.decode(record: item)
         }
     }
 
     @Test
     func decodeOTP_authTypeHOTPWithCounter() throws {
-        let otpDetails = makePersistedOTPDetails(authType: "hotp", counter: 69)
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(authType: "hotp", counter: 69)
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.item.otpCode?.type == .hotp(counter: 69))
     }
 
     @Test
     func decodeOTP_authTypeHOTPWithoutCounterThrows() throws {
-        let otpDetails = makePersistedOTPDetails(authType: "hotp", counter: nil)
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(authType: "hotp", counter: nil)
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
         #expect(throws: (any Error).self) {
-            try sut.decode(item: item)
+            try sut.decode(record: item)
         }
     }
 
@@ -367,64 +383,64 @@ extension PersistedVaultItemDecoderTests {
         (OTPAuthAlgorithm.sha512, "SHA512"),
     ])
     func decodeOTP_algorithm(expected: OTPAuthAlgorithm, string: String) throws {
-        let otpDetails = makePersistedOTPDetails(algorithm: string)
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(algorithm: string)
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.item.otpCode?.data.algorithm == expected)
     }
 
     @Test
     func decodeOTP_invalidAlgorithmThrows() throws {
-        let otpDetails = makePersistedOTPDetails(algorithm: "OTHER")
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(algorithm: "OTHER")
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
         #expect(throws: (any Error).self) {
-            try sut.decode(item: item)
+            try sut.decode(record: item)
         }
     }
 
     @Test(arguments: [(OTPAuthSecret.Format.base32, "BASE_32")])
     func decodeOTP_secretFormat(expected: OTPAuthSecret.Format, string: String) throws {
-        let otpDetails = makePersistedOTPDetails(secretFormat: string)
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(secretFormat: string)
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.item.otpCode?.data.secret.format == expected)
     }
 
     @Test
     func decodeOTP_secretFormatInvalidThrows() throws {
-        let otpDetails = makePersistedOTPDetails(secretFormat: "INVALID")
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(secretFormat: "INVALID")
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
         #expect(throws: (any Error).self) {
-            try sut.decode(item: item)
+            try sut.decode(record: item)
         }
     }
 
     @Test
     func decodeOTP_emptySecret() throws {
-        let otpDetails = makePersistedOTPDetails(secretData: Data())
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(secretData: Data())
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.item.otpCode?.data.secret.data == Data())
     }
 
     @Test
     func decodeOTP_nonEmptySecret() throws {
         let data = Data([0xFF, 0xEE, 0x11, 0x12, 0x13, 0x56])
-        let otpDetails = makePersistedOTPDetails(secretData: data)
-        let item = makePersistedItem(otpDetails: otpDetails)
+        let otpDetails = makeOTPDetails(secretData: data)
+        let item = makeRecord(otpDetails: otpDetails)
         let sut = makeSUT()
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.item.otpCode?.data.secret.data == data)
     }
 }
@@ -437,10 +453,10 @@ extension PersistedVaultItemDecoderTests {
         let sut = makeSUT()
 
         let title = "this is my note title"
-        let noteDetails = makePersistedNoteDetails(title: title)
-        let item = makePersistedItem(noteDetails: noteDetails, otpDetails: nil)
+        let noteDetails = makeNoteDetails(title: title)
+        let item = makeRecord(noteDetails: noteDetails, otpDetails: nil)
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.item.secureNote?.title == title)
     }
 
@@ -449,10 +465,10 @@ extension PersistedVaultItemDecoderTests {
         let sut = makeSUT()
 
         let contents = "this is my note contents"
-        let noteDetails = makePersistedNoteDetails(contents: contents)
-        let item = makePersistedItem(noteDetails: noteDetails, otpDetails: nil)
+        let noteDetails = makeNoteDetails(contents: contents)
+        let item = makeRecord(noteDetails: noteDetails, otpDetails: nil)
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
         #expect(decoded.item.secureNote?.contents == contents)
     }
 }
@@ -469,7 +485,7 @@ extension PersistedVaultItemDecoderTests {
         let itemEncryptionIV = Data.random(count: 16)
         let itemKeygenSalt = Data.random(count: 16)
         let itemKeygenSignature = "my sig"
-        let encryptedItem = PersistedEncryptedItemDetails(
+        let encryptedItem = VaultItemRecord.EncryptedItemDetails(
             version: "1.0.3",
             title: "cool title",
             data: itemData,
@@ -478,9 +494,9 @@ extension PersistedVaultItemDecoderTests {
             keygenSalt: itemKeygenSalt,
             keygenSignature: itemKeygenSignature,
         )
-        let item = makePersistedItem(otpDetails: nil, encryptedItemDetails: encryptedItem)
+        let item = makeRecord(otpDetails: nil, encryptedItemDetails: encryptedItem)
 
-        let decoded = try sut.decode(item: item)
+        let decoded = try sut.decode(record: item)
 
         #expect(decoded.item.encryptedItem?.version == "1.0.3")
         #expect(decoded.item.encryptedItem?.title == "cool title")
@@ -499,16 +515,7 @@ extension PersistedVaultItemDecoderTests {
         PersistedVaultItemDecoder()
     }
 
-    private func makePersistedTag(
-        id: UUID = UUID(),
-        title: String = "Any",
-    ) -> PersistedVaultTag {
-        let tag = PersistedVaultTag(id: id, title: title, color: nil, iconName: nil, items: [])
-        context.insert(tag)
-        return tag
-    }
-
-    private func makePersistedItem(
+    private func makeRecord(
         id: UUID = UUID(),
         relativeOrder: UInt64 = .min,
         createdDate: Date = Date(),
@@ -525,9 +532,9 @@ extension PersistedVaultItemDecoderTests {
         color: PersistedColor? = nil,
         showInQuickType: Bool = true,
         previewMode: String = NotePreviewMode.titleAndFirstLine.rawValue,
-        tags: [PersistedVaultTag] = [],
-        noteDetails: PersistedNoteDetails? = nil,
-        otpDetails: PersistedOTPDetails? = .init(
+        tagIDs: Set<UUID> = [],
+        noteDetails: VaultItemRecord.NoteDetails? = nil,
+        otpDetails: VaultItemRecord.OTPDetails? = .init(
             accountName: "",
             issuer: "",
             algorithm: VaultEncodingConstants.OTPAuthAlgorithm.sha1,
@@ -538,9 +545,9 @@ extension PersistedVaultItemDecoderTests {
             secretData: Data(),
             secretFormat: VaultEncodingConstants.OTPAuthSecret.Format.base32,
         ),
-        encryptedItemDetails: PersistedEncryptedItemDetails? = nil,
-    ) -> PersistedVaultItem {
-        let item = PersistedVaultItem(
+        encryptedItemDetails: VaultItemRecord.EncryptedItemDetails? = nil,
+    ) -> VaultItemRecord {
+        VaultItemRecord(
             id: id,
             relativeOrder: relativeOrder,
             createdDate: createdDate,
@@ -556,16 +563,14 @@ extension PersistedVaultItemDecoderTests {
             color: color,
             showInQuickType: showInQuickType,
             previewMode: previewMode,
-            tags: tags,
+            tagIDs: tagIDs,
             noteDetails: noteDetails,
             otpDetails: otpDetails,
             encryptedItemDetails: encryptedItemDetails,
         )
-        context.insert(item)
-        return item
     }
 
-    private func makePersistedOTPDetails(
+    private func makeOTPDetails(
         accountName: String = "",
         algorithm: String = VaultEncodingConstants.OTPAuthAlgorithm.sha1,
         authType: String = VaultEncodingConstants.OTPAuthType.totp,
@@ -575,8 +580,8 @@ extension PersistedVaultItemDecoderTests {
         period: Int64? = 0,
         secretData: Data = Data(),
         secretFormat: String = VaultEncodingConstants.OTPAuthSecret.Format.base32,
-    ) -> PersistedOTPDetails {
-        PersistedOTPDetails(
+    ) -> VaultItemRecord.OTPDetails {
+        VaultItemRecord.OTPDetails(
             accountName: accountName,
             issuer: issuer,
             algorithm: algorithm,
@@ -589,11 +594,11 @@ extension PersistedVaultItemDecoderTests {
         )
     }
 
-    private func makePersistedNoteDetails(
+    private func makeNoteDetails(
         title: String = "my title",
         contents: String = "",
         format: String = VaultEncodingConstants.TextFormat.plain,
-    ) -> PersistedNoteDetails {
-        PersistedNoteDetails(title: title, contents: contents, format: format)
+    ) -> VaultItemRecord.NoteDetails {
+        VaultItemRecord.NoteDetails(title: title, contents: contents, format: format)
     }
 }

@@ -2,37 +2,41 @@ import Foundation
 import FoundationExtensions
 import VaultCore
 
+/// Decodes a stored `VaultItemRecord` into a `VaultItem`.
+///
+/// The counterpart of `PersistedVaultItemEncoder`, shared by every store. It throws for a record it can't make
+/// sense of, and stores report that as a retrieval error for the item.
 struct PersistedVaultItemDecoder {
-    func decode(item: PersistedVaultItem) throws -> VaultItem {
+    func decode(record: VaultItemRecord) throws -> VaultItem {
         let metadata = try VaultItem.Metadata(
-            id: Identifier(id: item.id),
-            created: item.createdDate,
-            updated: item.updatedDate,
-            relativeOrder: item.relativeOrder,
-            userDescription: item.userDescription,
-            tags: decodeTags(tags: item.tags),
-            visibility: decodeVisibility(level: item.visibility),
-            searchableLevel: decodeSearchableLevel(level: item.searchableLevel),
-            searchPassphrase: decodeSearchPassphrase(item: item),
-            killphrase: decodeKillphrase(item: item),
-            lockState: decodeLockState(value: item.lockState),
-            color: decodeColor(item: item),
-            showInQuickType: item.showInQuickType,
-            previewMode: NotePreviewMode(rawValue: item.previewMode) ?? .titleAndFirstLine,
+            id: Identifier(id: record.id),
+            created: record.createdDate,
+            updated: record.updatedDate,
+            relativeOrder: record.relativeOrder,
+            userDescription: record.userDescription,
+            tags: decodeTags(ids: record.tagIDs),
+            visibility: decodeVisibility(level: record.visibility),
+            searchableLevel: decodeSearchableLevel(level: record.searchableLevel),
+            searchPassphrase: decodeSearchPassphrase(record: record),
+            killphrase: decodeKillphrase(record: record),
+            lockState: decodeLockState(value: record.lockState),
+            color: decodeColor(record: record),
+            showInQuickType: record.showInQuickType,
+            previewMode: NotePreviewMode(rawValue: record.previewMode) ?? .titleAndFirstLine,
         )
-        if let otp = item.otpDetails {
+        if let otp = record.otpDetails {
             let otpCode = try decodeOTPCode(otp: otp)
             return VaultItem(metadata: metadata, item: .otpCode(otpCode))
-        } else if let note = item.noteDetails {
+        } else if let note = record.noteDetails {
             let note = try SecureNote(
                 title: note.title,
                 contents: note.contents,
                 format: decodeTextFormat(value: note.format),
             )
             return VaultItem(metadata: metadata, item: .secureNote(note))
-        } else if let encryptedItem = item.encryptedItemDetails {
-            let item = try decodeEncryptedItem(item: encryptedItem)
-            return VaultItem(metadata: metadata, item: .encryptedItem(item))
+        } else if let encryptedItem = record.encryptedItemDetails {
+            let encrypted = try decodeEncryptedItem(details: encryptedItem)
+            return VaultItem(metadata: metadata, item: .encryptedItem(encrypted))
         } else {
             throw VaultItemDecodingError.missingItemDetail
         }
@@ -42,9 +46,9 @@ struct PersistedVaultItemDecoder {
 // MARK: - Helpers
 
 extension PersistedVaultItemDecoder {
-    private func decodeTags(tags: [PersistedVaultTag]) -> Set<Identifier<VaultItemTag>> {
-        tags.map {
-            Identifier<VaultItemTag>(id: $0.id)
+    private func decodeTags(ids: Set<UUID>) -> Set<Identifier<VaultItemTag>> {
+        ids.map {
+            Identifier<VaultItemTag>(id: $0)
         }.reducedToSet()
     }
 
@@ -66,25 +70,25 @@ extension PersistedVaultItemDecoder {
         }
     }
 
-    private func decodeKillphrase(item: PersistedVaultItem) -> KillphraseDigest? {
-        guard let salt = item.killphraseSalt, let digest = item.killphraseDigest else { return nil }
+    private func decodeKillphrase(record: VaultItemRecord) -> KillphraseDigest? {
+        guard let salt = record.killphraseSalt, let digest = record.killphraseDigest else { return nil }
         return KillphraseDigest(salt: salt, digest: digest)
     }
 
-    private func decodeSearchPassphrase(item: PersistedVaultItem) -> SearchPassphraseDigest? {
-        guard let salt = item.searchPassphraseSalt, let digest = item.searchPassphraseDigest else { return nil }
+    private func decodeSearchPassphrase(record: VaultItemRecord) -> SearchPassphraseDigest? {
+        guard let salt = record.searchPassphraseSalt, let digest = record.searchPassphraseDigest else { return nil }
         return SearchPassphraseDigest(salt: salt, digest: digest)
     }
 
-    private func decodeColor(item: PersistedVaultItem) -> VaultItemColor? {
-        if let color = item.color {
+    private func decodeColor(record: VaultItemRecord) -> VaultItemColor? {
+        if let color = record.color {
             VaultItemColor(red: color.red, green: color.green, blue: color.blue)
         } else {
             nil
         }
     }
 
-    private func decodeOTPCode(otp: PersistedOTPDetails) throws(VaultItemDecodingError) -> OTPAuthCode {
+    private func decodeOTPCode(otp: VaultItemRecord.OTPDetails) throws(VaultItemDecodingError) -> OTPAuthCode {
         try OTPAuthCode(
             type: decodeOTPType(otp: otp),
             data: .init(
@@ -97,7 +101,7 @@ extension PersistedVaultItemDecoder {
         )
     }
 
-    private func decodeOTPType(otp: PersistedOTPDetails) throws(VaultItemDecodingError) -> OTPAuthType {
+    private func decodeOTPType(otp: VaultItemRecord.OTPDetails) throws(VaultItemDecodingError) -> OTPAuthType {
         switch otp.authType {
         case VaultEncodingConstants.OTPAuthType.totp:
             guard let period = otp.period else {
@@ -154,15 +158,17 @@ extension PersistedVaultItemDecoder {
         }
     }
 
-    private func decodeEncryptedItem(item: PersistedEncryptedItemDetails) throws(SemVer.ParseError) -> EncryptedItem {
+    private func decodeEncryptedItem(
+        details: VaultItemRecord.EncryptedItemDetails,
+    ) throws(SemVer.ParseError) -> EncryptedItem {
         try .init(
-            version: SemVer(string: item.version),
-            title: item.title,
-            data: item.data,
-            authentication: item.authentication,
-            encryptionIV: item.encryptionIV,
-            keygenSalt: item.keygenSalt,
-            keygenSignature: item.keygenSignature,
+            version: SemVer(string: details.version),
+            title: details.title,
+            data: details.data,
+            authentication: details.authentication,
+            encryptionIV: details.encryptionIV,
+            keygenSalt: details.keygenSalt,
+            keygenSignature: details.keygenSignature,
         )
     }
 }

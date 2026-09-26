@@ -1,20 +1,11 @@
 import Foundation
 import FoundationExtensions
-import SwiftData
 import TestHelpers
 import Testing
 import VaultCore
 @testable import VaultFeed
 
-struct PersistedVaultItemEncoderTests {
-    private let context: ModelContext
-
-    init() throws {
-        let config = ModelConfiguration(isStoredInMemoryOnly: true)
-        let container = try ModelContainer(for: PersistedVaultItem.self, configurations: config)
-        context = ModelContext(container)
-    }
-}
+struct PersistedVaultItemEncoderTests {}
 
 // MARK: - Metadata
 
@@ -353,7 +344,7 @@ extension PersistedVaultItemEncoderTests {
         let item = uniqueVaultItem(tags: []).makeWritable()
 
         let encoded = try encode(sut: sut, item: item)
-        #expect(encoded.tags == [])
+        #expect(encoded.tagIDs == [])
     }
 
     @Test
@@ -363,38 +354,33 @@ extension PersistedVaultItemEncoderTests {
         let sut = makeSUT()
         let item = uniqueVaultItem(tags: [.init(id: id1), .init(id: id2)]).makeWritable()
 
-        let persisted1 = makePersistedTag(id: id1)
-        let persisted2 = makePersistedTag(id: id2)
         let encoded = try encode(sut: sut, item: item)
-        #expect(encoded.tags.map(\.id).reducedToSet() == [persisted1.id, persisted2.id])
+        #expect(encoded.tagIDs == [id1, id2])
     }
 
     @Test
     func encodeMetadata_existingItemEncodesEmptyTags() throws {
         let id1 = UUID()
-        _ = makePersistedTag(id: id1)
         let sut = makeSUT()
         let item = uniqueVaultItem(tags: [.init(id: id1)]).makeWritable()
         let existing = try encode(sut: sut, item: item)
 
         let itemNew = uniqueVaultItem(tags: []).makeWritable()
         let encoded = try encode(sut: sut, item: itemNew, existing: existing)
-        #expect(encoded.tags == [])
+        #expect(encoded.tagIDs == [])
     }
 
     @Test
     func encodeMetadata_existingItemEncodesSomeTags() throws {
         let id1 = UUID()
-        _ = makePersistedTag(id: id1)
         let sut = makeSUT()
         let item = uniqueVaultItem(tags: [.init(id: id1)]).makeWritable()
         let existing = try encode(sut: sut, item: item)
 
         let id2 = UUID()
-        let persisted2 = makePersistedTag(id: id2)
         let itemNew = uniqueVaultItem(tags: [.init(id: id2)]).makeWritable()
         let encoded = try encode(sut: sut, item: itemNew, existing: existing)
-        #expect(encoded.tags.map(\.id).reducedToSet() == [persisted2.id])
+        #expect(encoded.tagIDs == [id2])
     }
 
     @Test
@@ -624,6 +610,68 @@ extension PersistedVaultItemEncoderTests {
     }
 }
 
+// MARK: - Importing
+
+extension PersistedVaultItemEncoderTests {
+    @Test
+    func encodeImport_usesContextIDAndDates() throws {
+        let sut = makeSUT(currentDate: { Date(timeIntervalSince1970: 300) })
+        let id = Identifier<VaultItem>(id: UUID())
+        let context = VaultItem.WriteUpdateContext(
+            id: id,
+            created: Date(timeIntervalSince1970: 100),
+            updated: .retainUpdatedDate(Date(timeIntervalSince1970: 200)),
+        )
+
+        let encoded = try sut.encode(item: uniqueVaultItem().makeWritable(), writeUpdateContext: context)
+
+        #expect(encoded.id == id.rawValue)
+        #expect(encoded.createdDate == Date(timeIntervalSince1970: 100))
+        #expect(encoded.updatedDate == Date(timeIntervalSince1970: 200))
+    }
+
+    @Test
+    func encodeImport_updateUpdatedDateUsesNow() throws {
+        let sut = makeSUT(currentDate: { Date(timeIntervalSince1970: 300) })
+        let context = VaultItem.WriteUpdateContext(
+            id: .init(id: UUID()),
+            created: Date(timeIntervalSince1970: 100),
+            updated: .updateUpdatedDate,
+        )
+
+        let encoded = try sut.encode(item: uniqueVaultItem().makeWritable(), writeUpdateContext: context)
+
+        #expect(encoded.updatedDate == Date(timeIntervalSince1970: 300))
+    }
+
+    @Test
+    func encodeImport_setsDigestsFromTheWrite() throws {
+        let sut = makeSUT()
+        let killphrase = KillphraseDigest(salt: .random(count: 16), digest: .random(count: 32))
+        let searchPassphrase = SearchPassphraseDigest(salt: .random(count: 16), digest: .random(count: 32))
+        let item = uniqueVaultItem(metadata: anyVaultItemMetadata(
+            searchPassphrase: searchPassphrase,
+            killphrase: killphrase,
+        ))
+
+        let encoded = try sut.encode(item: item.makeWritable(), writeUpdateContext: item.makeImportingContext())
+
+        #expect(encoded.killphraseSalt == killphrase.salt)
+        #expect(encoded.killphraseDigest == killphrase.digest)
+        #expect(encoded.searchPassphraseSalt == searchPassphrase.salt)
+        #expect(encoded.searchPassphraseDigest == searchPassphrase.digest)
+    }
+
+    @Test
+    func encodeMetadata_relativeOrder() throws {
+        let sut = makeSUT()
+
+        let encoded = try encode(sut: sut, item: uniqueVaultItem(relativeOrder: 7).makeWritable())
+
+        #expect(encoded.relativeOrder == 7)
+    }
+}
+
 // MARK: - Recovery Phrase
 
 extension PersistedVaultItemEncoderTests {
@@ -635,7 +683,6 @@ extension PersistedVaultItemEncoderTests {
         #expect(throws: VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable) {
             try sut.encode(item: item.makeWritable())
         }
-        #expect(context.insertedModelsArray.isEmpty)
     }
 }
 
@@ -643,24 +690,15 @@ extension PersistedVaultItemEncoderTests {
 
 extension PersistedVaultItemEncoderTests {
     private func makeSUT(currentDate: @escaping () -> Date = { Date() }) -> PersistedVaultItemEncoder {
-        PersistedVaultItemEncoder(context: context, currentDate: currentDate)
+        PersistedVaultItemEncoder(currentDate: currentDate)
     }
 
-    /// Encodes and adds to context, so we can resolve properties on the item.
     private func encode(
         sut: PersistedVaultItemEncoder,
         item: VaultItem.Write,
-        existing: PersistedVaultItem? = nil,
-    ) throws -> PersistedVaultItem {
-        let encoded = try sut.encode(item: item, existing: existing)
-        context.insert(encoded)
-        return encoded
-    }
-
-    private func makePersistedTag(id: UUID = UUID(), title: String = "Any") -> PersistedVaultTag {
-        let tag = PersistedVaultTag(id: id, title: title, color: nil, iconName: nil, items: [])
-        context.insert(tag)
-        return tag
+        existing: VaultItemRecord? = nil,
+    ) throws -> VaultItemRecord {
+        try sut.encode(item: item, existing: existing)
     }
 
     private func makeWritable(
