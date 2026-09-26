@@ -15,7 +15,11 @@ extension PasteTTL: Identifiable {
 }
 
 extension PasteTTL {
-    public static let `default`: PasteTTL = .init(duration: nil)
+    /// Copied values are cleared after a minute unless the user chooses otherwise (MANIFESTO C7).
+    ///
+    /// Only a choice made in Settings is ever stored, so changing this reaches everyone who never chose, and
+    /// anyone who chose "Never" keeps it.
+    public static let `default`: PasteTTL = .init(duration: 60)
 
     public static let defaultOptions: [PasteTTL] = [
         .init(duration: nil),
