@@ -120,13 +120,13 @@ public final class AutoBackupServiceImpl: AutoBackupService {
             guard let provider = selectedProvider else { return }
             guard await provider.isConfigured else { return }
             guard hasChangesSinceLastBackup else { return }
-            await performBackup()
+            await performBackup(trigger: .automatic)
         }
     }
 
     public func forceBackup() async {
         await enqueueBackup { [weak self] in
-            await self?.performBackup()
+            await self?.performBackup(trigger: .manual)
         }
     }
 
@@ -200,7 +200,7 @@ public final class AutoBackupServiceImpl: AutoBackupService {
         }
     }
 
-    private func performBackup() async {
+    private func performBackup(trigger: AutoBackupRun.Trigger) async {
         guard let provider = selectedProvider else {
             setStatus(.error(.noProviderSelected))
             return
@@ -221,21 +221,22 @@ public final class AutoBackupServiceImpl: AutoBackupService {
             return
         }
 
-        setStatus(.backingUp(.starting))
+        let run = AutoBackupRun(trigger: trigger, startedAt: clock.currentDate)
+        setStatus(.backingUp(run))
 
         do {
             // Export on the main actor; it is an in-memory read of the current vault.
             let payload = try await dataModel.makeExport(userDescription: "Auto-backup")
 
             // Generate PDF
-            let pdfData = try await renderBackupPDF(payload: payload, backupPassword: backupPassword)
+            let pdfData = try await renderBackupPDF(payload: payload, backupPassword: backupPassword, run: run)
 
             // Create filename with timestamp
             let timestamp = VaultDateFormatter(timezone: .current).formatForFileName(date: clock.currentDate)
             let filename = "vault-auto-backup-\(timestamp).pdf"
 
             // Write to provider
-            setStatus(.backingUp(.init(phase: .saving)))
+            setStatus(.backingUp(run.with(progress: .init(phase: .saving))))
             try await provider.write(data: pdfData, filename: filename)
 
             // Update configuration with last backup info
@@ -273,6 +274,7 @@ public final class AutoBackupServiceImpl: AutoBackupService {
     private func renderBackupPDF(
         payload: VaultApplicationPayload,
         backupPassword: DerivedEncryptionKey,
+        run: AutoBackupRun,
     ) async throws -> Data {
         let (progress, continuation) = AsyncStream.makeStream(
             of: AutoBackupProgress.self,
@@ -280,7 +282,7 @@ public final class AutoBackupServiceImpl: AutoBackupService {
         )
         async let pdfData = encryptAndRender(payload: payload, backupPassword: backupPassword, progress: continuation)
         for await update in progress {
-            setStatus(.backingUp(update))
+            setStatus(.backingUp(run.with(progress: update)))
         }
         return try await pdfData
     }

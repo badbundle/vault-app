@@ -70,13 +70,31 @@ struct AutoBackupViewSnapshotTests {
         let sut = makeSUT(
             dataModel: await passwordFetchedDataModel(),
             viewModel: makeViewModel(
-                status: .backingUp(.init(phase: .rendering, phaseFraction: 0.4)),
+                status: .backingUp(anyRun(trigger: .automatic, progress: .init(phase: .rendering, phaseFraction: 0.4))),
                 configuration: enabledConfiguration(providerID: "icloud-drive"),
                 providerStates: [configuredProviderState()],
             ),
         )
 
         assertSnapshot(of: sut, as: .image)
+    }
+
+    /// The running state carries the most detail, so check it holds up in dark mode at a large text size.
+    @Test
+    func backingUp_manualDarkLargeText() async {
+        let sut = makeSUT(
+            dataModel: await passwordFetchedDataModel(),
+            viewModel: makeViewModel(
+                status: .backingUp(anyRun(trigger: .manual, progress: .init(phase: .saving))),
+                configuration: enabledConfiguration(providerID: "icloud-drive"),
+                providerStates: [configuredProviderState()],
+            ),
+            dynamicTypeSize: .xxLarge,
+        )
+        .environment(\.colorScheme, .dark)
+
+        // The environment alone doesn't reach UIKit-backed rows; the host's traits do.
+        assertSnapshot(of: sut, as: .image(traits: UITraitCollection(userInterfaceStyle: .dark)))
     }
 
     @Test
@@ -146,10 +164,12 @@ extension AutoBackupViewSnapshotTests {
     private func makeSUT(
         dataModel: VaultDataModel,
         viewModel: AutoBackupViewModel,
+        dynamicTypeSize: DynamicTypeSize = .large,
     ) -> some View {
         NavigationStack {
             AutoBackupView(viewModel: viewModel)
         }
+        .dynamicTypeSize(dynamicTypeSize)
         .environment(dataModel)
         .environment(DeviceAuthenticationService(policy: .alwaysAllow))
         .environment(anyVaultInjector())
@@ -165,6 +185,10 @@ extension AutoBackupViewSnapshotTests {
             service: AutoBackupServiceMock(status: status, configuration: configuration),
             initialProviderStates: providerStates,
         )
+    }
+
+    private func anyRun(trigger: AutoBackupRun.Trigger, progress: AutoBackupProgress) -> AutoBackupRun {
+        AutoBackupRun(trigger: trigger, startedAt: Date(timeIntervalSince1970: 1_700_000_000), progress: progress)
     }
 
     private func passwordNotCreatedDataModel() async -> VaultDataModel {

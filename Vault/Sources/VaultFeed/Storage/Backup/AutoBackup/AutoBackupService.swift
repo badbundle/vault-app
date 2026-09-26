@@ -10,7 +10,7 @@ public enum AutoBackupStatus: Equatable, Sendable {
     case idle
 
     /// A backup is currently in progress.
-    case backingUp(AutoBackupProgress)
+    case backingUp(AutoBackupRun)
 
     /// Cleaning up old backups.
     case cleaningUp
