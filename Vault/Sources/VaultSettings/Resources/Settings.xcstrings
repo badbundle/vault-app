@@ -12,6 +12,39 @@
         }
       }
     },
+    "codeTapAction.copy" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy"
+          }
+        }
+      }
+    },
+    "codeTapAction.showDetails" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Details"
+          }
+        }
+      }
+    },
+    "codeTapAction.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap a Code To"
+          }
+        }
+      }
+    },
     "home.header.policyAndLegal.title" : {
       "extractionState" : "manual",
       "localizations" : {

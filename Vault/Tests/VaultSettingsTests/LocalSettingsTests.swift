@@ -106,6 +106,23 @@ struct LocalSettingsTests {
     }
 
     @Test
+    func codeTapAction_copiesByDefault() throws {
+        let sut = try makeSUT(defaults: .nonPersistent())
+
+        #expect(sut.state.codeTapAction == .copy)
+    }
+
+    @Test(arguments: CodeTapAction.allCases)
+    func codeTapAction_savesStateAfterStateChanged(codeTapAction: CodeTapAction) throws {
+        let defaults = try Defaults.nonPersistent()
+        let sutSave = try makeSUT(defaults: defaults)
+        sutSave.state.codeTapAction = codeTapAction
+
+        let sutRetrieve = try makeSUT(defaults: defaults)
+        #expect(sutRetrieve.state.codeTapAction == codeTapAction)
+    }
+
+    @Test
     func universalClipboard_savesStateAfterStateChanged() throws {
         let defaults = try Defaults.nonPersistent()
         let sutSave = try makeSUT(defaults: defaults)

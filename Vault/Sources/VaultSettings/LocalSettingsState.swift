@@ -19,7 +19,15 @@ public struct LocalSettingsState {
     /// When `true`, new codes start out offered in QuickType. Only read when a code is created.
     @DefaultsStored public var showNewCodesInQuickType: Bool
 
+    /// What tapping a code in the feed does.
+    @DefaultsStored public var codeTapAction: CodeTapAction
+
     init(defaults: Defaults) {
+        _codeTapAction = DefaultsStored(
+            defaults: defaults,
+            defaultsKey: .init(VaultIdentifiers.Preferences.General.codeTapAction),
+            defaultValue: .default,
+        )
         _pasteTimeToLive = DefaultsStored(
             defaults: defaults,
             defaultsKey: .init(VaultIdentifiers.Preferences.General.settingsPasteTTL),
