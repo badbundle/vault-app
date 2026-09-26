@@ -1,6 +1,5 @@
 import Foundation
 import LocalAuthentication
-import Synchronization
 import TestHelpers
 import Testing
 @testable import VaultFeed
@@ -910,19 +909,6 @@ extension AppLockServiceTests {
         )
         policy.authenticateWithBiometricsHandler = { _ in throw error }
         return policy
-    }
-}
-
-/// Time that moves only when the test says so.
-private final class FakeAppLockClock: AppLockClock {
-    private let current = Mutex(ContinuousClock.now)
-
-    var now: ContinuousClock.Instant {
-        current.withLock(\.self)
-    }
-
-    func advance(by duration: Duration) {
-        current.withLock { $0 = $0.advanced(by: duration) }
     }
 }
 

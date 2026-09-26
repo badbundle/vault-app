@@ -33,10 +33,13 @@ public enum AppLockDelay: Int, CaseIterable, Identifiable, Comparable, Sendable 
     }
 }
 
-/// Time for the app lock's delay, which only ever moves forward.
+/// Time for the app lock's delays, which only ever moves forward until the device restarts.
 ///
-/// Changing the device's date and time doesn't move it, so it can't be wound back to stretch the delay. It restarts
-/// with the device, but it's only compared within one run of the app, and a new run always starts locked.
+/// Changing the device's date and time doesn't move it, so it can't be wound back to stretch the delay before the app
+/// locks, or forward to cut short the wait after wrong password attempts. It restarts with the device. The delay
+/// before locking is only compared within one run of the app, and a new run always starts locked.
+/// `AppLockPasswordAttemptCounter` compares it across runs, and starts its delay again when it finds time has gone
+/// back.
 public protocol AppLockClock: Sendable {
     var now: ContinuousClock.Instant { get }
 }
