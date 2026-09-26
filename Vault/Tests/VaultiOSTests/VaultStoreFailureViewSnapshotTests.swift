@@ -16,13 +16,12 @@ final class VaultStoreFailureViewSnapshotTests {
                     message: "Unable to connect to PersistedLocalVaultStore",
                 )
                 .dynamicTypeSize(dynamicTypeSize)
-                .preferredColorScheme(colorScheme)
                 .framedForTest()
                 let named = "\(colorScheme)_\(dynamicTypeSize)"
 
                 assertSnapshot(
                     of: snapshottingView,
-                    as: .image,
+                    colorScheme: colorScheme,
                     named: named,
                 )
             }
@@ -33,9 +32,8 @@ final class VaultStoreFailureViewSnapshotTests {
     func layoutWithoutDetails() {
         let snapshottingView = VaultStoreFailureView(message: nil)
             .dynamicTypeSize(.medium)
-            .preferredColorScheme(.light)
             .framedForTest()
 
-        assertSnapshot(of: snapshottingView, as: .image)
+        assertSnapshot(of: snapshottingView, colorScheme: .light)
     }
 }

@@ -15,13 +15,12 @@ final class SettingsDangerViewSnapshotTests {
             for dynamicTypeSize in dynamicTypeSizes {
                 let snapshottingView = SettingsDangerView(viewModel: makeViewModel())
                     .dynamicTypeSize(dynamicTypeSize)
-                    .preferredColorScheme(colorScheme)
                     .framedForTest()
                 let named = "\(colorScheme)_\(dynamicTypeSize)"
 
                 assertSnapshot(
                     of: snapshottingView,
-                    as: .image,
+                    colorScheme: colorScheme,
                     named: named,
                 )
             }

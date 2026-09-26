@@ -53,13 +53,9 @@ extension TagPillViewSnapshotTests {
                 let sut = tagView
                     .frame(width: 300, height: 200)
                     .background(Color(UIColor.systemBackground))
-                    .environment(\.colorScheme, colorScheme)
-                // The pill's glass resolves its content's colors from the
-                // host's traits, which the environment alone doesn't set.
-                let traits = UITraitCollection(userInterfaceStyle: colorScheme == .dark ? .dark : .light)
 
                 let config = [isSelectedName, colorSchemeName].joined(separator: ".")
-                assertSnapshot(of: sut, as: .image(traits: traits), named: config, testName: testName)
+                assertSnapshot(of: sut, colorScheme: colorScheme, named: config, testName: testName)
             }
         }
     }

@@ -18,9 +18,8 @@ struct CreateItemPickerViewSnapshotTests {
                     .dynamicTypeSize(dynamicTypeSize)
                     .frame(width: 390)
                     .background(Color(UIColor.systemBackground))
-                    .environment(\.colorScheme, colorScheme)
 
-                assertSnapshot(of: sut, as: .image, named: "\(colorScheme)_\(dynamicTypeSize)")
+                assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)_\(dynamicTypeSize)")
             }
         }
     }

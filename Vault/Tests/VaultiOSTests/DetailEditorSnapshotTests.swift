@@ -242,8 +242,6 @@ extension DetailEditorSnapshotTests {
                     // The sheet the editor is shown in.
                     .background(Color(uiColor: .systemBackground))
                     .dynamicTypeSize(dynamicTypeSize)
-                    // Not `preferredColorScheme`: that sets the test host's window, where it outlasts this snapshot.
-                    .environment(\.colorScheme, colorScheme)
                     .framedForTest(height: height)
                     .environment(DeviceAuthenticationService(policy: DeviceAuthenticationPolicyAlwaysAllow()))
                     // A recovery phrase is hidden unless the app is in the foreground.
@@ -251,7 +249,7 @@ extension DetailEditorSnapshotTests {
 
                 assertSnapshot(
                     of: snapshottingView,
-                    as: .image,
+                    colorScheme: colorScheme,
                     named: "\(colorScheme)_\(dynamicTypeSize)",
                     testName: testName,
                 )

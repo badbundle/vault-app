@@ -19,12 +19,11 @@ final class BackupKeyDecryptorViewSnapshotTests {
                     BackupKeyDecryptorView(viewModel: makeViewModel())
                 }
                 .dynamicTypeSize(dynamicTypeSize)
-                .preferredColorScheme(colorScheme)
                 .framedForTest()
 
                 assertSnapshot(
                     of: snapshottingView,
-                    as: .image,
+                    colorScheme: colorScheme,
                     named: "\(colorScheme)_\(dynamicTypeSize)",
                 )
             }
@@ -47,10 +46,9 @@ final class BackupKeyDecryptorViewSnapshotTests {
             BackupKeyDecryptorView(viewModel: viewModel)
         }
         .dynamicTypeSize(.medium)
-        .preferredColorScheme(.light)
         .framedForTest()
 
-        assertSnapshot(of: snapshottingView, as: .image)
+        assertSnapshot(of: snapshottingView, colorScheme: .light)
     }
 }
 

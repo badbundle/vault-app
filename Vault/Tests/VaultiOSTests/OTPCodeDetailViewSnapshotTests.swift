@@ -197,7 +197,6 @@ extension OTPCodeDetailViewSnapshotTests {
             for dynamicTypeSize in dynamicTypeSizes {
                 let snapshottingView = view
                     .dynamicTypeSize(dynamicTypeSize)
-                    .preferredColorScheme(colorScheme)
                     .framedForTest()
                     .environment(makePasteboard())
                     .environment(DeviceAuthenticationService(policy: deviceAuthenticationPolicy))
@@ -205,7 +204,7 @@ extension OTPCodeDetailViewSnapshotTests {
 
                 assertSnapshot(
                     of: snapshottingView,
-                    as: .image,
+                    colorScheme: colorScheme,
                     named: named,
                     testName: testName,
                 )

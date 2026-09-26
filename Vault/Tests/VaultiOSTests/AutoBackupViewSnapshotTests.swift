@@ -91,10 +91,8 @@ struct AutoBackupViewSnapshotTests {
             ),
             dynamicTypeSize: .xxLarge,
         )
-        .environment(\.colorScheme, .dark)
 
-        // The environment alone doesn't reach UIKit-backed rows; the host's traits do.
-        assertSnapshot(of: sut, as: .image(traits: UITraitCollection(userInterfaceStyle: .dark)))
+        assertSnapshot(of: sut, colorScheme: .dark)
     }
 
     @Test
