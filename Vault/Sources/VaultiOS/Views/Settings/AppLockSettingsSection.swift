@@ -2,11 +2,14 @@ import Foundation
 import SwiftUI
 import VaultFeed
 
-/// The Security section of Settings: the app lock, which takes authenticating to turn on or off.
+/// The Security section of Settings: the app lock, which takes authenticating to turn on or off, and, while it's on,
+/// how soon it locks.
 struct AppLockSettingsSection: View {
     @Environment(AppLockService.self) private var appLock
     /// Where the user has just moved the toggle, held there while they authenticate.
     @State private var requestedIsEnabled: Bool?
+    /// Likewise for the delay.
+    @State private var requestedDelay: AppLockDelay?
 
     var body: some View {
         Section {
@@ -15,12 +18,31 @@ struct AppLockSettingsSection: View {
                     Text("App Lock")
                 }
             }
-            .disabled(!appLock.canEnable || requestedIsEnabled != nil)
+            .disabled(!appLock.canEnable || isChanging)
+
+            if appLock.isEnabled {
+                Picker(selection: delay) {
+                    ForEach(AppLockDelay.allCases) { option in
+                        Text(option.localizedName)
+                            .tag(option)
+                    }
+                } label: {
+                    FormRow(image: Image(systemName: "hourglass"), color: SettingsIconColor.security) {
+                        Text("Require Unlock")
+                    }
+                }
+                .disabled(isChanging)
+            }
         } header: {
             Text("Security")
         } footer: {
             Text(footer)
         }
+        .animation(.snappy, value: appLock.isEnabled)
+    }
+
+    private var isChanging: Bool {
+        requestedIsEnabled != nil || requestedDelay != nil
     }
 
     private var isEnabled: Binding<Bool> {
@@ -31,6 +53,18 @@ struct AppLockSettingsSection: View {
             Task {
                 await appLock.setEnabled(newValue)
                 requestedIsEnabled = nil
+            }
+        }
+    }
+
+    private var delay: Binding<AppLockDelay> {
+        Binding {
+            requestedDelay ?? appLock.delay
+        } set: { newValue in
+            requestedDelay = newValue
+            Task {
+                await appLock.setDelay(newValue)
+                requestedDelay = nil
             }
         }
     }

@@ -1,5 +1,6 @@
 import Foundation
 import LocalAuthentication
+import Synchronization
 import TestHelpers
 import Testing
 @testable import VaultFeed
@@ -524,15 +525,329 @@ struct AppLockServiceTests {
 
         let turningOff = Task { await sut.setEnabled(false) }
         await policy.waitForPrompt(count: 2)
-        #expect(sut.isChangingEnabled)
+        #expect(sut.isChangingSettings)
         sut.scenePhaseDidChange(to: .background)
         await policy.answer(true)
         await turningOff.value
 
         #expect(sut.isEnabled)
         #expect(settings.isEnabled)
-        #expect(!sut.isChangingEnabled)
+        #expect(!sut.isChangingSettings)
         #expect(sut.isLocked)
+    }
+
+    // MARK: - Delay
+
+    @Test
+    func init_readsTheDelay() throws {
+        let (sut, _) = try makeSUT(isEnabled: true, delay: .fiveMinutes)
+
+        #expect(sut.delay == .fiveMinutes)
+    }
+
+    @Test(arguments: [AppLockDelay.oneMinute, .fiveMinutes, .fifteenMinutes])
+    func delay_backSooner_staysUnlocked(delay: AppLockDelay) async throws {
+        let clock = FakeAppLockClock()
+        let purge = CallCounter()
+        let (sut, _) = try makeSUT(isEnabled: true, delay: delay, clock: clock, purge: purge)
+        await activate(sut)
+
+        leaveForeground(sut)
+        clock.advance(by: delay.duration - .seconds(1))
+        returnToForeground(sut)
+
+        #expect(sut.state == .unlocked)
+        #expect(purge.callCount == 0)
+    }
+
+    @Test(arguments: [AppLockDelay.oneMinute, .fiveMinutes, .fifteenMinutes])
+    func delay_backOnceItsUp_locks(delay: AppLockDelay) async throws {
+        let clock = FakeAppLockClock()
+        let purge = CallCounter()
+        let (sut, _) = try makeSUT(isEnabled: true, delay: delay, clock: clock, purge: purge)
+        await activate(sut)
+
+        leaveForeground(sut)
+        clock.advance(by: delay.duration)
+        returnToForeground(sut)
+
+        #expect(sut.isLocked)
+        #expect(purge.callCount == 1)
+    }
+
+    @Test
+    func delay_backMuchLater_locksAndPrompts() async throws {
+        let clock = FakeAppLockClock()
+        let policy = countingPolicy(result: true)
+        let (sut, _) = try makeSUT(isEnabled: true, delay: .oneMinute, policy: policy, clock: clock)
+        await activate(sut)
+
+        leaveForeground(sut)
+        clock.advance(by: .seconds(60 * 60 * 24))
+        sut.scenePhaseDidChange(to: .inactive)
+        #expect(sut.state == .locked(.init(step: .deviceAuthentication)))
+        await activate(sut)
+
+        #expect(sut.state == .unlocked)
+        #expect(policy.authenticateWithBiometricsCallCount == 2)
+    }
+
+    @Test
+    func delay_locksAsSoonAsTheAppIsBack_beforeItsActive() async throws {
+        // The first thing on the way back is going inactive: locking then means the vault is never shown.
+        let clock = FakeAppLockClock()
+        let (sut, _) = try makeSUT(isEnabled: true, delay: .oneMinute, clock: clock)
+        await activate(sut)
+        leaveForeground(sut)
+        clock.advance(by: .seconds(61))
+
+        sut.scenePhaseDidChange(to: .inactive)
+
+        #expect(sut.isLocked)
+    }
+
+    @Test
+    func delay_backStraightToActive_stillLocks() async throws {
+        let clock = FakeAppLockClock()
+        let (sut, _) = try makeSUT(isEnabled: true, delay: .oneMinute, clock: clock)
+        await activate(sut)
+        leaveForeground(sut)
+        clock.advance(by: .seconds(61))
+
+        sut.scenePhaseDidChange(to: .active)
+
+        #expect(sut.isLocked)
+        await sut.automaticUnlock?.value
+    }
+
+    @Test
+    func delay_countsFromTheFirstReportOfTheBackground() async throws {
+        // The app hears about going to the background from UIKit and from SwiftUI. The second mustn't restart it.
+        let clock = FakeAppLockClock()
+        let (sut, _) = try makeSUT(isEnabled: true, delay: .oneMinute, clock: clock)
+        await activate(sut)
+
+        leaveForeground(sut)
+        clock.advance(by: .seconds(50))
+        sut.scenePhaseDidChange(to: .background)
+        clock.advance(by: .seconds(10))
+        returnToForeground(sut)
+
+        #expect(sut.isLocked)
+    }
+
+    @Test
+    func delay_startsAgainOnEachTripToTheBackground() async throws {
+        let clock = FakeAppLockClock()
+        let (sut, _) = try makeSUT(isEnabled: true, delay: .oneMinute, clock: clock)
+        await activate(sut)
+
+        leaveForeground(sut)
+        clock.advance(by: .seconds(50))
+        returnToForeground(sut)
+        leaveForeground(sut)
+        clock.advance(by: .seconds(50))
+        returnToForeground(sut)
+
+        #expect(sut.state == .unlocked)
+    }
+
+    @Test
+    func delay_timeInTheForegroundDoesNotCount() async throws {
+        let clock = FakeAppLockClock()
+        let (sut, _) = try makeSUT(isEnabled: true, delay: .oneMinute, clock: clock)
+        await activate(sut)
+
+        clock.advance(by: .seconds(60 * 60))
+        leaveForeground(sut)
+        returnToForeground(sut)
+
+        #expect(sut.state == .unlocked)
+    }
+
+    @Test
+    func delay_clockGoingBackwards_locks() async throws {
+        // Changing the device's date and time doesn't move this clock at all. If time ever ran backwards anyway,
+        // it's no reason to stay unlocked.
+        let clock = FakeAppLockClock()
+        let (sut, _) = try makeSUT(isEnabled: true, delay: .fifteenMinutes, clock: clock)
+        await activate(sut)
+
+        leaveForeground(sut)
+        clock.advance(by: .seconds(-60 * 60))
+        returnToForeground(sut)
+
+        #expect(sut.isLocked)
+    }
+
+    @Test
+    func delay_restart_alwaysStartsLocked() async throws {
+        // Restarting the device (or iOS ending the app in the background) means a new launch: it starts locked,
+        // however recently the app was used and whatever the delay.
+        let clock = FakeAppLockClock()
+        let (sut, settings) = try makeSUT(isEnabled: true, delay: .fifteenMinutes, clock: clock)
+        await activate(sut)
+        leaveForeground(sut)
+
+        let relaunched = AppLockService(
+            settings: settings,
+            authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
+            clock: clock,
+            purgeSensitiveData: {},
+        )
+
+        #expect(relaunched.isLocked)
+    }
+
+    @Test
+    func delay_privacyCoverStillShowsAtOnce() throws {
+        let (sut, _) = try makeSUT(isEnabled: true, delay: .fifteenMinutes)
+
+        #expect(sut.requiresPrivacyCover(in: .inactive))
+        #expect(sut.requiresPrivacyCover(in: .background))
+    }
+
+    @Test
+    func delay_backgroundWhileLocked_stillRearmsThePrompt() async throws {
+        let clock = FakeAppLockClock()
+        let policy = DeviceAuthenticationPolicyMock(
+            canAuthenicateWithPasscode: true,
+            canAuthenticateWithBiometrics: true,
+        )
+        policy.authenticateWithBiometricsHandler = { _ in throw LAError(.userCancel) }
+        let (sut, _) = try makeSUT(isEnabled: true, delay: .fifteenMinutes, policy: policy, clock: clock)
+        await activate(sut)
+        #expect(policy.authenticateWithBiometricsCallCount == 1)
+
+        leaveForeground(sut)
+        returnToForeground(sut)
+        await sut.automaticUnlock?.value
+
+        #expect(policy.authenticateWithBiometricsCallCount == 2)
+    }
+
+    // MARK: - Changing the delay
+
+    @Test
+    func setDelay_longer_authenticatesThenSaves() async throws {
+        let policy = countingPolicy(result: true)
+        let (sut, settings) = try makeSUT(isEnabled: false, delay: .immediately, policy: policy)
+        await sut.setEnabled(true)
+
+        await sut.setDelay(.fiveMinutes)
+
+        #expect(sut.delay == .fiveMinutes)
+        #expect(settings.delay == .fiveMinutes)
+        #expect(policy.authenticateWithBiometricsCallCount == 2)
+    }
+
+    @Test
+    func setDelay_longer_authenticationFails_staysTheSame() async throws {
+        let policy = DeviceAuthenticationPolicyMock(
+            canAuthenicateWithPasscode: true,
+            canAuthenticateWithBiometrics: true,
+        )
+        policy.authenticateWithBiometricsHandler = { _ in
+            // Turns the lock on, then fails to lengthen the delay.
+            policy.authenticateWithBiometricsCallCount == 1
+        }
+        let (sut, settings) = try makeSUT(isEnabled: false, policy: policy)
+        await sut.setEnabled(true)
+
+        await sut.setDelay(.fifteenMinutes)
+
+        #expect(sut.delay == .immediately)
+        #expect(settings.delay == .immediately)
+    }
+
+    @Test
+    func setDelay_longer_authenticationCancelled_staysTheSame() async throws {
+        let policy = DeviceAuthenticationPolicyMock(
+            canAuthenicateWithPasscode: true,
+            canAuthenticateWithBiometrics: true,
+        )
+        policy.authenticateWithBiometricsHandler = { _ in
+            if policy.authenticateWithBiometricsCallCount == 1 {
+                return true
+            }
+            throw LAError(.userCancel)
+        }
+        let (sut, settings) = try makeSUT(isEnabled: false, policy: policy)
+        await sut.setEnabled(true)
+
+        await sut.setDelay(.oneMinute)
+
+        #expect(sut.delay == .immediately)
+        #expect(settings.delay == .immediately)
+    }
+
+    @Test
+    func setDelay_shorter_savesWithoutAuthenticating() async throws {
+        let policy = countingPolicy(result: true)
+        let (sut, settings) = try makeSUT(isEnabled: true, delay: .fifteenMinutes, policy: policy)
+        await activate(sut)
+        #expect(policy.authenticateWithBiometricsCallCount == 1)
+
+        await sut.setDelay(.oneMinute)
+        await sut.setDelay(.immediately)
+
+        #expect(sut.delay == .immediately)
+        #expect(settings.delay == .immediately)
+        #expect(policy.authenticateWithBiometricsCallCount == 1)
+    }
+
+    @Test
+    func setDelay_takesEffectOnTheNextTripToTheBackground() async throws {
+        let clock = FakeAppLockClock()
+        let (sut, _) = try makeSUT(isEnabled: false, clock: clock)
+        await sut.setEnabled(true)
+        await sut.setDelay(.fiveMinutes)
+
+        leaveForeground(sut)
+        clock.advance(by: .seconds(60))
+        returnToForeground(sut)
+
+        #expect(sut.state == .unlocked)
+    }
+
+    @Test
+    func setDelay_lockOff_doesNothing() async throws {
+        let policy = countingPolicy(result: true)
+        let (sut, settings) = try makeSUT(isEnabled: false, policy: policy)
+
+        await sut.setDelay(.fiveMinutes)
+
+        #expect(sut.delay == .immediately)
+        #expect(settings.delay == .immediately)
+        #expect(policy.authenticateWithBiometricsCallCount == 0)
+    }
+
+    @Test
+    func setDelay_whileLocked_doesNothing() async throws {
+        let policy = countingPolicy(result: true)
+        let (sut, settings) = try makeSUT(isEnabled: true, policy: policy)
+
+        await sut.setDelay(.fiveMinutes)
+
+        #expect(sut.delay == .immediately)
+        #expect(settings.delay == .immediately)
+        #expect(policy.authenticateWithBiometricsCallCount == 0)
+    }
+
+    @Test
+    func setEnabled_off_withADelay_neverLocks() async throws {
+        let clock = FakeAppLockClock()
+        let (sut, _) = try makeSUT(isEnabled: true, delay: .oneMinute, clock: clock)
+        await activate(sut)
+        leaveForeground(sut)
+        returnToForeground(sut)
+
+        await sut.setEnabled(false)
+        leaveForeground(sut)
+        clock.advance(by: .seconds(60 * 60))
+        returnToForeground(sut)
+
+        #expect(sut.state == .unlocked)
     }
 }
 
@@ -541,20 +856,36 @@ struct AppLockServiceTests {
 extension AppLockServiceTests {
     private func makeSUT(
         isEnabled: Bool,
+        delay: AppLockDelay = .immediately,
         policy: any DeviceAuthenticationPolicy = DeviceAuthenticationPolicyAlwaysAllow(),
         authenticationService: DeviceAuthenticationService? = nil,
+        clock: FakeAppLockClock = FakeAppLockClock(),
         purge: CallCounter = CallCounter(),
         didChangeSettings: CallCounter = CallCounter(),
     ) throws -> (AppLockService, AppLockSettingsStore) {
         let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
         settings.isEnabled = isEnabled
+        settings.delay = delay
         let sut = AppLockService(
             settings: settings,
             authenticationService: authenticationService ?? DeviceAuthenticationService(policy: policy),
+            clock: clock,
             purgeSensitiveData: { purge.increment() },
             didChangeSettings: { didChangeSettings.increment() },
         )
         return (sut, settings)
+    }
+
+    /// Active to background, as the system reports it.
+    private func leaveForeground(_ sut: AppLockService) {
+        sut.scenePhaseDidChange(to: .inactive)
+        sut.scenePhaseDidChange(to: .background)
+    }
+
+    /// Background to active, without waiting for a prompt that starts.
+    private func returnToForeground(_ sut: AppLockService) {
+        sut.scenePhaseDidChange(to: .inactive)
+        sut.scenePhaseDidChange(to: .active)
     }
 
     /// Brings the app to the foreground and waits for any prompt that starts.
@@ -579,6 +910,19 @@ extension AppLockServiceTests {
         )
         policy.authenticateWithBiometricsHandler = { _ in throw error }
         return policy
+    }
+}
+
+/// Time that moves only when the test says so.
+private final class FakeAppLockClock: AppLockClock {
+    private let current = Mutex(ContinuousClock.now)
+
+    var now: ContinuousClock.Instant {
+        current.withLock(\.self)
+    }
+
+    func advance(by duration: Duration) {
+        current.withLock { $0 = $0.advanced(by: duration) }
     }
 }
 
