@@ -15,10 +15,31 @@ import VaultCore
 /// - Deleting by killphrase returns `false` whatever the failure, the same as when nothing matches (MANIFESTO C2).
 ///
 /// It behaves exactly as `RecordVaultStore` does, which it's built on. Finding the slot a password opens, within the
-/// unlock deadline, is the unlock service's job. See "Reading and writing while unlocked" in
+/// unlock deadline, is `VaultUnlockService`'s job. See "Reading and writing while unlocked" in
 /// `docs/on-device-encryption.md`.
 public final class EncryptedVaultStore: Sendable {
     let records: RecordVaultStore
+
+    /// The vault in `slot`, whose payload has already been read.
+    ///
+    /// - Parameters:
+    ///   - file: Where the vault file is.
+    ///   - slot: The vault's slot, as it was opened.
+    ///   - state: The vault the slot's payload holds.
+    init(
+        file: EncryptedVaultFile,
+        slot: VaultSlotFile.OpenedSlot,
+        state: VaultRecordState,
+        sortOrder: VaultStoreSortOrder = .relativeOrder,
+        currentDate: @escaping @Sendable () -> Date = { Date() },
+    ) {
+        records = RecordVaultStore(
+            state: state,
+            sortOrder: sortOrder,
+            currentDate: currentDate,
+            persistence: SlotFilePersistence(file: file, slot: slot),
+        )
+    }
 
     /// Reads the vault in `slot`.
     ///
@@ -28,19 +49,19 @@ public final class EncryptedVaultStore: Sendable {
     ///   - slot: The vault's slot, opened in `contents`.
     /// - Throws: If the slot's payload doesn't open or decode, including
     ///   `EncryptedVaultStoreError.unsupportedPayloadVersion(_:)` for a vault saved by a newer version of the app.
-    init(
+    convenience init(
         file: EncryptedVaultFile,
         contents: VaultSlotFile,
         slot: VaultSlotFile.OpenedSlot,
         sortOrder: VaultStoreSortOrder = .relativeOrder,
         currentDate: @escaping @Sendable () -> Date = { Date() },
     ) throws {
-        let state = try EncryptedVaultPayload.decode(slot: slot, in: contents)
-        records = RecordVaultStore(
-            state: state,
+        try self.init(
+            file: file,
+            slot: slot,
+            state: EncryptedVaultPayload.decode(slot: slot, in: contents),
             sortOrder: sortOrder,
             currentDate: currentDate,
-            persistence: SlotFilePersistence(file: file, slot: slot),
         )
     }
 }
