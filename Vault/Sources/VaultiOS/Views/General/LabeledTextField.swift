@@ -121,6 +121,9 @@ struct LabeledTextField: View {
                 }
 
             input
+                // Every kind of input takes the title as its label. VoiceOver doesn't read a text field's own label,
+                // and the floating label is hidden from it, so without this the field would have no name.
+                .accessibilityLabel(title)
                 .accessibilityHint(prompt ?? "")
                 .overlay(alignment: restsLabelOnFirstLine ? .topLeading : .leading) {
                     promptOverlay
@@ -237,7 +240,6 @@ struct LabeledTextField: View {
                     .scrollContentBackground(.hidden)
                     // Line the text up with the label, and with the text of the other fields.
                     .padding(Self.textEditorInsetCompensation)
-                    .accessibilityLabel(title)
             }
     }
 
