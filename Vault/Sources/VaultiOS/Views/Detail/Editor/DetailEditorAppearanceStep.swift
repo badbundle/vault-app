@@ -33,24 +33,30 @@ struct DetailEditorAppearanceStep: View {
             } label: {
                 VaultDetailTagsRow(tags: selectedTags, countDescription: tagCountDescription)
             }
+            // On the row, not the section: a section applies its modifiers to its footer too, and two sheets for one
+            // tap cancel each other out.
+            .sheet(isPresented: $isShowingTagPicker) {
+                tagPicker
+            }
         } footer: {
             Text("Tags group items together, so you can filter the vault by them.")
         }
-        .sheet(isPresented: $isShowingTagPicker) {
-            NavigationStack {
-                VaultDetailTagEditView(
-                    tagsThatAreSelected: selectedTags,
-                    remainingTags: remainingTags,
-                    didAdd: addTag,
-                    didRemove: removeTag,
-                )
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button {
-                            isShowingTagPicker = false
-                        } label: {
-                            Text("Done")
-                        }
+    }
+
+    private var tagPicker: some View {
+        NavigationStack {
+            VaultDetailTagEditView(
+                tagsThatAreSelected: selectedTags,
+                remainingTags: remainingTags,
+                didAdd: addTag,
+                didRemove: removeTag,
+            )
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        isShowingTagPicker = false
+                    } label: {
+                        Text("Done")
                     }
                 }
             }

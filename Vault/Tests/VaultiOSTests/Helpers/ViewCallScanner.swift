@@ -1,14 +1,13 @@
 import Foundation
+import Testing
 
-/// Finds the text inputs created in Swift source, and the modifiers chained onto each one.
+/// Finds the calls to some views in Swift source, and the modifiers chained onto each one.
 ///
 /// It reads the text rather than a syntax tree, which is enough for how the app's views are written: a call to one of
-/// `inputNames`, any trailing closures, then a chain of `.modifier(…)` calls. Comments and string literals are
-/// skipped, so a field mentioned in a doc comment, or a bracket inside a label, doesn't throw it off.
-enum TextInputCallScanner {
-    /// SwiftUI's text inputs, and the app's own field built from them.
-    static let inputNames = ["TextField", "SecureField", "TextEditor", "LabeledTextField"]
-
+/// the names, with arguments or a trailing closure, any further trailing closures, then a chain of `.modifier(…)`
+/// calls. Comments and string literals are skipped, so a view mentioned in a doc comment, or a bracket inside a label,
+/// doesn't throw it off.
+enum ViewCallScanner {
     struct Call: Equatable {
         var name: String
         /// 1-based, like a compiler diagnostic.
@@ -17,33 +16,98 @@ enum TextInputCallScanner {
         var modifiers: [String]
     }
 
-    static func calls(in source: String) -> [Call] {
+    static func calls(to names: Set<String>, in source: String) -> [Call] {
         let code = codeOnly(Array(source.utf8))
-        let text = String(decoding: code, as: UTF8.self)
-        let pattern = /(TextField|SecureField|TextEditor|LabeledTextField)\s*\(/
-        return text.matches(of: pattern).compactMap { match in
-            let start = text.utf8.distance(from: text.utf8.startIndex, to: match.range.lowerBound)
-            // Part of a longer name, like `MyTextField`.
-            if start > 0, code[start - 1].isIdentifierCharacter {
-                return nil
+        var calls: [Call] = []
+        var previousWord = ""
+        var line = 1
+        var index = 0
+        while index < code.count {
+            guard code[index].isIdentifierCharacter else {
+                if code[index] == .newline {
+                    line += 1
+                }
+                index += 1
+                continue
             }
-            let openParen = text.utf8.distance(from: text.utf8.startIndex, to: match.range.upperBound) - 1
-            let line = code[..<start].count(where: { $0 == .newline }) + 1
-            return Call(
-                name: String(match.output.1),
-                line: line,
-                modifiers: modifierChain(in: code, afterCallAt: openParen),
-            )
+            // A whole word, so part of a longer name, like `MyTextField`, isn't a match.
+            var end = index
+            while end < code.count, code[end].isIdentifierCharacter {
+                end += 1
+            }
+            let word = String(decoding: code[index ..< end], as: UTF8.self)
+            let opening = skippingWhitespace(in: code, from: end)
+            if names.contains(word),
+               !declarationKeywords.contains(previousWord),
+               opening < code.count,
+               code[opening] == .openParen || code[opening] == .openBrace
+            {
+                calls.append(Call(name: word, line: line, modifiers: modifierChain(in: code, afterCallAt: opening)))
+            }
+            previousWord = word
+            index = end
         }
+        return calls
+    }
+
+    /// Words that declare a type rather than call it, like `extension Section {`.
+    private static let declarationKeywords: Set = ["extension", "struct", "class", "enum", "protocol", "actor"]
+
+    // MARK: - App sources
+
+    /// A call in one of the app's source files.
+    struct LocatedCall: CustomStringConvertible {
+        /// Relative to the repository.
+        var path: String
+        var call: Call
+
+        var file: String {
+            URL(filePath: path).lastPathComponent
+        }
+
+        var description: String {
+            "\(path):\(call.line): \(call.name)"
+        }
+    }
+
+    /// The calls to `names` in the Swift package's sources and the app targets' own, found from this file's path.
+    static func callsInAppSources(to names: Set<String>) throws -> [LocatedCall] {
+        let repository = URL(filePath: #filePath)
+            .deletingLastPathComponent() // Helpers
+            .deletingLastPathComponent() // VaultiOSTests
+            .deletingLastPathComponent() // Tests
+            .deletingLastPathComponent() // Vault
+            .deletingLastPathComponent()
+        let roots = [
+            repository.appending(path: "Vault/Sources"),
+            repository.appending(path: "VaultApp"),
+        ]
+        var located: [LocatedCall] = []
+        for root in roots {
+            let files = try #require(FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil))
+            for case let url as URL in files where url.pathExtension == "swift" {
+                let source = try String(contentsOf: url, encoding: .utf8)
+                let path = String(url.standardizedFileURL.path().dropFirst(repository.standardizedFileURL.path().count))
+                for call in calls(to: names, in: source) {
+                    located.append(LocatedCall(path: path, call: call))
+                }
+            }
+        }
+        return located
     }
 
     // MARK: - Modifier chain
 
-    /// Everything after the call's arguments: trailing closures, then `.name(…)` and `.name { … }` for as long as the
-    /// chain goes on.
-    private static func modifierChain(in code: [UInt8], afterCallAt openParen: Int) -> [String] {
+    /// Everything after the call's arguments, or its first trailing closure: trailing closures, then `.name(…)` and
+    /// `.name { … }` for as long as the chain goes on.
+    private static func modifierChain(in code: [UInt8], afterCallAt opening: Int) -> [String] {
         var modifiers: [String] = []
-        var index = endOfGroup(in: code, openingAt: openParen)
+        var index = endOfGroup(in: code, openingAt: opening)
+        // A call that starts with a trailing closure can go straight on to a labeled one (`} footer: {`).
+        let afterFirstGroup = skippingWhitespace(in: code, from: index)
+        if code[opening] == .openBrace, let labelEnd = endOfClosureLabel(in: code, from: afterFirstGroup) {
+            index = labelEnd
+        }
         while true {
             index = skippingWhitespace(in: code, from: index)
             guard index < code.count else { break }

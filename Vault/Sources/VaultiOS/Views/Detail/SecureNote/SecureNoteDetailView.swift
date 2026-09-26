@@ -153,10 +153,11 @@ struct SecureNoteDetailView: View {
                         DetailEditorItemBadge(identity: identity)
                             .padding(20)
                     }
+                    // On the row rather than the section, which would repeat it for each of its parts.
+                    .sheet(isPresented: $isSelectingText) {
+                        NoteTextSelectionSheet(text: viewModel.editingModel.detail.contents)
+                    }
             }
-        }
-        .sheet(isPresented: $isSelectingText) {
-            NoteTextSelectionSheet(text: viewModel.editingModel.detail.contents)
         }
     }
 

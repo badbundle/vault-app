@@ -39,7 +39,7 @@ struct SecretTextInputDeclarationTests {
 extension SecretTextInputDeclarationTests {
     @Test
     func scanner_findsModifiersChainedOntoAField() {
-        let calls = TextInputCallScanner.calls(in: """
+        let calls = ViewCallScanner.calls(to: Self.textInputNames, in: """
         LabeledTextField("Title", text: $title)
             .secretTextInput(.prose)
             .focused($focus, equals: .title)
@@ -50,7 +50,7 @@ extension SecretTextInputDeclarationTests {
 
     @Test
     func scanner_findsFieldWithoutModifiers() {
-        let calls = TextInputCallScanner.calls(in: """
+        let calls = ViewCallScanner.calls(to: Self.textInputNames, in: """
         VStack {
             Text("Name")
             TextField("Name", text: $name)
@@ -62,7 +62,7 @@ extension SecretTextInputDeclarationTests {
 
     @Test
     func scanner_readsPastTrailingClosures() {
-        let calls = TextInputCallScanner.calls(in: """
+        let calls = ViewCallScanner.calls(to: Self.textInputNames, in: """
         SecureField(text: $text, prompt: nil) {
             Text(title)
         }
@@ -77,7 +77,7 @@ extension SecretTextInputDeclarationTests {
 
     @Test
     func scanner_readsPastLabeledTrailingClosures() {
-        let calls = TextInputCallScanner.calls(in: """
+        let calls = ViewCallScanner.calls(to: Self.textInputNames, in: """
         TextField(text: $text) {
             Text("Word")
         } label: {
@@ -91,7 +91,7 @@ extension SecretTextInputDeclarationTests {
 
     @Test
     func scanner_readsPastCommentsInTheChain() {
-        let calls = TextInputCallScanner.calls(in: """
+        let calls = ViewCallScanner.calls(to: Self.textInputNames, in: """
         TextEditor(text: $text)
             // Line it up with the label.
             .padding(insets)
@@ -104,7 +104,7 @@ extension SecretTextInputDeclarationTests {
 
     @Test
     func scanner_isNotThrownByBracketsOrQuotesInStrings() {
-        let calls = TextInputCallScanner.calls(in: #"""
+        let calls = ViewCallScanner.calls(to: Self.textInputNames, in: #"""
         LabeledTextField("Name (\(count) \"left\")", text: $name, prompt: "\(example ? "a)" : "b(")")
             .secretTextInput(.prose)
         TextField(#"Raw ")" string"#, text: $raw)
@@ -115,7 +115,7 @@ extension SecretTextInputDeclarationTests {
 
     @Test
     func scanner_ignoresFieldsInCommentsAndStrings() {
-        let calls = TextInputCallScanner.calls(in: """
+        let calls = ViewCallScanner.calls(to: Self.textInputNames, in: """
         /// Use `TextField(text:)` rather than a `UITextField`.
         // TextEditor(text: $text)
         /* SecureField(text: $text) /* nested */ */
@@ -127,7 +127,7 @@ extension SecretTextInputDeclarationTests {
 
     @Test
     func scanner_ignoresDeclarationsAndOtherNames() {
-        let calls = TextInputCallScanner.calls(in: """
+        let calls = ViewCallScanner.calls(to: Self.textInputNames, in: """
         struct LabeledTextField: View {}
         extension LabeledTextField.Status {}
         MyTextField(text: $text)
@@ -138,7 +138,7 @@ extension SecretTextInputDeclarationTests {
 
     @Test
     func scanner_findsModuleQualifiedFields() {
-        let calls = TextInputCallScanner.calls(in: """
+        let calls = ViewCallScanner.calls(to: Self.textInputNames, in: """
         SwiftUI.TextField("Name", text: $name)
         """)
 
@@ -149,42 +149,10 @@ extension SecretTextInputDeclarationTests {
 // MARK: - Helpers
 
 extension SecretTextInputDeclarationTests {
-    struct LocatedCall: CustomStringConvertible {
-        /// Relative to the repository.
-        var path: String
-        var call: TextInputCallScanner.Call
+    /// SwiftUI's text inputs, and the app's own field built from them.
+    static let textInputNames: Set = ["TextField", "SecureField", "TextEditor", "LabeledTextField"]
 
-        var file: String {
-            URL(filePath: path).lastPathComponent
-        }
-
-        var description: String {
-            "\(path):\(call.line): \(call.name)"
-        }
-    }
-
-    /// The Swift package's sources and the app targets' own, found from this file's path.
-    private static func textInputCallsInAppSources(filePath: String = #filePath) throws -> [LocatedCall] {
-        let repository = URL(filePath: filePath)
-            .deletingLastPathComponent() // VaultiOSTests
-            .deletingLastPathComponent() // Tests
-            .deletingLastPathComponent() // Vault
-            .deletingLastPathComponent()
-        let roots = [
-            repository.appending(path: "Vault/Sources"),
-            repository.appending(path: "VaultApp"),
-        ]
-        var calls: [LocatedCall] = []
-        for root in roots {
-            let files = try #require(FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil))
-            for case let url as URL in files where url.pathExtension == "swift" {
-                let source = try String(contentsOf: url, encoding: .utf8)
-                let path = String(url.standardizedFileURL.path().dropFirst(repository.standardizedFileURL.path().count))
-                for call in TextInputCallScanner.calls(in: source) {
-                    calls.append(LocatedCall(path: path, call: call))
-                }
-            }
-        }
-        return calls
+    private static func textInputCallsInAppSources() throws -> [ViewCallScanner.LocatedCall] {
+        try ViewCallScanner.callsInAppSources(to: textInputNames)
     }
 }
