@@ -23,6 +23,9 @@ public enum VaultIdentifiers {
         /// class as `killphraseKey` so the case-folded match works the
         /// moment the device is unlocked.
         public static let searchPassphraseKey = "vault.secure-storage.search-passphrase-key.v1"
+        /// Wrong attempts at the app lock password, and when the latest was made. Kept on this device only, and
+        /// readable only while it's unlocked, with no biometric prompt.
+        public static let appLockPasswordAttempts = "vault.secure-storage.app-lock-password-attempts.v1"
     }
 
     public enum Backup {
