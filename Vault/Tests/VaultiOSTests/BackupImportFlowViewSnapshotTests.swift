@@ -14,13 +14,12 @@ final class BackupImportFlowViewSnapshotTests {
             for colorScheme in [ColorScheme.light, .dark] {
                 let snapshottingView = BackupImportFlowView(viewModel: makeViewModel(context: context))
                     .dynamicTypeSize(.medium)
-                    .preferredColorScheme(colorScheme)
                     .framedForTest()
                     .environment(anyVaultInjector())
 
                 assertSnapshot(
                     of: snapshottingView,
-                    as: .image,
+                    colorScheme: colorScheme,
                     named: "\(context)_\(colorScheme)",
                 )
             }

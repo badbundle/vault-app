@@ -121,12 +121,11 @@ extension LabeledTextFieldSnapshotTests {
             for dynamicTypeSize in dynamicTypeSizes {
                 let snapshottingView = view
                     .dynamicTypeSize(dynamicTypeSize)
-                    .preferredColorScheme(colorScheme)
                     .framedForTest(height: 700)
 
                 assertSnapshot(
                     of: snapshottingView,
-                    as: .image,
+                    colorScheme: colorScheme,
                     named: "\(colorScheme)_\(dynamicTypeSize)",
                     testName: testName,
                 )

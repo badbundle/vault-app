@@ -36,9 +36,8 @@ final class EncryptedItemDetailViewSnapshotTests {
 // MARK: - Helpers
 
 extension EncryptedItemDetailViewSnapshotTests {
-    /// Outside a `NavigationStack`: its bar is UIKit, which doesn't take the dark
-    /// color scheme from the environment, so its Cancel button would vanish in the
-    /// dark references.
+    /// Outside a `NavigationStack`: its bar's Cancel button would vanish in the dark
+    /// references (see `assertSnapshot(of:colorScheme:)`).
     private func makeSUT(viewModel: EncryptedItemDetailViewModel) -> some View {
         EncryptedItemDetailView(viewModel: viewModel, openDetailSubject: PassthroughSubject())
     }
@@ -57,9 +56,6 @@ extension EncryptedItemDetailViewSnapshotTests {
         )
     }
 
-    /// Dark mode is set on the environment rather than with `preferredColorScheme`,
-    /// which a hosted view can't apply to itself, so the dark references really are
-    /// dark (and show the dark icon's door).
     private func snapshotScenarios(
         view: some View,
         dynamicTypeSizes: [DynamicTypeSize] = [.xSmall, .medium, .xxLarge],
@@ -69,12 +65,11 @@ extension EncryptedItemDetailViewSnapshotTests {
             for dynamicTypeSize in dynamicTypeSizes {
                 let snapshottingView = view
                     .dynamicTypeSize(dynamicTypeSize)
-                    .environment(\.colorScheme, colorScheme)
                     .framedForTest()
 
                 assertSnapshot(
                     of: snapshottingView,
-                    as: .image,
+                    colorScheme: colorScheme,
                     named: "\(colorScheme)_\(dynamicTypeSize)",
                     testName: testName,
                 )

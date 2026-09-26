@@ -12,12 +12,11 @@ final class VaultDetailEncryptionEditViewSnapshotTests {
             for dynamicTypeSize in [DynamicTypeSize.xSmall, .medium, .xxLarge] {
                 let snapshottingView = makeView(encryptionInitiallyEnabled: false)
                     .dynamicTypeSize(dynamicTypeSize)
-                    .preferredColorScheme(colorScheme)
                     .framedForTest()
 
                 assertSnapshot(
                     of: snapshottingView,
-                    as: .image,
+                    colorScheme: colorScheme,
                     named: "\(colorScheme)_\(dynamicTypeSize)",
                 )
             }
@@ -29,12 +28,11 @@ final class VaultDetailEncryptionEditViewSnapshotTests {
         for colorScheme in [ColorScheme.light, .dark] {
             let snapshottingView = makeView(encryptionInitiallyEnabled: true)
                 .dynamicTypeSize(.medium)
-                .preferredColorScheme(colorScheme)
                 .framedForTest()
 
             assertSnapshot(
                 of: snapshottingView,
-                as: .image,
+                colorScheme: colorScheme,
                 named: "\(colorScheme)_medium",
             )
         }
@@ -45,12 +43,11 @@ final class VaultDetailEncryptionEditViewSnapshotTests {
         for colorScheme in [ColorScheme.light, .dark] {
             let snapshottingView = makeRequiredView(hasExistingPassword: false)
                 .dynamicTypeSize(.medium)
-                .preferredColorScheme(colorScheme)
                 .framedForTest()
 
             assertSnapshot(
                 of: snapshottingView,
-                as: .image,
+                colorScheme: colorScheme,
                 named: "\(colorScheme)_medium",
             )
         }
@@ -61,12 +58,11 @@ final class VaultDetailEncryptionEditViewSnapshotTests {
         for colorScheme in [ColorScheme.light, .dark] {
             let snapshottingView = makeRequiredView(hasExistingPassword: true)
                 .dynamicTypeSize(.medium)
-                .preferredColorScheme(colorScheme)
                 .framedForTest()
 
             assertSnapshot(
                 of: snapshottingView,
-                as: .image,
+                colorScheme: colorScheme,
                 named: "\(colorScheme)_medium",
             )
         }

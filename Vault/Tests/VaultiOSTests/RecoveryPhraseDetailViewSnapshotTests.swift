@@ -239,14 +239,13 @@ extension RecoveryPhraseDetailViewSnapshotTests {
                 let snapshottingView = view
                     .environment(\.scenePhase, scenePhase)
                     .dynamicTypeSize(dynamicTypeSize)
-                    .preferredColorScheme(colorScheme)
                     .framedForTest(height: height)
                     .environment(DeviceAuthenticationService(policy: deviceAuthenticationPolicy))
                 let named = "\(colorScheme)_\(dynamicTypeSize)"
 
                 assertSnapshot(
                     of: snapshottingView,
-                    as: .image,
+                    colorScheme: colorScheme,
                     named: named,
                     testName: testName,
                 )

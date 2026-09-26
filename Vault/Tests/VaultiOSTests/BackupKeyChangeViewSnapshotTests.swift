@@ -89,16 +89,16 @@ final class BackupKeyChangeViewSnapshotTests {
             }
 
             // The point of this snapshot is the enabled Cancel button in
-            // the view's own navigation bar.
+            // the view's own navigation bar, which only the light
+            // reference can show (see `assertSnapshot(of:colorScheme:)`).
             let snapshottingView = BackupKeyChangeView(viewModel: viewModel)
                 .dynamicTypeSize(.medium)
-                .preferredColorScheme(colorScheme)
                 .framedForTest()
                 .environment(makePasteboard())
                 .environment(DeviceAuthenticationService(policy: DeviceAuthenticationPolicyAlwaysAllow()))
             assertSnapshot(
                 of: snapshottingView,
-                as: .image,
+                colorScheme: colorScheme,
                 named: "\(colorScheme)_medium",
             )
 
@@ -188,7 +188,6 @@ extension BackupKeyChangeViewSnapshotTests {
             for dynamicTypeSize in dynamicTypeSizes {
                 let snapshottingView = await makeView()
                     .dynamicTypeSize(dynamicTypeSize)
-                    .preferredColorScheme(colorScheme)
                     .framedForTest()
                     .environment(makePasteboard())
                     .environment(DeviceAuthenticationService(policy: deviceAuthenticationPolicy))
@@ -196,7 +195,7 @@ extension BackupKeyChangeViewSnapshotTests {
 
                 assertSnapshot(
                     of: snapshottingView,
-                    as: .image,
+                    colorScheme: colorScheme,
                     named: named,
                     testName: testName,
                 )
