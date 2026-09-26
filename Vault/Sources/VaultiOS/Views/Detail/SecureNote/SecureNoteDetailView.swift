@@ -10,6 +10,9 @@ struct SecureNoteDetailView: View {
     @Environment(\.presentationMode) private var presentationMode
     @State private var currentError: (any Error)?
     @State private var isShowingDeleteConfirmation = false
+    /// How much of the screen the badge above the note takes, with the space around the two of them. It grows with
+    /// the badge.
+    @ScaledMetric(relativeTo: .title) private var noteBadgeAllowance: Double = 190
 
     init(
         editingExistingNote note: SecureNote,
@@ -62,7 +65,7 @@ struct SecureNoteDetailView: View {
                 editorIdentity: identity,
             ) {
                 noteContentsSection(size: reader.size)
-                MetadataDisclosureSection(
+                DetailPageInfoSections(
                     tags: viewModel.tagsThatAreSelected,
                     entries: viewModel.detailEntries,
                 )
@@ -114,6 +117,7 @@ struct SecureNoteDetailView: View {
 
     // MARK: - Viewing
 
+    /// The note, on a card that reaches down to the bottom of the screen like a page, however short the note is.
     private func noteContentsSection(size: CGSize) -> some View {
         Section {
             switch viewModel.editingModel.detail.textFormat {
@@ -123,21 +127,20 @@ struct SecureNoteDetailView: View {
                     fontStyle: .monospace,
                     textStyle: .subheadline,
                 )
-                .frame(minHeight: size.height - 100, alignment: .top)
+                .frame(minHeight: noteMinHeight(in: size), alignment: .top)
                 .listRowInsets(EdgeInsets())
             case .markdown:
                 Markdown(.init(viewModel.editingModel.detail.contents))
                     .textSelection(.enabled)
-                    .frame(minHeight: size.height - 100, alignment: .top)
+                    .frame(minHeight: noteMinHeight(in: size), alignment: .top)
                     .listRowInsets(EdgeInsets(vertical: 12, horizontal: 16))
             }
-        } header: {
-            Image(systemName: noteSymbol)
-                .font(.title)
-                .foregroundStyle((viewModel.editingModel.detail.color ?? .default).color)
-                .containerRelativeFrame(.horizontal)
-                .padding(.vertical, 2)
         }
+    }
+
+    /// The screen, less the badge above the note and the margins around it.
+    private func noteMinHeight(in size: CGSize) -> CGFloat {
+        max(size.height - noteBadgeAllowance, 200)
     }
 }
 

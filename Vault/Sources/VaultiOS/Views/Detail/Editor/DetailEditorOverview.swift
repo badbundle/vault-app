@@ -17,14 +17,7 @@ struct DetailEditorOverview: View {
     var delete: (() -> Void)?
 
     var body: some View {
-        Section {
-            DetailEditorItemBadge(identity: identity)
-        } footer: {
-            Text("Choose what to change.")
-                .padding(.top, 8)
-        }
-        .listRowBackground(Color.clear)
-        .listRowInsets(EdgeInsets(top: 8, leading: 4, bottom: 0, trailing: 4))
+        DetailItemBadgeSection(identity: identity, footer: "Choose what to change.")
 
         ForEach(steps, id: \.self) { step in
             Section {
