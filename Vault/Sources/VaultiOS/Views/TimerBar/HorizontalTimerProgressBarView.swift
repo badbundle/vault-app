@@ -4,7 +4,7 @@ import SwiftUI
 /// A progress bar: a track, filled from the leading edge by `fractionCompleted`.
 ///
 /// When the environment has a `timerBarLabel`, the bar shows it at its leading edge, colored to contrast with
-/// what's behind each part of it: secondary text over the track, and `fillLabelColor` over the fill. The color
+/// what's behind each part of it: muted text over the track, and `fillLabelColor` over the fill. The color
 /// changes exactly where the fill ends, even as the fill animates across the label.
 struct HorizontalTimerProgressBarView: View {
     var fractionCompleted: Double
@@ -25,9 +25,8 @@ struct HorizontalTimerProgressBarView: View {
                 Rectangle()
                     .fill(backgroundColor)
                 if let label {
-                    // Not the hierarchical `.secondary`: in a card that's a button, that would be the tint's.
                     LoadingBarLabel(text: label)
-                        .foregroundStyle(Color(.secondaryLabel))
+                        .foregroundStyle(Self.trackLabelColor)
                 }
                 Rectangle()
                     .fill(color)
@@ -46,6 +45,10 @@ struct HorizontalTimerProgressBarView: View {
             }
         }
     }
+
+    /// Muted like secondary text, but stronger than `secondaryLabel`, which is only about 3:1 on the light track
+    /// at this size. (Not the hierarchical `.secondary`: in a card that's a button, that would be the tint's.)
+    private static let trackLabelColor = Color(.label).opacity(0.6)
 
     private var isPlaceholder: Bool {
         redactionReasons.contains(.placeholder)
@@ -71,6 +74,14 @@ extension HorizontalTimerProgressBarView {
     /// A bar filled with `color`, whose label is `labelColor`.
     static func filled(_ color: Color, labelColor: Color = .white) -> Self {
         .init(fractionCompleted: 1, color: color, fillLabelColor: labelColor)
+    }
+
+    /// The white bar a code card shows on its accent background while it's being edited.
+    ///
+    /// It stays out of the card's editing shimmer, so it's always solid white, and its label is the accent
+    /// darkened to read on white: about 7.5:1, where the accent itself is only about 3.5:1.
+    static var editing: Self {
+        .filled(.white, labelColor: Color.accentColor.mix(with: .black, by: 0.3))
     }
 }
 

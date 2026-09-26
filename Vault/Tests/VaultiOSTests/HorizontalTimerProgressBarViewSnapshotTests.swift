@@ -69,7 +69,7 @@ final class HorizontalTimerProgressBarViewSnapshotTests {
         assertSnapshot(of: view, as: .image)
     }
 
-    /// Secondary text over the track and white over the fill, changing where the fill ends.
+    /// Muted text over the track and white over the fill, changing where the fill ends.
     @Test
     func label_changesColorWhereFillEnds() {
         for colorScheme in [ColorScheme.light, .dark] {
@@ -82,13 +82,16 @@ final class HorizontalTimerProgressBarViewSnapshotTests {
         }
     }
 
+    /// The white editing bar, on the accent background of a card being edited.
     @Test
-    func label_usesFillLabelColorOnFill() {
-        let view = HorizontalTimerProgressBarView.filled(.white, labelColor: .blue)
-            .environment(\.timerBarLabel, "Tap to View")
-            .frame(width: 150, height: 12)
-            .background(Color.blue)
+    func label_editing() {
+        for colorScheme in [ColorScheme.light, .dark] {
+            let view = HorizontalTimerProgressBarView.editing
+                .environment(\.timerBarLabel, "Tap to View")
+                .frame(width: 150, height: 12)
+                .background(Color.accentColor)
 
-        assertSnapshot(of: view, colorScheme: .light)
+            assertSnapshot(of: view, colorScheme: colorScheme, named: "\(colorScheme)")
+        }
     }
 }

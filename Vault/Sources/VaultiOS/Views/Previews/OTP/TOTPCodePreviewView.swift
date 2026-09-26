@@ -11,16 +11,20 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Icon at top
-            icon
-                .padding(.bottom, 8)
+            VStack(alignment: .leading, spacing: 0) {
+                // Icon at top
+                icon
+                    .padding(.bottom, 8)
 
-            // Issuer and account labels
-            labelsStack
+                // Issuer and account labels
+                labelsStack
 
-            // Code section - prominent
-            OTPPreviewCodeText(codeState: previewViewModel.code, behaviour: behaviour)
-                .padding(.vertical, 12)
+                // Code section - prominent
+                OTPPreviewCodeText(codeState: previewViewModel.code, behaviour: behaviour)
+                    .padding(.vertical, 12)
+            }
+            // Not the bar: its label has to stay readable while editing, which the shimmer's fade would stop.
+            .shimmering(active: isEditing)
 
             Spacer(minLength: 0)
 
@@ -35,7 +39,6 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
         .animation(.snappy, value: behaviour)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .aspectRatio(1, contentMode: .fill)
-        .shimmering(active: isEditing)
         .modifier(
             VaultCardModifier(
                 configuration: .init(
@@ -93,8 +96,7 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
                 HorizontalTimerProgressBarView.filled(.red)
             }
         case .editingState:
-            // White on the card's accent background while editing, so the label takes the accent color.
-            HorizontalTimerProgressBarView.filled(.white, labelColor: .accentColor)
+            HorizontalTimerProgressBarView.editing
         }
     }
 
