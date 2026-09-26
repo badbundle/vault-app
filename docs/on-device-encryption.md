@@ -115,6 +115,10 @@ These are facts from the code and from the prototypes described in the [appendix
   `vault-primary.failed-open-<timestamp>/`. Those are full plaintext copies of the vault. Nothing reads them
   again, but they may hold the only copy of some items, so they're never deleted automatically. Since VAULT-55
   the Backups page says a vault was set aside and offers to delete it, and deleting all data deletes them.
+- **Backup PDFs.** A PDF backup is the whole vault, encrypted with the backup password, including items deleted
+  since it was made. Until VAULT-62, each one stayed in the app's `tmp/` until the system cleared it. Now the file
+  only exists while the share sheet has it (`BackupPDFTemporaryFiles`), and any left behind, if the app was closed
+  with the sheet open, are deleted when the Backups page next opens.
 - **Settings.** The last backup event (dates and a payload hash) and the auto-backup configuration are in
   `UserDefaults`. The backup password's derived key and a "backup password is set" record are in the keychain.
   None of these identify items.

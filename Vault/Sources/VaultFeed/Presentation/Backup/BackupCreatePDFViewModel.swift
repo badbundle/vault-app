@@ -67,10 +67,10 @@ public final class BackupCreatePDFViewModel {
 
     /// Exported PDF document that has been generated.
     ///
-    /// It only exists as a temporary file until the user saves it somewhere, so it isn't a backup yet.
+    /// It's only in memory until the user saves it somewhere, so it isn't a backup yet. It's written to a file
+    /// just while the share sheet has it (`BackupPDFTemporaryFiles`).
     public struct GeneratedPDF: Equatable, Hashable {
         public let document: PDFDocument
-        public let diskURL: URL
         public let size: Size
         public let dataHash: Digest<VaultApplicationPayload>.SHA256
         /// When the vault was exported into this PDF.
@@ -78,13 +78,11 @@ public final class BackupCreatePDFViewModel {
 
         public init(
             document: PDFDocument,
-            diskURL: URL,
             size: Size,
             dataHash: Digest<VaultApplicationPayload>.SHA256,
             createdDate: Date,
         ) {
             self.document = document
-            self.diskURL = diskURL
             self.size = size
             self.dataHash = dataHash
             self.createdDate = createdDate
@@ -115,20 +113,17 @@ public final class BackupCreatePDFViewModel {
     private let dataModel: VaultDataModel
     private let clock: any EpochClock
     private let defaults: Defaults
-    private let fileManager: FileManager
 
     public init(
         backupPassword: DerivedEncryptionKey,
         dataModel: VaultDataModel,
         clock: any EpochClock,
         defaults: Defaults,
-        fileManager: FileManager,
     ) {
         self.backupPassword = backupPassword
         self.dataModel = dataModel
         self.clock = clock
         self.defaults = defaults
-        self.fileManager = fileManager
 
         size = defaults.get(for: Self.pdfSizeKey) ?? .a4
         userHint = defaults.get(for: Self.userHintKey) ?? Self.defaultUserHint
@@ -145,14 +140,9 @@ public final class BackupCreatePDFViewModel {
             state = .loading
             let payload = try await dataModel.makeExport(userDescription: userDescriptionEncrypted)
             let document = try await makeBackupPDFDocument(payload: payload)
-            let timestamp = VaultDateFormatter(timezone: .current).formatForFileName(date: currentDate)
-            let filename = "vault-export-\(timestamp).pdf"
-            let tempURL = fileManager.temporaryDirectory.appending(path: filename)
-            document.write(to: tempURL)
             let hash = try DigestHasher().sha256(value: payload)
             generatedPDFSubject.send(.init(
                 document: document,
-                diskURL: tempURL,
                 size: size,
                 dataHash: hash,
                 createdDate: currentDate,

@@ -104,7 +104,6 @@ extension BackupCreatePDFViewModelTests {
             ),
             clock: clock,
             defaults: Defaults(userDefaults: defaults),
-            fileManager: FileManager(),
         )
     }
 }

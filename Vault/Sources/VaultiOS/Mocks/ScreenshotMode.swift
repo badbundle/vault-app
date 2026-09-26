@@ -222,7 +222,7 @@ enum ScreenshotMode {
 
         // The backups hub otherwise opens on a "no backups" warning.
         let payload = try await store.exportVault(userDescription: "")
-        try backupEventLogger.exportedToPDF(date: Date(), hash: .makeHash(payload))
+        try backupEventLogger.exportedToPDF(backupDate: Date(), hash: .makeHash(payload))
 
         await dataModel.reloadTags()
         await dataModel.reloadItems()

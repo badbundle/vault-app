@@ -38,6 +38,18 @@ struct BackupPDFViewSnapshotTests {
 
         assertSnapshot(of: sut, as: .image)
     }
+
+    /// The PDF couldn't be written for the share sheet, so the save section says why.
+    @Test
+    func savePDF_shareFailed() {
+        let viewModel = makeSaveViewModel(
+            directory: URL.temporaryDirectory.appending(path: "missing-\(UUID().uuidString)"),
+        )
+        viewModel.share()
+        let sut = makeSaveSUT(viewModel: viewModel)
+
+        assertSnapshot(of: sut, as: .image)
+    }
 }
 
 // MARK: - Helpers
@@ -51,7 +63,6 @@ extension BackupPDFViewSnapshotTests {
             dataModel: anyVaultDataModel(),
             clock: EpochClockMock(currentTime: 100),
             defaults: Defaults(userDefaults: userDefaults),
-            fileManager: .default,
         )
         return NavigationStack {
             BackupCreatePDFView(viewModel: viewModel, navigationPath: .constant(NavigationPath()))
@@ -68,8 +79,12 @@ extension BackupPDFViewSnapshotTests {
         .framedForTest()
     }
 
-    private func makeSaveViewModel() -> BackupGeneratedPDFViewModel {
-        BackupGeneratedPDFViewModel(pdf: blankPDF(), backupEventLogger: BackupEventLoggerMock())
+    private func makeSaveViewModel(directory: URL = .temporaryDirectory) -> BackupGeneratedPDFViewModel {
+        BackupGeneratedPDFViewModel(
+            pdf: blankPDF(),
+            backupEventLogger: BackupEventLoggerMock(),
+            files: BackupPDFTemporaryFiles(fileManager: .default, directory: directory),
+        )
     }
 
     /// Blank pages rather than a real backup: real backups encrypt with a random IV, so their QR codes
@@ -83,7 +98,6 @@ extension BackupPDFViewSnapshotTests {
         }
         return BackupCreatePDFViewModel.GeneratedPDF(
             document: document,
-            diskURL: URL(fileURLWithPath: "/tmp/backup.pdf"),
             size: .a4,
             dataHash: .init(value: Data(repeating: 0xAB, count: 32)),
             createdDate: Date(timeIntervalSince1970: 100),

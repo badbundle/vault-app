@@ -10,9 +10,15 @@ import VaultCore
 @MainActor
 public protocol BackupEventLogger: Sendable {
     func lastBackupEvent() -> VaultBackupEvent?
-    func exportedToPDF(date: Date, hash: Digest<VaultApplicationPayload>.SHA256)
-    func exportedToDevice(date: Date, hash: Digest<VaultApplicationPayload>.SHA256)
-    func exportedToAutoBackup(date: Date, hash: Digest<VaultApplicationPayload>.SHA256, providerID: String)
+    /// Logs a PDF backup, once it's been saved somewhere.
+    ///
+    /// - Parameter backupDate: When the vault was exported into the backup, which is what the backup's age goes by.
+    ///   The event is dated now.
+    func exportedToPDF(backupDate: Date, hash: Digest<VaultApplicationPayload>.SHA256)
+    /// Logs a transfer to another device. `backupDate` is when the vault was exported for it.
+    func exportedToDevice(backupDate: Date, hash: Digest<VaultApplicationPayload>.SHA256)
+    /// Logs an auto-backup. `backupDate` is when the vault was exported for it.
+    func exportedToAutoBackup(backupDate: Date, hash: Digest<VaultApplicationPayload>.SHA256, providerID: String)
     /// Publishes whenever an event is logged.
     var loggedEventPublisher: AnyPublisher<VaultBackupEvent, Never> { get }
 }
@@ -34,10 +40,10 @@ public final class BackupEventLoggerImpl: BackupEventLogger {
         defaults.get(for: backupEventKey)
     }
 
-    public func exportedToPDF(date: Date, hash: Digest<VaultApplicationPayload>.SHA256) {
+    public func exportedToPDF(backupDate: Date, hash: Digest<VaultApplicationPayload>.SHA256) {
         let event = VaultBackupEvent(
-            backupDate: clock.currentDate,
-            eventDate: date,
+            backupDate: backupDate,
+            eventDate: clock.currentDate,
             kind: .exportedToPDF,
             payloadHash: hash,
         )
@@ -49,10 +55,10 @@ public final class BackupEventLoggerImpl: BackupEventLogger {
         }
     }
 
-    public func exportedToDevice(date: Date, hash: Digest<VaultApplicationPayload>.SHA256) {
+    public func exportedToDevice(backupDate: Date, hash: Digest<VaultApplicationPayload>.SHA256) {
         let event = VaultBackupEvent(
-            backupDate: clock.currentDate,
-            eventDate: date,
+            backupDate: backupDate,
+            eventDate: clock.currentDate,
             kind: .exportedToDevice,
             payloadHash: hash,
         )
@@ -64,10 +70,14 @@ public final class BackupEventLoggerImpl: BackupEventLogger {
         }
     }
 
-    public func exportedToAutoBackup(date: Date, hash: Digest<VaultApplicationPayload>.SHA256, providerID: String) {
+    public func exportedToAutoBackup(
+        backupDate: Date,
+        hash: Digest<VaultApplicationPayload>.SHA256,
+        providerID: String,
+    ) {
         let event = VaultBackupEvent(
-            backupDate: clock.currentDate,
-            eventDate: date,
+            backupDate: backupDate,
+            eventDate: clock.currentDate,
             kind: .exportedToAutoBackup(providerID: providerID),
             payloadHash: hash,
         )

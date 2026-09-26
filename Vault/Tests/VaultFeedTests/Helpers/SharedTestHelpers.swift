@@ -542,3 +542,22 @@ struct VaultItemEncryptableMock: Equatable, VaultItemEncryptable {
         )
     }
 }
+
+/// A generated PDF of blank pages.
+func anyGeneratedPDF(
+    pageCount: Int = 1,
+    createdDate: Date = Date(timeIntervalSince1970: 100),
+) -> BackupCreatePDFViewModel.GeneratedPDF {
+    let document = PDFDocument()
+    for index in 0 ..< pageCount {
+        let page = PDFPage()
+        page.setBounds(CGRect(x: 0, y: 0, width: 595, height: 842), for: .mediaBox)
+        document.insert(page, at: index)
+    }
+    return BackupCreatePDFViewModel.GeneratedPDF(
+        document: document,
+        size: .a4,
+        dataHash: .init(value: Data(repeating: 0xAB, count: 32)),
+        createdDate: createdDate,
+    )
+}
