@@ -10,11 +10,20 @@ public struct LocalSettingsState {
     /// When `true`, OTP copies are allowed to sync via iCloud Universal Clipboard.
     @DefaultsStored public var allowUniversalClipboardForOTPs: Bool
 
+    /// When `true`, the whole app is covered while the screen is recorded, mirrored or shared. On by default
+    /// (MANIFESTO C7). Recovery phrases hide then whatever this says.
+    @DefaultsStored public var hidesVaultWhileScreenCaptured: Bool
+
     init(defaults: Defaults) {
         _pasteTimeToLive = DefaultsStored(
             defaults: defaults,
             defaultsKey: .init(VaultIdentifiers.Preferences.General.settingsPasteTTL),
             defaultValue: .default,
+        )
+        _hidesVaultWhileScreenCaptured = DefaultsStored(
+            defaults: defaults,
+            defaultsKey: .init(VaultIdentifiers.Preferences.General.hideWhileScreenCaptured),
+            defaultValue: true,
         )
         _allowUniversalClipboardForOTPs = DefaultsStored(
             defaults: defaults,

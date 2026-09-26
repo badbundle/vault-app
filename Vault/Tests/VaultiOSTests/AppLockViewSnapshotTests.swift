@@ -35,6 +35,11 @@ struct AppLockViewSnapshotTests {
         snapshotScenarios(view: AppPrivacyCoverView(), dynamicTypeSizes: [.medium])
     }
 
+    @Test
+    func screenCaptureCover() {
+        snapshotScenarios(view: AppScreenCaptureCoverView(), dynamicTypeSizes: [.medium, .xxLarge, .accessibility3])
+    }
+
     @Test(arguments: [ColorScheme.light, .dark])
     func lockedLandscape(colorScheme: ColorScheme) {
         let view = AppLockView(state: .init(step: .deviceAuthentication)) {}

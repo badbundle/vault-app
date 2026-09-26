@@ -99,6 +99,30 @@ struct AppPrivacyCoverView: View {
     }
 }
 
+/// Covers the vault while the screen is recorded, mirrored or shared, so it doesn't show up in the recording or on the
+/// other screen: the lock screen's door, and why the vault has gone.
+struct AppScreenCaptureCoverView: View {
+    var body: some View {
+        AppLockBackdrop(
+            details: {
+                VStack(spacing: 12) {
+                    Text("Vault Hidden")
+                        .font(.title2.bold())
+                        .foregroundStyle(.primary)
+                        .accessibilityAddTraits(.isHeader)
+                    Text("Your screen is being recorded or shared. Vault will reappear when that stops.")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                }
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                .accessibilityElement(children: .combine)
+            },
+            action: { EmptyView() },
+        )
+    }
+}
+
 /// Shows `content` only once the user has unlocked the app, with the lock screen until then.
 ///
 /// For the AutoFill extension, which has its own copy of the lock: its prompt comes up as soon as the extension
@@ -149,4 +173,8 @@ public struct AppLockGate<Content: View>: View {
 
 #Preview("Privacy cover") {
     AppPrivacyCoverView()
+}
+
+#Preview("Screen capture cover") {
+    AppScreenCaptureCoverView()
 }

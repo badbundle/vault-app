@@ -8,6 +8,7 @@ import SwiftUI
 /// here that no other section uses.
 enum SettingsIconColor {
     static let security = Color.green
+    static let screenRecording = Color.indigo
     static let clipboard = Color.blue
     static let danger = Color.red
 }

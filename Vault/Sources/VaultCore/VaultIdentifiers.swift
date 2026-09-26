@@ -42,6 +42,7 @@ public enum VaultIdentifiers {
 
         public enum General {
             public static let settingsPasteTTL = "vault.preferences.general.settings-paste-ttl"
+            public static let hideWhileScreenCaptured = "vault.preferences.general.hide-while-screen-captured"
         }
 
         /// Earlier versions also stored `allow-passwords` and `allow-other`, though nothing was ever copied as either.
