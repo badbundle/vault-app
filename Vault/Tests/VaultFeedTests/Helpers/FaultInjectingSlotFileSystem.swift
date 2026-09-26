@@ -14,6 +14,8 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         case crash(atStep: Int)
         /// Reading back a temp file gives different bytes from the ones written.
         case corruptReadBack
+        /// One step fails, and then the process "crashes" at a later one, as `crash(atStep:)` does.
+        case failThenCrash(failAtStep: Int, crashAtStep: Int)
 
         /// That step throws, and everything else works.
         static func fail(atStep step: Int) -> Fault {
@@ -114,6 +116,8 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         case let .fail(atSteps) where atSteps.contains(number):
             throw InjectedFault()
         case let .crash(atStep) where number >= atStep:
+            throw InjectedFault()
+        case let .failThenCrash(failAtStep, crashAtStep) where number == failAtStep || number >= crashAtStep:
             throw InjectedFault()
         default:
             break

@@ -1,4 +1,5 @@
 import Foundation
+import FoundationExtensions
 import Testing
 @testable import VaultFeed
 
@@ -88,6 +89,55 @@ struct VaultStorageRecoveryTests {
                 VaultStorageStateFile.fileName,
                 unconfirmed.lastPathComponent,
             ])
+            // The system surfaces are still to be cleared.
+            #expect(try Self.read(in: directory) == VaultStorageState(
+                mode: .password,
+                transition: .clearingSystemSurfaces,
+                unlockDeadline: .seconds(1),
+            ))
+        }
+    }
+
+    /// Something has gone badly wrong, such as a lost encrypted file. The plain store might be the only copy of the
+    /// vault, so it stays.
+    @Test(arguments: [nil, Data("not a vault file".utf8)])
+    func recover_whileDeletingThePlainStoreWithoutAnEncryptedFile_deletesNothing(encryptedFile: Data?) async throws {
+        try await withTemporaryDirectory { directory in
+            try Self.makePlainStore(in: directory)
+            try encryptedFile?.write(to: directory.appending(path: EncryptedVaultFile.fileName))
+            try Self.write(
+                VaultStorageState(
+                    mode: .password,
+                    transition: .deletingPlainStore(archives: []),
+                    unlockDeadline: .seconds(1),
+                ),
+                in: directory,
+            )
+            let before = try Self.fileNames(in: directory)
+
+            #expect(throws: VaultStorageRecovery.Failure.plainStoreWithoutEncryptedFile) {
+                try VaultStorageRecovery(directory: directory).recoverAtLaunch()
+            }
+
+            #expect(try Self.fileNames(in: directory) == before)
+        }
+    }
+
+    /// The app stopped after deleting the plain store, before clearing QuickType and the widgets.
+    @Test
+    func finishClearingSystemSurfaces_clearsThemOnceThenClearsTheJournal() async throws {
+        try await withTemporaryDirectory { directory in
+            try Self.write(
+                VaultStorageState(mode: .password, transition: .clearingSystemSurfaces, unlockDeadline: .seconds(1)),
+                in: directory,
+            )
+            let clears = SharedMutex(0)
+            let recovery = VaultStorageRecovery(directory: directory)
+
+            try await recovery.finishClearingSystemSurfaces { clears.modify { $0 += 1 } }
+            try await recovery.finishClearingSystemSurfaces { clears.modify { $0 += 1 } }
+
+            #expect(clears.value == 1)
             #expect(try Self.read(in: directory) == VaultStorageState(mode: .password, unlockDeadline: .seconds(1)))
         }
     }
@@ -185,8 +235,10 @@ extension VaultStorageRecoveryTests {
         }
     }
 
+    /// A real encrypted file, with every slot random, and a temp file beside it.
     static func makeEncryptedFiles(in directory: URL, temporary: Bool = true) throws {
-        try Data("encrypted".utf8).write(to: directory.appending(path: EncryptedVaultFile.fileName))
+        try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters).bytes
+            .write(to: directory.appending(path: EncryptedVaultFile.fileName))
         if temporary {
             try Data("encrypted".utf8)
                 .write(to: directory.appending(path: EncryptedVaultFile.temporaryFilePrefix + "a"))

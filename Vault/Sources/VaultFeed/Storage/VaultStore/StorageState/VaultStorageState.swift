@@ -22,6 +22,10 @@ public struct VaultStorageState: Codable, Equatable, Sendable {
         /// The conversion has committed. Recovery finishes deleting the plain store's files, its pending rehash
         /// files, and these archives of it (folder names), whose deletion the user confirmed.
         case deletingPlainStore(archives: [String])
+        /// The plain store is gone. The QuickType identity store still has to be cleared and the widgets reloaded,
+        /// which the app does at its next launch if it was stopped first
+        /// (`VaultStorageRecovery.finishClearingSystemSurfaces(_:)`).
+        case clearingSystemSurfaces
     }
 
     public var mode: Mode
@@ -50,6 +54,9 @@ public struct VaultStorageState: Codable, Equatable, Sendable {
 ///
 /// It's replaced atomically: written to a temp file, flushed with `F_FULLFSYNC`, renamed over the old one, and the
 /// directory flushed. Going back to plain removes it.
+///
+/// The rename is the commit point, as for the encrypted file: once it's done the new state holds, so a failure to
+/// flush the directory afterwards doesn't count as a failure to write it.
 struct VaultStorageStateFile: Sendable {
     static let fileName = "vault-storage-state.json"
     static let temporaryFilePrefix = ".vault-storage-state.tmp-"
@@ -76,7 +83,7 @@ struct VaultStorageStateFile: Sendable {
     func write(_ state: VaultStorageState) throws {
         guard state != .plain else {
             try fileSystem.removeItem(at: url)
-            try fileSystem.synchronizeDirectory(at: directory)
+            try? fileSystem.synchronizeDirectory(at: directory)
             return
         }
         let temporaryURL = directory.appending(path: Self.temporaryFilePrefix + UUID().uuidString)
@@ -94,7 +101,7 @@ struct VaultStorageStateFile: Sendable {
             try? fileSystem.removeItem(at: temporaryURL)
             throw error
         }
-        try fileSystem.synchronizeDirectory(at: directory)
+        try? fileSystem.synchronizeDirectory(at: directory)
     }
 
     /// Removes temp files a crash left behind while writing the state.

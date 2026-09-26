@@ -20,13 +20,33 @@ struct PlainVaultConversionHarness {
     let attemptStorage: LoggingAttemptStorage
     let converter: VaultEncryptionConverter
 
-    /// - Parameter openedNormally: Whether the plain store opened normally, rather than as an empty fallback.
-    init(directory: URL, openedNormally: Bool = true) throws {
+    /// - Parameters:
+    ///   - openedNormally: Whether the plain store opened normally, rather than as an empty fallback.
+    ///   - releasingPlainStore: Runs when the converter lets go of the plain store, after the commit.
+    ///   - clearingCredentialIdentities: Runs when the converter clears the QuickType identity store.
+    init(
+        directory: URL,
+        openedNormally: Bool = true,
+        releasingPlainStore: @escaping @Sendable (VaultStoreSession) async -> Void = { _ in },
+        clearingCredentialIdentities: @escaping @Sendable () -> Void = {},
+    ) throws {
         let store = try PersistedLocalVaultStoreFactory(storageDirectory: directory).makeVaultStoreOrThrow()
-        try self.init(directory: directory, store: store, openedNormally: openedNormally)
+        try self.init(
+            directory: directory,
+            store: store,
+            openedNormally: openedNormally,
+            releasingPlainStore: releasingPlainStore,
+            clearingCredentialIdentities: clearingCredentialIdentities,
+        )
     }
 
-    init(directory: URL, store: PersistedLocalVaultStore, openedNormally: Bool = true) throws {
+    init(
+        directory: URL,
+        store: PersistedLocalVaultStore,
+        openedNormally: Bool = true,
+        releasingPlainStore: @escaping @Sendable (VaultStoreSession) async -> Void = { _ in },
+        clearingCredentialIdentities: @escaping @Sendable () -> Void = {},
+    ) throws {
         let session = VaultStoreSession(target: .plain(store))
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: LiveSlotFileSystem())
         let log = SharedMutex([String]())
@@ -46,8 +66,14 @@ struct PlainVaultConversionHarness {
             archives: PersistedLocalVaultStoreArchives(storageDirectory: directory),
             attemptCounter: AppLockPasswordAttemptCounter(storage: attemptStorage, clock: FakeAppLockClock()),
             hooks: VaultEncryptionConverter.Hooks(
-                releasePlainStore: { log.modify { $0.append("release the plain store") } },
-                clearCredentialIdentities: { log.modify { $0.append("clear QuickType") } },
+                releasePlainStore: {
+                    log.modify { $0.append("release the plain store") }
+                    await releasingPlainStore(session)
+                },
+                clearCredentialIdentities: {
+                    log.modify { $0.append("clear QuickType") }
+                    clearingCredentialIdentities()
+                },
                 reloadWidgets: { log.modify { $0.append("reload widgets") } },
             ),
             calibrate: {
@@ -95,7 +121,11 @@ struct PlainVaultConversionHarness {
     /// Launches again: recovers from any change underway, as the app does, then reads the vault from wherever it's
     /// stored now.
     func relaunch() async throws -> (mode: VaultStorageState.Mode, state: VaultRecordState) {
-        let mode = try VaultStorageRecovery(directory: directory).recoverAtLaunch()
+        let recovery = VaultStorageRecovery(directory: directory)
+        let mode = try recovery.recoverAtLaunch()
+        try await recovery.finishClearingSystemSurfaces { [log] in
+            log.modify { $0.append("clear the system surfaces at launch") }
+        }
         switch mode {
         case .plain:
             let reopened = try PersistedLocalVaultStoreFactory(storageDirectory: directory, recoveryMode: .openOnly)

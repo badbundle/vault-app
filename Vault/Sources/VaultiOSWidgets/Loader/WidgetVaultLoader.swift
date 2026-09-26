@@ -41,9 +41,11 @@ public actor WidgetVaultLoader {
         self.appLockSettings = appLockSettings
     }
 
+    /// - Parameter isVaultPlain: Whether the vault is in the plain store, with no change of mode underway. The store
+    ///   is only opened and read while it is.
     public init(
         appLockSettings: AppLockSettingsStore = .shared(),
-        isVaultPlain: @escaping @Sendable () -> Bool = { true },
+        isVaultPlain: @escaping @Sendable () -> Bool,
         makeStore: @escaping StoreFactory,
     ) {
         self.makeStore = makeStore
@@ -110,11 +112,13 @@ public actor WidgetVaultLoader {
         return code
     }
 
+    /// The plain store, guarded, so a HOTP increment can't land in it after the app has started converting it to an
+    /// encrypted vault.
     private static func makeSharedStore() throws -> any WidgetStore {
-        try PersistedLocalVaultStoreFactory(
-            storageDirectory: VaultSharedStorage.directory(),
-            recoveryMode: .openOnly,
-        ).makeVaultStoreOrThrow()
+        let directory = VaultSharedStorage.directory()
+        let store = try PersistedLocalVaultStoreFactory(storageDirectory: directory, recoveryMode: .openOnly)
+            .makeVaultStoreOrThrow()
+        return GuardedPlainVaultStore(store: store, directory: directory)
     }
 
     /// Every read goes through here, so none reaches the vault while the app lock is on, or opens the plain store

@@ -188,14 +188,14 @@ extension VaultEncryptionConverterTests {
     /// Every step of a conversion.
     private struct Steps {
         var names: [String]
-        /// Renaming the committing state into place: a crash after it leaves the conversion committed.
+        /// Renaming the committing state into place, the commit point: a failure or crash up to here leaves the
+        /// plain store as the vault, and from here the encrypted one.
         var commitRename: Int
-        /// Flushing the directory after that rename. The conversion only goes on to delete the plain store once
-        /// that succeeds, so a failure up to here undoes it.
-        var commitFlush: Int
-        /// Flushing the directory after the encrypted file's rename. A failure there doesn't stop the conversion:
-        /// the commit's own flush covers the same directory.
-        var encryptedFileFlush: Int
+
+        /// Flushing the directory never fails a step: by then the rename it follows has happened.
+        func isFatal(_ step: Int) -> Bool {
+            names[step - 1] != "flush directory"
+        }
     }
 
     private static func stepsOfAConversion() async throws -> Steps {
@@ -205,22 +205,12 @@ extension VaultEncryptionConverterTests {
             try await harness.encrypt()
             let names = harness.fileSystem.log.filter { $0 != "unlock" }
             let stateRenames = names.indices.filter { names[$0] == "rename state temp to vault-storage-state.json" }
-            let commitRename = try #require(stateRenames.dropFirst().first) + 1
-            let encryptedFileRename = try #require(names.firstIndex(of: "rename temp to vault-slots.v1")) + 1
-            #expect(names[commitRename] == "flush directory")
-            #expect(names[encryptedFileRename] == "flush directory")
-            return Steps(
-                names: names,
-                commitRename: commitRename,
-                commitFlush: commitRename + 1,
-                encryptedFileFlush: encryptedFileRename + 1,
-            )
+            return try Steps(names: names, commitRename: #require(stateRenames.dropFirst().first) + 1)
         }
     }
 
-    /// A conversion that fails at any step before it commits leaves the plain store as the vault, with nothing
-    /// else on disk. One that fails after it has committed still finishes, and the next launch deletes what it
-    /// couldn't.
+    /// A conversion that fails at any step before it commits leaves the plain store as the vault, with nothing else
+    /// on disk. One that fails after it has committed still finishes, and the next launch deletes what it couldn't.
     @Test
     func encrypt_failingAtAnyStep_leavesThePlainVaultOrTheEncryptedOne() async throws {
         let steps = try await Self.stepsOfAConversion()
@@ -233,7 +223,7 @@ extension VaultEncryptionConverterTests {
                 let result = await Result(asyncThrowingClosure: { try await harness.encrypt() })
 
                 let context = Comment(rawValue: "failing at step \(step), \(steps.names[step - 1])")
-                let staysPlain = step <= steps.commitFlush && step != steps.encryptedFileFlush
+                let staysPlain = step <= steps.commitRename && steps.isFatal(step)
                 if staysPlain {
                     #expect(throws: (any Error).self, context) { try result.get() }
                     #expect(await !harness.session.isLocked, context)
@@ -241,11 +231,7 @@ extension VaultEncryptionConverterTests {
                 } else {
                     #expect(throws: Never.self, context) { try result.get() }
                 }
-                let relaunched = try await harness.relaunch()
-                #expect(relaunched.mode == (staysPlain ? .plain : .password), context)
-                #expect(relaunched.state.items == before.items, context)
-                #expect(relaunched.state.tags == before.tags, context)
-                try Self.expectNoLeftovers(harness, mode: relaunched.mode, context)
+                try await Self.expectRelaunch(harness, as: staysPlain ? .plain : .password, with: before, context)
             }
         }
     }
@@ -262,14 +248,118 @@ extension VaultEncryptionConverterTests {
                 harness.fileSystem.inject(.crash(atStep: step))
 
                 _ = try? await harness.encrypt()
-                let relaunched = try await harness.relaunch()
 
                 let context = Comment(rawValue: "crashing at step \(step), \(steps.names[step - 1])")
-                #expect(relaunched.mode == (step <= steps.commitRename ? .plain : .password), context)
-                #expect(relaunched.state.items == before.items, context)
-                #expect(relaunched.state.tags == before.tags, context)
-                try Self.expectNoLeftovers(harness, mode: relaunched.mode, context)
+                let expectedMode: VaultStorageState.Mode = step <= steps.commitRename ? .plain : .password
+                try await Self.expectRelaunch(harness, as: expectedMode, with: before, context)
             }
+        }
+    }
+
+    /// A step fails before the commit, and then undoing it fails too, at any of the next few steps. The plain store
+    /// is still the vault: at once, or once the next launch has finished the undoing.
+    @Test
+    func encrypt_failingAndThenFailingToUndo_keepsThePlainVault() async throws {
+        let steps = try await Self.stepsOfAConversion()
+        for step in 1 ... steps.commitRename where steps.isFatal(step) {
+            for later in step + 1 ... step + 4 {
+                try await withTemporaryDirectory { directory in
+                    let harness = try PlainVaultConversionHarness(directory: directory)
+                    let before = try await Self.seed(harness.store)
+                    harness.fileSystem.inject(.fail(atSteps: [step, later]))
+
+                    await #expect(throws: (any Error).self) { try await harness.encrypt() }
+
+                    let context = Comment(rawValue: "failing at steps \(step) and \(later), \(steps.names[step - 1])")
+                    // The session only goes back to the plain store if the journal shows the conversion didn't
+                    // commit: otherwise it stays locked. It's never the encrypted vault.
+                    if await !harness.session.isLocked {
+                        #expect(try await harness.session.retrieve(query: .init()).errors.count == 1, context)
+                    }
+                    try await Self.expectRelaunch(harness, as: .plain, with: before, context)
+                }
+            }
+        }
+    }
+
+    /// A step fails before the commit, and the app stops while it's undoing it.
+    @Test
+    func encrypt_failingAndThenCrashingWhileUndoing_keepsThePlainVault() async throws {
+        let steps = try await Self.stepsOfAConversion()
+        for step in 1 ... steps.commitRename where steps.isFatal(step) {
+            for later in step + 1 ... step + 4 {
+                try await withTemporaryDirectory { directory in
+                    let harness = try PlainVaultConversionHarness(directory: directory)
+                    let before = try await Self.seed(harness.store)
+                    harness.fileSystem.inject(.failThenCrash(failAtStep: step, crashAtStep: later))
+
+                    _ = try? await harness.encrypt()
+
+                    let context =
+                        Comment(rawValue: "failing at \(step), crashing at \(later), \(steps.names[step - 1])")
+                    try await Self.expectRelaunch(harness, as: .plain, with: before, context)
+                }
+            }
+        }
+    }
+
+    @Test
+    func encrypt_calledAgainWhileConverting_isRefusedAndChangesNothing() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try PlainVaultConversionHarness(directory: directory)
+            let before = try await Self.seed(harness.store)
+
+            async let first = Result(asyncThrowingClosure: { try await harness.encrypt() })
+            async let second = Result(asyncThrowingClosure: { try await harness.encrypt() })
+            let results = await [first, second]
+
+            let failures = results.compactMap { result -> VaultEncryptionError? in
+                if case let .failure(error) = result {
+                    error as? VaultEncryptionError
+                } else {
+                    nil
+                }
+            }
+            #expect(failures == [.alreadyEncrypted])
+            #expect(await !harness.session.isLocked)
+            let vault = try #require(try await harness.openEncryptedVault())
+            #expect(vault.state.items == before.items)
+        }
+    }
+
+    /// For example, the app went to the background, and locked, while converting.
+    @Test
+    func encrypt_whenTheSessionLocksMeanwhile_leavesItLocked() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try PlainVaultConversionHarness(directory: directory, releasingPlainStore: { session in
+                await session.lock()
+            })
+
+            try await harness.encrypt()
+
+            #expect(await harness.session.isLocked)
+            #expect(try await harness.openEncryptedVault() != nil)
+        }
+    }
+
+    /// The QuickType identity store and the widgets are cleared while the journal still says so, so a launch after
+    /// a crash does it again.
+    @Test
+    func encrypt_clearsTheSystemSurfacesWhileTheJournalStillSaysTo() async throws {
+        try await withTemporaryDirectory { directory in
+            let journalWhileClearing = SharedMutex<VaultStorageState.Transition?>(nil)
+            let stateFile = VaultStorageStateFile(directory: directory)
+            let harness = try PlainVaultConversionHarness(
+                directory: directory,
+                clearingCredentialIdentities: {
+                    journalWhileClearing.modify { $0 = try? stateFile.read().transition }
+                },
+            )
+
+            try await harness.encrypt()
+
+            #expect(journalWhileClearing.value == .clearingSystemSurfaces)
+            #expect(try stateFile.read().transition == nil)
         }
     }
 }
@@ -311,6 +401,21 @@ extension VaultEncryptionConverterTests {
         #expect(!names.contains(EncryptedVaultFile.fileName), sourceLocation: sourceLocation)
         #expect(try harness.plainStoreFilesExist(), sourceLocation: sourceLocation)
         #expect(await !harness.session.isLocked, sourceLocation: sourceLocation)
+    }
+
+    /// Launches again, and requires the vault to be in `mode` with exactly the records it had, and nothing left of
+    /// the other mode or any temp file.
+    static func expectRelaunch(
+        _ harness: PlainVaultConversionHarness,
+        as mode: VaultStorageState.Mode,
+        with before: VaultRecordState,
+        _ context: Comment,
+    ) async throws {
+        let relaunched = try await harness.relaunch()
+        #expect(relaunched.mode == mode, context)
+        #expect(relaunched.state.items == before.items, context)
+        #expect(relaunched.state.tags == before.tags, context)
+        try expectNoLeftovers(harness, mode: relaunched.mode, context)
     }
 
     /// Whichever way the vault ended up, nothing of the other way, or any temp file, is left.

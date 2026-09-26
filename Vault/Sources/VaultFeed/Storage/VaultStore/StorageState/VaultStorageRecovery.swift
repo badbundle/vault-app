@@ -11,14 +11,20 @@ import Foundation
 ///   was set.
 /// - **Deleting the plain store**: the encrypted vault has committed. It finishes deleting the plain store's files,
 ///   its pending rehash files and the confirmed archives. That's safe to repeat.
+/// - **Clearing the system surfaces**: the app then clears QuickType and reloads the widgets
+///   (`finishClearingSystemSurfaces(_:)`), once it can.
 ///
 /// It never deletes the only copy of anything: an encrypted file goes only if the plain store is there to be the
-/// vault. See "Migration: plain to encrypted" in `docs/on-device-encryption.md`.
+/// vault, and the plain store only if there's an encrypted file that reads as one. See "Migration: plain to
+/// encrypted" in `docs/on-device-encryption.md`.
 public struct VaultStorageRecovery: Sendable {
     public enum Failure: Error, Equatable, Sendable {
         /// The state says plain, but there's an encrypted file and no plain store: deleting the encrypted file might
         /// delete the only copy of the vault, so nothing is deleted.
         case encryptedFileWithoutPlainStore
+        /// The state says the conversion committed, but there's no encrypted file that reads as one: deleting the
+        /// plain store might delete the only copy of the vault, so nothing is deleted.
+        case plainStoreWithoutEncryptedFile
     }
 
     private let directory: URL
@@ -33,7 +39,7 @@ public struct VaultStorageRecovery: Sendable {
         self.fileSystem = fileSystem
     }
 
-    /// Finishes or undoes any change underway.
+    /// Finishes or undoes any change underway, apart from clearing the system surfaces.
     ///
     /// - Returns: How the vault is stored now.
     /// - Throws: If the state can't be read or a step fails, `Failure` if deleting would risk the only copy of the
@@ -52,11 +58,22 @@ public struct VaultStorageRecovery: Sendable {
         case .password:
             if case let .deletingPlainStore(archives) = state.transition {
                 try deletePlainStore(archives: archives)
-                state.transition = nil
+                state.transition = .clearingSystemSurfaces
                 try stateFile.write(state)
             }
             return .password
         }
+    }
+
+    /// Clears the QuickType identity store and reloads the widgets, if a committed conversion hadn't yet, then clears
+    /// the journal. Call it once at launch, after `recoverAtLaunch()`. It's safe to repeat.
+    public func finishClearingSystemSurfaces(_ clear: @Sendable () async -> Void) async throws {
+        let stateFile = VaultStorageStateFile(directory: directory, fileSystem: fileSystem)
+        var state = try stateFile.read()
+        guard state.transition == .clearingSystemSurfaces else { return }
+        await clear()
+        state.transition = nil
+        try stateFile.write(state)
     }
 
     /// Deletes the encrypted file and its temp files, if the plain store is there to be the vault.
@@ -74,18 +91,23 @@ public struct VaultStorageRecovery: Sendable {
         for url in encryptedFiles {
             try fileSystem.removeItem(at: url)
         }
-        try fileSystem.synchronizeDirectory(at: directory)
+        try? fileSystem.synchronizeDirectory(at: directory)
     }
 
-    /// Deletes the plain store's files, its pending rehash files, and the named archives. Each is skipped if it's
-    /// already gone.
+    /// Deletes the plain store's files, its pending rehash files, and the named archives, each skipped if it's
+    /// already gone: but only if the encrypted file is there and reads as one.
     func deletePlainStore(archives: [String]) throws {
+        let encryptedFile = EncryptedVaultFile(directory: directory, fileSystem: fileSystem)
+        guard let bytes = try fileSystem.contents(of: encryptedFile.url), (try? VaultSlotFile(bytes: bytes)) != nil
+        else {
+            throw Failure.plainStoreWithoutEncryptedFile
+        }
         let urls = PersistedLocalVaultStoreFactory.storeFileURLs(storageDirectory: directory)
             + PersistedLocalVaultStoreFactory.pendingRehashFileURLs(storageDirectory: directory)
             + archives.map { directory.appending(path: $0) }
         for url in urls {
             try fileSystem.removeItem(at: url)
         }
-        try fileSystem.synchronizeDirectory(at: directory)
+        try? fileSystem.synchronizeDirectory(at: directory)
     }
 }

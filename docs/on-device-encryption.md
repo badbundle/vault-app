@@ -267,7 +267,8 @@ secret: the lock screen already shows whether a password is set.
 - **Only the app recovers** from a transition a crash interrupted, at launch, before it opens any store. The
   AutoFill and widget extensions only read the state. Anything but a settled `plain`, including a file they can't
   read, counts as encrypted, so they never open the plain store then: the AutoFill extension's store session
-  starts locked, and the widget loader returns nothing. (What they show is VAULT-49's.)
+  starts locked, and the widget loader returns nothing. An extension can live through a conversion, so it checks
+  the state on every call, not just at launch (`GuardedPlainVaultStore`). (What they show is VAULT-49's.)
 
 `plain` exists so that users who never opt in carry no new risk. The first time the password is set, there's a
 one-time, verified conversion. After that, turning the password on and off only rewraps keys.
@@ -554,21 +555,34 @@ At launch:
 **As built** (`VaultEncryptionConverter`, `VaultStorageRecovery`, VAULT-47), the steps above run in a slightly
 different order:
 
-- The attempt counter is reset first, so a count left in the keychain doesn't carry over to the new password.
-- The journal says `migrating` before the snapshot, so the extensions already stay away from the SQLite store
-  while it's taken, and the store session is locked, so the app's own writes finish first.
-- The size of the vault is checked against the largest slot before deriving anything. A vault too large for it
-  refuses with its own error (`vaultTooLarge`), which the UI can explain.
-- The failed-open archives are confirmed by the caller, and their names go in the committing journal, so recovery
-  deletes exactly those.
-- The commit is the committing journal's rename, followed by a successful directory flush. If the flush fails,
-  the conversion is undone rather than trust a rename that might not survive a power loss. A crash after the
-  rename, though, leaves it committed.
-- "Close the SwiftData container" is a hook the app provides, `releasePlainStore`, called once the session has
-  switched away from the plain store. Clearing the QuickType identity store and reloading the widgets are hooks
-  too.
-- Any failure before the commit deletes the encrypted file, removes the journal and switches the session back to
-  the plain store. A failure deleting the SQLite files after the commit is left for the next launch.
+- **Preconditions first.** A second conversion is refused before the first can suspend. The vault's size is checked
+  against the largest slot before anything is journaled or derived, and a vault too large for it refuses with its
+  own error (`vaultTooLarge`), which the UI can explain. The attempt counter is reset, so a count left in the
+  keychain doesn't carry over to the new password.
+- **The lock is held from the journal to the commit.** The conversion takes `vault-slots.lock`, journals
+  `migrating`, and locks the store session, so the app's own writes finish first. Only then does it take the
+  snapshot. An extension reads the plain store only while the state is a settled `plain`, and writes it only
+  holding the same lock, checking the state again once it has it (`GuardedPlainVaultStore`). So a HOTP counter
+  AutoFill or a widget advances can't land after the snapshot and be lost.
+- **The failed-open archives** are confirmed by the caller, and their names go in the committing journal, so
+  recovery deletes exactly those.
+- **The commit is the committing journal's rename.** Every state write treats its rename as done once it's done:
+  flushing the directory after it is attempted, not required, as for the encrypted file.
+- **Undoing** a conversion that failed before the commit first reads the journal on disk. Only if it shows the
+  conversion didn't commit does it delete the encrypted file, and only a file this conversion wrote, then remove
+  the journal and switch the session back to the plain store. If the journal can't be read, the session stays
+  locked and the next launch's recovery decides. If a deletion fails, the journal still says `migrating`, which
+  recovery undoes the same way.
+- **After the commit**, "close the SwiftData container" is a hook the app provides (`releasePlainStore`, with
+  `VaultRoot.plainVaultStore` releasable). The SQLite files, the rehash files and the confirmed archives are
+  deleted, then the journal says `clearingSystemSurfaces` while the QuickType identity store is cleared and the
+  widgets reloaded. The app runs those again at its next launch if it stopped first
+  (`finishClearingSystemSurfaces`). A failure deleting the SQLite files is left for the next launch too.
+- **The session** switches to the vault only if it hasn't locked since the conversion locked it: if the app went to
+  the background meanwhile, it stays locked, and the vault opens with the password.
+- **Recovery never deletes a possible only copy.** It deletes the SQLite store only if the encrypted file is there
+  and reads as one, and the encrypted file only if the SQLite store is there. Otherwise the app shows its failure
+  screen.
 
 **No step deletes the source before a verified copy is committed.**
 
