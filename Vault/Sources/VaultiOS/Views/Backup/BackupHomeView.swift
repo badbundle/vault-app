@@ -23,13 +23,14 @@ struct BackupHomeView: View {
 
     var body: some View {
         Form {
-            summarySection
+            headerSection
             autoBackupSection
             exportSection
             restoreSection
             passwordSection
         }
         .navigationTitle(Text("Backups"))
+        .navigationBarTitleDisplayMode(.inline)
         .task {
             await dataModel.loadBackupPasswordStatus()
         }
@@ -42,12 +43,11 @@ struct BackupHomeView: View {
         }
     }
 
-    // MARK: - Summary Section
+    // MARK: - Header Section
 
-    private var summarySection: some View {
+    private var headerSection: some View {
         Section {
-            LastBackupSummaryView(lastBackup: dataModel.lastBackupEvent)
-                .listRowInsets(EdgeInsets())
+            LastBackupHeader(lastBackup: dataModel.lastBackupEvent)
         }
     }
 
