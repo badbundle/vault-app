@@ -15,14 +15,7 @@ struct SecureNotePreviewView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 8)
 
-            Text(title)
-                .font(titleFont)
-                .minimumScaleFactor(0.7)
-                .allowsTightening(true)
-                .foregroundStyle(isEditing ? .white : .primary)
-                .lineLimit(description != nil ? 3 : nil)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VaultCardTitle(text: title, isEditing: isEditing, lineLimit: description != nil ? 3 : nil)
 
             if let description {
                 ZStack(alignment: .topLeading) {
@@ -88,11 +81,6 @@ struct SecureNotePreviewView: View {
         case .plain: return description
         case .markdown: return MarkdownContent(description).renderPlainText()
         }
-    }
-
-    /// The title carries more weight when it is the only content in the card.
-    private var titleFont: Font {
-        description == nil ? .title.weight(.heavy) : .title3.weight(.bold)
     }
 }
 

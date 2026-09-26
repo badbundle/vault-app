@@ -51,12 +51,7 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
 
     private var labelsStack: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(previewViewModel.visibleIssuer)
-                .font(.title3.bold())
-                .minimumScaleFactor(0.7)
-                .allowsTightening(true)
-                .foregroundStyle(isEditing ? .white : .primary)
-                .lineLimit(2)
+            VaultCardTitle(text: previewViewModel.visibleIssuer, isEditing: isEditing, lineLimit: 2)
 
             Text(accountNameFormatted)
                 .font(.caption2)

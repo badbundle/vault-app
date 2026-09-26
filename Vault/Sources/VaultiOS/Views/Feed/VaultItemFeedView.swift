@@ -11,7 +11,6 @@ public struct VaultItemFeedView<
 {
     var localSettings: LocalSettings
     var viewGenerator: ViewGenerator
-    var gridSpacing: Double
 
     @Environment(VaultInjector.self) private var injector
     @Environment(VaultDataModel.self) private var dataModel
@@ -33,12 +32,10 @@ public struct VaultItemFeedView<
         localSettings: LocalSettings,
         viewGenerator: ViewGenerator,
         state: VaultItemFeedState,
-        gridSpacing: Double = 8,
     ) {
         self.localSettings = localSettings
         self.viewGenerator = viewGenerator
         self.state = state
-        self.gridSpacing = gridSpacing
     }
 
     public var body: some View {
@@ -78,7 +75,7 @@ public struct VaultItemFeedView<
     private var listOfCodesView: some View {
         ScrollView(.vertical, showsIndicators: true) {
             if dataModel.items.isNotEmpty {
-                LazyVGrid(columns: columns) {
+                LazyVGrid(columns: columns, spacing: itemSpacing) {
                     Section {
                         vaultItemsList
                     }
@@ -723,8 +720,13 @@ public struct VaultItemFeedView<
         return hasher.finalize()
     }
 
+    /// The gap between neighboring cards, the same across and down.
+    private var itemSpacing: Double {
+        16
+    }
+
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: 150), spacing: gridSpacing, alignment: .top)]
+        [GridItem(.adaptive(minimum: 150), spacing: itemSpacing, alignment: .top)]
     }
 }
 

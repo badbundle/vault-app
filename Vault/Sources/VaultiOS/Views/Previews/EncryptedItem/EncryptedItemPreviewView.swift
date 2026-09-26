@@ -16,15 +16,7 @@ struct EncryptedItemPreviewView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 8)
 
-            // Title - emphasized and large
-            Text(viewModel.visibleTitle)
-                .font(.title.weight(.heavy))
-                .minimumScaleFactor(0.7)
-                .allowsTightening(true)
-                .foregroundStyle(isEditing ? .white : .primary)
-                .lineLimit(nil)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VaultCardTitle(text: viewModel.visibleTitle, isEditing: isEditing)
 
             Spacer()
 

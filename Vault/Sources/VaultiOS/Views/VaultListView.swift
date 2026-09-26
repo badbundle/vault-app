@@ -47,7 +47,6 @@ struct VaultListView<
             localSettings: localSettings,
             viewGenerator: interactableViewGenerator(),
             state: vaultItemFeedState,
-            gridSpacing: 12,
         )
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
