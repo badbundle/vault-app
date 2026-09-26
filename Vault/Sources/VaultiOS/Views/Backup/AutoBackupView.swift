@@ -19,6 +19,8 @@ struct AutoBackupView: View {
 
     var body: some View {
         Form {
+            headerSection
+
             switch dataModel.backupPassword {
             case .error:
                 authenticateSection(isError: true)
@@ -27,7 +29,6 @@ struct AutoBackupView: View {
             case .notCreated:
                 createPasswordSection
             case .fetched:
-                headerSection
                 enabledSection
 
                 if viewModel.configuration.isEnabled {
@@ -109,16 +110,29 @@ struct AutoBackupView: View {
 
     /// Says plainly whether auto-backup is on and what it's doing, so nobody has to read the toggle
     /// and footers to find out.
+    ///
+    /// Only once the page is unlocked, though: the live status names the backup folder and describes
+    /// errors. Until then, the header just says what auto-backup is, as the Export page does.
     private var headerSection: some View {
-        let header = viewModel.statusHeader
-        return Section {
-            BackupHeroHeader(
-                title: header.title,
-                subtitle: header.subtitle,
-                systemImage: header.systemImage,
-                color: color(for: header.tone),
-                iconSize: 56,
-            )
+        Section {
+            if case .fetched = dataModel.backupPassword {
+                let header = viewModel.statusHeader
+                BackupHeroHeader(
+                    title: header.title,
+                    subtitle: header.subtitle,
+                    systemImage: header.systemImage,
+                    color: color(for: header.tone),
+                    iconSize: 56,
+                )
+            } else {
+                BackupHeroHeader(
+                    title: "Auto-Backup",
+                    subtitle: "Saves an encrypted backup of your vault to a folder you choose whenever it changes.",
+                    systemImage: "arrow.clockwise.icloud",
+                    color: .accentColor,
+                    iconSize: 56,
+                )
+            }
         }
     }
 
