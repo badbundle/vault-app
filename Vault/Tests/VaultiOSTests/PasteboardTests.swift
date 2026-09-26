@@ -127,6 +127,101 @@ final class PasteboardTests {
             sut.copy(anyAction(contentType: .otp))
         }
     }
+
+    @Test(arguments: PasteboardContentType.allCases)
+    func copyText_isLocalOnlyByDefault(contentType: PasteboardContentType) async throws {
+        let pasteboard = SystemPasteboardMock()
+        let settings = try LocalSettings(defaults: .nonPersistent())
+        let sut = makeSUT(pasteboard: pasteboard, localSettings: settings)
+
+        await confirmation { confirm in
+            pasteboard.copyHandler = { string, _, localOnly in
+                #expect(string == "copied text")
+                #expect(localOnly == true)
+                confirm()
+            }
+
+            sut.copy("copied text", as: contentType)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func copyText_noteFollowsTheNotesSetting(allowNotes: Bool) async throws {
+        let pasteboard = SystemPasteboardMock()
+        let settings = try LocalSettings(defaults: .nonPersistent())
+        settings.state.allowUniversalClipboardForNotes = allowNotes
+        let sut = makeSUT(pasteboard: pasteboard, localSettings: settings)
+
+        await confirmation { confirm in
+            pasteboard.copyHandler = { _, _, localOnly in
+                #expect(localOnly == !allowNotes)
+                confirm()
+            }
+
+            sut.copy("note text", as: .note)
+        }
+    }
+
+    @Test
+    func copyText_noteIgnoresTheCodesSetting() async throws {
+        let pasteboard = SystemPasteboardMock()
+        let settings = try LocalSettings(defaults: .nonPersistent())
+        settings.state.allowUniversalClipboardForOTPs = true
+        let sut = makeSUT(pasteboard: pasteboard, localSettings: settings)
+
+        await confirmation { confirm in
+            pasteboard.copyHandler = { _, _, localOnly in
+                #expect(localOnly == true)
+                confirm()
+            }
+
+            sut.copy("note text", as: .note)
+        }
+    }
+
+    @Test
+    func copyText_detailStaysOnThisDeviceWhateverTheSettings() async throws {
+        let pasteboard = SystemPasteboardMock()
+        let settings = try LocalSettings(defaults: .nonPersistent())
+        settings.state.allowUniversalClipboardForOTPs = true
+        settings.state.allowUniversalClipboardForNotes = true
+        let sut = makeSUT(pasteboard: pasteboard, localSettings: settings)
+
+        await confirmation { confirm in
+            pasteboard.copyHandler = { _, _, localOnly in
+                #expect(localOnly == true)
+                confirm()
+            }
+
+            sut.copy("a description", as: .detail)
+        }
+    }
+
+    @Test(arguments: PasteboardContentType.allCases)
+    func copyText_usesTTLFromSettings(contentType: PasteboardContentType) async throws {
+        let pasteboard = SystemPasteboardMock()
+        let settings = try LocalSettings(defaults: .nonPersistent())
+        settings.state.pasteTimeToLive = PasteTTL(duration: 30)
+        let sut = makeSUT(pasteboard: pasteboard, localSettings: settings)
+
+        await confirmation { confirm in
+            pasteboard.copyHandler = { _, ttl, _ in
+                #expect(ttl == 30)
+                confirm()
+            }
+
+            sut.copy("copied text", as: contentType)
+        }
+    }
+
+    @Test
+    func copyText_emitsDidPasteEvent() async throws {
+        let sut = try makeSUT(localSettings: LocalSettings(defaults: .nonPersistent()))
+
+        try await sut.didPaste().expect(valueCount: 1) {
+            sut.copy("copied text", as: .note)
+        }
+    }
 }
 
 // MARK: - Helpers

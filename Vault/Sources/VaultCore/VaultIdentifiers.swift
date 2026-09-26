@@ -41,6 +41,8 @@ public enum VaultIdentifiers {
         }
 
         public enum General {
+            /// Stored in the App Group's defaults, so the widget extension can read it too. Earlier versions kept it
+            /// in the app's own defaults, and the app moves a value from there the first time it runs.
             public static let settingsPasteTTL = "vault.preferences.general.settings-paste-ttl"
             public static let hideWhileScreenCaptured = "vault.preferences.general.hide-while-screen-captured"
             public static let codeTapAction = "vault.preferences.general.code-tap-action"
@@ -57,6 +59,7 @@ public enum VaultIdentifiers {
         /// Don't reuse those keys for a new kind of value: an old choice would silently apply to it.
         public enum UniversalClipboard {
             public static let allowOTPs = "vault.preferences.universal-clipboard.allow-otps"
+            public static let allowNotes = "vault.preferences.universal-clipboard.allow-notes"
         }
 
         /// Stored in the App Group's defaults rather than the app's own, so the

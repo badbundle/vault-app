@@ -8,8 +8,11 @@ struct SecureNoteDetailView: View {
     @Binding private var navigationPath: NavigationPath
 
     @Environment(\.presentationMode) private var presentationMode
+    /// Optional, so a preview without one still renders. Without it nothing is copied.
+    @Environment(Pasteboard.self) private var pasteboard: Pasteboard?
     @State private var currentError: (any Error)?
     @State private var isShowingDeleteConfirmation = false
+    @State private var isSelectingText = false
     /// How much of the screen the badge above the note takes, with the space around the two of them. It grows with
     /// the badge.
     @ScaledMetric(relativeTo: .title) private var noteBadgeAllowance: Double = 190
@@ -128,15 +131,32 @@ struct SecureNoteDetailView: View {
                     viewModel.editingModel.detail.contents,
                     fontStyle: .monospace,
                     textStyle: .subheadline,
+                    copyingAs: .note,
                 )
                 .frame(minHeight: noteMinHeight(in: size), alignment: .top)
                 .listRowInsets(EdgeInsets())
             case .markdown:
+                // Formatted text can't be selected with a copy Vault controls, so the note is copied or selected
+                // from its menu, both through Vault's clipboard.
                 Markdown(.init(viewModel.editingModel.detail.contents))
-                    .textSelection(.enabled)
                     .frame(minHeight: noteMinHeight(in: size), alignment: .top)
                     .listRowInsets(EdgeInsets(vertical: 12, horizontal: 16))
+                    .contextMenu {
+                        Button("Copy Note", systemImage: "doc.on.doc") {
+                            pasteboard?.copy(viewModel.editingModel.detail.contents, as: .note)
+                        }
+                        Button("Select Text", systemImage: "character.cursor.ibeam") {
+                            isSelectingText = true
+                        }
+                    } preview: {
+                        // The note's badge, rather than lifting a card as tall as the screen.
+                        DetailEditorItemBadge(identity: identity)
+                            .padding(20)
+                    }
             }
+        }
+        .sheet(isPresented: $isSelectingText) {
+            NoteTextSelectionSheet(text: viewModel.editingModel.detail.contents)
         }
     }
 

@@ -27,7 +27,24 @@ struct UniversalClipboardSheet: View {
                     isOn: $localSettings.state.allowUniversalClipboardForOTPs.animation(),
                 )
                 .optionCardBackground()
+
+                OptionCardToggle(
+                    title: "Notes",
+                    subtitle: localSettings.state.allowUniversalClipboardForNotes
+                        ? "Text you copy from notes can be pasted on your other devices."
+                        : "Text you copy from notes stays on this device.",
+                    systemImage: "text.alignleft",
+                    isOn: $localSettings.state.allowUniversalClipboardForNotes.animation(),
+                )
+                .optionCardBackground()
             }
+
+            Text("Descriptions and other details you copy always stay on this device.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                // Wraps rather than truncating while the sheet measures itself.
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 4)
         }
         .padding(.horizontal, 20)
         // Room above the title for the drag indicator.

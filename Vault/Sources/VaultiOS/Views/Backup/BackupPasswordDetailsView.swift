@@ -11,6 +11,8 @@ import VaultSettings
 struct BackupPasswordDetailsView: View {
     var viewModel: BackupKeyChangeViewModel
 
+    @Environment(Pasteboard.self) private var pasteboard
+
     var body: some View {
         Form {
             learnMoreSection
@@ -51,9 +53,15 @@ struct BackupPasswordDetailsView: View {
                 Text(viewModel.encryptionKeyDeriverSignature.id)
                     .font(.caption2)
                     .fontDesign(.monospaced)
-                    .textSelection(.enabled)
             } label: {
                 Text("ID")
+            }
+            // Copied through Vault's clipboard rather than the system's text selection, so it's cleared and kept to
+            // this device like everything else copied from Vault.
+            .contextMenu {
+                Button("Copy ID", systemImage: "doc.on.doc") {
+                    pasteboard.copy(viewModel.encryptionKeyDeriverSignature.id, as: .detail)
+                }
             }
         } header: {
             Text("Key Generation")

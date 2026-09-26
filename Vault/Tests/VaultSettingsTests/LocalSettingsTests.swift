@@ -73,7 +73,7 @@ struct LocalSettingsTests {
         for contentType in PasteboardContentType.allCases {
             #expect(!sut.state.isUniversalClipboardAllowed(for: contentType))
         }
-        #expect(!sut.state.isUniversalClipboardAllowedForAny)
+        #expect(sut.state.universalClipboardSummary == .off)
     }
 
     @Test
@@ -83,7 +83,39 @@ struct LocalSettingsTests {
         sut.state.allowUniversalClipboardForOTPs = true
 
         #expect(sut.state.isUniversalClipboardAllowed(for: .otp))
-        #expect(sut.state.isUniversalClipboardAllowedForAny)
+        #expect(!sut.state.isUniversalClipboardAllowed(for: .note))
+        #expect(sut.state.universalClipboardSummary == .only([.otp]))
+    }
+
+    @Test
+    func universalClipboard_allowsNotesOnceTurnedOn() throws {
+        let sut = try makeSUT(defaults: .nonPersistent())
+
+        sut.state.allowUniversalClipboardForNotes = true
+
+        #expect(sut.state.isUniversalClipboardAllowed(for: .note))
+        #expect(!sut.state.isUniversalClipboardAllowed(for: .otp))
+        #expect(sut.state.universalClipboardSummary == .only([.note]))
+    }
+
+    @Test
+    func universalClipboard_isOnWhenEveryOptionIsOn() throws {
+        let sut = try makeSUT(defaults: .nonPersistent())
+
+        sut.state.allowUniversalClipboardForOTPs = true
+        sut.state.allowUniversalClipboardForNotes = true
+
+        #expect(sut.state.universalClipboardSummary == .on)
+    }
+
+    @Test
+    func universalClipboard_neverAllowsDetails() throws {
+        let sut = try makeSUT(defaults: .nonPersistent())
+
+        sut.state.allowUniversalClipboardForOTPs = true
+        sut.state.allowUniversalClipboardForNotes = true
+
+        #expect(!sut.state.isUniversalClipboardAllowed(for: .detail))
     }
 
     @Test
@@ -170,11 +202,77 @@ struct LocalSettingsTests {
         #expect(sutRetrieve.state.lockNewItems)
         #expect(sutRetrieve.state.showNewCodesInQuickType)
     }
+
+    @Test
+    func universalClipboard_savesNotesStateAfterStateChanged() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sutSave = try makeSUT(defaults: defaults)
+        sutSave.state.allowUniversalClipboardForNotes = true
+
+        let sutRetrieve = try makeSUT(defaults: defaults)
+        #expect(sutRetrieve.state.allowUniversalClipboardForNotes)
+    }
+
+    // MARK: - Shared defaults
+
+    @Test
+    func pasteTimeToLive_isStoredInTheSharedDefaults() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sharedDefaults = try Defaults.nonPersistent()
+        let sut = LocalSettings(defaults: defaults, sharedDefaults: sharedDefaults)
+
+        sut.state.pasteTimeToLive = .init(duration: 30)
+
+        #expect(PasteTTL.stored(in: sharedDefaults) == .init(duration: 30))
+        #expect(!defaults.has(pasteTTLKey))
+    }
+
+    @Test
+    func pasteTimeToLive_movesNothingIfNeverChosen() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sharedDefaults = try Defaults.nonPersistent()
+
+        let sut = LocalSettings(defaults: defaults, sharedDefaults: sharedDefaults)
+
+        #expect(sut.state.pasteTimeToLive == .default)
+        #expect(!sharedDefaults.has(pasteTTLKey))
+        #expect(!defaults.has(pasteTTLKey))
+    }
+
+    @Test(arguments: [PasteTTL(duration: nil), PasteTTL(duration: 30), PasteTTL(duration: 60 * 10)])
+    func pasteTimeToLive_movesAnEarlierChoiceToTheSharedDefaults(choice: PasteTTL) throws {
+        let defaults = try Defaults.nonPersistent()
+        let sharedDefaults = try Defaults.nonPersistent()
+        // Where earlier versions kept the choice.
+        try defaults.set(choice, for: pasteTTLKey)
+
+        let sut = LocalSettings(defaults: defaults, sharedDefaults: sharedDefaults)
+
+        #expect(sut.state.pasteTimeToLive == choice)
+        #expect(PasteTTL.stored(in: sharedDefaults) == choice)
+        #expect(!defaults.has(pasteTTLKey))
+    }
+
+    @Test
+    func pasteTimeToLive_keepsTheSharedChoiceOverAnOlderOne() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sharedDefaults = try Defaults.nonPersistent()
+        try defaults.set(PasteTTL(duration: nil), for: pasteTTLKey)
+        try sharedDefaults.set(PasteTTL(duration: 30), for: pasteTTLKey)
+
+        let sut = LocalSettings(defaults: defaults, sharedDefaults: sharedDefaults)
+
+        #expect(sut.state.pasteTimeToLive == .init(duration: 30))
+    }
 }
 
 // MARK: - Helpers
 
 extension LocalSettingsTests {
+    private var pasteTTLKey: Key<PasteTTL> {
+        Key(VaultIdentifiers.Preferences.General.settingsPasteTTL)
+    }
+
     private func makeSUT(defaults: Defaults) throws -> LocalSettings {
         LocalSettings(defaults: defaults)
     }

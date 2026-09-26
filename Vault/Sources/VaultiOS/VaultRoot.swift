@@ -25,8 +25,20 @@ public enum VaultRoot {
         return .init(userDefaults: .standard)
     }()
 
+    /// The App Group's defaults, for the settings the extensions read too, such as Clear Clipboard.
     @MainActor
-    public static let localSettings: LocalSettings = .init(defaults: defaults)
+    public static let sharedDefaults: Defaults = {
+        #if DEBUG
+        // Screenshots keep every setting in their own suite, away from the real ones.
+        if ScreenshotMode.isEnabled {
+            return defaults
+        }
+        #endif
+        return .init(userDefaults: VaultSharedStorage.userDefaults())
+    }()
+
+    @MainActor
+    public static let localSettings: LocalSettings = .init(defaults: defaults, sharedDefaults: sharedDefaults)
 
     public static let timer: some IntervalTimer = IntervalTimerImpl()
 

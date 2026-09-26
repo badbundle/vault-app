@@ -1,4 +1,6 @@
 import Foundation
+import FoundationExtensions
+import VaultCore
 
 public struct PasteTTL: Equatable, Hashable, Codable, Sendable {
     public let duration: Double?
@@ -30,6 +32,25 @@ extension PasteTTL {
         .init(duration: 60 * 10),
         .init(duration: 60 * 30),
     ]
+}
+
+extension PasteTTL {
+    /// Where the Clear Clipboard setting is stored. The app keeps it in the defaults it shares with its extensions.
+    static var storageKey: Key<PasteTTL> {
+        Key(VaultIdentifiers.Preferences.General.settingsPasteTTL)
+    }
+
+    /// The Clear Clipboard setting stored in `defaults`, for an extension that copies a value but has no
+    /// `LocalSettings` of its own.
+    @MainActor
+    public static func stored(in defaults: Defaults) -> PasteTTL {
+        defaults.get(for: storageKey) ?? .default
+    }
+
+    /// When a value copied at `date` should be cleared from the clipboard, or `nil` to keep it.
+    public func expiryDate(copiedAt date: Date) -> Date? {
+        duration.map { date.addingTimeInterval($0) }
+    }
 }
 
 extension PasteTTL {

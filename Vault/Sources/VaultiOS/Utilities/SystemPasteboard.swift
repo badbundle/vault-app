@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import VaultFeed
+import VaultiOSShared
 import VaultSettings
 
 /// @mockable
@@ -16,11 +17,6 @@ public protocol SystemPasteboard {
 
 /// The live iOS system pasteboard.
 struct SystemPasteboardImpl: SystemPasteboard {
-    /// Widely-supported clipboard-manager UTI for marking copied values as concealed (passwords / OTPs).
-    /// Honoured by tools like Paste, Maccy, etc. so the copied value is not shown in clipboard previews.
-    private static let concealedTypeIdentifier = "org.nspasteboard.ConcealedType"
-
-    private let pasteboard = UIPasteboard.general
     private let clock: any EpochClock
 
     init(clock: any EpochClock) {
@@ -28,15 +24,7 @@ struct SystemPasteboardImpl: SystemPasteboard {
     }
 
     func copy(string: String, ttl: Double?, localOnly: Bool) {
-        var options: [UIPasteboard.OptionsKey: Any] = [.localOnly: localOnly]
-        if let ttl {
-            let expiryDate = Date(timeIntervalSince1970: clock.currentTime).addingTimeInterval(ttl)
-            options[.expirationDate] = expiryDate
-        }
-
-        pasteboard.setItems([[
-            UIPasteboard.typeAutomatic: string,
-            Self.concealedTypeIdentifier: string,
-        ]], options: options)
+        let now = Date(timeIntervalSince1970: clock.currentTime)
+        ConcealedPasteboard.copy(string, expiresAt: ttl.map { now.addingTimeInterval($0) }, localOnly: localOnly)
     }
 }
