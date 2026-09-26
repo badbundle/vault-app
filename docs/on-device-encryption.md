@@ -390,7 +390,8 @@ changes it for slots the app can't open, and `i` is 2 bytes. It's `VaultSlotFile
 - **Padding.** Each vault writes its body to fill its slot, so a slot's contents reveal nothing about its size.
 - **Slot size** starts at 1 MiB, which holds about 3,500 typical items or 1,400 heavy-note items once
   compressed. It doubles when any vault outgrows it, up to 4 MiB (about 14,000 typical items, and a 64 MiB file);
-  a payload too large for that is refused. The ceiling bounds memory as well as the file (see
+  a payload too large for that is refused, as is one over 64 MiB before compression (opening stops decompressing
+  past that too). The ceiling bounds memory as well as the file (see
   [Memory and the AutoFill extension](#key-derivation)). On growth, the vault being written re-seals its own slot
   at the new size, and every other slot is copied byte for byte with random fill appended. Their key box carries
   their real body length, so they still open. Each re-seals at the full size the next time it saves. Slots never
@@ -441,21 +442,26 @@ with VAULT-51.
 `RecordVaultStore` is an actor. It implements `VaultStoreReader`, `VaultStoreWriter`, `VaultStoreReorderable`,
 `VaultStoreExporter`, `VaultStoreImporter`, `VaultStoreDeleter`, `VaultStoreKillphraseDeleter`,
 `VaultStoreHOTPIncrementer` and `VaultTagStore` over `[VaultItemRecord]` and `[VaultTagRecord]`, keyed by id.
-`EncryptedVaultStore` wraps it with the slot file. Each mutation:
+`EncryptedVaultStore` wraps it with the slot file. Mutations take turns, and each one:
 
-1. Computes the new records from the current ones, without publishing them.
+1. Computes the new records from the current ones, without publishing them. If nothing changed, it stops there.
 2. Takes `flock(LOCK_EX)` on `vault-slots.lock` and reads the current file. If our slot's generation isn't the
-   one we loaded, another process has written it: it stops with a conflict and reloads. The change throws
-   `EncryptedVaultStoreError.conflict` and the store takes what the other process saved, so trying again starts
-   from there. If the slot doesn't open with our wrap key any more (it was rewrapped or replaced), the store can't
-   save again until the vault is unlocked again.
+   one we loaded, another process has written it: it stops with a conflict and reloads, then works the mutation
+   out again on top of what the other process saved and goes back to this step. Every mutation is a function of
+   the records, so neither process's change is lost; a killphrase is matched again. After three conflicts in a
+   row it throws `EncryptedVaultStoreError.conflict`. If the slot doesn't open with our wrap key any more (it was
+   rewrapped or replaced), the store can't save again until the vault is unlocked again.
 3. Encodes, compresses and seals the body with generation + 1, reseals the key box, and builds the new file
    bytes with the other slots copied unchanged.
-4. Writes a temp file, `.vault-slots.tmp-<random>`, and calls `F_FULLFSYNC`.
-5. **Verifies** the temp file: opens our slot's key box and body from it, decodes, and compares with the new
-   records.
-6. Renames the temp file over `vault-slots.v1`, then `fsync`s the directory.
-7. Publishes the new records in memory and releases the lock.
+4. Removes temp files a writer that crashed left behind. Each is an old copy of the whole file, which could hold
+   items deleted since, under the same keys (C6). If one can't be removed, the save fails.
+5. Writes a temp file, `.vault-slots.tmp-<random>`, and calls `F_FULLFSYNC`.
+6. **Verifies** the temp file: reads it back, requires it to match byte for byte, opens our slot's key box and
+   body from it, decodes, and compares with the new records. The read most likely comes from the page cache, so
+   this proves the sealing and encoding round-trip, not what reached storage; `F_FULLFSYNC` is what covers that.
+7. Renames the temp file over `vault-slots.v1`, then flushes the directory with `F_FULLFSYNC` (on Darwin, plain
+   `fsync` doesn't flush the drive's cache).
+8. Publishes the new records in memory and releases the lock.
 
 If any step up to the rename fails, the temp file is removed, the in-memory records stay as they were, and the
 error is thrown. `deleteItems(matchingKillphrase:using:)` returns `false` instead, exactly as it does for
@@ -463,15 +469,15 @@ error is thrown. `deleteItems(matchingKillphrase:using:)` returns `false` instea
 
 - **The rename is the commit point.** Once it succeeds the file holds the change, so a failure to `fsync` the
   directory afterwards doesn't undo it, and the change is published.
-- **Waiting for the lock gives up after 10 s**, so a stuck holder can't hang the store, which would also stop
-  the vault locking.
+- **Waiting for the lock** polls with `LOCK_NB` and `Task.sleep`, so it doesn't block a thread, and gives up
+  after 10 s, so a stuck holder can't hang the store, which would also stop the vault locking.
 - **The file I/O is `SlotFileSystem`**, which tests replace to fail or crash at every step.
 
 ### Crash safety
 
 | Crash or failure during | State afterwards | Recovery |
 | --- | --- | --- |
-| A save, before the rename | Old file intact; maybe a stray temp file | Temp files are deleted at launch. The change was never reported as saved. |
+| A save, before the rename | Old file intact; maybe a stray temp file | The next save, by any process, or the next unlock deletes the temp file. The change was never reported as saved. |
 | A save, after the rename | New file, already verified | None needed |
 | Disk full, or verification fails | Old file intact | Error shown; nothing changes in memory |
 | A password change | Old or new file, never a mix | Either the old or the new password works |
@@ -578,10 +584,11 @@ deadline. What differs afterwards is decoding time, which is proportional to wha
 
 - Keys live in `SymmetricKey` and are zeroed. `K_pw` goes straight from the derivation's wiped buffer into one.
 - Buffers the storage code owns are `memset_s`'d when it's done with them: the key box and body plaintexts, the
-  compressed payload, the compression scratch buffer, and the encoded payload after a save. The compression
-  output is sized up front, so it never leaves copies behind by reallocating.
-- Swift `String` and `Data` copies of decoded items can't be reliably zeroed, and nor can the JSON coders' and
-  the compression stream's own buffers. They're freed and eventually reused. Process memory isn't readable by
+  compressed payload, the compression scratch buffer, the JSON encoded for a save, and the JSON decompressed to
+  read a vault, including when a save verifies. The compression output is sized up front, so it never leaves
+  copies behind by reallocating.
+- The records decoded from the JSON, which are Swift `String`s and `Data`, can't be reliably zeroed, and nor can
+  the JSON coders' own buffers, the compression stream's internal state, or CryptoKit's. They're freed and eventually reused. Process memory isn't readable by
   other apps, but a forensic tool with code execution on an unlocked, exploited device can read a suspended
   process.
 - The password comes from a `SecureField`. The binding is cleared after use, but the `String` isn't zeroed.

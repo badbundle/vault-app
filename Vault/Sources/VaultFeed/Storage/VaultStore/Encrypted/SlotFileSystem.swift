@@ -5,9 +5,9 @@ import Foundation
 /// Each one is a step `EncryptedVaultFile` can fail at. Tests inject file systems that fail or stop at any step, to
 /// check that no failure loses data.
 protocol SlotFileSystem: Sendable {
-    /// Takes an exclusive lock on the file at `url`, creating the file if it isn't there. Waits while anyone else,
-    /// in this process or another, holds the lock.
-    func lock(_ url: URL) throws -> SlotFileLock
+    /// Takes an exclusive lock on the file at `url`, creating the file if it isn't there, or returns `nil` straight
+    /// away if anyone else, in this process or another, holds it.
+    func tryLock(_ url: URL) throws -> SlotFileLock?
     /// Releases a lock. It can't fail: closing the file releases the lock, as a crash would.
     func unlock(_ lock: SlotFileLock)
     /// The file's contents, or `nil` if there's no file.
@@ -26,7 +26,7 @@ protocol SlotFileSystem: Sendable {
     func contentsOfDirectory(at url: URL) throws -> [URL]
 }
 
-/// A lock taken with `SlotFileSystem.lock(_:)`.
+/// A lock taken with `SlotFileSystem.tryLock(_:)`.
 struct SlotFileLock: Sendable {
     /// The lock file.
     let url: URL
@@ -36,22 +36,18 @@ struct SlotFileLock: Sendable {
 
 /// The device's file system.
 struct LiveSlotFileSystem: SlotFileSystem {
-    /// How long `lock(_:)` waits for another holder before giving up with `EWOULDBLOCK`.
-    ///
-    /// A save holds the lock for tens of milliseconds, so waiting this long means something is wrong, and a store
-    /// that waited forever would never finish its change or let the vault lock.
-    var lockTimeout: Duration = .seconds(10)
-
-    func lock(_ url: URL) throws -> SlotFileLock {
+    func tryLock(_ url: URL) throws -> SlotFileLock? {
         let descriptor = try Self.open(url, flags: O_RDWR | O_CREAT)
-        let deadline = ContinuousClock.now + lockTimeout
         while flock(descriptor, LOCK_EX | LOCK_NB) != 0 {
             let error = errno
-            guard error == EWOULDBLOCK || error == EINTR, ContinuousClock.now < deadline else {
-                close(descriptor)
-                throw POSIXError(Self.code(error))
+            if error == EINTR {
+                continue
             }
-            usleep(2000)
+            close(descriptor)
+            if error == EWOULDBLOCK {
+                return nil
+            }
+            throw POSIXError(Self.code(error))
         }
         return SlotFileLock(url: url, descriptor: descriptor)
     }
@@ -75,11 +71,7 @@ struct LiveSlotFileSystem: SlotFileSystem {
     func synchronizeFile(at url: URL) throws {
         let descriptor = try Self.open(url, flags: O_RDWR)
         defer { close(descriptor) }
-        guard fcntl(descriptor, F_FULLFSYNC) != -1 else {
-            // Some file systems can't flush the drive's cache. APFS can, but fall back to a plain flush as SQLite does.
-            guard fsync(descriptor) == 0 else { throw POSIXError(Self.code(errno)) }
-            return
-        }
+        try Self.fullSynchronize(descriptor)
     }
 
     func moveItem(at source: URL, replacing destination: URL) throws {
@@ -89,7 +81,7 @@ struct LiveSlotFileSystem: SlotFileSystem {
     func synchronizeDirectory(at url: URL) throws {
         let descriptor = try Self.open(url, flags: O_RDONLY | O_DIRECTORY)
         defer { close(descriptor) }
-        guard fsync(descriptor) == 0 else { throw POSIXError(Self.code(errno)) }
+        try Self.fullSynchronize(descriptor)
     }
 
     func removeItem(at url: URL) throws {
@@ -98,6 +90,13 @@ struct LiveSlotFileSystem: SlotFileSystem {
 
     func contentsOfDirectory(at url: URL) throws -> [URL] {
         try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
+    }
+
+    /// `F_FULLFSYNC`, which flushes the drive's own cache too: on Darwin, plain `fsync` doesn't. Some file systems
+    /// can't do it. APFS can, but fall back to `fsync` as SQLite does.
+    private static func fullSynchronize(_ descriptor: Int32) throws {
+        guard fcntl(descriptor, F_FULLFSYNC) == -1 else { return }
+        guard fsync(descriptor) == 0 else { throw POSIXError(code(errno)) }
     }
 
     private static func open(_ url: URL, flags: Int32) throws -> Int32 {

@@ -123,17 +123,50 @@ extension RecordVaultStoreTests {
     func everyChange_isSavedBeforeItsPublished() async throws {
         let persistence = ScriptedPersistence()
         let sut = RecordVaultStore(persistence: persistence)
+        persistence.observe(sut)
 
         let tag = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
-        let id = try await sut.insert(item: uniqueVaultItem(tags: [tag]).makeWritable())
+        let hotpCode = VaultItem.Payload.otpCode(anyOTPAuthCode(type: .hotp()))
+        let id = try await sut.insert(item: uniqueVaultItem(item: hotpCode, tags: [tag]).makeWritable())
         try await sut.incrementCounter(id: id)
         try await sut.deleteTag(id: tag)
         try await sut.delete(id: id)
 
-        let saved = persistence.saved
-        #expect(saved.count == 5)
-        #expect(saved.last == .empty)
+        let saves = persistence.saves
+        #expect(saves.count == 5)
+        // While each save was underway, the store still showed the state before it.
+        #expect(saves.map(\.publishedWhileSaving) == [.empty] + saves.dropLast().map(\.state))
         #expect(await sut.state == .empty)
+    }
+
+    @Test
+    func aChangeThatChangesNothing_savesNothing() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+
+        try await sut.delete(id: .new())
+        try await sut.deleteTag(id: .init(id: UUID()))
+        try await sut.deleteVault()
+        _ = await sut.deleteItems(matchingKillphrase: "nothing", using: testDigester)
+
+        #expect(persistence.saves.isEmpty)
+    }
+
+    @Test
+    func changes_takeTurnsSoEachStartsFromTheOneBefore() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+        persistence.holdNextSave()
+
+        let first = Task { try await sut.insert(item: uniqueVaultItem().makeWritable()) }
+        await persistence.waitUntilHolding()
+        let second = Task { try await sut.insert(item: uniqueVaultItem().makeWritable()) }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(persistence.saves.count == 1)
+        persistence.release()
+        let ids = try await [first.value, second.value].map(\.rawValue)
+
+        #expect(persistence.saves.map { $0.state.items.map(\.id) } == [[ids[0]], ids])
     }
 
     @Test
@@ -142,7 +175,7 @@ extension RecordVaultStoreTests {
         let sut = RecordVaultStore(persistence: persistence)
         try await sut.insert(item: uniqueVaultItem().makeWritable())
         let before = await sut.state
-        persistence.nextOutcome = .failure(TestError())
+        persistence.script(.failure(TestError()))
 
         await #expect(throws: TestError.self) {
             try await sut.insert(item: uniqueVaultItem().makeWritable())
@@ -152,21 +185,32 @@ extension RecordVaultStoreTests {
     }
 
     @Test
-    func conflictingSave_throwsAndTakesWhatTheOtherWriterSaved() async throws {
+    func conflictingSave_makesTheChangeAgainOnTopOfWhatTheOtherWriterSaved() async throws {
         let persistence = ScriptedPersistence()
         let sut = RecordVaultStore(persistence: persistence)
-        try await sut.insert(item: uniqueVaultItem().makeWritable())
-        let otherWriters = try VaultRecordState(
-            items: [PersistedVaultItemEncoder().encode(item: uniqueVaultItem().makeWritable())],
-            tags: [],
-        )
-        persistence.nextOutcome = .success(.conflict(saved: otherWriters))
+        let otherWriters = try Self.state(with: uniqueVaultItem())
+        persistence.script(.success(.conflict(saved: otherWriters)))
+
+        let id = try await sut.insert(item: uniqueVaultItem().makeWritable())
+
+        #expect(persistence.saves.count == 2)
+        #expect(await sut.state.items.map(\.id) == otherWriters.items.map(\.id) + [id.rawValue])
+        #expect(await sut.state == persistence.saves.last?.state)
+    }
+
+    @Test
+    func conflictingEverySave_throwsAfterThreeTriesHoldingWhatWasSaved() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+        let otherWriters = try (0 ..< 3).map { _ in try Self.state(with: uniqueVaultItem()) }
+        persistence.script(otherWriters.map { .success(.conflict(saved: $0)) })
 
         await #expect(throws: EncryptedVaultStoreError.conflict) {
             try await sut.insert(item: uniqueVaultItem().makeWritable())
         }
 
-        #expect(await sut.state == otherWriters)
+        #expect(persistence.saves.count == RecordVaultStore.conflictAttempts)
+        #expect(await sut.state == otherWriters.last)
     }
 
     @Test
@@ -176,7 +220,7 @@ extension RecordVaultStoreTests {
         let matching = uniqueVaultItem(killphrase: "red")
         try await sut.importAndOverrideVault(payload: .init(userDescription: "", items: [matching], tags: []))
         let before = await sut.state
-        persistence.nextOutcome = .failure(TestError())
+        persistence.script(.failure(TestError()))
 
         let didDelete = await sut.deleteItems(matchingKillphrase: "red", using: testDigester)
 
@@ -184,19 +228,20 @@ extension RecordVaultStoreTests {
         #expect(await sut.state == before)
     }
 
+    /// Another writer saved first, adding an item: the phrase is matched again on top of that, and still deletes.
     @Test
-    func deleteItemsMatchingKillphrase_returnsFalseOnAConflict() async throws {
+    func deleteItemsMatchingKillphrase_afterAConflict_matchesAgainAndDeletes() async throws {
         let persistence = ScriptedPersistence()
         let sut = RecordVaultStore(persistence: persistence)
         let matching = uniqueVaultItem(killphrase: "red")
+        let other = uniqueVaultItem()
         try await sut.importAndOverrideVault(payload: .init(userDescription: "", items: [matching], tags: []))
-        let otherWriters = await sut.state
-        persistence.nextOutcome = .success(.conflict(saved: otherWriters))
+        try persistence.script(.success(.conflict(saved: Self.state(with: matching, other))))
 
         let didDelete = await sut.deleteItems(matchingKillphrase: "red", using: testDigester)
 
-        #expect(!didDelete)
-        #expect(await sut.state == otherWriters)
+        #expect(didDelete)
+        #expect(await sut.state.items.map(\.id) == [other.id.rawValue])
     }
 }
 
@@ -210,29 +255,88 @@ extension RecordVaultStoreTests {
 
     private struct TestError: Error {}
 
-    /// Records every state it's asked to save, and gives the outcome it's told to for the next one.
+    private static func state(with items: VaultItem...) throws -> VaultRecordState {
+        let encoder = PersistedVaultItemEncoder()
+        return try VaultRecordState(
+            items: items
+                .map { try encoder.encode(item: $0.makeWritable(), writeUpdateContext: $0.makeImportingContext()) },
+            tags: [],
+        )
+    }
+
+    /// Records every state it's asked to save, gives the outcomes it's scripted to, and can hold a save underway.
     private final class ScriptedPersistence: VaultRecordPersistence {
-        private let log = SharedMutex([VaultRecordState]())
-        private let outcome = SharedMutex(Result<VaultRecordSaveOutcome, any Error>.success(.saved))
+        struct Save: Sendable {
+            /// The state to save.
+            var state: VaultRecordState
+            /// What the store showed while the save was underway, if it's being observed.
+            var publishedWhileSaving: VaultRecordState
+        }
+
+        private struct State {
+            var saves = [Save]()
+            var outcomes = [Result<VaultRecordSaveOutcome, any Error>]()
+            var store: RecordVaultStore?
+            var holdsNextSave = false
+            var held: CheckedContinuation<Void, Never>?
+        }
+
+        private let state = SharedMutex(State())
 
         /// Every state saved, or attempted, in order.
-        var saved: [VaultRecordState] {
-            log.value
+        var saves: [Save] {
+            state.get { $0.saves }
         }
 
-        /// What the next save gives. Later saves succeed.
-        var nextOutcome: Result<VaultRecordSaveOutcome, any Error> {
-            get { outcome.value }
-            set { outcome.modify { $0 = newValue } }
+        /// What the next saves give, in order. Saves after them succeed.
+        func script(_ outcomes: Result<VaultRecordSaveOutcome, any Error>...) {
+            script(outcomes)
         }
 
-        func save(_ state: VaultRecordState) throws -> VaultRecordSaveOutcome {
-            log.modify { $0.append(state) }
-            let result = outcome.modify { outcome in
-                defer { outcome = .success(.saved) }
-                return outcome
+        func script(_ outcomes: [Result<VaultRecordSaveOutcome, any Error>]) {
+            state.modify { $0.outcomes = outcomes }
+        }
+
+        /// Notes what `store` shows while each save is underway.
+        func observe(_ store: RecordVaultStore) {
+            state.modify { $0.store = store }
+        }
+
+        func holdNextSave() {
+            state.modify { $0.holdsNextSave = true }
+        }
+
+        func release() {
+            state.modify { state in
+                state.held?.resume()
+                state.held = nil
             }
-            return try result.get()
+        }
+
+        /// Waits (for up to 5 seconds) until a save is being held.
+        func waitUntilHolding() async {
+            let deadline = ContinuousClock.now + .seconds(5)
+            while state.get({ $0.held == nil }), ContinuousClock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(1))
+            }
+        }
+
+        func save(_ newState: VaultRecordState) async throws -> VaultRecordSaveOutcome {
+            let published = await state.get { $0.store }?.state
+            let holds = state.modify { state in
+                state.saves.append(Save(state: newState, publishedWhileSaving: published ?? .empty))
+                defer { state.holdsNextSave = false }
+                return state.holdsNextSave
+            }
+            if holds {
+                await withCheckedContinuation { continuation in
+                    state.modify { $0.held = continuation }
+                }
+            }
+            let outcome = state.modify { state in
+                state.outcomes.isEmpty ? .success(.saved) : state.outcomes.removeFirst()
+            }
+            return try outcome.get()
         }
     }
 }

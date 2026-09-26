@@ -22,6 +22,15 @@ enum EncryptedVaultPayload {
         return try VaultSlotPayload(version: currentVersion, data: encoder.encode(contents))
     }
 
+    /// Opens and decodes the payload of a slot opened in `file`, then wipes the JSON it decoded.
+    ///
+    /// - Throws: As `VaultSlotFile.openPayload(of:)` and `decode(_:)` do.
+    static func decode(slot: VaultSlotFile.OpenedSlot, in file: VaultSlotFile) throws -> VaultRecordState {
+        var payload = try file.openPayload(of: slot)
+        defer { SlotRandom.wipe(&payload.data) }
+        return try decode(payload)
+    }
+
     /// - Throws: `EncryptedVaultStoreError.unsupportedPayloadVersion(_:)` for a version this app doesn't know, or a
     ///   decoding error.
     static func decode(_ payload: VaultSlotPayload) throws -> VaultRecordState {

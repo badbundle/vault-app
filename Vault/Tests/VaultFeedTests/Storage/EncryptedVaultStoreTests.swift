@@ -13,6 +13,7 @@ struct EncryptedVaultStoreTests {
     static let stepsOfASave = [
         "lock vault-slots.lock",
         "read vault-slots.v1",
+        "list directory",
         "create temp",
         "flush temp",
         "read temp",
@@ -21,7 +22,7 @@ struct EncryptedVaultStoreTests {
     ]
 
     /// The last step before the file holds the change.
-    static let renameStep = 6
+    static let renameStep = 7
 
     // MARK: Opening
 
@@ -31,41 +32,41 @@ struct EncryptedVaultStoreTests {
         let item = uniqueVaultItem(tags: [tag.id])
         let fixture = try EncryptedVaultFixture(state: Self.state(items: [item], tags: [tag]))
 
-        let sut = try fixture.openStore()
+        let sut = try await fixture.openStore()
 
         #expect(try await sut.retrieve(query: .init()).items == [item])
         #expect(try await sut.retrieveTags() == [tag])
     }
 
     @Test
-    func init_refusesAVaultSavedByANewerVersion() throws {
+    func init_refusesAVaultSavedByANewerVersion() async throws {
         let fixture = try EncryptedVaultFixture(payloadVersion: EncryptedVaultPayload.currentVersion + 1)
 
-        #expect(throws: EncryptedVaultStoreError.unsupportedPayloadVersion(2)) {
-            try fixture.openStore()
+        await #expect(throws: EncryptedVaultStoreError.unsupportedPayloadVersion(2)) {
+            try await fixture.openStore()
         }
     }
 
     @Test
-    func open_removesTemporaryFilesACrashLeftBehind() throws {
+    func open_removesTemporaryFilesACrashLeftBehind() async throws {
         let fileSystem = InMemorySlotFileSystem()
         let fixture = try EncryptedVaultFixture(fileSystem: fileSystem)
         let stray = fixture.file.directory.appending(path: EncryptedVaultFile.temporaryFilePrefix + "stray")
         try fileSystem.createFile(at: stray, contents: fixture.bytes())
 
-        _ = try fixture.openStore()
+        _ = try await fixture.openStore()
 
         #expect(try fixture.temporaryFileNames().isEmpty)
     }
 
     @Test
-    func open_findsNothingWithoutAFile() throws {
+    func open_findsNothingWithoutAFile() async throws {
         let file = EncryptedVaultFile(
             directory: EncryptedVaultFixture.inMemoryDirectory,
             fileSystem: InMemorySlotFileSystem(),
         )
 
-        #expect(try file.open() == nil)
+        #expect(try await file.open() == nil)
     }
 }
 
@@ -75,7 +76,7 @@ extension EncryptedVaultStoreTests {
     @Test
     func everyChange_isSavedToTheFile() async throws {
         let fixture = try EncryptedVaultFixture()
-        let sut = try fixture.openStore()
+        let sut = try await fixture.openStore()
 
         let tag = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
         #expect(try await fixture.savedState() == sut.records.state)
@@ -93,7 +94,7 @@ extension EncryptedVaultStoreTests {
     func save_sealsTheSlotAtTheNextGenerationAndCopiesEveryOtherSlot() async throws {
         let fixture = try EncryptedVaultFixture()
         let before = try VaultSlotFile(bytes: fixture.bytes())
-        let sut = try fixture.openStore()
+        let sut = try await fixture.openStore()
 
         try await sut.insert(item: uniqueVaultItem().makeWritable())
         try await sut.insert(item: uniqueVaultItem().makeWritable())
@@ -110,7 +111,7 @@ extension EncryptedVaultStoreTests {
     func save_takesEveryStepHoldingTheLock() async throws {
         let fixture = try EncryptedVaultFixture()
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.file.fileSystem)
-        let sut = try fixture.through(fileSystem).openStore()
+        let sut = try await fixture.through(fileSystem).openStore()
         let opening = fileSystem.log.count
 
         try await sut.insert(item: uniqueVaultItem().makeWritable())
@@ -122,8 +123,8 @@ extension EncryptedVaultStoreTests {
     func save_growsTheFileWhenTheVaultOutgrowsItsSlot() async throws {
         let fixture = try EncryptedVaultFixture(slotIndex: 3)
         let otherState = try Self.state(items: [uniqueVaultItem()])
-        let other = try fixture.addingVault(inSlot: 9, state: otherState)
-        let sut = try fixture.openStore()
+        let other = try await fixture.addingVault(inSlot: 9, state: otherState)
+        let sut = try await fixture.openStore()
         // Base64 of random bytes only compresses to about three quarters, so this doesn't fit a 1 MiB slot.
         let contents = SlotRandom.bytes(count: 1_500_000).base64EncodedString()
 
@@ -142,7 +143,7 @@ extension EncryptedVaultStoreTests {
     func save_failingAtAnyStepUpToTheRename_leavesTheFileAndTheStoreAsTheyWere(step: Int) async throws {
         let fixture = try EncryptedVaultFixture(state: Self.state(items: [uniqueVaultItem()]))
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.file.fileSystem)
-        let sut = try fixture.through(fileSystem).openStore()
+        let sut = try await fixture.through(fileSystem).openStore()
         let bytesBefore = try fixture.bytes()
         let stateBefore = await sut.records.state
 
@@ -168,7 +169,7 @@ extension EncryptedVaultStoreTests {
     func save_failingToFlushTheDirectory_stillSaves() async throws {
         let fixture = try EncryptedVaultFixture()
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.file.fileSystem)
-        let sut = try fixture.through(fileSystem).openStore()
+        let sut = try await fixture.through(fileSystem).openStore()
 
         fileSystem.inject(.fail(atStep: Self.stepsOfASave.count))
         let id = try await sut.insert(item: uniqueVaultItem().makeWritable())
@@ -184,11 +185,11 @@ extension EncryptedVaultStoreTests {
         let before = try Self.state(items: [uniqueVaultItem()])
         let fixture = try EncryptedVaultFixture(state: before)
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.file.fileSystem)
-        let sut = try fixture.through(fileSystem).openStore()
+        let sut = try await fixture.through(fileSystem).openStore()
 
         fileSystem.inject(.crash(atStep: step))
         _ = try? await sut.insert(item: uniqueVaultItem().makeWritable())
-        let relaunched = try fixture.openStore()
+        let relaunched = try await fixture.openStore()
 
         let after = await relaunched.records.state
         if step <= Self.renameStep {
@@ -205,7 +206,7 @@ extension EncryptedVaultStoreTests {
     func save_whoseFileDoesNotReadBackAsWritten_isNotUsed() async throws {
         let fixture = try EncryptedVaultFixture()
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.file.fileSystem)
-        let sut = try fixture.through(fileSystem).openStore()
+        let sut = try await fixture.through(fileSystem).openStore()
         let bytesBefore = try fixture.bytes()
 
         fileSystem.inject(.corruptReadBack)
@@ -225,7 +226,7 @@ extension EncryptedVaultStoreTests {
         let item = uniqueVaultItem(killphrase: "red")
         let fixture = try EncryptedVaultFixture(state: Self.state(items: [item]))
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.file.fileSystem)
-        let sut = try fixture.through(fileSystem).openStore()
+        let sut = try await fixture.through(fileSystem).openStore()
 
         fileSystem.inject(.fail(atStep: step))
         let didDelete = await sut.deleteItems(matchingKillphrase: "red", using: testDigester)
@@ -239,7 +240,7 @@ extension EncryptedVaultStoreTests {
     func save_withoutAFile_throwsFileMissing() async throws {
         let fileSystem = InMemorySlotFileSystem()
         let fixture = try EncryptedVaultFixture(fileSystem: fileSystem)
-        let sut = try fixture.openStore()
+        let sut = try await fixture.openStore()
         fileSystem.setContents(nil, at: fixture.file.url)
 
         await #expect(throws: EncryptedVaultStoreError.fileMissing) {
@@ -249,39 +250,121 @@ extension EncryptedVaultStoreTests {
     }
 }
 
+extension EncryptedVaultStoreTests {
+    /// A writer killed mid-save, AutoFill say, leaves a temp file: a whole copy of the file, whose items the right
+    /// password still opens. The next save removes it before anything else, so an item deleted then leaves no copy
+    /// behind (MANIFESTO C6).
+    @Test
+    func save_firstRemovesATempFileAnotherWriterLeftBehind() async throws {
+        let fileSystem = InMemorySlotFileSystem()
+        let item = uniqueVaultItem(killphrase: "red")
+        let fixture = try EncryptedVaultFixture(fileSystem: fileSystem, state: Self.state(items: [item]))
+        let sut = try await fixture.openStore()
+        let stray = fixture.file.directory.appending(path: EncryptedVaultFile.temporaryFilePrefix + "autofill")
+        try fileSystem.createFile(at: stray, contents: fixture.bytes())
+
+        #expect(await sut.deleteItems(matchingKillphrase: "red", using: testDigester))
+
+        #expect(try fixture.temporaryFileNames().isEmpty)
+        #expect(try fixture.savedState().items.isEmpty)
+    }
+
+    /// Here the rename fails, and then so does removing the temp file.
+    @Test
+    func save_thatCantRemoveItsOwnTempFile_leavesItForTheNextSaveToRemove() async throws {
+        let fixture = try EncryptedVaultFixture()
+        let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.file.fileSystem)
+        let sut = try await fixture.through(fileSystem).openStore()
+
+        fileSystem.inject(.fail(atSteps: [Self.renameStep, Self.renameStep + 1]))
+        await #expect(throws: FaultInjectingSlotFileSystem.InjectedFault.self) {
+            try await sut.insert(item: uniqueVaultItem().makeWritable())
+        }
+        #expect(try fixture.temporaryFileNames().count == 1)
+
+        fileSystem.inject(nil)
+        try await sut.insert(item: uniqueVaultItem().makeWritable())
+
+        #expect(try fixture.temporaryFileNames().isEmpty)
+        #expect(try await fixture.savedState() == sut.records.state)
+    }
+
+    @Test
+    func save_ofAVaultTooLargeForTheLargestSlot_throwsAndChangesNothing() async throws {
+        let fixture = try EncryptedVaultFixture()
+        let sut = try await fixture.openStore()
+        let bytesBefore = try fixture.bytes()
+        // Base64 of random bytes compresses to about three quarters: more than a 4 MiB slot holds.
+        let contents = SlotRandom.bytes(count: 4_500_000).base64EncodedString()
+
+        await #expect(throws: VaultSlotFileError.payloadTooLarge) {
+            try await sut
+                .insert(item: uniqueVaultItem(item: .secureNote(anySecureNote(contents: contents))).makeWritable())
+        }
+
+        #expect(try fixture.bytes() == bytesBefore)
+        #expect(await sut.records.state == .empty)
+    }
+}
+
 // MARK: - Other writers
 
 extension EncryptedVaultStoreTests {
-    /// Two stores on one vault stand in for the app and its AutoFill extension.
+    /// Two stores on one vault stand in for the app and its AutoFill extension. A store that finds the other saved
+    /// first makes its change again on top of what the other saved.
     @Test
-    func twoStoresOnOneVault_detectAConflictingWriteAndLoseNeither() async throws {
+    func twoStoresOnOneVault_makeAConflictingChangeOnTopOfTheOtherAndLoseNeither() async throws {
         try await withTemporaryDirectory { directory in
             let fixture = try EncryptedVaultFixture(fileSystem: LiveSlotFileSystem(), directory: directory)
-            let app = try fixture.openStore()
-            let autoFill = try fixture.openStore()
+            let app = try await fixture.openStore()
+            let autoFill = try await fixture.openStore()
 
             let first = try await app.insert(item: uniqueVaultItem().makeWritable())
-            await #expect(throws: EncryptedVaultStoreError.conflict) {
-                try await autoFill.insert(item: uniqueVaultItem().makeWritable())
-            }
-            // AutoFill now holds what the app saved, so trying again keeps both.
-            #expect(await autoFill.records.state == app.records.state)
             let second = try await autoFill.insert(item: uniqueVaultItem().makeWritable())
 
             #expect(try fixture.savedState().items.map(\.id) == [first.rawValue, second.rawValue])
-            await #expect(throws: EncryptedVaultStoreError.conflict) {
-                try await app.delete(id: first)
-            }
+            #expect(try await fixture.savedState() == autoFill.records.state)
             try await app.delete(id: first)
             #expect(try fixture.savedState().items.map(\.id) == [second.rawValue])
+            #expect(try await fixture.savedState() == app.records.state)
         }
+    }
+
+    /// An update made on top of another writer's change to the same item wins, as the last save does in the SQLite
+    /// store.
+    @Test
+    func update_onTopOfAnotherWritersChangeToTheSameItem_winsLikeTheLastSave() async throws {
+        let item = uniqueVaultItem(userDescription: "Original")
+        let fixture = try EncryptedVaultFixture(state: Self.state(items: [item]))
+        let app = try await fixture.openStore()
+        let autoFill = try await fixture.openStore()
+
+        try await autoFill.update(id: item.id, item: uniqueVaultItem(userDescription: "AutoFill").makeWritable())
+        try await app.update(id: item.id, item: uniqueVaultItem(userDescription: "App").makeWritable())
+
+        #expect(try fixture.savedState().items.map(\.userDescription) == ["App"])
+    }
+
+    @Test
+    func update_ofAnItemAnotherWriterDeleted_throwsItemNotFound() async throws {
+        let item = uniqueVaultItem()
+        let fixture = try EncryptedVaultFixture(state: Self.state(items: [item]))
+        let app = try await fixture.openStore()
+        let autoFill = try await fixture.openStore()
+        try await autoFill.delete(id: item.id)
+
+        await #expect(throws: RecordVaultStore.Error.itemNotFound) {
+            try await app.update(id: item.id, item: uniqueVaultItem().makeWritable())
+        }
+
+        #expect(await app.records.state == .empty)
     }
 
     @Test
     func twoStoresWritingAtOnce_neverLoseAWrite() async throws {
         try await withTemporaryDirectory { directory in
             let fixture = try EncryptedVaultFixture(fileSystem: LiveSlotFileSystem(), directory: directory)
-            let stores = try [fixture.openStore(), fixture.openStore()]
+            let stores = try await [fixture.openStore(), fixture.openStore()]
 
             let ids = try await withThrowingTaskGroup(of: [UUID].self) { group in
                 for store in stores {
@@ -301,28 +384,46 @@ extension EncryptedVaultStoreTests {
         }
     }
 
+    /// For example, AutoFill advanced a HOTP counter just before the killphrase was typed in the app.
     @Test
-    func deleteItemsMatchingKillphrase_returnsFalseOnAConflictAndTakesTheOtherWrite() async throws {
+    func deleteItemsMatchingKillphrase_afterAnotherWritersChange_stillDeletesAndKeepsTheirChange() async throws {
         let item = uniqueVaultItem(killphrase: "red")
         let fixture = try EncryptedVaultFixture(state: Self.state(items: [item]))
-        let app = try fixture.openStore()
-        let autoFill = try fixture.openStore()
+        let app = try await fixture.openStore()
+        let autoFill = try await fixture.openStore()
         let other = try await autoFill.insert(item: uniqueVaultItem().makeWritable())
 
         let didDelete = await app.deleteItems(matchingKillphrase: "red", using: testDigester)
 
-        #expect(!didDelete)
-        #expect(await app.records.state.items.map(\.id) == [item.id.rawValue, other.rawValue])
-        #expect(await app.deleteItems(matchingKillphrase: "red", using: testDigester))
+        #expect(didDelete)
         #expect(try fixture.savedState().items.map(\.id) == [other.rawValue])
+        #expect(try await fixture.savedState() == app.records.state)
+    }
+
+    /// A phrase that matches nothing saves nothing, so it doesn't pick up another writer's change either: nothing
+    /// about the store changes.
+    @Test
+    func deleteItemsMatchingKillphrase_matchingNothing_changesNothing() async throws {
+        let item = uniqueVaultItem(killphrase: "red")
+        let fixture = try EncryptedVaultFixture(state: Self.state(items: [item]))
+        let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.file.fileSystem)
+        let app = try await fixture.through(fileSystem).openStore()
+        let stateBefore = await app.records.state
+        let steps = fileSystem.log.count
+
+        let didDelete = await app.deleteItems(matchingKillphrase: "blue", using: testDigester)
+
+        #expect(!didDelete)
+        #expect(fileSystem.log.count == steps)
+        #expect(await app.records.state == stateBefore)
     }
 
     @Test
     func twoVaultsInOneFile_saveWithoutDisturbingEachOther() async throws {
         let first = try EncryptedVaultFixture(slotIndex: 3)
-        let second = try first.addingVault(inSlot: 9)
-        let firstStore = try first.openStore()
-        let secondStore = try second.openStore()
+        let second = try await first.addingVault(inSlot: 9)
+        let firstStore = try await first.openStore()
+        let secondStore = try await second.openStore()
 
         for _ in 0 ..< 3 {
             try await firstStore.insert(item: uniqueVaultItem().makeWritable())
@@ -338,8 +439,8 @@ extension EncryptedVaultStoreTests {
     @Test
     func save_afterTheSlotWasRewrapped_throwsSlotLostAndChangesNothing() async throws {
         let fixture = try EncryptedVaultFixture()
-        let sut = try fixture.openStore()
-        try fixture.file.withLock { file in
+        let sut = try await fixture.openStore()
+        try await fixture.file.withLock { file in
             var contents = try #require(try file.read())
             let slot = try contents.openSlot(fixture.slotIndex, with: fixture.rootKey)
             try contents.rewrap(slot, with: .password(derivedKey: SymmetricKey(size: .bits256)), wrappedAt: Date())
@@ -376,7 +477,7 @@ extension EncryptedVaultStoreTests {
 
             for _ in 0 ..< 3 {
                 let start = clock.now
-                let store = try fixture.openStore()
+                let store = try await fixture.openStore()
                 _ = try await store.retrieve(query: .init())
                 loads.append(clock.now - start)
 

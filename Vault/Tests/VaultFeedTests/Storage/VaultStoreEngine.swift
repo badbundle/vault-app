@@ -55,7 +55,7 @@ enum VaultStoreEngine: CaseIterable, Sendable, CustomTestStringConvertible {
         case .records:
             return RecordVaultStore(sortOrder: sortOrder)
         case .encrypted:
-            return try EncryptedVaultFixture().openStore(sortOrder: sortOrder)
+            return try await EncryptedVaultFixture().openStore(sortOrder: sortOrder)
         }
     }
 }
@@ -178,10 +178,10 @@ extension EncryptedVaultStore: ContractTestableVaultStore {
     }
 
     func corruptItemAlgorithm(id: Identifier<VaultItem>) async throws {
-        var state = await records.state
-        let index = try #require(state.items.firstIndex { $0.id == id.rawValue }, "Item not found")
-        state.items[index].otpDetails?.algorithm = "INVALID"
-        try await records.commit(state)
+        let index = try #require(await records.state.items.firstIndex { $0.id == id.rawValue }, "Item not found")
+        try await records.change { state in
+            state.items[index].otpDetails?.algorithm = "INVALID"
+        }
     }
 
     func storedItemIDs() async throws -> Set<UUID> {
@@ -191,11 +191,12 @@ extension EncryptedVaultStore: ContractTestableVaultStore {
     /// The state in memory, after checking the vault's slot of the file holds exactly the same.
     func requireSavedState(sourceLocation: SourceLocation = #_sourceLocation) async throws -> VaultRecordState {
         let persistence = try #require(await records.persistence as? SlotFilePersistence)
-        let contents = try #require(try persistence.file.open())
-        let slot = try contents.reopen(persistence.slot)
-        let saved = try EncryptedVaultPayload.decode(contents.openPayload(of: slot))
+        let contents = try #require(try await persistence.file.open())
+        let lastSaved = await persistence.slot
+        let slot = try contents.reopen(lastSaved)
+        let saved = try EncryptedVaultPayload.decode(slot: slot, in: contents)
         let state = await records.state
-        #expect(slot.generation == persistence.slot.generation, sourceLocation: sourceLocation)
+        #expect(slot.generation == lastSaved.generation, sourceLocation: sourceLocation)
         #expect(saved == state, "The file doesn't hold what's in memory", sourceLocation: sourceLocation)
         return state
     }

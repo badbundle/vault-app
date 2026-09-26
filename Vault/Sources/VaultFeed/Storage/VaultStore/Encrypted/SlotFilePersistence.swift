@@ -10,31 +10,38 @@ import Foundation
 ///    is written: the save returns what the other writer saved.
 /// 3. Replaces the file (`EncryptedVaultFile.Locked.write(_:verify:)`), verifying first that the file as read back
 ///    opens the slot at the new generation and decodes to exactly the state being saved.
-struct SlotFilePersistence: VaultRecordPersistence {
+///
+/// `RecordVaultStore` makes one save at a time, so a save always starts from the slot the last one left.
+actor SlotFilePersistence: VaultRecordPersistence {
     let file: EncryptedVaultFile
     /// The vault's slot, as this vault last saved or read it.
-    var slot: VaultSlotFile.OpenedSlot
+    private(set) var slot: VaultSlotFile.OpenedSlot
 
-    mutating func save(_ state: VaultRecordState) throws -> VaultRecordSaveOutcome {
+    init(file: EncryptedVaultFile, slot: VaultSlotFile.OpenedSlot) {
+        self.file = file
+        self.slot = slot
+    }
+
+    func save(_ state: VaultRecordState) async throws -> VaultRecordSaveOutcome {
         var payload = try EncryptedVaultPayload.encode(state)
         defer { SlotRandom.wipe(&payload.data) }
         let slot = slot
-        let saved = try file.withLock { file -> (VaultSlotFile.OpenedSlot, VaultRecordSaveOutcome) in
+        let (saved, outcome) = try await file.withLock { [payload] file in
             guard var contents = try file.read() else { throw EncryptedVaultStoreError.fileMissing }
             let sealed: VaultSlotFile.OpenedSlot
             do {
                 sealed = try contents.seal(payload, in: slot)
             } catch VaultSlotFileError.slotChanged {
                 let (current, saved) = try Self.reload(slot, from: contents)
-                return (current, .conflict(saved: saved))
+                return (current, VaultRecordSaveOutcome.conflict(saved: saved))
             }
             try file.write(contents) { written in
                 try Self.verify(written, holds: state, in: sealed)
             }
             return (sealed, .saved)
         }
-        self.slot = saved.0
-        return saved.1
+        self.slot = saved
+        return outcome
     }
 
     /// The slot and the state saved in it, after another writer saved it.
@@ -51,7 +58,7 @@ struct SlotFilePersistence: VaultRecordPersistence {
         } catch {
             throw EncryptedVaultStoreError.slotLost
         }
-        return try (current, EncryptedVaultPayload.decode(contents.openPayload(of: current)))
+        return try (current, EncryptedVaultPayload.decode(slot: current, in: contents))
     }
 
     /// Throws `EncryptedVaultStoreError.verificationFailed` unless the file opens the slot at the sealed generation
@@ -67,7 +74,7 @@ struct SlotFilePersistence: VaultRecordPersistence {
             guard reopened.generation == sealed.generation else {
                 throw EncryptedVaultStoreError.verificationFailed
             }
-            saved = try EncryptedVaultPayload.decode(written.openPayload(of: reopened))
+            saved = try EncryptedVaultPayload.decode(slot: reopened, in: written)
         } catch {
             throw EncryptedVaultStoreError.verificationFailed
         }

@@ -9,9 +9,9 @@ import VaultCore
 /// `EncryptedVaultFile`), and only then publishes them. So memory is never ahead of the disk, and a change that
 /// fails leaves both as they were and throws.
 ///
-/// - If another app or extension saved the vault since this store last read or saved it, the change fails with
-///   `EncryptedVaultStoreError.conflict`, and the store takes what the other writer saved. Trying again starts from
-///   there, so neither writer's change is lost.
+/// - If another app or extension saved the vault since this store last read or saved it, the store takes what the
+///   other writer saved and makes the change again on top of it, so neither writer's change is lost. Only if that
+///   keeps happening does the change fail, with `EncryptedVaultStoreError.conflict`.
 /// - Deleting by killphrase returns `false` whatever the failure, the same as when nothing matches (MANIFESTO C2).
 ///
 /// It behaves exactly as `RecordVaultStore` does, which it's built on. Finding the slot a password opens, within the
@@ -35,7 +35,7 @@ public final class EncryptedVaultStore: Sendable {
         sortOrder: VaultStoreSortOrder = .relativeOrder,
         currentDate: @escaping @Sendable () -> Date = { Date() },
     ) throws {
-        let state = try EncryptedVaultPayload.decode(contents.openPayload(of: slot))
+        let state = try EncryptedVaultPayload.decode(slot: slot, in: contents)
         records = RecordVaultStore(
             state: state,
             sortOrder: sortOrder,

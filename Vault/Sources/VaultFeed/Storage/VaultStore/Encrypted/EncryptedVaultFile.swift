@@ -5,25 +5,40 @@ import Foundation
 /// Every writer, in the app or an extension, holds `vault-slots.lock` with `flock` while it reads and replaces the
 /// file, so they take turns. A replacement never overwrites the only copy of anything:
 ///
-/// 1. The new file is written to a temp file, `.vault-slots.tmp-<random>`, and flushed with `F_FULLFSYNC`.
-/// 2. It's read back and verified: it must match what was written byte for byte, and the writer checks that its
-///    slot opens to what it saved.
-/// 3. It's renamed over `vault-slots.v1`, which replaces every slot in one step. Then the directory is flushed.
+/// 1. Temp files an earlier writer left behind, by crashing before its rename, are removed.
+/// 2. The new file is written to a temp file, `.vault-slots.tmp-<random>`, and flushed with `F_FULLFSYNC`.
+/// 3. It's read back and verified: it must match what was written byte for byte, and the writer checks that its
+///    slot opens to what it saved. The read most likely comes from the page cache, so this proves the sealing and
+///    encoding round-trip, not what reached storage.
+/// 4. It's renamed over `vault-slots.v1`, which replaces every slot in one step. Then the directory is flushed.
 ///
 /// A failure before the rename removes the temp file and leaves the old file as it was. A crash before the rename
-/// leaves a temp file behind, which `open()` removes. See "Crash safety" in `docs/on-device-encryption.md`.
+/// leaves a temp file behind, which the next write, or `open()`, removes. Each is an old copy of the whole file, so
+/// it could hold items deleted since (MANIFESTO C6). See "Crash safety" in `docs/on-device-encryption.md`.
 struct EncryptedVaultFile: Sendable {
     static let fileName = "vault-slots.v1"
     static let lockFileName = "vault-slots.lock"
     static let temporaryFilePrefix = ".vault-slots.tmp-"
+    /// How often `withLock(_:)` tries the lock while another writer holds it.
+    static let lockRetryInterval = Duration.milliseconds(2)
 
     /// The directory the file is in.
     let directory: URL
     let fileSystem: any SlotFileSystem
+    /// How long `withLock(_:)` waits for another writer before giving up with `EWOULDBLOCK`.
+    ///
+    /// A save holds the lock for tens of milliseconds, so waiting this long means something is wrong, and a store
+    /// that waited forever would never finish its change or let the vault lock.
+    let lockTimeout: Duration
 
-    init(directory: URL, fileSystem: any SlotFileSystem = LiveSlotFileSystem()) {
+    init(
+        directory: URL,
+        fileSystem: any SlotFileSystem = LiveSlotFileSystem(),
+        lockTimeout: Duration = .seconds(10),
+    ) {
         self.directory = directory
         self.fileSystem = fileSystem
+        self.lockTimeout = lockTimeout
     }
 
     var url: URL {
@@ -34,24 +49,36 @@ struct EncryptedVaultFile: Sendable {
         directory.appending(path: Self.lockFileName)
     }
 
-    /// Reads the file to unlock a vault from it, first removing any temp files a crash left behind.
+    /// Reads the file to unlock a vault from it, first removing any temp files a crash left behind, as far as it
+    /// can. (A write removes them too, and fails if it can't.)
     ///
     /// - Returns: The file, or `nil` if there isn't one.
-    func open() throws -> VaultSlotFile? {
-        try withLock { file in
-            file.removeStrayTemporaryFiles()
+    func open() async throws -> VaultSlotFile? {
+        try await withLock { file in
+            try? file.removeStrayTemporaryFiles()
             return try file.read()
         }
     }
 
     /// Runs `body` holding the lock, so no other writer changes the file meanwhile.
     ///
-    /// Waiting for the lock blocks the calling thread, briefly: another writer only holds it while it replaces the
-    /// file.
-    func withLock<Result>(_ body: (Locked) throws -> Result) throws -> Result {
-        let lock = try fileSystem.lock(lockURL)
+    /// While another writer holds the lock, it tries again every couple of milliseconds, without blocking a thread,
+    /// for up to `lockTimeout`.
+    func withLock<Result>(_ body: (Locked) throws -> Result) async throws -> Result {
+        let lock = try await acquireLock()
         defer { fileSystem.unlock(lock) }
         return try body(Locked(file: self))
+    }
+
+    private func acquireLock() async throws -> SlotFileLock {
+        let deadline = ContinuousClock.now + lockTimeout
+        while true {
+            if let lock = try fileSystem.tryLock(lockURL) {
+                return lock
+            }
+            guard ContinuousClock.now < deadline else { throw POSIXError(.EWOULDBLOCK) }
+            try await Task.sleep(for: Self.lockRetryInterval)
+        }
     }
 }
 
@@ -69,8 +96,10 @@ extension EncryptedVaultFile {
         ///
         /// - Parameter verify: Checks the file as it was read back, before it replaces the old one. It throws if the
         ///   file doesn't hold what the writer meant it to.
-        /// - Throws: If any step before the rename fails, leaving the old file as it was and no temp file.
+        /// - Throws: If temp files left behind by a crash can't be removed, or if any step before the rename fails.
+        ///   The old file stays as it was, and this write leaves no temp file, unless removing it fails too.
         func write(_ newFile: VaultSlotFile, verify: (VaultSlotFile) throws -> Void) throws {
+            try removeStrayTemporaryFiles()
             let fileSystem = file.fileSystem
             let temporaryURL = file.directory.appending(path: temporaryFilePrefix + UUID().uuidString)
             do {
@@ -91,14 +120,15 @@ extension EncryptedVaultFile {
             try? fileSystem.synchronizeDirectory(at: file.directory)
         }
 
-        /// Removes temp files left by a writer that crashed before its rename, as far as it can.
+        /// Removes temp files left by a writer that crashed before its rename, or whose removal failed.
         ///
         /// They're safe to remove while the lock is held, because a writer holds it until its temp file is renamed
-        /// or removed. Each is an old copy of the whole file, so leaving it would show which slots changed since.
-        func removeStrayTemporaryFiles() {
-            let contents = (try? file.fileSystem.contentsOfDirectory(at: file.directory)) ?? []
+        /// or removed. Each is an old copy of the whole file: it could hold items deleted since, under the same keys,
+        /// and it would show which slots changed since.
+        func removeStrayTemporaryFiles() throws {
+            let contents = try file.fileSystem.contentsOfDirectory(at: file.directory)
             for url in contents where url.lastPathComponent.hasPrefix(temporaryFilePrefix) {
-                try? file.fileSystem.removeItem(at: url)
+                try file.fileSystem.removeItem(at: url)
             }
         }
     }

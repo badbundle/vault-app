@@ -7,13 +7,18 @@ import FoundationExtensions
 /// Every operation but `unlock(_:)` is a step. Steps are numbered from 1, counting from when the fault was injected.
 final class FaultInjectingSlotFileSystem: SlotFileSystem {
     enum Fault: Equatable, Sendable {
-        /// That step throws, and everything else works.
-        case fail(atStep: Int)
+        /// Those steps throw, and everything else works.
+        case fail(atSteps: Set<Int>)
         /// The process "crashes" at that step: it and every later step throw, so nothing after it happens, including
         /// the clean-up a failure would do. Locks are still released, as the system releases a dead process's locks.
         case crash(atStep: Int)
         /// Reading back a temp file gives different bytes from the ones written.
         case corruptReadBack
+
+        /// That step throws, and everything else works.
+        static func fail(atStep step: Int) -> Fault {
+            .fail(atSteps: [step])
+        }
     }
 
     struct InjectedFault: Error {}
@@ -44,9 +49,9 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         }
     }
 
-    func lock(_ url: URL) throws -> SlotFileLock {
+    func tryLock(_ url: URL) throws -> SlotFileLock? {
         try step("lock \(Self.name(url))")
-        return try base.lock(url)
+        return try base.tryLock(url)
     }
 
     func unlock(_ lock: SlotFileLock) {
@@ -101,7 +106,7 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
             return (state.stepsSinceInjecting, state.fault)
         }
         switch fault {
-        case let .fail(atStep) where number == atStep:
+        case let .fail(atSteps) where atSteps.contains(number):
             throw InjectedFault()
         case let .crash(atStep) where number >= atStep:
             throw InjectedFault()

@@ -2,8 +2,8 @@ import Foundation
 
 /// Why an encrypted vault couldn't be read or saved.
 public enum EncryptedVaultStoreError: Error, Equatable, Sendable {
-    /// Another app or extension saved the vault after this store last read or saved it, so this change wasn't
-    /// saved. The store now holds what the other writer saved, so trying again starts from there.
+    /// Other apps or extensions saved the vault each time this change was about to, so it gave up and wasn't
+    /// saved. The store holds what they saved, so trying again starts from there.
     case conflict
     /// The vault's slot has been rewrapped or replaced since the vault was unlocked, for example by a password
     /// change, so this store can't save to it. The vault has to be unlocked again.

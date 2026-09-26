@@ -48,9 +48,9 @@ struct EncryptedVaultFixture {
     }
 
     /// Creates another vault, holding `state`, in another slot of the same file.
-    func addingVault(inSlot index: Int, state: VaultRecordState = .empty) throws -> EncryptedVaultFixture {
+    func addingVault(inSlot index: Int, state: VaultRecordState = .empty) async throws -> EncryptedVaultFixture {
         let rootKey = VaultSlotRootKey.password(derivedKey: SymmetricKey(size: .bits256))
-        try file.withLock { file in
+        try await file.withLock { file in
             var contents = try #require(try file.read())
             try contents.createVault(
                 inSlot: index,
@@ -76,8 +76,8 @@ struct EncryptedVaultFixture {
     func openStore(
         sortOrder: VaultStoreSortOrder = .relativeOrder,
         currentDate: @escaping @Sendable () -> Date = { Date() },
-    ) throws -> EncryptedVaultStore {
-        let contents = try #require(try file.open())
+    ) async throws -> EncryptedVaultStore {
+        let contents = try #require(try await file.open())
         return try EncryptedVaultStore(
             file: file,
             contents: contents,
@@ -95,7 +95,7 @@ struct EncryptedVaultFixture {
     /// The vault as it's saved on disk now.
     func savedState() throws -> VaultRecordState {
         let contents = try VaultSlotFile(bytes: bytes())
-        return try EncryptedVaultPayload.decode(contents.openPayload(of: contents.openSlot(slotIndex, with: rootKey)))
+        return try EncryptedVaultPayload.decode(slot: contents.openSlot(slotIndex, with: rootKey), in: contents)
     }
 
     /// The slot as it's saved on disk now.

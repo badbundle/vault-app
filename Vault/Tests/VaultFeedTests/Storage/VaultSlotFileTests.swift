@@ -538,13 +538,42 @@ extension VaultSlotFileTests {
         }
     }
 
+    @Test(arguments: VaultSlotCompression.allCases)
+    func decompress_stopsPastTheMaximumLength(compression: VaultSlotCompression) throws {
+        let data = Data(String(repeating: "vault ", count: 20000).utf8)
+        let compressed = try compression.compress(data)
+
+        #expect(try compression.decompress(compressed, maximumLength: data.count) == data)
+        #expect(throws: VaultSlotFileError.payloadTooLarge) {
+            try compression.decompress(compressed, maximumLength: data.count - 1)
+        }
+    }
+
+    @Test
+    func createVaultAndSeal_refuseAPayloadLongerThanTheMaximum() throws {
+        var file = try makeFile()
+        let created = try file.createVault(inSlot: 0, rootKey: randomKey(), payload: payload("first"), wrappedAt: date)
+        let before = file.bytes
+        // Zeros compress to almost nothing, so only the length itself is too large.
+        let tooLong = VaultSlotPayload(version: 1, data: Data(count: VaultSlotFile.maximumPayloadLength + 1))
+
+        #expect(throws: VaultSlotFileError.payloadTooLarge) {
+            try file.createVault(inSlot: 1, rootKey: randomKey(), payload: tooLong, wrappedAt: date)
+        }
+        #expect(throws: VaultSlotFileError.payloadTooLarge) {
+            try file.seal(tooLong, in: created)
+        }
+        #expect(file.bytes == before)
+        #expect(VaultSlotFile.maximumPayloadLength == 64 * mebibyte)
+    }
+
     @Test
     func lzfse_refusesAStreamThatIsCutShortOrIsNotLZFSE() throws {
         let compressed = try VaultSlotCompression.lzfse.compress(Data(String(repeating: "vault ", count: 20000).utf8))
 
         for broken in [Data(), compressed.prefix(compressed.count / 2), Data(repeating: 0xAB, count: 256)] {
             #expect(throws: VaultSlotFileError.compressionFailed) {
-                try VaultSlotCompression.lzfse.decompress(broken)
+                try VaultSlotCompression.lzfse.decompress(broken, maximumLength: .max)
             }
         }
     }

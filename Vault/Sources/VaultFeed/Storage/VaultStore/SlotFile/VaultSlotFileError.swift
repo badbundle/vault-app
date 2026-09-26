@@ -16,7 +16,8 @@ public enum VaultSlotFileError: Error, Equatable {
     case unsupportedCompression(UInt32)
     /// The slot has been written or rewrapped since it was opened.
     case slotChanged
-    /// The compressed payload doesn't fit even the largest slot size.
+    /// The payload is longer than `VaultSlotFile.maximumPayloadLength`, or doesn't fit even the largest slot size
+    /// once compressed.
     case payloadTooLarge
     /// Compressing or decompressing the payload failed.
     case compressionFailed

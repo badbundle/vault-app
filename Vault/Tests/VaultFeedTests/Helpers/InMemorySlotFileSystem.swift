@@ -4,7 +4,7 @@ import FoundationExtensions
 
 /// A file system in memory, for tests that don't need a real disk.
 ///
-/// Locks behave like `flock`: one holder at a time, and `lock(_:)` waits while someone else holds one.
+/// Locks behave like `flock`: one holder at a time.
 final class InMemorySlotFileSystem: SlotFileSystem {
     private struct State {
         var files = [String: Data]()
@@ -14,19 +14,13 @@ final class InMemorySlotFileSystem: SlotFileSystem {
 
     private let state = SharedMutex(State())
 
-    func lock(_ url: URL) throws -> SlotFileLock {
-        while true {
-            let lock = state.modify { state -> SlotFileLock? in
-                guard !state.heldLocks.contains(url.path) else { return nil }
-                state.heldLocks.insert(url.path)
-                state.files[url.path] = state.files[url.path] ?? Data()
-                state.lastDescriptor += 1
-                return SlotFileLock(url: url, descriptor: state.lastDescriptor)
-            }
-            if let lock {
-                return lock
-            }
-            usleep(1000)
+    func tryLock(_ url: URL) throws -> SlotFileLock? {
+        state.modify { state in
+            guard !state.heldLocks.contains(url.path) else { return nil }
+            state.heldLocks.insert(url.path)
+            state.files[url.path] = state.files[url.path] ?? Data()
+            state.lastDescriptor += 1
+            return SlotFileLock(url: url, descriptor: state.lastDescriptor)
         }
     }
 

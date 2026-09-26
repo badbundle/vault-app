@@ -8,14 +8,14 @@ struct EncryptedVaultFileTests {
     // MARK: Replacing the file
 
     @Test
-    func write_replacesTheFileThroughAFlushedAndVerifiedTempFile() throws {
+    func write_replacesTheFileThroughAFlushedAndVerifiedTempFile() async throws {
         let fixture = try EncryptedVaultFixture()
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.file.fileSystem)
         let file = fixture.through(fileSystem).file
         let newFile = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
         var verified: VaultSlotFile?
 
-        try file.withLock { file in
+        try await file.withLock { file in
             try file.write(newFile) { verified = $0 }
         }
 
@@ -24,6 +24,7 @@ struct EncryptedVaultFileTests {
         #expect(try fixture.temporaryFileNames().isEmpty)
         #expect(fileSystem.log == [
             "lock vault-slots.lock",
+            "list directory",
             "create temp",
             "flush temp",
             "read temp",
@@ -34,13 +35,13 @@ struct EncryptedVaultFileTests {
     }
 
     @Test
-    func write_thatFailsVerification_leavesTheOldFileAndNoTempFile() throws {
+    func write_thatFailsVerification_leavesTheOldFileAndNoTempFile() async throws {
         let fixture = try EncryptedVaultFixture()
         let bytesBefore = try fixture.bytes()
         let newFile = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
 
-        #expect(throws: VerifyError.self) {
-            try fixture.file.withLock { file in
+        await #expect(throws: VerifyError.self) {
+            try await fixture.file.withLock { file in
                 try file.write(newFile) { _ in throw VerifyError() }
             }
         }
@@ -50,7 +51,28 @@ struct EncryptedVaultFileTests {
     }
 
     @Test
-    func open_removesOnlyTemporaryFiles() throws {
+    func write_thatCantRemoveAStrayTempFile_writesNothing() async throws {
+        let fixture = try EncryptedVaultFixture()
+        let fileSystem = FaultInjectingSlotFileSystem(wrapping: fixture.file.fileSystem)
+        let stray = fixture.file.directory.appending(path: EncryptedVaultFile.temporaryFilePrefix + "stray")
+        try fileSystem.createFile(at: stray, contents: Data())
+        let bytesBefore = try fixture.bytes()
+        let newFile = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
+
+        // Counting from here: lock, list the directory, remove the stray.
+        fileSystem.inject(.fail(atStep: 3))
+        await #expect(throws: FaultInjectingSlotFileSystem.InjectedFault.self) {
+            try await fixture.through(fileSystem).file.withLock { file in
+                try file.write(newFile) { _ in }
+            }
+        }
+
+        #expect(try fixture.bytes() == bytesBefore)
+        #expect(try fixture.temporaryFileNames() == [stray.lastPathComponent])
+    }
+
+    @Test
+    func open_removesOnlyTemporaryFiles() async throws {
         let fileSystem = InMemorySlotFileSystem()
         let fixture = try EncryptedVaultFixture(fileSystem: fileSystem)
         let directory = fixture.file.directory
@@ -63,7 +85,7 @@ struct EncryptedVaultFileTests {
             )
         }
 
-        let opened = try fixture.file.open()
+        let opened = try await fixture.file.open()
 
         #expect(try opened?.bytes == fixture.bytes())
         let names = try Set(fileSystem.contentsOfDirectory(at: directory).map(\.lastPathComponent))
@@ -111,42 +133,49 @@ extension EncryptedVaultFileTests {
 
     /// `flock` locks belong to an open file, so two opens in one process exclude each other as two processes do.
     @Test
-    func live_lockGivesUpWhileAnotherHolderKeepsIt() async throws {
+    func live_tryLockFindsTheLockHeldUntilItsHolderLetsGo() async throws {
         try await withTemporaryDirectory { directory in
             let url = directory.appending(path: EncryptedVaultFile.lockFileName)
-            let holder = LiveSlotFileSystem()
-            let waiter = LiveSlotFileSystem(lockTimeout: .milliseconds(100))
-            let held = try holder.lock(url)
+            let fileSystem = LiveSlotFileSystem()
+            let held = try #require(try fileSystem.tryLock(url))
 
-            let start = ContinuousClock.now
-            #expect(throws: POSIXError(.EWOULDBLOCK)) {
-                try waiter.lock(url)
-            }
-            #expect(ContinuousClock.now - start >= .milliseconds(100))
+            #expect(try fileSystem.tryLock(url) == nil)
 
-            holder.unlock(held)
-            try waiter.unlock(waiter.lock(url))
+            fileSystem.unlock(held)
+            let again = try #require(try fileSystem.tryLock(url))
+            fileSystem.unlock(again)
         }
     }
 
     @Test
-    func live_lockWaitsForTheHolderToLetGo() async throws {
+    func withLock_waitsForTheHolderToLetGo() async throws {
         try await withTemporaryDirectory { directory in
-            let url = directory.appending(path: EncryptedVaultFile.lockFileName)
-            let fileSystem = LiveSlotFileSystem()
-            let held = try fileSystem.lock(url)
+            let file = EncryptedVaultFile(directory: directory)
+            let held = try #require(try file.fileSystem.tryLock(file.lockURL))
 
-            let waiting = Task.detached {
-                let lock = try fileSystem.lock(url)
-                let taken = ContinuousClock.now
-                fileSystem.unlock(lock)
-                return taken
+            let waiting = Task {
+                try await file.withLock { _ in ContinuousClock.now }
             }
             try await Task.sleep(for: .milliseconds(50))
             let released = ContinuousClock.now
-            fileSystem.unlock(held)
+            file.fileSystem.unlock(held)
 
             #expect(try await waiting.value >= released)
+        }
+    }
+
+    @Test
+    func withLock_givesUpWhileAnotherHolderKeepsIt() async throws {
+        try await withTemporaryDirectory { directory in
+            let file = EncryptedVaultFile(directory: directory, lockTimeout: .milliseconds(100))
+            let held = try #require(try file.fileSystem.tryLock(file.lockURL))
+            defer { file.fileSystem.unlock(held) }
+
+            let start = ContinuousClock.now
+            await #expect(throws: POSIXError(.EWOULDBLOCK)) {
+                try await file.withLock { _ in }
+            }
+            #expect(ContinuousClock.now - start >= .milliseconds(100))
         }
     }
 }
