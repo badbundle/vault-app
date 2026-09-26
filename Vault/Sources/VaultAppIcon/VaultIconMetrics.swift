@@ -25,11 +25,6 @@ public struct VaultIconMetrics: Sendable {
     public var spokeReach: CGFloat = 0.175
     /// Radius of the knob on the end of each spoke.
     public var knobRadius: CGFloat = 0.046
-    /// Width of the rim-light stroke along the door's edges.
-    public var highlightWidth: CGFloat = 0.008
-    /// Width of the rim inside the edge of each round part of the wheel, lit above
-    /// and shaded below, so parts that small still read as turned.
-    public var wheelRimWidth: CGFloat = 0.0065
     /// Degrees the door swings on its hinge when fully open (`doorOpening == 1`).
     public var doorOpenAngle: Double = 26
 
@@ -54,8 +49,6 @@ public struct VaultIconMetrics: Sendable {
         scaled.spokeInnerStart *= factor
         scaled.spokeReach *= factor
         scaled.knobRadius *= factor
-        scaled.highlightWidth *= factor
-        scaled.wheelRimWidth *= factor
         return scaled
     }
 }

@@ -15,7 +15,7 @@ public struct VaultAppIconView: View {
     public var body: some View {
         ZStack {
             if appearance.hasOpaqueBackground {
-                appearance.palette.backgroundGradient
+                appearance.palette.background
             }
             VaultLockGlyphView(appearance: appearance)
         }
