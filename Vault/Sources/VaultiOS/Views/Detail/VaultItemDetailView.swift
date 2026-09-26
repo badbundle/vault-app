@@ -213,7 +213,8 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View>:
                         }
                     },
                 )
-            case nil:
+            case .decrypt, .decryptionFailed, nil:
+                // Decrypting belongs to `EncryptedItemDetailView`: here the door only locks and unlocks.
                 VaultLockGlyphView(appearance: appearance, metrics: .compact)
             }
         }

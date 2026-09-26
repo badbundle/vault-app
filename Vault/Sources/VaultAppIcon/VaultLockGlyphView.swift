@@ -11,7 +11,7 @@ public struct VaultLockGlyphView: View {
     public var wheelRotation: Angle
     /// 0 is shut; 1 is swung open by `metrics.doorOpenAngle`.
     public var doorOpening: Double
-    public var appearance: VaultAppIconAppearance
+    public var palette: VaultAppIconPalette
     public var metrics: VaultIconMetrics
 
     public init(
@@ -20,9 +20,20 @@ public struct VaultLockGlyphView: View {
         appearance: VaultAppIconAppearance = .light,
         metrics: VaultIconMetrics = .standard,
     ) {
+        self.init(wheelRotation: wheelRotation, doorOpening: doorOpening, palette: appearance.palette, metrics: metrics)
+    }
+
+    /// Drawn in colors of its own rather than one of the icon's appearances, such
+    /// as `.monochrome(.white)` on a colored background.
+    public init(
+        wheelRotation: Angle = .zero,
+        doorOpening: Double = 0,
+        palette: VaultAppIconPalette,
+        metrics: VaultIconMetrics = .standard,
+    ) {
         self.wheelRotation = wheelRotation
         self.doorOpening = doorOpening
-        self.appearance = appearance
+        self.palette = palette
         self.metrics = metrics
     }
 
@@ -43,7 +54,6 @@ public struct VaultLockGlyphView: View {
     }
 
     private func artwork(side: CGFloat) -> some View {
-        let palette = appearance.palette
         let door = VaultDoorShape(metrics: metrics)
         // Rotating the shape rather than the view keeps the light coming from
         // above while the wheel turns.

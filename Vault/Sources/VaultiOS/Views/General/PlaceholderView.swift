@@ -5,6 +5,9 @@ import SwiftUI
 struct PlaceholderView<Icon: View>: View {
     var title: String
     var subtitle: String?
+    /// A step down from the title by default. `.primary` keeps it as bold as the
+    /// title, for white text on a colored background.
+    var subtitleStyle: HierarchicalShapeStyle = .secondary
     /// Drawn at `.largeTitle` size; a system image by default.
     @ViewBuilder var icon: () -> Icon
 
@@ -23,7 +26,7 @@ struct PlaceholderView<Icon: View>: View {
                 if let subtitle {
                     Text(subtitle)
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(subtitleStyle)
                 }
             }
             .transaction { transaction in

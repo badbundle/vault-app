@@ -88,6 +88,19 @@ public struct VaultAppIconPalette: Sendable {
         self.highlight = highlight
     }
 
+    /// The door and wheel in one flat `color`, with no background or rim light:
+    /// the glyph as a symbol, for drawing on a colored background.
+    public static func monochrome(_ color: Color) -> VaultAppIconPalette {
+        VaultAppIconPalette(
+            backgroundTop: .clear,
+            backgroundBottom: .clear,
+            metalTop: color,
+            metalMiddle: color,
+            metalBottom: color,
+            highlight: .clear,
+        )
+    }
+
     public var backgroundGradient: LinearGradient {
         LinearGradient(colors: [backgroundTop, backgroundBottom], startPoint: .top, endPoint: .bottom)
     }

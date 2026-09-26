@@ -149,11 +149,68 @@ final class EncryptedItemDetailViewModelTests {
             Issue.record("Unexpected state \(sut.state)")
         }
     }
+
+    @Test
+    func canStartDecryption_falseOnceDecrypted() async throws {
+        let sut = try makeSUTWithSecureNote(password: "hello")
+        sut.enteredEncryptionPassword = "hello"
+
+        await sut.startDecryption()
+
+        #expect(sut.canStartDecryption == false)
+    }
+
+    @Test
+    func canStartDecryption_trueAfterIncorrectPassword() async throws {
+        let sut = try makeSUTWithSecureNote(password: "hello")
+        sut.enteredEncryptionPassword = "incorrect password"
+
+        await sut.startDecryption()
+
+        #expect(sut.canStartDecryption == true)
+    }
+
+    @Test
+    func isDecrypted_isInitiallyFalse() {
+        let sut = makeSUT(item: anyEncryptedItem())
+
+        #expect(sut.isDecrypted == false)
+    }
+
+    @Test
+    func isDecrypted_trueOnceDecrypted() async throws {
+        let sut = try makeSUTWithSecureNote(password: "hello")
+        sut.enteredEncryptionPassword = "hello"
+
+        await sut.startDecryption()
+
+        #expect(sut.isDecrypted == true)
+    }
+
+    @Test
+    func isDecrypted_falseAfterIncorrectPassword() async throws {
+        let sut = try makeSUTWithSecureNote(password: "hello")
+        sut.enteredEncryptionPassword = "incorrect password"
+
+        await sut.startDecryption()
+
+        #expect(sut.isDecrypted == false)
+    }
 }
 
 // MARK: - Helpers
 
 extension EncryptedItemDetailViewModelTests {
+    /// A secure note encrypted with `password`, using the fast testing key deriver.
+    private func makeSUTWithSecureNote(password: String) throws -> EncryptedItemDetailViewModel {
+        let note = SecureNote(title: "Hello", contents: "World", format: .plain)
+        let derivedKey = try VaultKeyDeriver.testing.createEncryptionKey(password: password)
+        let encryptedItem = try VaultItemEncryptor(key: derivedKey).encrypt(item: note)
+        let keyDeriverFactory = VaultKeyDeriverFactoryMock()
+        keyDeriverFactory.lookupVaultKeyDeriverHandler = { _ in .testing }
+        return makeSUT(item: encryptedItem, keyDeriverFactory: keyDeriverFactory)
+    }
+
     private func makeSUT(
         item: EncryptedItem,
         metadata: VaultItem.Metadata = anyVaultItemMetadata(),
