@@ -31,6 +31,31 @@ public struct VaultBackupEvent: Equatable, Hashable, Codable, Sendable {
 }
 
 extension VaultBackupEvent {
+    /// How far behind a backup is, in the steps the Backups page warns at.
+    public enum Staleness: Equatable, Hashable, Sendable {
+        /// Made within the last week.
+        case recent
+        /// Made within the last 30 days.
+        case stale
+        /// Made 30 or more days ago.
+        case veryStale
+    }
+
+    /// How stale this backup is at `date`, going by when it was made rather than when it was
+    /// exported or imported.
+    public func staleness(at date: Date, calendar: Calendar = .current) -> Staleness {
+        let days = calendar.dateComponents([.day], from: backupDate, to: date).day ?? .max
+        return if days < 7 {
+            .recent
+        } else if days < 30 {
+            .stale
+        } else {
+            .veryStale
+        }
+    }
+}
+
+extension VaultBackupEvent {
     public enum Kind: Equatable, Hashable, Sendable, Codable {
         case exportedToPDF
         case importedToPDF
