@@ -365,6 +365,7 @@ let package = Package(
                 "FoundationExtensions",
                 "TestHelpers",
             ],
+            exclude: ["__Snapshots__"],
             swiftSettings: swiftSettings,
             plugins: testTargetPlugins,
         ),

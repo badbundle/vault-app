@@ -11,6 +11,10 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
     private var cancellables = Set<AnyCancellable>()
 
     override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
+        // With the vault encrypted, the sheet unlocks it with the App Lock
+        // Password after device authentication, never device authentication
+        // alone (MANIFESTO C4).
+        let passwordService = VaultRoot.autofillPasswordService
         vaultAutofillViewModel = VaultAutofillViewModel(
             localSettings: VaultRoot.localSettings,
             // A fresh lock for every request, rather than the process-wide
@@ -19,10 +23,33 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
             appLock: AppLockService(
                 settings: VaultRoot.appLockSettingsStore,
                 authenticationService: VaultRoot.deviceAuthenticationService,
-                purgeSensitiveData: {},
+                passwordService: passwordService,
+                purgeSensitiveData: Self.lockEncryptedVault,
             ),
+            hasMemoryHeadroomToUnlock: Self.memoryHeadroomCheck(for: passwordService),
         )
         super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
+        // Nor should an unlock carry over from an earlier request.
+        Self.lockEncryptedVault()
+    }
+
+    /// Whether the extension has the memory to derive the App Lock Password's key. A check that can't be made counts
+    /// as no: the app can always unlock.
+    private static func memoryHeadroomCheck(
+        for passwordService: EncryptedVaultPasswordService?,
+    ) -> (@MainActor () async -> Bool)? {
+        guard let passwordService else { return nil }
+        return {
+            (try? await passwordService.hasMemoryHeadroomToUnlock()) ?? false
+        }
+    }
+
+    /// Locks an encrypted vault the extension unlocked, dropping its keys and everything read from it.
+    private static func lockEncryptedVault() {
+        guard let passwordService = VaultRoot.autofillPasswordService else { return }
+        Task {
+            await passwordService.lockVault()
+        }
     }
 
     @available(*, unavailable)
@@ -58,12 +85,14 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
             // Complete the OTP code request with the generated code
             let credential = ASOneTimeCodeCredential(code: text)
             self?.extensionContext.completeOneTimeCodeRequest(using: credential, completionHandler: nil)
+            Self.lockEncryptedVault()
         }.store(in: &cancellables)
         vaultAutofillViewModel.cancelRequestPublisher.sink { [weak self] reason in
             let error = switch reason {
             case .userCancelled: ASExtensionError(.userCanceled)
             }
             self?.extensionContext.cancelRequest(withError: error)
+            Self.lockEncryptedVault()
         }.store(in: &cancellables)
     }
 
@@ -112,6 +141,7 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
             copyActionHandler: VaultRoot.vaultItemCopyHandler,
             clock: VaultRoot.clock,
             isAppLockEnabled: VaultRoot.appLockSettingsStore.isEnabled,
+            isVaultPlain: VaultRoot.isVaultPlain,
         )
 
         switch await resolver.resolve(recordIdentifier: identity?.recordIdentifier) {

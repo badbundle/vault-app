@@ -29,22 +29,34 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
             }
         case .showAllCodesSelector:
             NavigationStack {
-                AppLockGate(appLock: viewModel.appLock) {
-                    viewModel.cancelRequestSubject.send(.userCancelled)
-                } content: {
-                    VaultAutofillCodeSelectorView(
-                        localSettings: viewModel.localSettings,
-                        viewGenerator: generator,
-                        copyActionHandler: copyActionHandler,
-                        textToInsertSubject: viewModel.textToInsertSubject,
-                        cancelSubject: viewModel.cancelRequestSubject,
-                    )
+                switch viewModel.unlockAvailability {
+                case .checking:
+                    ProgressView()
+                case .available:
+                    AppLockGate(appLock: viewModel.appLock, cancel: cancel) {
+                        VaultAutofillCodeSelectorView(
+                            localSettings: viewModel.localSettings,
+                            viewGenerator: generator,
+                            copyActionHandler: copyActionHandler,
+                            textToInsertSubject: viewModel.textToInsertSubject,
+                            cancelSubject: viewModel.cancelRequestSubject,
+                        )
+                    }
+                case .needsTheApp:
+                    AppLockOpenVaultView(cancel: cancel)
                 }
+            }
+            .task {
+                await viewModel.checkUnlockAvailability()
             }
         case let .unimplemented(name):
             Text("Unimplemented \(name)")
         case nil:
             ProgressView()
         }
+    }
+
+    private func cancel() {
+        viewModel.cancelRequestSubject.send(.userCancelled)
     }
 }

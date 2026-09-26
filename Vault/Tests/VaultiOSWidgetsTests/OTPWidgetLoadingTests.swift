@@ -175,6 +175,56 @@ struct OTPWidgetLoadingTests {
         #expect(await store.retrieveCallCount == 0)
     }
 
+    // MARK: - Encrypted vault
+
+    /// While the vault is encrypted with the App Lock Password, the widget shows it locked, whatever the lock's
+    /// setting says, and never opens the plain store.
+    @Test
+    func providerTimeline_vaultEncrypted_isLockedWithoutOpeningTheStore() async throws {
+        let factory = StoreFactoryScript(results: [])
+        let loader = try WidgetVaultLoader(
+            appLockSettings: appLockOff(),
+            isVaultPlain: { false },
+            makeStore: { try factory.makeStore() },
+        )
+        let provider = OTPWidgetProvider(loader: loader)
+        let entity = OTPWidgetItemEntity(id: UUID(), issuer: "issuer", accountName: "account")
+
+        let timeline = await provider.makeTimeline(for: .init(item: entity))
+
+        #expect(loader.isLocked)
+        #expect(timeline.entries.map(\.snapshot) == [.locked])
+        #expect(factory.openCallCount == 0)
+    }
+
+    @Test
+    func entityQuery_vaultEncrypted_listsNothing() async throws {
+        let factory = StoreFactoryScript(results: [])
+        let query = try OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(
+            appLockSettings: appLockOff(),
+            isVaultPlain: { false },
+            makeStore: { try factory.makeStore() },
+        ))
+
+        let suggested = try await query.suggestedEntities()
+        let found = try await query.entities(for: [UUID()])
+
+        #expect(suggested == [])
+        #expect(found == [])
+        #expect(factory.openCallCount == 0)
+    }
+
+    @Test
+    func isLocked_plainVaultAndLockOff_isFalse() throws {
+        let loader = try WidgetVaultLoader(
+            appLockSettings: appLockOff(),
+            isVaultPlain: { true },
+            makeStore: { throw WidgetTestError.open },
+        )
+
+        #expect(!loader.isLocked)
+    }
+
     @Test
     func providerTimeline_isUnavailableWhenSelectedItemFailsToLoad() async {
         let entity = OTPWidgetItemEntity(id: UUID(), issuer: "issuer", accountName: "account")
@@ -186,6 +236,10 @@ struct OTPWidgetLoadingTests {
 
         #expect(timeline.entries.first?.snapshot == .unavailable)
     }
+}
+
+private func appLockOff() throws -> AppLockSettingsStore {
+    try AppLockSettingsStore(userDefaults: .nonPersistent())
 }
 
 private func appLockOn() throws -> AppLockSettingsStore {
