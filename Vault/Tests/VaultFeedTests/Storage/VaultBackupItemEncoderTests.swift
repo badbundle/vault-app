@@ -57,6 +57,8 @@ final class VaultBackupItemEncoderTests {
         #expect(encodedItem.killphraseDigest == anyKillphraseDigest.digest)
         #expect(encodedItem.lockState == .notLocked)
         #expect(encodedItem.tintColor == .init(red: 0.1, green: 0.2, blue: 0.3))
+        #expect(encodedItem.showInQuickType == false)
+        #expect(encodedItem.previewMode == .titleAndFirstLine)
 
         #expect(encodedItem.item.encryptedData == nil)
         #expect(encodedItem.item.codeData == nil)
@@ -277,6 +279,33 @@ final class VaultBackupItemEncoderTests {
         let code1 = anyOTPAuthCode().wrapInAnyVaultItem(color: nil)
         let encoded1 = try sut.encode(storedItem: code1)
         #expect(encoded1.tintColor == nil, "No encoded color, it should be nil")
+    }
+
+    @Test(arguments: [true, false])
+    func encode_encodesShowInQuickType(showInQuickType: Bool) throws {
+        let sut = makeSUT()
+
+        let item = anyOTPAuthCode().wrapInAnyVaultItem(showInQuickType: showInQuickType)
+        let encoded = try sut.encode(storedItem: item)
+
+        #expect(encoded.showInQuickType == showInQuickType)
+    }
+
+    @Test
+    func encode_encodesEveryPreviewMode() throws {
+        let sut = makeSUT()
+        let expected: [NotePreviewMode: VaultBackupItem.PreviewMode] = [
+            .titleAndFirstLine: .titleAndFirstLine,
+            .titleOnly: .titleOnly,
+            .hidden: .hidden,
+        ]
+
+        for mode in NotePreviewMode.allCases {
+            let item = anySecureNote().wrapInAnyVaultItem(previewMode: mode)
+            let encoded = try sut.encode(storedItem: item)
+
+            #expect(encoded.previewMode == expected[mode], "\(mode) should be backed up")
+        }
     }
 
     @Test

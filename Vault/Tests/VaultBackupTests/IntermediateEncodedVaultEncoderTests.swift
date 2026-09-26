@@ -86,6 +86,41 @@ struct IntermediateEncodedVaultEncoderTests {
     }
 
     @Test
+    func encodeVault_encodesToJSONFormat_quickTypeAndPreviewMode() throws {
+        let date = Date(timeIntervalSince1970: 12345)
+        let uuid = try #require(UUID(uuidString: "A5950174-2106-4251-BD73-58B8D39F77F3"))
+        let item = VaultBackupItem(
+            id: uuid,
+            createdDate: date,
+            updatedDate: date.addingTimeInterval(7000),
+            relativeOrder: 1000,
+            userDescription: "",
+            tags: [],
+            visibility: .always,
+            searchableLevel: .full,
+            searchPassphraseSalt: nil,
+            searchPassphraseDigest: nil,
+            killphraseSalt: nil,
+            killphraseDigest: nil,
+            lockState: .notLocked,
+            showInQuickType: false,
+            previewMode: .hidden,
+            item: .note(data: .init(title: "Example Note", rawContents: "Example note", format: .markdown)),
+        )
+        let backup = anyBackupPayload(
+            created: date,
+            userDescription: "Example vault with a note hidden from QuickType and the feed",
+            items: [item],
+        )
+
+        let encodedVault = try sut.encode(vaultBackup: backup)
+
+        let decompressedData = try (encodedVault.data as NSData).decompressed(using: .lzma) as Data
+        let encoded = try #require(String(data: decompressedData, encoding: .utf8))
+        assertSnapshot(of: encoded, as: .lines)
+    }
+
+    @Test
     func encodeVault_encodesToJSONFormat_encryptedItem() throws {
         let date = Date(timeIntervalSince1970: 12345)
         let uuid1 = try #require(UUID(uuidString: "A5950174-2106-4251-BD73-58B8D39F77F3"))

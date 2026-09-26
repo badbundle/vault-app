@@ -1,0 +1,35 @@
+{
+  "created" : 12345000,
+  "items" : [
+    {
+      "created_date" : 12345000,
+      "id" : "A5950174-2106-4251-BD73-58B8D39F77F3",
+      "item" : {
+        "note" : {
+          "data" : {
+            "format" : "MARKDOWN",
+            "raw_contents" : "Example note",
+            "title" : "Example Note"
+          }
+        }
+      },
+      "lock_state" : "NOT_LOCKED",
+      "preview_mode" : "HIDDEN",
+      "relative_order" : 1000,
+      "searchable_level" : "FULL",
+      "show_in_quick_type" : false,
+      "tags" : [
+
+      ],
+      "updated_date" : 19345000,
+      "user_description" : "",
+      "visibility" : "ALWAYS"
+    }
+  ],
+  "obfuscation_padding" : "q6urCg==",
+  "tags" : [
+
+  ],
+  "user_description" : "Example vault with a note hidden from QuickType and the feed",
+  "version" : "1.0.0"
+}

@@ -67,6 +67,14 @@ public struct VaultBackupItem: Codable, Equatable, Identifiable {
     public var lockState: LockState
     /// The tint color associated with the item.
     public var tintColor: VaultBackupRGBColor?
+    /// Whether the item's code is offered as a QuickType suggestion.
+    ///
+    /// `nil` in backups made before this was recorded.
+    public var showInQuickType: Bool?
+    /// How much of the item the feed shows.
+    ///
+    /// `nil` in backups made before this was recorded.
+    public var previewMode: PreviewMode?
     /// The item's data that is used to reconstruct the item.
     public var item: Item
 
@@ -85,6 +93,8 @@ public struct VaultBackupItem: Codable, Equatable, Identifiable {
         killphraseDigest: Data?,
         lockState: LockState,
         tintColor: VaultBackupRGBColor? = nil,
+        showInQuickType: Bool? = nil,
+        previewMode: PreviewMode? = nil,
         item: Item,
     ) {
         self.id = id
@@ -100,6 +110,8 @@ public struct VaultBackupItem: Codable, Equatable, Identifiable {
         self.killphraseSalt = killphraseSalt
         self.killphraseDigest = killphraseDigest
         self.tintColor = tintColor
+        self.showInQuickType = showInQuickType
+        self.previewMode = previewMode
         self.lockState = lockState
         self.item = item
     }
@@ -143,6 +155,12 @@ extension VaultBackupItem {
     public enum TextFormat: String, Codable {
         case plain = "PLAIN"
         case markdown = "MARKDOWN"
+    }
+
+    public enum PreviewMode: String, Codable {
+        case titleAndFirstLine = "TITLE_AND_FIRST_LINE"
+        case titleOnly = "TITLE_ONLY"
+        case hidden = "HIDDEN"
     }
 
     /// An encrypted item.

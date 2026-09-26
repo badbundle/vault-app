@@ -121,6 +121,113 @@ struct IntermediateEncodedVaultDecoderTests {
     }
 
     @Test
+    func decodeVault_decodesQuickTypeAndPreviewMode() throws {
+        let cases: [(showInQuickType: Bool, previewMode: VaultBackupItem.PreviewMode)] = [
+            (true, .titleAndFirstLine),
+            (false, .titleOnly),
+            (false, .hidden),
+        ]
+        for (showInQuickType, previewMode) in cases {
+            var item = try anyEncryptedBackupItem()
+            item.showInQuickType = showInQuickType
+            item.previewMode = previewMode
+            let input = anyBackupPayload(created: Date(timeIntervalSince1970: 12345), items: [item])
+            let encoder = IntermediateEncodedVaultEncoder()
+
+            let decoded = try sut.decode(encodedVault: encoder.encode(vaultBackup: input))
+
+            #expect(decoded == input, "Decoded backup differs from input")
+        }
+    }
+
+    /// Backups made before items recorded QuickType and preview mode must still restore, with neither set.
+    @Test
+    func decodeVault_decodesItemWithoutQuickTypeOrPreviewMode() throws {
+        let json = """
+        {
+          "created" : 12345000,
+          "items" : [
+            {
+              "created_date" : 12345000,
+              "id" : "A5950174-2106-4251-BD73-58B8D39F77F3",
+              "item" : {
+                "note" : {
+                  "data" : {
+                    "format" : "MARKDOWN",
+                    "raw_contents" : "Example note",
+                    "title" : "Example Note"
+                  }
+                }
+              },
+              "lock_state" : "NOT_LOCKED",
+              "relative_order" : 1000,
+              "searchable_level" : "FULL",
+              "tags" : [],
+              "updated_date" : 19345000,
+              "user_description" : "",
+              "visibility" : "ALWAYS"
+            }
+          ],
+          "obfuscation_padding" : "q6urCg==",
+          "tags" : [],
+          "user_description" : "Example vault with a single note",
+          "version" : "1.0.0"
+        }
+        """
+        let compressed = try (Data(json.utf8) as NSData).compressed(using: .lzma) as Data
+
+        let decoded = try sut.decode(encodedVault: IntermediateEncodedVault(data: compressed))
+
+        let item = try #require(decoded.items.first)
+        #expect(item.showInQuickType == nil)
+        #expect(item.previewMode == nil)
+    }
+
+    @Test
+    func decodeVault_decodesQuickTypeAndPreviewModeFromJSON() throws {
+        let json = """
+        {
+          "created" : 12345000,
+          "items" : [
+            {
+              "created_date" : 12345000,
+              "id" : "A5950174-2106-4251-BD73-58B8D39F77F3",
+              "item" : {
+                "note" : {
+                  "data" : {
+                    "format" : "MARKDOWN",
+                    "raw_contents" : "Example note",
+                    "title" : "Example Note"
+                  }
+                }
+              },
+              "lock_state" : "NOT_LOCKED",
+              "preview_mode" : "TITLE_ONLY",
+              "relative_order" : 1000,
+              "searchable_level" : "FULL",
+              "show_in_quick_type" : false,
+              "tags" : [],
+              "updated_date" : 19345000,
+              "user_description" : "",
+              "visibility" : "ALWAYS"
+            }
+          ],
+          "obfuscation_padding" : "q6urCg==",
+          "tags" : [],
+          "user_description" : "Example vault with a single note",
+          "version" : "1.0.0"
+        }
+        """
+        let compressed = try (Data(json.utf8) as NSData).compressed(using: .lzma) as Data
+
+        let decoded = try sut.decode(encodedVault: IntermediateEncodedVault(data: compressed))
+
+        let item = try #require(decoded.items.first)
+        #expect(item.showInQuickType == false)
+        #expect(item.previewMode == .titleOnly)
+    }
+
+    @Test
     func decodeVault_decodesEncryptedItem() throws {
         let input = try anyBackupPayload(created: Date(timeIntervalSince1970: 12345), items: [anyEncryptedBackupItem()])
         let encoder = IntermediateEncodedVaultEncoder()
