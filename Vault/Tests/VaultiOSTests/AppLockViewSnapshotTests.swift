@@ -115,6 +115,43 @@ struct AppLockViewSnapshotTests {
     }
 }
 
+// MARK: - AutoFill with an encrypted vault
+
+extension AppLockViewSnapshotTests {
+    /// The AutoFill sheet asks for the App Lock Password after device authentication, as the app does.
+    @Test(arguments: [ColorScheme.light, .dark])
+    func autofillGatePassword(colorScheme: ColorScheme) async throws {
+        let appLock = try AppLockService(
+            settings: AppLockSettingsStore(userDefaults: .nonPersistent()),
+            authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
+            passwordService: FakeAppLockPasswordService(password: "correct horse"),
+            purgeSensitiveData: {},
+        )
+        await appLock.unlock()
+        let view = NavigationStack {
+            AppLockGate(appLock: appLock, cancel: {}) {
+                Text("Codes")
+            }
+        }
+        .environment(\.scenePhase, .inactive)
+        .environment(\.drawsGlassSnapshotBackdrop, true)
+        .framedForTest(height: 844)
+
+        assertSnapshot(of: view, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
+
+    /// Without the memory to derive the key, AutoFill sends the user to the app instead of asking for the password.
+    @Test(arguments: [ColorScheme.light, .dark])
+    func autofillOpenVault(colorScheme: ColorScheme) {
+        let view = NavigationStack {
+            AppLockOpenVaultView {}
+        }
+        .framedForTest(height: 844)
+
+        assertSnapshot(of: view, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
+}
+
 // MARK: - Helpers
 
 extension AppLockViewSnapshotTests {

@@ -103,6 +103,8 @@ public struct VaultMainScene: Scene {
         guard let action = WidgetDeepLink.parse(url) else { return }
         switch action {
         case let .incrementHOTP(itemID):
+            // Widgets never offer this while the vault is encrypted, and a link left from before doesn't either.
+            guard VaultRoot.isVaultPlain else { return }
             Task {
                 try? await vaultDataModel.incrementCounter(id: .init(id: itemID))
             }

@@ -11,9 +11,10 @@ struct AutofillOTPCredentialResolver {
     enum Outcome: Equatable {
         /// A rendered TOTP code, safe to return without interaction.
         case code(String)
-        /// The app lock is on, the item is auth-gated, or it's an HOTP code
-        /// (whose counter must not increment without UI). The system shows
-        /// the extension UI.
+        /// The app lock is on, the vault is encrypted with the App Lock
+        /// Password, the item is auth-gated, or it's an HOTP code (whose
+        /// counter must not increment without UI). The system shows the
+        /// extension UI.
         case userInteractionRequired
         /// The record identifier is missing, malformed, or matches no
         /// unlocked OTP item.
@@ -26,23 +27,30 @@ struct AutofillOTPCredentialResolver {
     private let copyActionHandler: any VaultItemCopyActionHandler
     private let clock: any EpochClock
     private let isAppLockEnabled: Bool
+    private let isVaultPlain: Bool
 
+    /// - Parameter isVaultPlain: Whether the vault is in the plain store, with
+    ///   no change of mode underway. Otherwise it can only be opened with the
+    ///   App Lock Password.
     init(
         retrieveItems: @escaping () async throws -> VaultRetrievalResult<VaultItem>,
         copyActionHandler: any VaultItemCopyActionHandler,
         clock: any EpochClock,
         isAppLockEnabled: Bool,
+        isVaultPlain: Bool,
     ) {
         self.retrieveItems = retrieveItems
         self.copyActionHandler = copyActionHandler
         self.clock = clock
         self.isAppLockEnabled = isAppLockEnabled
+        self.isVaultPlain = isVaultPlain
     }
 
     func resolve(recordIdentifier: String?) async -> Outcome {
-        // With the app lock on, no code leaves the vault until the user has
-        // authenticated in the extension's UI. The vault isn't even read.
-        guard !isAppLockEnabled else {
+        // With the app lock on, or the vault encrypted, no code leaves the
+        // vault until the user has unlocked it in the extension's UI, with the
+        // password if there is one. The vault isn't even read.
+        guard !isAppLockEnabled, isVaultPlain else {
             return .userInteractionRequired
         }
 

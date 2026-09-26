@@ -215,6 +215,44 @@ struct AppScreenCaptureCoverView: View {
     }
 }
 
+/// Sends the user to Vault, where the AutoFill extension can't unlock the vault itself: it hasn't the memory to
+/// derive the App Lock Password's key. The app always can.
+public struct AppLockOpenVaultView: View {
+    var cancel: () -> Void
+
+    public init(cancel: @escaping () -> Void) {
+        self.cancel = cancel
+    }
+
+    public var body: some View {
+        AppLockBackdrop(
+            details: {
+                VStack(spacing: 12) {
+                    Text("Open Vault")
+                        .font(.title2.bold())
+                        .foregroundStyle(.primary)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(
+                        "AutoFill doesn't have enough memory to unlock your vault right now. Open Vault to copy your code instead.",
+                    )
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                }
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+                .accessibilityElement(children: .combine)
+            },
+            action: { EmptyView() },
+        )
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button("Cancel", action: cancel)
+                    .tint(.red)
+            }
+        }
+    }
+}
+
 /// Shows `content` only once the user has unlocked the app, with the lock screen until then.
 ///
 /// For the AutoFill extension, which has its own copy of the lock: its prompt comes up as soon as the extension
@@ -283,4 +321,10 @@ public struct AppLockGate<Content: View>: View {
 
 #Preview("Screen capture cover") {
     AppScreenCaptureCoverView()
+}
+
+#Preview("AutoFill, open Vault") {
+    NavigationStack {
+        AppLockOpenVaultView {}
+    }
 }

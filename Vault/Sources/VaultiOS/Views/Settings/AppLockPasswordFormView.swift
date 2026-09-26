@@ -65,6 +65,7 @@ struct AppLockPasswordFormView: View {
                 headerSection
                 if viewModel.purpose == .set {
                     forgettingSection
+                    systemSurfacesSection
                 }
                 if viewModel.needsCurrentPassword {
                     currentPasswordSection(passwordWait: passwordWait)
@@ -159,6 +160,26 @@ struct AppLockPasswordFormView: View {
                     color: .red,
                 )
             }
+        }
+    }
+
+    /// While the password is on, the widgets, QuickType and AutoFill show nothing of the vault without it. A widget
+    /// that's already been added keeps what it was set up with in the system's widget settings, which Vault can't
+    /// clear, so this asks the user to remove it.
+    private var systemSurfacesSection: some View {
+        Section {
+            note(
+                title: "Remove your Vault widgets",
+                detail: "While the password is on, widgets show Vault as locked. Any you've added still keep their code's name and account in this iPhone's widget settings.",
+                systemImage: "square.grid.2x2.fill",
+                color: .secondary,
+            )
+            note(
+                title: "AutoFill asks for it too",
+                detail: "QuickType stops suggesting codes, and AutoFill asks for the password before it shows any.",
+                systemImage: "keyboard.fill",
+                color: .secondary,
+            )
         }
     }
 

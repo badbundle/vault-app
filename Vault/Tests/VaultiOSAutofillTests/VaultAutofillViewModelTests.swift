@@ -65,10 +65,50 @@ struct VaultAutofillViewModelTests {
     }
 }
 
+// MARK: - Unlocking an encrypted vault
+
+extension VaultAutofillViewModelTests {
+    @Test
+    func unlockAvailability_plainVault_isAvailableWithoutChecking() throws {
+        let sut = try makeSUT()
+
+        #expect(sut.unlockAvailability == .available)
+    }
+
+    @Test
+    func unlockAvailability_encryptedVault_isCheckedBeforeAnythingIsAsked() throws {
+        let sut = try makeSUT(hasMemoryHeadroomToUnlock: { true })
+
+        #expect(sut.unlockAvailability == .checking)
+    }
+
+    @Test
+    func checkUnlockAvailability_enoughMemory_isAvailable() async throws {
+        let sut = try makeSUT(hasMemoryHeadroomToUnlock: { true })
+
+        await sut.checkUnlockAvailability()
+
+        #expect(sut.unlockAvailability == .available)
+    }
+
+    /// Deriving the key without the memory would get the extension stopped mid-attempt, so it sends the user to the
+    /// app instead of asking for the password.
+    @Test
+    func checkUnlockAvailability_notEnoughMemory_needsTheApp() async throws {
+        let sut = try makeSUT(hasMemoryHeadroomToUnlock: { false })
+
+        await sut.checkUnlockAvailability()
+
+        #expect(sut.unlockAvailability == .needsTheApp)
+    }
+}
+
 // MARK: - Helpers
 
 extension VaultAutofillViewModelTests {
-    private func makeSUT() throws -> VaultAutofillViewModel {
+    private func makeSUT(
+        hasMemoryHeadroomToUnlock: (@MainActor () async -> Bool)? = nil,
+    ) throws -> VaultAutofillViewModel {
         try VaultAutofillViewModel(
             localSettings: LocalSettings(defaults: Defaults.nonPersistent()),
             appLock: AppLockService(
@@ -76,6 +116,7 @@ extension VaultAutofillViewModelTests {
                 authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
                 purgeSensitiveData: {},
             ),
+            hasMemoryHeadroomToUnlock: hasMemoryHeadroomToUnlock,
         )
     }
 }
