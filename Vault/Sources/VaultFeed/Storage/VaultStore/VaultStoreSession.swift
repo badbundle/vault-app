@@ -9,10 +9,9 @@ public typealias CompleteVaultStore = VaultStore & VaultStoreDeleter & VaultStor
 
 /// The vault store the app reads and writes, whichever one that is right now.
 ///
-/// Forwards every call to its `target`, which can change while the app runs: the plain SQLite store, or nothing at
-/// all while the vault is `locked`. (The encrypted store joins as a target once it exists: see
-/// `docs/on-device-encryption.md`, "Store session".) Everything else holds on to the session, so switching the target
-/// switches the store for all of them.
+/// Forwards every call to its `target`, which can change while the app runs: the plain SQLite store, an unlocked
+/// encrypted vault, or nothing at all while the vault is `locked` (see `docs/on-device-encryption.md`, "Store
+/// session"). Everything else holds on to the session, so switching the target switches the store for all of them.
 ///
 /// While locked, reads find nothing and writes throw `VaultStoreSessionError.locked`. Exporting throws too, rather
 /// than exporting an empty vault that a backup could replace a real one with. Deleting by killphrase finds nothing,
@@ -21,11 +20,16 @@ public final actor VaultStoreSession {
     public enum Target: Sendable {
         /// Today's SQLite store, readable whenever the device is unlocked.
         case plain(any CompleteVaultStore)
+        /// An encrypted vault that the app lock password has opened (`VaultUnlockService`).
+        case unlocked(EncryptedVaultStore)
         /// No store: the vault is locked.
         case locked
     }
 
     private var target: Target
+    /// Counts the times the session has locked. Something that set out to unlock at one count mustn't switch to a
+    /// vault once the count has moved on (`switchTo(_:unlessLockedSince:)`).
+    public private(set) var lockEpoch = 0
     /// Calls that reached a store and haven't returned yet.
     private var operationsInFlight = 0
     private var waitingForOperations = [CheckedContinuation<Void, Never>]()
@@ -46,7 +50,19 @@ public final actor VaultStoreSession {
     /// one has finished, so the old store isn't in use any more.
     public func switchTo(_ newTarget: Target) async {
         target = newTarget
+        if case .locked = newTarget {
+            lockEpoch += 1
+        }
         await waitForOperationsInFlight()
+    }
+
+    /// Switches to `newTarget`, unless the session has locked since `lockEpoch` was `epoch`: that lock wins.
+    ///
+    /// - Returns: Whether it switched.
+    public func switchTo(_ newTarget: Target, unlessLockedSince epoch: Int) async -> Bool {
+        guard lockEpoch == epoch else { return false }
+        await switchTo(newTarget)
+        return true
     }
 
     /// Switch to `locked`, once every call already underway has finished.
@@ -63,7 +79,13 @@ public final actor VaultStoreSession {
 
     /// Runs `operation` against the current store, or throws `VaultStoreSessionError.locked` if there's none.
     private func withStore<T: Sendable>(_ operation: (any CompleteVaultStore) async throws -> T) async throws -> T {
-        guard case let .plain(store) = target else {
+        let store: any CompleteVaultStore
+        switch target {
+        case let .plain(plain):
+            store = plain
+        case let .unlocked(encrypted):
+            store = encrypted
+        case .locked:
             throw VaultStoreSessionError.locked
         }
         operationsInFlight += 1

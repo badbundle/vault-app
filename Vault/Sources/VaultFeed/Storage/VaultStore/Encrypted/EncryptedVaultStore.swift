@@ -10,15 +10,38 @@ import VaultCore
 /// fails leaves both as they were and throws.
 ///
 /// - If another app or extension saved the vault since this store last read or saved it, the store takes what the
-///   other writer saved and makes the change again on top of it, so neither writer's change is lost. Only if that
-///   keeps happening does the change fail, with `EncryptedVaultStoreError.conflict`.
+///   other writer saved and makes the change again on top of it, so each writer's change is applied once. An update
+///   to an item the other writer changed too replaces it, as the later save does in the SQLite store, but keeps a
+///   HOTP counter it advanced. Only if conflicts keep happening does the change fail, with
+///   `EncryptedVaultStoreError.conflict`.
 /// - Deleting by killphrase returns `false` whatever the failure, the same as when nothing matches (MANIFESTO C2).
 ///
 /// It behaves exactly as `RecordVaultStore` does, which it's built on. Finding the slot a password opens, within the
-/// unlock deadline, is the unlock service's job. See "Reading and writing while unlocked" in
+/// unlock deadline, is `VaultUnlockService`'s job. See "Reading and writing while unlocked" in
 /// `docs/on-device-encryption.md`.
 public final class EncryptedVaultStore: Sendable {
     let records: RecordVaultStore
+
+    /// The vault in `slot`, whose payload has already been read.
+    ///
+    /// - Parameters:
+    ///   - file: Where the vault file is.
+    ///   - slot: The vault's slot, as it was opened.
+    ///   - state: The vault the slot's payload holds.
+    init(
+        file: EncryptedVaultFile,
+        slot: VaultSlotFile.OpenedSlot,
+        state: VaultRecordState,
+        sortOrder: VaultStoreSortOrder = .relativeOrder,
+        currentDate: @escaping @Sendable () -> Date = { Date() },
+    ) {
+        records = RecordVaultStore(
+            state: state,
+            sortOrder: sortOrder,
+            currentDate: currentDate,
+            persistence: SlotFilePersistence(file: file, slot: slot),
+        )
+    }
 
     /// Reads the vault in `slot`.
     ///
@@ -28,19 +51,19 @@ public final class EncryptedVaultStore: Sendable {
     ///   - slot: The vault's slot, opened in `contents`.
     /// - Throws: If the slot's payload doesn't open or decode, including
     ///   `EncryptedVaultStoreError.unsupportedPayloadVersion(_:)` for a vault saved by a newer version of the app.
-    init(
+    convenience init(
         file: EncryptedVaultFile,
         contents: VaultSlotFile,
         slot: VaultSlotFile.OpenedSlot,
         sortOrder: VaultStoreSortOrder = .relativeOrder,
         currentDate: @escaping @Sendable () -> Date = { Date() },
     ) throws {
-        let state = try EncryptedVaultPayload.decode(slot: slot, in: contents)
-        records = RecordVaultStore(
-            state: state,
+        try self.init(
+            file: file,
+            slot: slot,
+            state: EncryptedVaultPayload.decode(slot: slot, in: contents),
             sortOrder: sortOrder,
             currentDate: currentDate,
-            persistence: SlotFilePersistence(file: file, slot: slot),
         )
     }
 }

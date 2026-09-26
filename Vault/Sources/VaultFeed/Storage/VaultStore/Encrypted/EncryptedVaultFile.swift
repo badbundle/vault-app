@@ -60,6 +60,17 @@ struct EncryptedVaultFile: Sendable {
         }
     }
 
+    /// Reads only the file's header, and its size, without the lock: the header's salt and Argon2id parameters are
+    /// fixed for the life of the file.
+    ///
+    /// - Returns: The header and the file's size, or `nil` if there's no file.
+    func readHeader() throws -> (header: VaultSlotFile.Header, fileSize: Int)? {
+        guard let (bytes, fileSize) = try fileSystem.prefix(of: url, length: VaultSlotFile.Header.length) else {
+            return nil
+        }
+        return try (VaultSlotFile.Header(parsing: bytes), fileSize)
+    }
+
     /// Runs `body` holding the lock, so no other writer changes the file meanwhile.
     ///
     /// While another writer holds the lock, it tries again every couple of milliseconds, without blocking a thread,

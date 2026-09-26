@@ -213,6 +213,41 @@ extension RecordVaultStoreTests {
         #expect(await sut.state == otherWriters.last)
     }
 
+    /// The update was made from the item at counter 5. Meanwhile another writer advanced it to 6.
+    @Test
+    func update_afterAConflict_keepsTheCounterAnotherWriterAdvanced() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+        let item = uniqueVaultItem(item: .otpCode(anyOTPAuthCode(type: .hotp(counter: 5))))
+        try await sut.importAndOverrideVault(payload: .init(userDescription: "", items: [item], tags: []))
+        var advanced = await sut.state
+        advanced.items[0].otpDetails?.counter = 6
+        persistence.script(.success(.conflict(saved: advanced)))
+
+        let edited = uniqueVaultItem(id: item.id, item: item.item, userDescription: "Edited")
+        try await sut.update(id: item.id, item: edited.makeWritable())
+
+        #expect(await sut.state.items.map(\.otpDetails?.counter) == [6])
+        #expect(await sut.state.items.map(\.userDescription) == ["Edited"])
+    }
+
+    /// An update that sets the counter itself keeps its own counter.
+    @Test
+    func update_afterAConflict_keepsACounterTheUpdateChanged() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+        let item = uniqueVaultItem(item: .otpCode(anyOTPAuthCode(type: .hotp(counter: 5))))
+        try await sut.importAndOverrideVault(payload: .init(userDescription: "", items: [item], tags: []))
+        var advanced = await sut.state
+        advanced.items[0].otpDetails?.counter = 6
+        persistence.script(.success(.conflict(saved: advanced)))
+
+        let edited = uniqueVaultItem(id: item.id, item: .otpCode(anyOTPAuthCode(type: .hotp(counter: 2))))
+        try await sut.update(id: item.id, item: edited.makeWritable())
+
+        #expect(await sut.state.items.map(\.otpDetails?.counter) == [2])
+    }
+
     @Test
     func deleteItemsMatchingKillphrase_returnsFalseWhenTheSaveFails() async throws {
         let persistence = ScriptedPersistence()

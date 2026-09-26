@@ -419,6 +419,54 @@ extension EncryptedVaultStoreTests {
     }
 
     @Test
+    func incrementCounter_onTopOfAnotherWritersIncrement_appliesEachOnce() async throws {
+        let item = uniqueVaultItem(item: .otpCode(anyOTPAuthCode(type: .hotp(counter: 5))))
+        let fixture = try EncryptedVaultFixture(state: Self.state(items: [item]))
+        let app = try await fixture.openStore()
+        let autoFill = try await fixture.openStore()
+
+        try await autoFill.incrementCounter(id: item.id)
+        try await app.incrementCounter(id: item.id)
+
+        #expect(try fixture.savedState().items.map(\.otpDetails?.counter) == [7])
+    }
+
+    /// The app saves an edit made before AutoFill used a code. The counter doesn't go back, so that code isn't
+    /// generated again.
+    @Test
+    func update_onTopOfAnotherWritersIncrement_keepsTheAdvancedCounter() async throws {
+        let item = uniqueVaultItem(item: .otpCode(anyOTPAuthCode(type: .hotp(counter: 5))))
+        let fixture = try EncryptedVaultFixture(state: Self.state(items: [item]))
+        let app = try await fixture.openStore()
+        let autoFill = try await fixture.openStore()
+        try await autoFill.incrementCounter(id: item.id)
+
+        let edited = uniqueVaultItem(id: item.id, item: item.item, userDescription: "Edited")
+        try await app.update(id: item.id, item: edited.makeWritable())
+
+        let saved = try #require(try fixture.savedState().items.first)
+        #expect(saved.userDescription == "Edited")
+        #expect(saved.otpDetails?.counter == 6)
+    }
+
+    @Test
+    func reorder_onTopOfAnotherWritersChange_appliesOnce() async throws {
+        let items = (0 ..< 3).map { uniqueVaultItem(relativeOrder: UInt64($0), userDescription: "\($0)") }
+        let fixture = try EncryptedVaultFixture(state: Self.state(items: items))
+        let app = try await fixture.openStore()
+        let autoFill = try await fixture.openStore()
+        let tag = try await autoFill.insertTag(item: anyVaultItemTag().makeWritable())
+
+        try await app.reorder(items: [items[2].id], to: .start)
+
+        let saved = try fixture.savedState()
+        let ordered = saved.items.sorted { $0.relativeOrder < $1.relativeOrder }
+        #expect(ordered.map(\.userDescription) == ["2", "0", "1"])
+        #expect(ordered.map(\.relativeOrder) == [0, 1, 2])
+        #expect(saved.tags.map(\.id) == [tag.id])
+    }
+
+    @Test
     func twoVaultsInOneFile_saveWithoutDisturbingEachOther() async throws {
         let first = try EncryptedVaultFixture(slotIndex: 3)
         let second = try await first.addingVault(inSlot: 9)

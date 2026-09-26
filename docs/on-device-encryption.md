@@ -319,13 +319,24 @@ Calibration adds about 0.3–1.5 s, once, to setting the password. It runs behin
   If there isn't enough headroom, the sheet tells the user to open Vault instead of risking a crash. The app can
   always unlock.
 - It derives before building any vault UI, and releases the working memory straight after.
-- The unlock service (sub-issue 7) exposes the check. Sub-issue 10 uses it.
-- **Writes need memory too.** A HOTP counter write from the sheet replaces the whole file, and a save holds the
-  file twice at its peak: the new file and the copy read back to verify it. That's about 32 MiB at the minimum
-  size, after the derivation's 64 MiB has been freed, and 128 MiB at the largest (4 MiB slots). So before
-  writing, the extension checks `os_proc_available_memory()` against twice the file's size plus the same margin,
-  and otherwise asks the user to open Vault. Mapping the file instead of reading it wouldn't help: slot writes
-  modify the bytes, and writing to a mapped `Data` crashes.
+- The unlock service (sub-issue 7) exposes the check, `hasMemoryHeadroomToUnlock()`: m, plus the file, which is
+  read before deriving, plus the margin. It reads only the file's header and size. Sub-issue 10 uses it. On an
+  iPhone, `os_proc_available_memory()` returning 0 means the process is already over its limit, so the check
+  fails. The simulator has no limit, and the check passes there.
+- **Opening the vault** after the derivation holds the file, the decompressed JSON and the decoded records. The
+  derivation's 64 MiB is freed by then, and for any vault a slot can hold that's less than m plus the file, so
+  the check above covers it.
+- **Writes need memory too.** A HOTP counter write from the sheet replaces the whole file. At its peak a save
+  holds:
+  - the file twice: the new file, and the copy read back to verify it;
+  - the JSON twice: encoded for the save, and decompressed again to verify it;
+  - the records twice: the vault in memory, and the copy verification decodes. They take about as much memory as
+    their JSON.
+
+  That's about 36 MiB for 1,000 typical items at the minimum size, and around 180 MiB for a full 4 MiB slot. So
+  before writing, the extension checks `os_proc_available_memory()` against twice the file's size plus four
+  times the JSON's plus the same margin, and otherwise asks the user to open Vault (VAULT-49). Mapping the file
+  instead of reading it wouldn't help: slot writes modify the bytes, and writing to a mapped `Data` crashes.
 
 **Why Argon2id.**
 
@@ -448,8 +459,10 @@ with VAULT-51.
 2. Takes `flock(LOCK_EX)` on `vault-slots.lock` and reads the current file. If our slot's generation isn't the
    one we loaded, another process has written it: it stops with a conflict and reloads, then works the mutation
    out again on top of what the other process saved and goes back to this step. Every mutation is a function of
-   the records, so neither process's change is lost; a killphrase is matched again. After three conflicts in a
-   row it throws `EncryptedVaultStoreError.conflict`. If the slot doesn't open with our wrap key any more (it was
+   the records, so each process's change is applied once; a killphrase is matched again. An update to an item the
+   other process changed too replaces it, as the later save does in SQLite, but keeps a HOTP counter the other
+   process advanced if the update left the counter alone, so a used code isn't generated again. After three
+   conflicts in a row it throws `EncryptedVaultStoreError.conflict`. If the slot doesn't open with our wrap key any more (it was
    rewrapped or replaced), the store can't save again until the vault is unlocked again.
 3. Encodes, compresses and seals the body with generation + 1, reseals the key box, and builds the new file
    bytes with the other slots copied unchanged.
@@ -557,28 +570,52 @@ downgrade and back), the app offers to merge its items into the open vault inste
 
 ### Unlocking and locking
 
-**Unlock, when a password is set.** The lock screen is VAULT-22's. The storage side:
+**Unlock, when a password is set.** The lock screen is VAULT-22's. The storage side is `VaultUnlockService`
+(VAULT-46):
 
 1. Increment the persistent attempt counter (VAULT-22 and VAULT-34) **before** deriving. Force-quitting then
-   can't skip a wrong attempt.
+   can't skip a wrong attempt. If the user still has to wait after earlier wrong attempts, say how long and try
+   nothing.
 2. Start the device's fixed unlock deadline, set during calibration (see [Key derivation](#key-derivation)).
-3. Derive `K_pw` off the main actor.
+3. Derive `K_pw` off the main actor, from the password's UTF-8 in Unicode's composed form (NFC), so it derives
+   the same key however the keyboard composed its accents. Setting a password uses the same.
 4. Try **every** slot's key box, with no early exit.
 5. If exactly one opens, open its body. If more than one opens, pick the most recently wrapped (see
-   [same passwords](#same-passwords)). Decode it.
+   [same passwords](#same-passwords)). Decode it. If none opens, open a decoy body instead (a random slot's, with
+   a throwaway key, which fails), so every attempt opens exactly one body.
 6. Drop `K_pw` and every `W_i`. They're CryptoKit `SymmetricKey`s, whose storage is zeroed on release. The
    Argon2 working memory is `memset_s`'d before it's freed.
 7. Wait for the deadline. Then reset the counter and show the vault, or show the error.
 
-Wrong, real and duress passwords all run the same derivation and the same sixteen trials, and finish at the same
-deadline. What differs afterwards is decoding time, which is proportional to what the vault shows anyway.
+Wrong, real and duress passwords all run the same derivation, the same sixteen trials and one body, and finish at
+the same deadline. What differs afterwards is decoding time, which is proportional to what the vault shows anyway.
 
-**Lock.** This happens on background, or explicitly (VAULT-21):
+- **An attempt whose derivation and slot trials take more than two thirds of the deadline** raises it to 1.5
+  times that before the attempt waits, so that attempt is held to the raised deadline too. Only that work counts,
+  because it's the same whatever the password: the deadline is saved, so counting a vault's decode would make every
+  later attempt, a duress one included, show how large the largest vault opened is. The work is timed in the thread's CPU time, so time the app spends suspended,
+  or the device asleep, doesn't count; only an attempt that finished its work and is still wanted raises it; and
+  it goes no higher than 5 s, about 1.5 times 32 passes on an iPhone four times slower than an M5 Max. A stored
+  deadline above that is taken as 5 s.
+- **Ties** in the most recently wrapped slot go to the lowest index. Wrap times come from the device that wrapped
+  the key, so one whose clock was set wrong can make a newer vault look older.
+- **Failures after counting** (a vault that opens but can't be read, say) are reported at the deadline as well.
+- **The counter is only reset when a vault opens.** If resetting fails, the vault stays locked and the error is
+  shown, rather than opening with a count that would carry on.
+- **An attempt underway when the app locks** is thrown away, and the vault stays locked. The session only
+  switches to the vault if it hasn't locked since the attempt began, checked on the session itself
+  (`switchTo(_:unlessLockedSince:)`), so a lock can't slip in between the check and the switch.
+- **Unlocking needs a locked session.** With a vault open already it refuses without counting an attempt.
+- **The opened slot's keys** stay with its store until the vault locks. Every other key is dropped at step 6.
+
+**Lock.** This happens on background, or explicitly (VAULT-21), through `VaultUnlockService.lock()`:
 
 - Await any in-flight write on the store actor.
 - Switch the store session to `locked`.
-- Drop the record store, `K_i`, the item caches and search text (`VaultDataModel.purgeSensitiveData()`, which
-  gets extended to do this).
+- Drop the record store, `K_i`, the item caches and search text (`VaultDataModel.purgeVaultContents()`).
+
+It's async, because the session waits for writes underway. The app lock's own purge hook is synchronous, so it
+starts the lock in a task, as it already does for the purge.
 
 **Zeroing, honestly:**
 
