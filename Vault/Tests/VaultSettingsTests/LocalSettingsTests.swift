@@ -16,6 +16,47 @@ struct LocalSettingsTests {
     }
 
     @Test
+    func pasteTimeToLive_defaultsToOneMinute() throws {
+        let sut = try makeSUT(defaults: .nonPersistent())
+
+        #expect(sut.state.pasteTimeToLive == .init(duration: 60))
+    }
+
+    @Test
+    func pasteTimeToLive_readingTheDefaultDoesNotStoreIt() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sut = try makeSUT(defaults: defaults)
+
+        _ = sut.state.pasteTimeToLive
+
+        // Only a choice is stored, so a later change to the default reaches everyone who never chose.
+        #expect(!defaults.has(Key<PasteTTL>(VaultIdentifiers.Preferences.General.settingsPasteTTL)))
+    }
+
+    @Test
+    func pasteTimeToLive_keepsAnExplicitChoiceOfNoExpiry() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sutSave = try makeSUT(defaults: defaults)
+        sutSave.state.pasteTimeToLive = .init(duration: nil)
+
+        let sutRetrieve = try makeSUT(defaults: defaults)
+        #expect(sutRetrieve.state.pasteTimeToLive == .init(duration: nil))
+    }
+
+    @Test
+    func pasteTimeToLive_keepsNoExpiryChosenInEarlierVersions() throws {
+        let suiteName = UUID().uuidString
+        let userDefaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { userDefaults.removePersistentDomain(forName: suiteName) }
+        // What choosing "No expiry" has always stored: the JSON of a `PasteTTL` without a duration.
+        userDefaults.set(Data("{}".utf8), forKey: VaultIdentifiers.Preferences.General.settingsPasteTTL)
+
+        let sut = try makeSUT(defaults: Defaults(userDefaults: userDefaults))
+
+        #expect(sut.state.pasteTimeToLive == .init(duration: nil))
+    }
+
+    @Test
     func pasteTimeToLive_savesStateAfterStateChanged() throws {
         let defaults = try Defaults.nonPersistent()
         let sutSave = try makeSUT(defaults: defaults)
