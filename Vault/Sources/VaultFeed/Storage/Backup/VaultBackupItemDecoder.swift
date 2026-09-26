@@ -31,8 +31,9 @@ extension VaultBackupItemDecoder {
             killphrase: decodeKillphrase(backupItem: backupItem),
             lockState: decodeLockState(state: backupItem.lockState),
             color: decodeColor(color: backupItem.tintColor),
-            showInQuickType: true,
-            previewMode: .titleAndFirstLine,
+            // Backups made before these were recorded restore them as they always have.
+            showInQuickType: backupItem.showInQuickType ?? true,
+            previewMode: backupItem.previewMode.map(decodePreviewMode(mode:)) ?? .titleAndFirstLine,
         )
     }
 
@@ -92,6 +93,14 @@ extension VaultBackupItemDecoder {
         switch state {
         case .notLocked: .notLocked
         case .lockedWithNativeSecurity: .lockedWithNativeSecurity
+        }
+    }
+
+    private func decodePreviewMode(mode: VaultBackupItem.PreviewMode) -> NotePreviewMode {
+        switch mode {
+        case .titleAndFirstLine: .titleAndFirstLine
+        case .titleOnly: .titleOnly
+        case .hidden: .hidden
         }
     }
 }

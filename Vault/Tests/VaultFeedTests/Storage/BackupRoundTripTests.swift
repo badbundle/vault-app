@@ -92,6 +92,36 @@ struct BackupRoundTripTests {
         #expect(items.items.map(\.id) == [exportedItem.id])
     }
 
+    /// Restoring mustn't offer codes in QuickType that the user had opted out of (MANIFESTO C7), or show notes
+    /// whose previews they'd hidden, whether it merges or overrides.
+    @Test(arguments: [false, true])
+    func pdfRoundTrip_preservesQuickTypeAndPreviewMode(override: Bool) async throws {
+        let source = try makeInMemoryStore()
+        let optedOutCode = anyOTPAuthCode().wrapInAnyVaultItem(showInQuickType: false)
+        let offeredCode = anyOTPAuthCode().wrapInAnyVaultItem(showInQuickType: true)
+        let hiddenNote = anySecureNote(title: "hidden").wrapInAnyVaultItem(previewMode: .hidden)
+        let titleOnlyNote = anySecureNote(title: "title only").wrapInAnyVaultItem(previewMode: .titleOnly)
+        let items = [optedOutCode, offeredCode, hiddenNote, titleOnlyNote]
+        try await source.importAndOverrideVault(payload: .init(userDescription: "", items: items, tags: []))
+
+        let restored = try await roundTripThroughPDF(source: source)
+        let destination = try makeInMemoryStore()
+        if override {
+            try await destination.importAndOverrideVault(payload: restored)
+        } else {
+            try await destination.importAndMergeVault(payload: restored)
+        }
+
+        let restoredItems = try await destination.retrieve(query: .init()).items
+        func restoredMetadata(of item: VaultItem) throws -> VaultItem.Metadata {
+            try #require(restoredItems.first(where: { $0.id == item.id })).metadata
+        }
+        #expect(try restoredMetadata(of: optedOutCode).showInQuickType == false)
+        #expect(try restoredMetadata(of: offeredCode).showInQuickType == true)
+        #expect(try restoredMetadata(of: hiddenNote).previewMode == .hidden)
+        #expect(try restoredMetadata(of: titleOnlyNote).previewMode == .titleOnly)
+    }
+
     @Test
     func pdfRoundTrip_wrongKey_failsDecrypt() async throws {
         let source = try makeInMemoryStore()

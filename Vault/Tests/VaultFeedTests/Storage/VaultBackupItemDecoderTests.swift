@@ -56,6 +56,50 @@ final class VaultBackupItemDecoderTests {
         #expect(decodedItem.item.otpCode == nil)
     }
 
+    @Test(arguments: [true, false])
+    func decode_decodesShowInQuickType(showInQuickType: Bool) throws {
+        var item = anyOTPItem()
+        item.showInQuickType = showInQuickType
+        let sut = makeSUT()
+
+        let decodedItem = try sut.decode(backupItem: item)
+
+        #expect(decodedItem.metadata.showInQuickType == showInQuickType)
+    }
+
+    @Test
+    func decode_decodesEveryPreviewMode() throws {
+        let expected: [VaultBackupItem.PreviewMode: NotePreviewMode] = [
+            .titleAndFirstLine: .titleAndFirstLine,
+            .titleOnly: .titleOnly,
+            .hidden: .hidden,
+        ]
+        let sut = makeSUT()
+
+        for (backedUp, restored) in expected {
+            var item = anyNoteItem()
+            item.previewMode = backedUp
+            let decodedItem = try sut.decode(backupItem: item)
+
+            #expect(decodedItem.metadata.previewMode == restored, "\(backedUp) should restore")
+        }
+    }
+
+    /// Backups made before these were recorded restore them as restoring always has: offered in QuickType, and
+    /// previewing the title and first line.
+    @Test
+    func decode_backupWithoutQuickTypeOrPreviewModeRestoresAsBefore() throws {
+        let item = anyNoteItem()
+        #expect(item.showInQuickType == nil)
+        #expect(item.previewMode == nil)
+        let sut = makeSUT()
+
+        let decodedItem = try sut.decode(backupItem: item)
+
+        #expect(decodedItem.metadata.showInQuickType == true)
+        #expect(decodedItem.metadata.previewMode == .titleAndFirstLine)
+    }
+
     @Test
     func decodeNote_decodeswithNilContentsIntoEmptyString() throws {
         let item = anyNoteItem(contents: nil)

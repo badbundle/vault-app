@@ -33,6 +33,8 @@ final class VaultBackupItemEncoder {
             killphraseDigest: storedItem.metadata.killphrase?.digest,
             lockState: encodeLockState(metadata: storedItem.metadata),
             tintColor: encodeTintColor(meta: storedItem.metadata),
+            showInQuickType: storedItem.metadata.showInQuickType,
+            previewMode: encodePreviewMode(metadata: storedItem.metadata),
             item: itemDetail,
         )
     }
@@ -66,6 +68,14 @@ extension VaultBackupItemEncoder {
         switch metadata.lockState {
         case .notLocked: .notLocked
         case .lockedWithNativeSecurity: .lockedWithNativeSecurity
+        }
+    }
+
+    private func encodePreviewMode(metadata: VaultItem.Metadata) -> VaultBackupItem.PreviewMode {
+        switch metadata.previewMode {
+        case .titleAndFirstLine: .titleAndFirstLine
+        case .titleOnly: .titleOnly
+        case .hidden: .hidden
         }
     }
 }
