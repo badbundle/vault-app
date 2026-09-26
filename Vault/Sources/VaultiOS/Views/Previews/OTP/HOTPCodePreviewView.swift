@@ -7,18 +7,24 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
     var previewViewModel: OTPCodePreviewViewModel
     var behaviour: VaultItemViewBehaviour
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Icon at top
-            icon
-                .padding(.bottom, 8)
+            VStack(alignment: .leading, spacing: 0) {
+                // Icon at top
+                icon
+                    .padding(.bottom, 8)
 
-            // Issuer and account labels
-            labelsStack
+                // Issuer and account labels
+                labelsStack
 
-            // Code section - prominent
-            OTPPreviewCodeText(codeState: previewViewModel.code, behaviour: behaviour)
-                .padding(.vertical, 12)
+                // Code section - prominent
+                OTPPreviewCodeText(codeState: previewViewModel.code, behaviour: behaviour)
+                    .padding(.vertical, 12)
+            }
+            // Not the bar: its label has to stay readable while editing, which the shimmer's fade would stop.
+            .shimmering(active: isEditing)
 
             Spacer(minLength: 0)
 
@@ -30,7 +36,6 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
         .animation(.snappy, value: canLoadNextCode)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .aspectRatio(1, contentMode: .fill)
-        .shimmering(active: isEditing)
         .modifier(
             VaultCardModifier(
                 configuration: .init(
@@ -48,14 +53,14 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
         case .normal:
             switch previewViewModel.code {
             case .visible, .locked:
-                Color.accentColor
+                HorizontalTimerProgressBarView.filled(.accentColor)
             case .notReady, .obfuscated:
-                Color(.quaternarySystemFill)
+                HorizontalTimerProgressBarView.empty
             case .error, .finished:
-                Color.red
+                HorizontalTimerProgressBarView.filled(.red)
             }
         case .editingState:
-            Color.accentColor
+            HorizontalTimerProgressBarView.editing
         }
     }
 
@@ -99,16 +104,15 @@ struct HOTPCodePreviewView<ButtonView: View>: View {
                 codeState: previewViewModel.code,
                 behaviour: behaviour,
             )
-            .frame(height: 12)
-            .clipShape(RoundedRectangle(cornerRadius: 6))
 
             buttonView
                 .disabled(!canLoadNextCode)
+                .shimmering(active: isEditing)
         }
         // The row takes only the bar's height, with the taller refresh button
         // rising into the space above it, so the rest of the card has exactly
         // the room it has in a TOTP card and lays out the same way.
-        .frame(height: 12, alignment: .bottom)
+        .frame(height: CodeStateTimerBarMetrics.height(for: dynamicTypeSize), alignment: .bottom)
         .animation(.snappy, value: canLoadNextCode)
     }
 

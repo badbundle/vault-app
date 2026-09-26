@@ -13,10 +13,13 @@ import UIKit
 /// One thing still renders light: a button in the snapshotted view's own navigation bar keeps its
 /// light-mode label offscreen, whatever the environment, traits or window style, so it vanishes
 /// against a dark bar. Cover those buttons in the light references.
+///
+/// Pass `contrast: .increased` to render the view as with Increase Contrast turned on.
 @MainActor
 func assertSnapshot(
     of view: some View,
     colorScheme: ColorScheme,
+    contrast: ColorSchemeContrast = .standard,
     named name: String? = nil,
     file: StaticString = #file,
     fileID: StaticString = #fileID,
@@ -25,10 +28,15 @@ func assertSnapshot(
     line: UInt = #line,
     column: UInt = #column,
 ) {
-    let style: UIUserInterfaceStyle = colorScheme == .dark ? .dark : .light
+    let traits = UITraitCollection { traits in
+        traits.userInterfaceStyle = colorScheme == .dark ? .dark : .light
+        if contrast == .increased {
+            traits.accessibilityContrast = .high
+        }
+    }
     assertSnapshot(
         of: view.environment(\.colorScheme, colorScheme),
-        as: .image(traits: UITraitCollection(userInterfaceStyle: style)),
+        as: .image(traits: traits),
         named: name,
         file: file,
         fileID: fileID,
