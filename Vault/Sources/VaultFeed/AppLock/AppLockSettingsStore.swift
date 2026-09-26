@@ -31,4 +31,15 @@ public struct AppLockSettingsStore: @unchecked Sendable { // swiftlint:disable:t
             userDefaults.set(newValue, forKey: VaultIdentifiers.Preferences.AppLock.isEnabled)
         }
     }
+
+    /// How long the app can be in the background before it locks. Immediately unless the user has chosen otherwise,
+    /// and immediately for any value this version doesn't know.
+    public var delay: AppLockDelay {
+        get {
+            AppLockDelay(rawValue: userDefaults.integer(forKey: VaultIdentifiers.Preferences.AppLock.delay)) ?? .default
+        }
+        nonmutating set {
+            userDefaults.set(newValue.rawValue, forKey: VaultIdentifiers.Preferences.AppLock.delay)
+        }
+    }
 }

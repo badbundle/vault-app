@@ -3,9 +3,10 @@ import LocalAuthentication
 
 /// The app lock: when it's on, the whole app stays behind a lock screen until the user authenticates.
 ///
-/// The app starts locked and locks again whenever it goes to the background. Going inactive (Control Center, the
-/// app switcher) doesn't lock the app, but the scene covers the vault with a privacy cover (see
-/// `requiresPrivacyCover(in:)`) so it doesn't show in the app switcher.
+/// The app starts locked and locks again when it goes to the background, or, with a `delay`, when it comes back after
+/// being in the background for at least that long. Going inactive (Control Center, the app switcher) doesn't lock the
+/// app, but the scene covers the vault with a privacy cover (see `requiresPrivacyCover(in:)`) so it doesn't show in
+/// the app switcher, whatever the delay.
 ///
 /// Unlocking takes the user through `AppUnlockStep`s in order. Device authentication is the only one for now, and
 /// it's asked for automatically when the app comes to the foreground locked; a cancelled or failed try waits for the
@@ -19,11 +20,14 @@ public final class AppLockService {
     public private(set) var state: AppLockState
     /// Whether the app lock is on.
     public private(set) var isEnabled: Bool
-    /// Whether the user is authenticating to turn the lock on or off.
-    public private(set) var isChangingEnabled = false
+    /// How long the app can be in the background before it locks.
+    public private(set) var delay: AppLockDelay
+    /// Whether the user is authenticating to change a setting.
+    public private(set) var isChangingSettings = false
 
     private let settings: AppLockSettingsStore
     private let authenticationService: DeviceAuthenticationService
+    private let clock: any AppLockClock
     private let purgeSensitiveData: @MainActor () -> Void
     private let didChangeSettings: @MainActor () -> Void
 
@@ -34,27 +38,34 @@ public final class AppLockService {
     /// try, so a cancelled prompt isn't shown again until the user asks.
     @ObservationIgnored private var startsUnlockWhenActive = false
     @ObservationIgnored private var scenePhase: AppScenePhase?
+    /// When the app last went to the background unlocked, while it has yet to come back: what `delay` counts from.
+    @ObservationIgnored private var wentToBackgroundAt: ContinuousClock.Instant?
     @ObservationIgnored private var isAuthenticationUnderway = false
     @ObservationIgnored private var actionsAwaitingUnlock = [@MainActor () -> Void]()
     /// The unlock started when the app became active, kept so tests can wait for it.
     @ObservationIgnored private(set) var automaticUnlock: Task<Void, Never>?
 
     /// - Parameters:
+    ///   - clock: What `delay` is measured with.
     ///   - purgeSensitiveData: Clears sensitive data from memory. Called every time the app locks.
     ///   - didChangeSettings: Called when the lock is turned on or off, so the extensions can catch up.
     public init(
         settings: AppLockSettingsStore,
         authenticationService: DeviceAuthenticationService,
+        clock: any AppLockClock = ContinuousClock(),
         purgeSensitiveData: @escaping @MainActor () -> Void,
         didChangeSettings: @escaping @MainActor () -> Void = {},
     ) {
         self.settings = settings
         self.authenticationService = authenticationService
+        self.clock = clock
         self.purgeSensitiveData = purgeSensitiveData
         self.didChangeSettings = didChangeSettings
         let isEnabled = settings.isEnabled
         self.isEnabled = isEnabled
-        // A launch always starts locked, however the app was last left.
+        delay = settings.delay
+        // A launch always starts locked, however the app was last left and whatever the delay: the time the app
+        // went to the background is only ever kept in memory.
         state = isEnabled ? .locked(AppLockedState(step: Self.unlockSteps[0])) : .unlocked
         startsUnlockWhenActive = isEnabled
     }
@@ -77,17 +88,40 @@ public final class AppLockService {
 
     // MARK: - Lifecycle
 
-    /// Tell the lock where the app is in its lifecycle. Locks the app when it goes to the background, and starts
-    /// unlocking when it comes back to the foreground locked.
+    /// Tell the lock where the app is in its lifecycle. Locks the app when it goes to the background (or when it
+    /// comes back, if it was away for longer than `delay`), and starts unlocking when it comes back locked.
     public func scenePhaseDidChange(to phase: AppScenePhase) {
         scenePhase = phase
         switch phase {
         case .background:
-            lock()
+            didEnterBackground()
         case .inactive:
-            break
+            lockIfAwayTooLong()
         case .active:
+            lockIfAwayTooLong()
             startAutomaticUnlockIfNeeded()
+        }
+    }
+
+    private func didEnterBackground() {
+        guard isEnabled else { return }
+        if isLocked || delay == .immediately {
+            lock()
+        } else if wentToBackgroundAt == nil {
+            // Only the first report counts: hearing about the same trip to the background again mustn't restart
+            // the delay.
+            wentToBackgroundAt = clock.now
+        }
+    }
+
+    /// Locks the app, coming back from the background, if it's been away for at least `delay`.
+    private func lockIfAwayTooLong() {
+        guard let wentToBackgroundAt else { return }
+        self.wentToBackgroundAt = nil
+        let timeAway = wentToBackgroundAt.duration(to: clock.now)
+        // Time running backwards can't happen with this clock. If it ever did, it's no reason to stay unlocked.
+        if timeAway >= delay.duration || timeAway < .zero {
+            lock()
         }
     }
 
@@ -108,6 +142,7 @@ public final class AppLockService {
 
     private func lock() {
         guard isEnabled else { return }
+        wentToBackgroundAt = nil
         lockGeneration += 1
         // An authentication still winding down from before (the system cancels its prompt when the app leaves the
         // foreground) keeps the step underway, so it can't be started twice.
@@ -192,16 +227,36 @@ public final class AppLockService {
     /// Turning it off needs authentication so that someone else can't open the unlocked app and switch it off.
     /// Turning it on does too, which checks that the user can unlock the app before they're locked out of it.
     public func setEnabled(_ enabled: Bool) async {
-        guard enabled != isEnabled, !isChangingEnabled, !isLocked else { return }
-        isChangingEnabled = true
-        defer { isChangingEnabled = false }
-        let generation = lockGeneration
-        let failure = await authenticate(reason: enabled ? "Turn On App Lock" : "Turn Off App Lock")
-        // Nothing changes if the app locked while the prompt was up.
-        guard failure == nil, generation == lockGeneration else { return }
+        guard enabled != isEnabled, !isChangingSettings, !isLocked else { return }
+        guard await authenticateToChangeSettings(reason: enabled ? "Turn On App Lock" : "Turn Off App Lock") else {
+            return
+        }
         settings.isEnabled = enabled
         isEnabled = enabled
+        wentToBackgroundAt = nil
         didChangeSettings()
+    }
+
+    /// Change how long the app can be in the background before it locks.
+    ///
+    /// A longer delay weakens the lock, so it needs authentication first. A shorter one doesn't.
+    public func setDelay(_ newDelay: AppLockDelay) async {
+        guard isEnabled, newDelay != delay, !isChangingSettings, !isLocked else { return }
+        if newDelay > delay {
+            guard await authenticateToChangeSettings(reason: "Lock Vault Less Often") else { return }
+        }
+        settings.delay = newDelay
+        delay = newDelay
+    }
+
+    /// Asks the user to authenticate before a setting changes. `false` if they didn't, or if the app locked while
+    /// the prompt was up.
+    private func authenticateToChangeSettings(reason: String) async -> Bool {
+        isChangingSettings = true
+        defer { isChangingSettings = false }
+        let generation = lockGeneration
+        let failure = await authenticate(reason: reason)
+        return failure == nil && generation == lockGeneration
     }
 
     // MARK: - Authentication

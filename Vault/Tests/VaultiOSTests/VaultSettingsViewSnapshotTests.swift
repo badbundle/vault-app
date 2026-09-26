@@ -46,6 +46,13 @@ struct VaultSettingsViewSnapshotTests {
     }
 
     @Test(arguments: [ColorScheme.light, .dark])
+    func appLockWithDelay(colorScheme: ColorScheme) throws {
+        let sut = try makeSUT(isAppLockEnabled: true, appLockDelay: .fiveMinutes)
+
+        assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
+
+    @Test(arguments: [ColorScheme.light, .dark])
     func appLockWithoutPasscode(colorScheme: ColorScheme) throws {
         let sut = try makeSUT(policy: .cannotAuthenticate)
 
@@ -60,6 +67,7 @@ extension VaultSettingsViewSnapshotTests {
         dynamicTypeSize: DynamicTypeSize = .medium,
         height: CGFloat = 1200,
         isAppLockEnabled: Bool = false,
+        appLockDelay: AppLockDelay = .immediately,
         policy: some DeviceAuthenticationPolicy = .alwaysDeny,
         configure: (inout LocalSettingsState) -> Void = { _ in },
     ) throws -> some View {
@@ -68,6 +76,7 @@ extension VaultSettingsViewSnapshotTests {
         let authenticationService = DeviceAuthenticationService(policy: policy)
         let appLockSettings = try AppLockSettingsStore(userDefaults: .nonPersistent())
         appLockSettings.isEnabled = isAppLockEnabled
+        appLockSettings.delay = appLockDelay
         let appLock = AppLockService(
             settings: appLockSettings,
             authenticationService: authenticationService,

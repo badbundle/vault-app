@@ -54,6 +54,8 @@ public enum VaultIdentifiers {
         /// AutoFill and widget extensions can read them too.
         public enum AppLock {
             public static let isEnabled = "vault.preferences.app-lock.is-enabled"
+            /// Seconds, as an `AppLockDelay` raw value.
+            public static let delay = "vault.preferences.app-lock.delay"
         }
     }
 
