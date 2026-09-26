@@ -14,7 +14,7 @@ struct OTPWidgetLoadingTests {
             .failure(.open),
             .success(store),
         ])
-        let loader = WidgetVaultLoader(makeStore: { try factory.makeStore() })
+        let loader = WidgetVaultLoader(isVaultPlain: { true }, makeStore: { try factory.makeStore() })
 
         await #expect(throws: WidgetTestError.open) {
             try await loader.eligibleItems()
@@ -26,6 +26,21 @@ struct OTPWidgetLoadingTests {
         #expect(await store.retrieveCallCount == 1)
     }
 
+    /// Once the vault is encrypted, or while it's being converted, the plain store mustn't be opened.
+    @Test
+    func eligibleItems_whenTheVaultIsNotPlain_neverOpensTheStore() async throws {
+        let item = makeOTPVaultItem(accountName: "first", issuer: "Issuer")
+        let factory = StoreFactoryScript(results: [.success(FakeVaultStoreReader(results: [
+            .success(.init(items: [item])),
+        ]))])
+        let loader = WidgetVaultLoader(isVaultPlain: { false }, makeStore: { try factory.makeStore() })
+
+        let items = try await loader.eligibleItems()
+
+        #expect(items == [])
+        #expect(factory.openCallCount == 0)
+    }
+
     @Test
     func eligibleItems_clearsCachedStoreAfterRetrieveFailure() async throws {
         let item = makeOTPVaultItem(accountName: "second", issuer: "Issuer")
@@ -35,7 +50,7 @@ struct OTPWidgetLoadingTests {
             .success(failingStore),
             .success(succeedingStore),
         ])
-        let loader = WidgetVaultLoader(makeStore: { try factory.makeStore() })
+        let loader = WidgetVaultLoader(isVaultPlain: { true }, makeStore: { try factory.makeStore() })
 
         await #expect(throws: WidgetTestError.retrieve) {
             try await loader.eligibleItems()
@@ -56,7 +71,10 @@ struct OTPWidgetLoadingTests {
             .failure(.open),
             .success(store),
         ])
-        let query = OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(makeStore: { try factory.makeStore() }))
+        let query = OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(
+            isVaultPlain: { true },
+            makeStore: { try factory.makeStore() },
+        ))
 
         let firstResult = try await query.suggestedEntities()
         let secondResult = try await query.suggestedEntities()
@@ -75,7 +93,7 @@ struct OTPWidgetLoadingTests {
     @Test
     func entitiesForIdentifiers_returnEmptyOnFailure() async throws {
         let id = UUID()
-        let query = OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(makeStore: {
+        let query = OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(isVaultPlain: { true }, makeStore: {
             throw WidgetTestError.open
         }))
 

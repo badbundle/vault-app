@@ -340,6 +340,20 @@ extension PersistedLocalVaultStore: VaultStoreReorderable {
     }
 }
 
+// MARK: - Records
+
+extension PersistedLocalVaultStore {
+    /// Every item and tag, as records, field for field: including items that don't decode. Converting the store to
+    /// an encrypted vault copies these.
+    ///
+    /// Items come in the order they were created, as the record store keeps them.
+    func recordState() throws -> VaultRecordState {
+        let items: [PersistedVaultItem] = try modelContext.fetch(.all(sortBy: [SortDescriptor(\.createdDate)]))
+        let tags: [PersistedVaultTag] = try modelContext.fetch(.all(sortBy: [SortDescriptor(\.title)]))
+        return VaultRecordState(items: items.map { $0.makeRecord() }, tags: tags.map { $0.makeRecord() })
+    }
+}
+
 // MARK: - VaultStoreExporter
 
 extension PersistedLocalVaultStore: VaultStoreExporter {

@@ -41,6 +41,26 @@ struct EncryptedVaultPayloadTests {
     }
 
     @Test
+    func encode_roundTripsTheVaultsMetadata() throws {
+        let state = VaultRecordState(items: [], tags: [], vault: VaultMetadata(duressSlots: [3, 14, 0]))
+
+        let payload = try EncryptedVaultPayload.encode(state)
+
+        #expect(try EncryptedVaultPayload.decode(payload) == state)
+        #expect(String(decoding: payload.data, as: UTF8.self).contains(#""vault":{"duressSlots":[3,14,0]}"#))
+    }
+
+    /// Fields added later read as their defaults when they're missing.
+    @Test
+    func decode_readsAPayloadWithoutTheVaultsMetadataAsHavingNone() throws {
+        for json in [#"{"items":[],"tags":[]}"#, #"{"items":[],"tags":[],"vault":{}}"#] {
+            let state = try EncryptedVaultPayload.decode(VaultSlotPayload(version: 1, data: Data(json.utf8)))
+
+            #expect(state == .empty, "\(json)")
+        }
+    }
+
+    @Test
     func encode_roundTripsAnEmptyVault() throws {
         #expect(try EncryptedVaultPayload.decode(EncryptedVaultPayload.encode(.empty)) == .empty)
     }

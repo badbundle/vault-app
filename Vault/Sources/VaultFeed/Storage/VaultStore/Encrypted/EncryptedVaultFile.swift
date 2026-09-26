@@ -81,6 +81,27 @@ struct EncryptedVaultFile: Sendable {
         return try body(Locked(file: self))
     }
 
+    /// Takes the lock, and keeps it until `HeldLock.release()`: for work that holds it across suspension points,
+    /// such as a conversion, or a plain-store write that has to know no conversion is underway.
+    func lockUntilReleased() async throws -> HeldLock {
+        try await HeldLock(file: self, lock: acquireLock())
+    }
+
+    /// The lock, held until it's released. Release it exactly once.
+    struct HeldLock: Sendable {
+        let file: EncryptedVaultFile
+        fileprivate let lock: SlotFileLock
+
+        /// The file, while the lock is held.
+        var locked: Locked {
+            Locked(file: file)
+        }
+
+        func release() {
+            file.fileSystem.unlock(lock)
+        }
+    }
+
     private func acquireLock() async throws -> SlotFileLock {
         let deadline = ContinuousClock.now + lockTimeout
         while true {
@@ -129,6 +150,12 @@ extension EncryptedVaultFile {
             // directory doesn't undo the change. APFS renames atomically either way; flushing only makes it survive a
             // power loss straight away.
             try? fileSystem.synchronizeDirectory(at: file.directory)
+        }
+
+        /// Deletes the file.
+        func removeFile() throws {
+            try file.fileSystem.removeItem(at: file.url)
+            try? file.fileSystem.synchronizeDirectory(at: file.directory)
         }
 
         /// Removes temp files left by a writer that crashed before its rename, or whose removal failed.

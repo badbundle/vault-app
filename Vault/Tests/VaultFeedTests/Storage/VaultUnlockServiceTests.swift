@@ -626,7 +626,7 @@ final class GatedSlotFileSystem: SlotFileSystem {
         }
     }
 
-    func createFile(at url: URL, contents: Data) throws {
+    func createFile(at url: URL, contents: Data, protection: SlotFileProtection) throws {
         let holds = holdsNextWrite.modify { holds in
             defer { holds = false }
             return holds
@@ -635,7 +635,7 @@ final class GatedSlotFileSystem: SlotFileSystem {
             isHolding.modify { $0 = true }
             _ = gate.wait(timeout: .now() + 5)
         }
-        try base.createFile(at: url, contents: contents)
+        try base.createFile(at: url, contents: contents, protection: protection)
     }
 
     func tryLock(_ url: URL) throws -> SlotFileLock? {

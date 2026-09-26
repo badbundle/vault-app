@@ -7,8 +7,29 @@ struct VaultRecordState: Equatable, Sendable {
     var items: [VaultItemRecord]
     /// Tags in the order they were first stored.
     var tags: [VaultTagRecord]
+    /// About the vault itself, rather than what's in it. No store operation changes it: deleting all data and
+    /// override imports keep it.
+    var vault = VaultMetadata()
 
     static let empty = VaultRecordState(items: [], tags: [])
+}
+
+/// What an encrypted vault keeps about itself, in its payload's `vault` section.
+///
+/// Each field reads as its default when it's missing, so fields can be added later.
+struct VaultMetadata: Codable, Equatable, Sendable {
+    /// The slots this vault's duress vaults go in, in order: ten distinct slots, never its own. Making a duress
+    /// vault uses the first (VAULT-51). A vault stored in the plain store has none.
+    var duressSlots: [Int] = []
+
+    init(duressSlots: [Int] = []) {
+        self.duressSlots = duressSlots
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        duressSlots = try container.decodeIfPresent([Int].self, forKey: .duressSlots) ?? []
+    }
 }
 
 /// A vault store that holds the whole vault in memory as `VaultItemRecord`s and `VaultTagRecord`s.
@@ -367,7 +388,7 @@ extension RecordVaultStore: VaultStoreImporter {
     func importAndOverrideVault(payload: VaultApplicationPayload) async throws {
         let currentDate = currentDate
         try await change { state in
-            var imported = VaultRecordState.empty
+            var imported = VaultRecordState(items: [], tags: [], vault: state.vault)
             try imported.importing(tags: payload.tags, items: payload.items, currentDate: currentDate)
             state = imported
         }
@@ -377,9 +398,11 @@ extension RecordVaultStore: VaultStoreImporter {
 // MARK: - VaultStoreDeleter
 
 extension RecordVaultStore: VaultStoreDeleter {
+    /// Deletes every item and tag. The vault itself stays, with its metadata.
     func deleteVault() async throws {
         try await change { state in
-            state = .empty
+            state.items = []
+            state.tags = []
         }
     }
 }

@@ -14,6 +14,8 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         case crash(atStep: Int)
         /// Reading back a temp file gives different bytes from the ones written.
         case corruptReadBack
+        /// One step fails, and then the process "crashes" at a later one, as `crash(atStep:)` does.
+        case failThenCrash(failAtStep: Int, crashAtStep: Int)
 
         /// That step throws, and everything else works.
         static func fail(atStep step: Int) -> Fault {
@@ -73,9 +75,9 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         return try base.prefix(of: url, length: length)
     }
 
-    func createFile(at url: URL, contents: Data) throws {
+    func createFile(at url: URL, contents: Data, protection: SlotFileProtection) throws {
         try step("create \(Self.name(url))")
-        try base.createFile(at: url, contents: contents)
+        try base.createFile(at: url, contents: contents, protection: protection)
     }
 
     func synchronizeFile(at url: URL) throws {
@@ -115,6 +117,8 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
             throw InjectedFault()
         case let .crash(atStep) where number >= atStep:
             throw InjectedFault()
+        case let .failThenCrash(failAtStep, crashAtStep) where number == failAtStep || number >= crashAtStep:
+            throw InjectedFault()
         default:
             break
         }
@@ -125,6 +129,14 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
     }
 
     private static func name(_ url: URL) -> String {
-        isTemporary(url) ? "temp" : url.lastPathComponent
+        if isTemporary(url) {
+            "temp"
+        } else if url.lastPathComponent.hasPrefix(VaultStorageStateFile.temporaryFilePrefix) {
+            "state temp"
+        } else if url.lastPathComponent.hasPrefix(PersistedLocalVaultStoreArchives.directoryNamePrefix) {
+            "archive"
+        } else {
+            url.lastPathComponent
+        }
     }
 }

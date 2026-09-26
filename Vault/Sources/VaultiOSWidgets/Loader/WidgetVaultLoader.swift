@@ -25,22 +25,33 @@ public actor WidgetVaultLoader {
     private let makeStore: StoreFactory
     private var store: (any WidgetStore)?
     private let appLockSettings: AppLockSettingsStore
+    /// Whether the vault is in the plain store, with no change of mode underway.
+    private let isVaultPlain: @Sendable () -> Bool
 
     public init(store: (any WidgetStore)? = nil, appLockSettings: AppLockSettingsStore = .shared()) {
         if let store {
             self.store = store
             makeStore = { store }
+            isVaultPlain = { true }
         } else {
             self.store = nil
             makeStore = Self.makeSharedStore
+            isVaultPlain = { VaultStorageState.isPlain(inDirectory: VaultSharedStorage.directory()) }
         }
         self.appLockSettings = appLockSettings
     }
 
-    public init(appLockSettings: AppLockSettingsStore = .shared(), makeStore: @escaping StoreFactory) {
+    /// - Parameter isVaultPlain: Whether the vault is in the plain store, with no change of mode underway. The store
+    ///   is only opened and read while it is.
+    public init(
+        appLockSettings: AppLockSettingsStore = .shared(),
+        isVaultPlain: @escaping @Sendable () -> Bool,
+        makeStore: @escaping StoreFactory,
+    ) {
         self.makeStore = makeStore
         store = nil
         self.appLockSettings = appLockSettings
+        self.isVaultPlain = isVaultPlain
     }
 
     /// Whether the app lock is on. While it is, the widget shows no codes and the loader hands out no items: the
@@ -101,16 +112,19 @@ public actor WidgetVaultLoader {
         return code
     }
 
+    /// The plain store, guarded, so a HOTP increment can't land in it after the app has started converting it to an
+    /// encrypted vault.
     private static func makeSharedStore() throws -> any WidgetStore {
-        try PersistedLocalVaultStoreFactory(
-            storageDirectory: VaultSharedStorage.directory(),
-            recoveryMode: .openOnly,
-        ).makeVaultStoreOrThrow()
+        let directory = VaultSharedStorage.directory()
+        let store = try PersistedLocalVaultStoreFactory(storageDirectory: directory, recoveryMode: .openOnly)
+            .makeVaultStoreOrThrow()
+        return GuardedPlainVaultStore(store: store, directory: directory)
     }
 
-    /// Every read goes through here, so none reaches the vault while the app lock is on.
+    /// Every read goes through here, so none reaches the vault while the app lock is on, or opens the plain store
+    /// once the vault is encrypted, or while it's being converted. (What widgets show then is VAULT-49's.)
     private func retrieveItems() async throws -> VaultRetrievalResult<VaultItem> {
-        guard !isAppLocked else { return .empty() }
+        guard !isAppLocked, isVaultPlain() else { return .empty() }
         let currentStore = try store ?? openStore()
         do {
             return try await currentStore.retrieve(query: .init())

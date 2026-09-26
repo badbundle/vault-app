@@ -3,7 +3,7 @@ import Foundation
 /// How an encrypted vault's records are encoded in its slot: as JSON, which the slot file compresses with LZFSE.
 ///
 /// ```
-/// { "items": [VaultItemRecord], "tags": [VaultTagRecord] }
+/// { "items": [VaultItemRecord], "tags": [VaultTagRecord], "vault": VaultMetadata }
 /// ```
 ///
 /// - **Keys** are the records' property names.
@@ -18,7 +18,7 @@ enum EncryptedVaultPayload {
     static let currentVersion: UInt32 = 1
 
     static func encode(_ state: VaultRecordState) throws -> VaultSlotPayload {
-        let contents = Contents(items: state.items, tags: state.tags)
+        let contents = Contents(items: state.items, tags: state.tags, vault: state.vault)
         return try VaultSlotPayload(version: currentVersion, data: encoder.encode(contents))
     }
 
@@ -38,12 +38,27 @@ enum EncryptedVaultPayload {
             throw EncryptedVaultStoreError.unsupportedPayloadVersion(payload.version)
         }
         let contents = try decoder.decode(Contents.self, from: payload.data)
-        return VaultRecordState(items: contents.items, tags: contents.tags)
+        return VaultRecordState(items: contents.items, tags: contents.tags, vault: contents.vault)
     }
 
     private struct Contents: Codable {
         var items: [VaultItemRecord]
         var tags: [VaultTagRecord]
+        var vault: VaultMetadata
+
+        init(items: [VaultItemRecord], tags: [VaultTagRecord], vault: VaultMetadata) {
+            self.items = items
+            self.tags = tags
+            self.vault = vault
+        }
+
+        /// A missing `vault` reads as no metadata: fields added later read as their defaults when they're missing.
+        init(from decoder: any Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            items = try container.decode([VaultItemRecord].self, forKey: .items)
+            tags = try container.decode([VaultTagRecord].self, forKey: .tags)
+            vault = try container.decodeIfPresent(VaultMetadata.self, forKey: .vault) ?? VaultMetadata()
+        }
     }
 
     private static var encoder: JSONEncoder {

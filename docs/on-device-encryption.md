@@ -257,8 +257,18 @@ involved.
 | `encrypted(password)` | App lock password set | Slot file | Device authentication, then the password |
 | `encrypted(deviceKey)` | Password turned off after being on | Slot file, with the open vault's key wrapped by a keychain device key | Device authentication only |
 
-The mode lives in `vault-storage-state.json`, written atomically with `F_FULLFSYNC`, together with the journal
-for in-progress transitions. It isn't secret: the lock screen already shows whether a password is set.
+The mode lives in `vault-storage-state.json` (`VaultStorageState`, VAULT-47), written atomically with
+`F_FULLFSYNC`, together with the journal for in-progress transitions and the device's unlock deadline. It isn't
+secret: the lock screen already shows whether a password is set.
+
+- **No file means `plain`**, so a device that never set a password has none, and going back to `plain` removes it.
+- **It's readable once the device has been unlocked after starting up**, like the plain store, so the widgets can
+  tell the vault is encrypted while the device is locked.
+- **Only the app recovers** from a transition a crash interrupted, at launch, before it opens any store. The
+  AutoFill and widget extensions only read the state. Anything but a settled `plain`, including a file they can't
+  read, counts as encrypted, so they never open the plain store then: the AutoFill extension's store session
+  starts locked, and the widget loader returns nothing. An extension can live through a conversion, so it checks
+  the state on every call, not just at launch (`GuardedPlainVaultStore`). (What they show is VAULT-49's.)
 
 `plain` exists so that users who never opt in carry no new risk. The first time the password is set, there's a
 one-time, verified conversion. After that, turning the password on and off only rewraps keys.
@@ -522,7 +532,7 @@ Steps:
 1. Derive `K_pw` with a fresh salt. Choose the real vault's slot `r` uniformly at random, never a fixed index,
    and generate `K_r`.
 2. Snapshot the SQLite store to `[VaultItemRecord]`.
-3. Build the file in memory: the header, slot `r` sealed (its `duressSlots` are four random slots ≠ `r`), the
+3. Build the file in memory: the header, slot `r` sealed (its `duressSlots` are ten random slots ≠ `r`), the
    other slots random.
 4. Write the journal: `migrating(temp: name)`.
 5. Write the temp file and call `F_FULLFSYNC`. **Verify** it by running the full unlock path against it with the
@@ -537,8 +547,42 @@ Steps:
 At launch:
 
 - Journal `migrating`, or `plain` with a stray slot file: the SQLite store was never touched and is still the
-  truth. Delete the slot file and any temp files. The UI never said the password was set.
+  truth. Delete the slot file and any temp files. The UI never said the password was set. If the SQLite store
+  isn't there, something else has gone wrong (a lost state file, say), and the slot file might be the only copy of
+  the vault, so nothing is deleted and the app shows its failure screen.
 - Journal `encrypted(password), cleanup: plain`: finish deleting the SQLite files. This is idempotent.
+
+**As built** (`VaultEncryptionConverter`, `VaultStorageRecovery`, VAULT-47), the steps above run in a slightly
+different order:
+
+- **Preconditions first.** A second conversion is refused before the first can suspend. The vault's size is checked
+  against the largest slot before anything is journaled or derived, and a vault too large for it refuses with its
+  own error (`vaultTooLarge`), which the UI can explain. The attempt counter is reset, so a count left in the
+  keychain doesn't carry over to the new password.
+- **The lock is held from the journal to the commit.** The conversion takes `vault-slots.lock`, journals
+  `migrating`, and locks the store session, so the app's own writes finish first. Only then does it take the
+  snapshot. An extension reads the plain store only while the state is a settled `plain`, and writes it only
+  holding the same lock, checking the state again once it has it (`GuardedPlainVaultStore`). So a HOTP counter
+  AutoFill or a widget advances can't land after the snapshot and be lost.
+- **The failed-open archives** are confirmed by the caller, and their names go in the committing journal, so
+  recovery deletes exactly those.
+- **The commit is the committing journal's rename.** Every state write treats its rename as done once it's done:
+  flushing the directory after it is attempted, not required, as for the encrypted file.
+- **Undoing** a conversion that failed before the commit first reads the journal on disk. Only if it shows the
+  conversion didn't commit does it delete the encrypted file, and only a file this conversion wrote, then remove
+  the journal and switch the session back to the plain store. If the journal can't be read, the session stays
+  locked and the next launch's recovery decides. If a deletion fails, the journal still says `migrating`, which
+  recovery undoes the same way.
+- **After the commit**, "close the SwiftData container" is a hook the app provides (`releasePlainStore`, with
+  `VaultRoot.plainVaultStore` releasable). The SQLite files, the rehash files and the confirmed archives are
+  deleted, then the journal says `clearingSystemSurfaces` while the QuickType identity store is cleared and the
+  widgets reloaded. The app runs those again at its next launch if it stopped first
+  (`finishClearingSystemSurfaces`). A failure deleting the SQLite files is left for the next launch too.
+- **The session** switches to the vault only if it hasn't locked since the conversion locked it: if the app went to
+  the background meanwhile, it stays locked, and the vault opens with the password.
+- **Recovery never deletes a possible only copy.** It deletes the SQLite store only if the encrypted file is there
+  and reads as one, and the encrypted file only if the SQLite store is there. Otherwise the app shows its failure
+  screen.
 
 **No step deletes the source before a verified copy is committed.**
 

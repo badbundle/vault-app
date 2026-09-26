@@ -83,9 +83,9 @@ public final class PersistedLocalVaultStoreFactory {
         }
     }
 
-    private func recoverExistingStoreIfPresent(storeURL: URL, connectionError: any Error) throws {
+    private func recoverExistingStoreIfPresent(storeURL _: URL, connectionError: any Error) throws {
         do {
-            let existingURLs = storeBundleURLs(storeURL: storeURL).filter { fileExists(at: $0.url) }
+            let existingURLs = storeBundleURLs().filter { fileExists(at: $0.url) }
             guard existingURLs.isEmpty == false else {
                 throw StoreConnectionError.unableToConnect(connectionError)
             }
@@ -180,6 +180,22 @@ private struct FileManagerPersistedLocalVaultStoreRecoveryFileSystem: PersistedL
 }
 
 extension PersistedLocalVaultStoreFactory {
+    /// The store's files in the directory: the SQLite database first, then its write-ahead log and shared memory.
+    static func storeFileURLs(storageDirectory: URL) -> [URL] {
+        let storeURL = storageDirectory.appending(path: storeFilename)
+        return [storeURL] + storeSidecarSuffixes.map { suffix in
+            URL(fileURLWithPath: storeURL.path(percentEncoded: false) + suffix)
+        }
+    }
+
+    /// The pending rehash files that a schema migration leaves next to the store (see `KillphraseRehashService`).
+    static func pendingRehashFileURLs(storageDirectory: URL) -> [URL] {
+        [
+            PendingKillphraseRehashStore.defaultURL(storeDirectory: storageDirectory),
+            PendingSearchPassphraseRehashStore.defaultURL(storeDirectory: storageDirectory),
+        ]
+    }
+
     private func makeUniqueArchiveDirectoryURL() -> URL {
         let baseName = archiveDirectoryName()
         var candidateURL = storageDirectory.appending(path: baseName)
@@ -193,15 +209,10 @@ extension PersistedLocalVaultStoreFactory {
         return candidateURL
     }
 
-    private func storeBundleURLs(storeURL: URL) -> [RecoveryFile] {
-        let sidecarURLs = Self.storeSidecarSuffixes.map { suffix in
-            URL(fileURLWithPath: storeURL.path(percentEncoded: false) + suffix)
-        }
-        return [
-            RecoveryFile(url: storeURL),
-            RecoveryFile(url: PendingKillphraseRehashStore.defaultURL(storeDirectory: storageDirectory)),
-            RecoveryFile(url: PendingSearchPassphraseRehashStore.defaultURL(storeDirectory: storageDirectory)),
-        ] + sidecarURLs.map(RecoveryFile.init(url:))
+    private func storeBundleURLs() -> [RecoveryFile] {
+        let storeURLs = Self.storeFileURLs(storageDirectory: storageDirectory)
+        let rehashURLs = Self.pendingRehashFileURLs(storageDirectory: storageDirectory)
+        return ([storeURLs[0]] + rehashURLs + storeURLs.dropFirst()).map(RecoveryFile.init(url:))
     }
 
     private func fileExists(at url: URL) -> Bool {

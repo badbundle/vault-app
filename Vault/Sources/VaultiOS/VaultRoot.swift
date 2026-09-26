@@ -60,18 +60,54 @@ public enum VaultRoot {
     static let vaultStorageDirectory: URL = VaultSharedStorage.directory(fileManager: fileManager)
 
     /// Non-nil when the on-disk vault store could not be opened (even
-    /// after recovery) and `plainVaultStore` is an empty in-memory fallback.
+    /// after recovery) and `plainVaultStore` is an empty in-memory fallback,
+    /// or when how the vault is stored couldn't be worked out.
     /// The main scene checks this before wiring `setup()` and shows a
     /// failure screen instead of the vault.
     @MainActor
     public private(set) static var vaultStoreLoadFailureMessage: String?
 
-    /// Today's SQLite store in the App Group container.
+    /// Whether this is an app extension (AutoFill), rather than the app.
+    static let isAppExtension = Bundle.main.bundleURL.pathExtension == "appex"
+
+    /// How the vault was stored on this device when the process started: in
+    /// the plain SQLite store, or encrypted with the App Lock Password.
+    ///
+    /// The app first finishes or undoes any change of mode it was stopped in
+    /// the middle of (`VaultStorageRecovery`). The AutoFill extension only
+    /// reads the state, and treats a change underway as encrypted, so it
+    /// never opens a plain store that's being converted. It can live through
+    /// a conversion, so it also checks the state on every call
+    /// (`GuardedPlainVaultStore`).
+    @MainActor
+    static let storageMode: VaultStorageState.Mode = {
+        #if DEBUG
+        if ScreenshotMode.isEnabled {
+            return .plain
+        }
+        #endif
+        if isAppExtension {
+            return VaultStorageState.isPlain(inDirectory: vaultStorageDirectory) ? .plain : .password
+        }
+        do {
+            return try VaultStorageRecovery(directory: vaultStorageDirectory).recoverAtLaunch()
+        } catch {
+            // Open no store at all: the scene shows the failure screen.
+            vaultStoreLoadFailureMessage = error.localizedDescription
+            return .password
+        }
+    }()
+
+    /// Today's SQLite store in the App Group container, while the vault is
+    /// stored in it. `nil` once encryption is on, so it's never opened then.
     ///
     /// Read and written through `vaultStore`, apart from the killphrase and
     /// search passphrase migrations, which only ever apply to this store.
+    /// `releasePlainVaultStore()` lets go of it once a conversion to an
+    /// encrypted vault has committed.
     @MainActor
-    static let plainVaultStore: PersistedLocalVaultStore = {
+    private(set) static var plainVaultStore: PersistedLocalVaultStore? = {
+        guard storageMode == .plain else { return nil }
         #if DEBUG
         // Likewise the vault: an in-memory one, so the simulator's stored
         // vault is never shown or modified.
@@ -102,11 +138,25 @@ public enum VaultRoot {
         }
     }()
 
-    /// Where everything reads and writes the vault. It opens on the plain
-    /// store, as the app always has, and can switch store (or lock) while
-    /// the app runs.
+    /// Lets go of the plain store, once the store session has switched away
+    /// from it, so its database closes before its files are deleted. Nothing
+    /// else holds it: the rehash services look it up for each write.
     @MainActor
-    public static let vaultStore: VaultStoreSession = .init(target: .plain(plainVaultStore))
+    static func releasePlainVaultStore() {
+        plainVaultStore = nil
+    }
+
+    /// Where everything reads and writes the vault. It opens on the plain
+    /// store, as the app always has, or locked once encryption is on, and
+    /// can switch store (or lock) while the app runs. In the AutoFill
+    /// extension the plain store is guarded, so it stops being read or
+    /// written if the app converts it meanwhile.
+    @MainActor
+    public static let vaultStore: VaultStoreSession = {
+        guard let plainVaultStore else { return .init(target: .locked) }
+        guard isAppExtension else { return .init(target: .plain(plainVaultStore)) }
+        return .init(target: .plain(GuardedPlainVaultStore(store: plainVaultStore, directory: vaultStorageDirectory)))
+    }()
 
     public static let backupPasswordStore: some BackupPasswordStore =
         BackupPasswordStoreImpl(secureStorage: secureStorage, clock: clock)
@@ -128,14 +178,14 @@ public enum VaultRoot {
 
     @MainActor
     private static func makeKillphraseRehashService() -> KillphraseRehashService {
-        // Capture the store (an actor reference, Sendable) into a local
-        // so the writer closure can hop straight onto the store actor
-        // without re-crossing MainActor on every call.
-        let store = plainVaultStore
-        return KillphraseRehashService(
+        KillphraseRehashService(
             storeDirectory: vaultStorageDirectory,
             fileManager: fileManager,
             writer: { id, digest in
+                // Looked up for each write, so the store can be released.
+                // Only the plain store has phrases to rehash: converting it
+                // to an encrypted vault requires there be none left.
+                guard let store = await plainVaultStore else { throw VaultStoreSessionError.locked }
                 try await store.applyKillphraseDigest(itemID: id, digest: digest)
             },
         )
@@ -143,11 +193,11 @@ public enum VaultRoot {
 
     @MainActor
     private static func makeSearchPassphraseRehashService() -> SearchPassphraseRehashService {
-        let store = plainVaultStore
-        return SearchPassphraseRehashService(
+        SearchPassphraseRehashService(
             storeDirectory: vaultStorageDirectory,
             fileManager: fileManager,
             writer: { id, digest in
+                guard let store = await plainVaultStore else { throw VaultStoreSessionError.locked }
                 try await store.applySearchPassphraseDigest(itemID: id, digest: digest)
             },
         )
@@ -356,9 +406,22 @@ public enum VaultRoot {
         reloadWidgetTimelines()
         // Clear deleted content an earlier session left in the SQLite store's files, and columns a migration has
         // just dropped (MANIFESTO C6). The store scrubs after each deletion itself from then on.
-        let store = plainVaultStore
-        Task {
-            await store.scrubContentLeftByEarlierSessions()
+        if let store = plainVaultStore {
+            Task {
+                await store.scrubContentLeftByEarlierSessions()
+            }
+        }
+        // Finish a conversion to an encrypted vault that the app was stopped in the middle of: QuickType mustn't
+        // keep the vault's issuers and accounts, nor the widgets its codes.
+        if storageMode == .password {
+            let otpAutofillStore = vaultOtpAutofillStore
+            let directory = vaultStorageDirectory
+            Task {
+                try? await VaultStorageRecovery(directory: directory).finishClearingSystemSurfaces {
+                    try? await otpAutofillStore.removeAll()
+                    await reloadWidgetTimelines()
+                }
+            }
         }
     }
 
