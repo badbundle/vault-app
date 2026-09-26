@@ -1966,6 +1966,83 @@ struct VaultStoreContractTests {
         try await sut.assertStoreContains(exactlyTags: tags2)
     }
 
+    /// Items the payload shares with the vault are replaced by the payload's copies, including their tags and
+    /// order, even once the store has read them.
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndOverrideVault_replacesItemsItShares(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore(sortOrder: .relativeOrder)
+        let (items, _) = try await insertVaultToKeep(into: sut)
+        let newTag = anyVaultItemTag(name: "New")
+        let replacements = [
+            uniqueVaultItem(
+                id: items[0].id,
+                relativeOrder: 9,
+                updatedDate: Date(timeIntervalSince1970: 1000),
+                userDescription: "replaced",
+                tags: [newTag.id],
+            ),
+            uniqueVaultItem(id: items[1].id, relativeOrder: 3, updatedDate: Date(timeIntervalSince1970: 2000)),
+        ]
+
+        try await sut.importAndOverrideVault(payload: .init(userDescription: "", items: replacements, tags: [newTag]))
+
+        try await sut.assertStoreContains(exactlyItems: replacements)
+        try await sut.assertStoreContains(exactlyTags: [newTag])
+        let ordered = try await sut.retrieve(query: .init()).items
+        #expect(ordered.map(\.id) == [replacements[1].id, replacements[0].id])
+    }
+
+    /// An override import that fails part way through leaves the vault as it was, not empty or half replaced:
+    /// the same items and tags, in the same order.
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndOverrideVault_failingPartWayLeavesVaultUntouched(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore(sortOrder: .relativeOrder)
+        let (items, tags) = try await insertVaultToKeep(into: sut)
+        let orderBefore = try await sut.retrieve(query: .init()).items
+
+        await #expect(throws: VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable) {
+            try await sut.importAndOverrideVault(payload: payloadFailingPartWay(sharingIDsWith: items))
+        }
+
+        try await sut.assertStoreContains(exactlyItems: items)
+        try await sut.assertStoreContains(exactlyTags: tags)
+        let orderAfter = try await sut.retrieve(query: .init()).items
+        #expect(orderAfter == orderBefore)
+    }
+
+    /// A failed override import doesn't get in the way of the next one.
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndOverrideVault_succeedsAfterAFailedImport(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
+        let (items, _) = try await insertVaultToKeep(into: sut)
+        let failing = payloadFailingPartWay(sharingIDsWith: items)
+        await #expect(throws: VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable) {
+            try await sut.importAndOverrideVault(payload: failing)
+        }
+
+        let storable = failing.items.filter { $0.item.recoveryPhrase == nil }
+        try await sut.importAndOverrideVault(payload: .init(userDescription: "", items: storable, tags: failing.tags))
+
+        try await sut.assertStoreContains(exactlyItems: storable)
+        try await sut.assertStoreContains(exactlyTags: failing.tags)
+    }
+
+    @Test(arguments: VaultStoreEngine.allCases)
+    func importAndMergeVault_failingPartWayLeavesVaultUntouched(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore(sortOrder: .relativeOrder)
+        let (items, tags) = try await insertVaultToKeep(into: sut)
+        let orderBefore = try await sut.retrieve(query: .init()).items
+
+        await #expect(throws: VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable) {
+            try await sut.importAndMergeVault(payload: payloadFailingPartWay(sharingIDsWith: items))
+        }
+
+        try await sut.assertStoreContains(exactlyItems: items)
+        try await sut.assertStoreContains(exactlyTags: tags)
+        let orderAfter = try await sut.retrieve(query: .init()).items
+        #expect(orderAfter == orderBefore)
+    }
+
     @Test(arguments: VaultStoreEngine.allCases)
     func deleteItemsMatchingKillphrase_hasNoEffectIfVaultEmpty(engine: VaultStoreEngine) async throws {
         let sut = try await engine.makeStore()
@@ -2100,5 +2177,62 @@ struct VaultStoreContractTests {
         #expect(spacesDidDelete == false)
         #expect(newlineDidDelete == false)
         try await sut.assertStoreContains(exactlyItems: [item1, item2, item3])
+    }
+}
+
+// MARK: - Helpers
+
+extension VaultStoreContractTests {
+    /// A vault of three items and two tags, stored through an import, as it reads back from the store.
+    ///
+    /// The items' relative order isn't the order they're created in, so a change to it shows.
+    private func insertVaultToKeep(
+        into sut: some ContractTestableVaultStore,
+    ) async throws -> (items: [VaultItem], tags: [VaultItemTag]) {
+        let tagA = anyVaultItemTag(name: "A")
+        let tagB = anyVaultItemTag(name: "B")
+        let items = [
+            uniqueVaultItem(
+                relativeOrder: 1,
+                updatedDate: Date(timeIntervalSince1970: 50),
+                userDescription: "one",
+                tags: [tagA.id],
+            ),
+            uniqueVaultItem(
+                relativeOrder: 2,
+                updatedDate: Date(timeIntervalSince1970: 100),
+                userDescription: "two",
+                tags: [tagB.id],
+            ),
+            uniqueVaultItem(relativeOrder: 0, updatedDate: Date(timeIntervalSince1970: 200), userDescription: "three"),
+        ]
+        try await sut.importAndOverrideVault(payload: .init(userDescription: "", items: items, tags: [tagA, tagB]))
+        return try await (sut.allVaultItems(), sut.allVaultTags())
+    }
+
+    /// A payload that would update, add and remove items and tags, with an item part way through that can't be
+    /// stored: a plaintext recovery phrase.
+    private func payloadFailingPartWay(sharingIDsWith items: [VaultItem]) -> VaultApplicationPayload {
+        let newTag = anyVaultItemTag(name: "New")
+        let unstorable = VaultItem(
+            metadata: anyVaultItemMetadata(updatedDate: Date(timeIntervalSince1970: 1002)),
+            item: .recoveryPhrase(anyRecoveryPhrase()),
+        )
+        return VaultApplicationPayload(
+            userDescription: "",
+            items: [
+                uniqueVaultItem(
+                    id: items[0].id,
+                    relativeOrder: 5,
+                    updatedDate: Date(timeIntervalSince1970: 1000),
+                    userDescription: "updated",
+                    tags: [newTag.id],
+                ),
+                uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 1001), userDescription: "added"),
+                unstorable,
+                uniqueVaultItem(updatedDate: Date(timeIntervalSince1970: 1003), userDescription: "never reached"),
+            ],
+            tags: [newTag],
+        )
     }
 }
