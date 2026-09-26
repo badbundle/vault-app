@@ -21,6 +21,9 @@ public final actor PersistedLocalVaultStore {
     /// It is how items in the store are fetched and what reorders are performed against.
     /// A change in this will affect the user-percieved order of their items.
     var sortOrder: VaultStoreSortOrder = .relativeOrder
+
+    /// The current time, for the created and updated dates of writes. Tests set it to make dates predictable.
+    var currentDate: @Sendable () -> Date = { Date() }
 }
 
 // MARK: - VaultStoreReader
@@ -54,7 +57,7 @@ extension PersistedLocalVaultStore: VaultStoreReader {
             sortBy: sortOrder.vaultItemSortDescriptors,
         )
         let results = try modelContext.fetch(descriptor)
-        return .collectFrom(retrievedItems: results)
+        return .collectFrom(records: results.map { $0.makeRecord() })
     }
 
     /// Fetches all `onlyPassphrase`-visible items with a stored digest and
@@ -217,35 +220,17 @@ extension PersistedLocalVaultStore: VaultStoreReader {
     }
 }
 
-extension VaultRetrievalResult where T == VaultItem {
-    /// Decodes and collects `PersistedVaultItem` instances into a retrieval result.
-    fileprivate static func collectFrom(retrievedItems: [PersistedVaultItem]) -> Self {
-        let decoder = PersistedVaultItemDecoder()
-        return retrievedItems.reduce(into: VaultRetrievalResult<VaultItem>()) { result, item in
-            do {
-                let decodedItem = try decoder.decode(record: item.makeRecord())
-                result.items.append(decodedItem)
-            } catch let error as VaultItemDecodingError {
-                result.errors.append(.failedToDecode(error))
-            } catch {
-                result.errors.append(.unknown)
-            }
-        }
-    }
-}
-
 // MARK: - VaultStoreWriter
 
 extension PersistedLocalVaultStore: VaultStoreWriter {
     @discardableResult
     public func insert(item: VaultItem.Write) async throws -> Identifier<VaultItem> {
         do {
-            let record = try PersistedVaultItemEncoder().encode(item: item)
-            let encoded = try makePersistedItem(record: record)
-            modelContext.insert(encoded)
+            let record = try PersistedVaultItemEncoder(currentDate: currentDate).encode(item: item)
+            try store(record: record)
 
             try modelContext.save()
-            return Identifier(id: encoded.id)
+            return Identifier(id: record.id)
         } catch {
             modelContext.rollback()
             throw error
@@ -255,10 +240,9 @@ extension PersistedLocalVaultStore: VaultStoreWriter {
     public func update(id: Identifier<VaultItem>, item: VaultItem.Write) async throws {
         do {
             let existing = try fetchVaultItem(id: id)
-            let record = try PersistedVaultItemEncoder().encode(item: item, existing: existing.makeRecord())
-            // A new model with the same id: the unique id makes the insert replace the existing one.
-            let item = try makePersistedItem(record: record)
-            modelContext.insert(item)
+            let encoder = PersistedVaultItemEncoder(currentDate: currentDate)
+            let record = try encoder.encode(item: item, existing: existing.makeRecord())
+            try store(record: record)
 
             try modelContext.save()
         } catch {
@@ -389,11 +373,10 @@ extension PersistedLocalVaultStore: VaultTagStoreWriter {
     public func insertTag(item: VaultItemTag.Write) async throws -> Identifier<VaultItemTag> {
         do {
             let record = PersistedVaultTagEncoder().encode(tag: item)
-            let newTag = PersistedVaultTag(record: record)
-            modelContext.insert(newTag)
+            try store(record: record)
 
             try modelContext.save()
-            return Identifier<VaultItemTag>(id: newTag.id)
+            return Identifier<VaultItemTag>(id: record.id)
         } catch {
             modelContext.rollback()
             throw error
@@ -404,8 +387,7 @@ extension PersistedLocalVaultStore: VaultTagStoreWriter {
         do {
             let existing = try fetchVaultItemTag(id: id)
             let record = PersistedVaultTagEncoder().encode(tag: item, existing: existing.makeRecord())
-            // Updated in place, so the items that carry the tag keep it.
-            existing.apply(record)
+            try store(record: record)
 
             try modelContext.save()
         } catch {
@@ -455,17 +437,16 @@ extension PersistedLocalVaultStore: VaultStoreImporter {
             let tagEncoder = PersistedVaultTagEncoder()
             for tag in payload.tags {
                 let record = tagEncoder.encode(tag: tag.makeWritable(), writeUpdateContext: tag.makeImportingContext())
-                modelContext.insert(PersistedVaultTag(record: record))
+                try store(record: record)
             }
 
-            let itemEncoder = PersistedVaultItemEncoder()
+            let itemEncoder = PersistedVaultItemEncoder(currentDate: currentDate)
             for item in itemsToImport {
                 let record = try itemEncoder.encode(
                     item: item.makeWritable(),
                     writeUpdateContext: item.makeImportingContext(),
                 )
-                let encoded = try makePersistedItem(record: record)
-                modelContext.insert(encoded)
+                try store(record: record)
             }
 
             try modelContext.save()
@@ -481,16 +462,15 @@ extension PersistedLocalVaultStore: VaultStoreImporter {
             let tagEncoder = PersistedVaultTagEncoder()
             for tag in payload.tags {
                 let record = tagEncoder.encode(tag: tag.makeWritable(), writeUpdateContext: tag.makeImportingContext())
-                modelContext.insert(PersistedVaultTag(record: record))
+                try store(record: record)
             }
-            let itemEncoder = PersistedVaultItemEncoder()
+            let itemEncoder = PersistedVaultItemEncoder(currentDate: currentDate)
             for item in payload.items {
                 let record = try itemEncoder.encode(
                     item: item.makeWritable(),
                     writeUpdateContext: item.makeImportingContext(),
                 )
-                let encoded = try makePersistedItem(record: record)
-                modelContext.insert(encoded)
+                try store(record: record)
             }
 
             try modelContext.save()
@@ -614,37 +594,61 @@ extension PersistedLocalVaultStore {
 // MARK: - Helpers
 
 extension PersistedLocalVaultStore {
-    /// A new model for the record, linked to the stored tags it names.
+    /// Stores the item record: updates the stored item with its id in place, or inserts a new one.
     ///
-    /// Tag ids that name no stored tag are dropped. Tags inserted but not yet saved count, so an import can insert
-    /// its tags and then items that carry them.
-    private func makePersistedItem(record: VaultItemRecord) throws -> PersistedVaultItem {
+    /// The record's tag ids are resolved to stored tags, and ids that name no stored tag are dropped. Tags inserted
+    /// but not yet saved count, so an import can store its tags and then items that carry them.
+    ///
+    /// An existing item is updated in place rather than replaced by a new model with the same id. SwiftData's
+    /// unique-id upsert merges to-many relationships instead of replacing them, so a replacement would keep tags
+    /// the record no longer has.
+    private func store(record: VaultItemRecord) throws {
         let tagIDs = record.tagIDs
         let tags = try modelContext.fetch(FetchDescriptor<PersistedVaultTag>(predicate: #Predicate {
             tagIDs.contains($0.id)
         }))
-        return PersistedVaultItem(record: record, tags: tags)
+        if let existing = try fetchVaultItemIfPresent(id: record.id) {
+            existing.apply(record, tags: tags, in: modelContext)
+        } else {
+            modelContext.insert(PersistedVaultItem(record: record, tags: tags))
+        }
+    }
+
+    /// Stores the tag record: updates the stored tag with its id in place, keeping the items that carry it, or
+    /// inserts a new one.
+    private func store(record: VaultTagRecord) throws {
+        if let existing = try fetchVaultItemTagIfPresent(id: record.id) {
+            existing.apply(record)
+        } else {
+            modelContext.insert(PersistedVaultTag(record: record))
+        }
+    }
+
+    private func fetchVaultItemIfPresent(id: UUID) throws -> PersistedVaultItem? {
+        var descriptor = FetchDescriptor<PersistedVaultItem>(predicate: #Predicate { item in
+            item.id == id
+        })
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first
+    }
+
+    private func fetchVaultItemTagIfPresent(id: UUID) throws -> PersistedVaultTag? {
+        var descriptor = FetchDescriptor<PersistedVaultTag>(predicate: #Predicate { tag in
+            tag.id == id
+        })
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first
     }
 
     private func fetchVaultItem(id: Identifier<VaultItem>) throws -> PersistedVaultItem {
-        let uuid = id.rawValue
-        var descriptor = FetchDescriptor<PersistedVaultItem>(predicate: #Predicate { item in
-            item.id == uuid
-        })
-        descriptor.fetchLimit = 1
-        guard let existing = try modelContext.fetch(descriptor).first else {
+        guard let existing = try fetchVaultItemIfPresent(id: id.rawValue) else {
             throw Error.modelNotFound
         }
         return existing
     }
 
     private func fetchVaultItemTag(id: Identifier<VaultItemTag>) throws -> PersistedVaultTag {
-        let uuid = id.id
-        var descriptor = FetchDescriptor<PersistedVaultTag>(predicate: #Predicate { item in
-            item.id == uuid
-        })
-        descriptor.fetchLimit = 1
-        guard let existing = try modelContext.fetch(descriptor).first else {
+        guard let existing = try fetchVaultItemTagIfPresent(id: id.id) else {
             throw Error.modelNotFound
         }
         return existing

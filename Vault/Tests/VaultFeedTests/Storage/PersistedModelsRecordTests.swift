@@ -104,6 +104,48 @@ extension PersistedModelsRecordTests {
     }
 }
 
+// MARK: - Applying to items
+
+extension PersistedModelsRecordTests {
+    @Test(arguments: [DetailKind.otp, .note, .encrypted], [DetailKind.otp, .note, .encrypted])
+    func item_applyReplacesEveryFieldTagsAndDetails(from before: DetailKind, to after: DetailKind) throws {
+        let tagA = UUID()
+        let tagB = UUID()
+        let original = makeFullRecord(tagIDs: [tagA, tagB], detail: before)
+        try saveItem(original, withTags: [tagA, tagB])
+        var updated = makeFullRecord(tagIDs: [tagB], detail: after)
+        updated.id = original.id
+
+        let context = ModelContext(container)
+        let model = try #require(try fetchItem(id: original.id, in: context))
+        let tagModel = try #require(try fetchTag(id: tagB, in: context))
+        model.apply(updated, tags: [tagModel], in: context)
+        try context.save()
+
+        #expect(try fetchItemRecord(id: original.id) == updated)
+        #expect(try detailRowCounts() == DetailRowCounts(kind: after))
+    }
+
+    @Test
+    func item_applyKeepsTheDetailRowForTheSameKind() throws {
+        let original = makeFullRecord(tagIDs: [], detail: .note)
+        try saveItem(original, withTags: [])
+        var updated = original
+        updated.noteDetails?.title = "A new title"
+        updated.noteDetails?.contents = "New contents"
+
+        let context = ModelContext(container)
+        let model = try #require(try fetchItem(id: original.id, in: context))
+        let detail = try #require(model.noteDetails)
+        model.apply(updated, tags: [], in: context)
+        try context.save()
+
+        #expect(model.noteDetails === detail)
+        #expect(try fetchItemRecord(id: original.id) == updated)
+        #expect(try detailRowCounts() == DetailRowCounts(notes: 1))
+    }
+}
+
 // MARK: - Tags
 
 extension PersistedModelsRecordTests {
@@ -233,9 +275,43 @@ extension PersistedModelsRecordTests {
 
     private func fetchItemRecord(id: UUID) throws -> VaultItemRecord {
         let context = ModelContext(container)
+        return try #require(try fetchItem(id: id, in: context)).makeRecord()
+    }
+
+    private func fetchItem(id: UUID, in context: ModelContext) throws -> PersistedVaultItem? {
         let descriptor = FetchDescriptor<PersistedVaultItem>(predicate: #Predicate { $0.id == id })
-        let item = try #require(try context.fetch(descriptor).first)
-        return item.makeRecord()
+        return try context.fetch(descriptor).first
+    }
+
+    /// How many rows of each detail entity are stored, across every item.
+    private func detailRowCounts() throws -> DetailRowCounts {
+        let context = ModelContext(container)
+        return try DetailRowCounts(
+            otp: context.fetchCount(FetchDescriptor<PersistedOTPDetails>()),
+            notes: context.fetchCount(FetchDescriptor<PersistedNoteDetails>()),
+            encrypted: context.fetchCount(FetchDescriptor<PersistedEncryptedItemDetails>()),
+        )
+    }
+
+    private struct DetailRowCounts: Equatable {
+        var otp = 0
+        var notes = 0
+        var encrypted = 0
+
+        init(otp: Int = 0, notes: Int = 0, encrypted: Int = 0) {
+            self.otp = otp
+            self.notes = notes
+            self.encrypted = encrypted
+        }
+
+        /// One row of the given kind, and none of the others.
+        init(kind: DetailKind) {
+            switch kind {
+            case .otp: self.init(otp: 1)
+            case .note: self.init(notes: 1)
+            case .encrypted: self.init(encrypted: 1)
+            }
+        }
     }
 
     private func fetchTagRecord(id: UUID) throws -> VaultTagRecord {
