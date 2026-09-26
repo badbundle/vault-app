@@ -307,7 +307,19 @@ public enum VaultRoot {
         autoBackupService: autoBackupService,
         defaults: defaults,
         fileManager: fileManager,
+        vaultStoreArchives: vaultStoreArchives,
     )
+
+    /// Vaults set aside because they couldn't be opened. Screenshot mode's store is in memory, so it has none.
+    @MainActor
+    static let vaultStoreArchives: any VaultStoreArchiving = {
+        #if DEBUG
+        if ScreenshotMode.isEnabled {
+            return NoVaultStoreArchives()
+        }
+        #endif
+        return PersistedLocalVaultStoreArchives(storageDirectory: vaultStorageDirectory)
+    }()
 
     // MARK: - Setup
 
@@ -327,6 +339,12 @@ public enum VaultRoot {
             reloadWidgetTimelines()
         }
         reloadWidgetTimelines()
+        // Clear deleted content an earlier session left in the SQLite store's files, and columns a migration has
+        // just dropped (MANIFESTO C6). The store scrubs after each deletion itself from then on.
+        let store = plainVaultStore
+        Task {
+            await store.scrubContentLeftByEarlierSessions()
+        }
     }
 
     @MainActor

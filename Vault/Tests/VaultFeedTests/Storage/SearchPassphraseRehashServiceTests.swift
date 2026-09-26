@@ -72,6 +72,31 @@ struct SearchPassphraseRehashServiceTests {
         #expect(remaining.first?.phrase == "bad")
     }
 
+    /// A file that can't be decoded is no use to this or any later run, so its plaintext mustn't stay.
+    @Test
+    func run_deletesPendingFileThatCantBeDecoded() async throws {
+        let env = makeSUT()
+        try Data("not json".utf8).write(to: env.url)
+
+        await env.sut.run(using: makeDigester())
+
+        #expect(FileManager.default.fileExists(atPath: env.url.path(percentEncoded: false)) == false)
+        let calls = await env.recorder.calls
+        #expect(calls.isEmpty)
+    }
+
+    /// One that can't be read right now is kept for the next run.
+    @Test
+    func run_keepsPendingFileThatCantBeRead() async throws {
+        let env = makeSUT()
+        defer { try? FileManager.default.removeItem(at: env.url) }
+        try FileManager.default.createDirectory(at: env.url, withIntermediateDirectories: true)
+
+        await env.sut.run(using: makeDigester())
+
+        #expect(FileManager.default.fileExists(atPath: env.url.path(percentEncoded: false)))
+    }
+
     @Test
     func run_isIdempotentWhenInvokedAfterSuccess() async throws {
         let env = makeSUT()
@@ -117,6 +142,7 @@ extension SearchPassphraseRehashServiceTests {
         let sut: SearchPassphraseRehashService
         let pending: PendingSearchPassphraseRehashStore
         let recorder: WriterRecorder
+        let url: URL
     }
 
     private func makeSUT() -> Env {
@@ -131,7 +157,7 @@ extension SearchPassphraseRehashServiceTests {
                 try await recorder.record(itemID: id, digest: digest)
             },
         )
-        return Env(sut: sut, pending: pending, recorder: recorder)
+        return Env(sut: sut, pending: pending, recorder: recorder, url: url)
     }
 
     private func makeDigester() -> SearchPassphraseDigester {

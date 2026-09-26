@@ -5,7 +5,7 @@ import Foundation
 /// Reads plaintext killphrases stashed by the V1 → V2 schema migration's
 /// `willMigrate` handler, hashes them with the unlocked vault's digester,
 /// writes the digest + salt back onto the corresponding `PersistedVaultItem`,
-/// and securely clears the pending file.
+/// and deletes the pending file.
 ///
 /// Idempotent: if the pending file is empty or missing, `run` is a no-op.
 /// Crash-safe: any entry not successfully written remains in the pending
@@ -38,7 +38,13 @@ public struct KillphraseRehashService: Sendable {
         let entries: [PendingKillphraseRehashStore.Entry]
         do {
             entries = try pendingStore.read()
+        } catch is DecodingError {
+            // A file that can't be decoded holds nothing this or any later run could use, so don't leave its
+            // plaintext behind.
+            try? pendingStore.clear()
+            return
         } catch {
+            // Couldn't read it right now: leave it for the next run.
             return
         }
         guard entries.isEmpty == false else { return }

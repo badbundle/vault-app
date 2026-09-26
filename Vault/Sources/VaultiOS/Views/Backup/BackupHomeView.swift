@@ -6,9 +6,10 @@ import VaultFeed
 /// backup password.
 ///
 /// The hub itself is reachable without device authentication — it exposes
-/// navigation, backup recency and whether a backup password is set only.
-/// Every sub-surface authenticates before it loads the backup key or offers to
-/// restore over the vault.
+/// navigation, backup recency, whether a backup password is set, and whether a
+/// vault was set aside because it couldn't be opened, only. Every sub-surface
+/// authenticates before it loads the backup key or offers to restore over the
+/// vault, and deleting a set-aside vault authenticates first.
 @MainActor
 struct BackupHomeView: View {
     @Environment(VaultDataModel.self) var dataModel
@@ -25,6 +26,10 @@ struct BackupHomeView: View {
     var body: some View {
         Form {
             headerSection
+            SetAsideVaultsSection(viewModel: .init(
+                archives: injector.vaultStoreArchives,
+                authenticationService: authenticationService,
+            ))
             autoBackupSection
             exportSection
             restoreSection

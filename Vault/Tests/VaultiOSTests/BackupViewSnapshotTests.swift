@@ -61,6 +61,28 @@ struct BackupViewSnapshotTests {
     }
 
     @Test
+    func backupHome_vaultSetAside() {
+        let sut = makeBackupHomeSUT(
+            dataModel: anyVaultDataModel(backupPasswordStore: unknownStatusPasswordStore()),
+            vaultStoreArchives: setAsideVaults(count: 1),
+            height: 1300,
+        )
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
+    func backupHome_vaultsSetAside_dark() {
+        let sut = makeBackupHomeSUT(
+            dataModel: anyVaultDataModel(backupPasswordStore: unknownStatusPasswordStore()),
+            vaultStoreArchives: setAsideVaults(count: 2),
+            height: 1300,
+        )
+
+        assertSnapshot(of: sut, colorScheme: .dark)
+    }
+
+    @Test
     func backupExport_passwordNotFetched() {
         let sut = makeBackupExportSUT(dataModel: anyVaultDataModel())
 
@@ -195,14 +217,25 @@ extension BackupViewSnapshotTests {
 
     private func makeBackupHomeSUT(
         dataModel: VaultDataModel,
+        vaultStoreArchives: any VaultStoreArchiving = NoVaultStoreArchives(),
+        height: CGFloat = 1000,
     ) -> some View {
         NavigationStack {
             BackupHomeView()
         }
         .environment(dataModel)
         .environment(DeviceAuthenticationService(policy: .alwaysAllow))
-        .environment(anyVaultInjector())
-        .framedForTest()
+        .environment(anyVaultInjector(vaultStoreArchives: vaultStoreArchives))
+        .framedForTest(height: height)
+    }
+
+    private func setAsideVaults(count: Int) -> VaultStoreArchivingMock {
+        let archives = VaultStoreArchivingMock()
+        let dates = (0 ..< count).map { Date(timeIntervalSince1970: 1_700_000_000 + Double($0) * 86400) }
+        archives.archivesHandler = {
+            dates.map { VaultStoreArchive(url: URL(fileURLWithPath: "/tmp/\($0.timeIntervalSince1970)"), date: $0) }
+        }
+        return archives
     }
 
     private func makeBackupExportSUT(

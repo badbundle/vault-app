@@ -63,31 +63,6 @@ struct PendingKillphraseRehashStoreTests {
         // Must not throw on missing file.
         try sut.clear()
     }
-
-    @Test
-    func clear_overwritesContentBeforeDeletion() throws {
-        let url = tmpURL()
-        defer { try? FileManager.default.removeItem(at: url) }
-        var overwrittenData: Data?
-        var overwrittenURL: URL?
-        let sut = PendingKillphraseRehashStore(
-            fileURL: url,
-            overwriteWrite: { data, url in
-                overwrittenData = data
-                overwrittenURL = url
-                try data.write(to: url, options: [.atomic])
-            },
-        )
-        try sut.write([.init(itemID: UUID(), phrase: "secret")])
-        let originalSize = try sizeOfFile(at: url)
-        #expect(originalSize > 0)
-
-        try sut.clear()
-
-        #expect(overwrittenURL == url)
-        #expect(overwrittenData == Data(count: originalSize))
-        #expect(FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) == false)
-    }
 }
 
 extension PendingKillphraseRehashStoreTests {
@@ -97,10 +72,5 @@ extension PendingKillphraseRehashStoreTests {
 
     private func tmpURL() -> URL {
         FileManager.default.temporaryDirectory.appending(path: "pending-killphrase-\(UUID().uuidString).json")
-    }
-
-    private func sizeOfFile(at url: URL) throws -> Int {
-        let attrs = try FileManager.default.attributesOfItem(atPath: url.path(percentEncoded: false))
-        return attrs[.size] as? Int ?? 0
     }
 }

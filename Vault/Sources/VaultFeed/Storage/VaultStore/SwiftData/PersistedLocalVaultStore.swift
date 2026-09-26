@@ -238,16 +238,21 @@ extension PersistedLocalVaultStore: VaultStoreWriter {
     }
 
     public func update(id: Identifier<VaultItem>, item: VaultItem.Write) async throws {
+        let changesSecrets: Bool
         do {
-            let existing = try fetchVaultItem(id: id)
+            let existing = try fetchVaultItem(id: id).makeRecord()
             let encoder = PersistedVaultItemEncoder(currentDate: currentDate)
-            let record = try encoder.encode(item: item, existing: existing.makeRecord())
+            let record = try encoder.encode(item: item, existing: existing)
+            changesSecrets = record.changesSecrets(of: existing)
             try store(record: record)
 
             try modelContext.save()
         } catch {
             modelContext.rollback()
             throw error
+        }
+        if changesSecrets {
+            scrubDeletedContent()
         }
     }
 
@@ -262,6 +267,7 @@ extension PersistedLocalVaultStore: VaultStoreWriter {
             modelContext.rollback()
             throw error
         }
+        scrubDeletedContent()
     }
 }
 
@@ -458,7 +464,7 @@ extension PersistedLocalVaultStore: VaultStoreImporter {
 
     public func importAndOverrideVault(payload: VaultApplicationPayload) async throws {
         do {
-            try await deleteVault()
+            try deleteAllModels()
             let tagEncoder = PersistedVaultTagEncoder()
             for tag in payload.tags {
                 let record = tagEncoder.encode(tag: tag.makeWritable(), writeUpdateContext: tag.makeImportingContext())
@@ -478,13 +484,37 @@ extension PersistedLocalVaultStore: VaultStoreImporter {
             modelContext.rollback()
             throw error
         }
+        // Everything that was in the vault before the import is gone.
+        scrubDeletedContent()
     }
 }
 
 // MARK: - VaultStoreDeleter
 
 extension PersistedLocalVaultStore: VaultStoreDeleter {
+    /// Deletes every item and tag, then everything else next to the store that holds vault data: pending
+    /// rehash files, and vaults set aside because they couldn't be opened (`PersistedLocalVaultStoreArchives`).
+    /// Deleting all data mustn't leave a copy of it on the device.
     public func deleteVault() async throws {
+        try deleteAllModels()
+        scrubDeletedContent()
+        guard let storeDirectory else { return }
+        try PendingKillphraseRehashStore(
+            fileURL: PendingKillphraseRehashStore.defaultURL(storeDirectory: storeDirectory),
+        ).clear()
+        try PendingSearchPassphraseRehashStore(
+            fileURL: PendingSearchPassphraseRehashStore.defaultURL(storeDirectory: storeDirectory),
+        ).clear()
+        try PersistedLocalVaultStoreArchives(storageDirectory: storeDirectory).deleteAll()
+    }
+
+    /// The directory the store's files are in, or `nil` for a store in memory.
+    private var storeDirectory: URL? {
+        storeURL?.deletingLastPathComponent()
+    }
+
+    /// Deletes every item and tag, and saves.
+    private func deleteAllModels() throws {
         do {
             for model in PersistedSchemaLatestVersion.models {
                 try modelContext.delete(model: model)
@@ -528,6 +558,9 @@ extension PersistedLocalVaultStore: VaultStoreKillphraseDeleter {
             }
             try modelContext.delete(model: PersistedVaultItem.self, where: deletionPredicate)
             try modelContext.save()
+            // Silent either way, like the rest of this path: the item disappearing from the feed is the only
+            // sign of a match.
+            scrubDeletedContent()
             return true
         } catch {
             // Error path must be indistinguishable from "no match" to preserve the
@@ -588,6 +621,42 @@ extension PersistedLocalVaultStore {
             modelContext.rollback()
             throw error
         }
+    }
+}
+
+// MARK: - Deleted Content
+
+extension PersistedLocalVaultStore {
+    /// Clears anything an earlier session left in the store's files: deletions that weren't scrubbed because
+    /// the app was closed first, or plaintext columns a schema migration has just dropped. The app calls this
+    /// once at launch, after the store has opened (and so migrated).
+    ///
+    /// It only rebuilds the database if it has freed pages, so a launch after a clean session only
+    /// checkpoints the log.
+    public func scrubContentLeftByEarlierSessions() {
+        scrubDeletedContent(vacuum: .ifPagesWereFreed)
+    }
+
+    /// Clears content left behind by deletions from the store's files, as `PersistedStoreScrubber` describes.
+    ///
+    /// The store calls this itself straight after anything is deleted: an item, the whole vault, the vault
+    /// replaced by an import, or an item's killphrase or search passphrase.
+    ///
+    /// Best effort and silent: if the store is busy, what's left is cleared by the next scrub.
+    @discardableResult
+    func scrubDeletedContent(vacuum: PersistedStoreScrubber.Vacuum = .always) -> PersistedStoreScrubber.Outcome {
+        guard let storeURL else { return .noStore }
+        return PersistedStoreScrubber(storeURL: storeURL).scrub(vacuum: vacuum)
+    }
+
+    /// The store's SQLite file, or `nil` for a store in memory.
+    var storeURL: URL? {
+        guard let configuration = modelContainer.configurations.first,
+              configuration.isStoredInMemoryOnly == false
+        else {
+            return nil
+        }
+        return configuration.url
     }
 }
 
@@ -659,6 +728,16 @@ extension PersistedLocalVaultStore {
         itemDescriptor.fetchLimit = 1
         let result = try modelContext.fetch(itemDescriptor)
         return result.isNotEmpty
+    }
+}
+
+extension VaultItemRecord {
+    /// Whether this record changes the killphrase or search passphrase of `existing`, including clearing one.
+    fileprivate func changesSecrets(of existing: VaultItemRecord) -> Bool {
+        killphraseSalt != existing.killphraseSalt ||
+            killphraseDigest != existing.killphraseDigest ||
+            searchPassphraseSalt != existing.searchPassphraseSalt ||
+            searchPassphraseDigest != existing.searchPassphraseDigest
     }
 }
 

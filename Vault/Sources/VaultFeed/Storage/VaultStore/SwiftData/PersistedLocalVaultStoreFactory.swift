@@ -24,7 +24,7 @@ public final class PersistedLocalVaultStoreFactory {
             let timestamp = ISO8601DateFormatter()
                 .string(from: Date())
                 .replacingOccurrences(of: ":", with: "-")
-            return "vault-primary.failed-open-\(timestamp)"
+            return PersistedLocalVaultStoreArchives.directoryNamePrefix + timestamp
         },
         recoveryMode: RecoveryMode = .recoverExistingStore,
     ) {

@@ -70,6 +70,61 @@ struct KillphraseRehashServiceTests {
         #expect(remaining.first?.phrase == "bad")
     }
 
+    /// A crash mid-drain leaves the pending file as it was, so the next launch applies every entry, including
+    /// any applied before the crash, then deletes the file.
+    @Test
+    func run_afterCrashMidDrain_appliesEveryEntryThenDeletesFile() async throws {
+        let store = try PersistedLocalVaultStore.inMemory()
+        let firstID = try await store.insert(item: uniqueVaultItem().makeWritable())
+        let secondID = try await store.insert(item: uniqueVaultItem().makeWritable())
+        let url = FileManager.default.temporaryDirectory.appending(path: "pending-killphrase-\(UUID().uuidString).json")
+        let pending = PendingKillphraseRehashStore(fileURL: url)
+        try pending.write([
+            .init(itemID: firstID.rawValue, phrase: "first"),
+            .init(itemID: secondID.rawValue, phrase: "second"),
+        ])
+        let digester = makeDigester()
+        // The run before the crash got as far as the first entry.
+        try await store.applyKillphraseDigest(itemID: firstID.rawValue, digest: digester.makeDigest(phrase: "first"))
+        let sut = KillphraseRehashService(pendingStore: pending) { id, digest in
+            try await store.applyKillphraseDigest(itemID: id, digest: digest)
+        }
+
+        await sut.run(using: digester)
+
+        #expect(FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) == false)
+        let items = try await store.retrieve(query: .init()).items
+        for (id, phrase) in [(firstID, "first"), (secondID, "second")] {
+            let killphrase = try #require(items.first(where: { $0.id == id })?.metadata.killphrase)
+            #expect(digester.matches(query: phrase, salt: killphrase.salt, digest: killphrase.digest))
+        }
+    }
+
+    /// A file that can't be decoded is no use to this or any later run, so its plaintext mustn't stay.
+    @Test
+    func run_deletesPendingFileThatCantBeDecoded() async throws {
+        let env = makeSUT()
+        try Data("not json".utf8).write(to: env.url)
+
+        await env.sut.run(using: makeDigester())
+
+        #expect(FileManager.default.fileExists(atPath: env.url.path(percentEncoded: false)) == false)
+        let calls = await env.recorder.calls
+        #expect(calls.isEmpty)
+    }
+
+    /// One that can't be read right now is kept for the next run.
+    @Test
+    func run_keepsPendingFileThatCantBeRead() async throws {
+        let env = makeSUT()
+        defer { try? FileManager.default.removeItem(at: env.url) }
+        try FileManager.default.createDirectory(at: env.url, withIntermediateDirectories: true)
+
+        await env.sut.run(using: makeDigester())
+
+        #expect(FileManager.default.fileExists(atPath: env.url.path(percentEncoded: false)))
+    }
+
     @Test
     func run_isIdempotentWhenInvokedAfterSuccess() async throws {
         let env = makeSUT()
@@ -119,6 +174,7 @@ extension KillphraseRehashServiceTests {
         let sut: KillphraseRehashService
         let pending: PendingKillphraseRehashStore
         let recorder: WriterRecorder
+        let url: URL
     }
 
     private func makeSUT() -> Env {
@@ -133,7 +189,7 @@ extension KillphraseRehashServiceTests {
                 try await recorder.record(itemID: id, digest: digest)
             },
         )
-        return Env(sut: sut, pending: pending, recorder: recorder)
+        return Env(sut: sut, pending: pending, recorder: recorder, url: url)
     }
 
     private func makeDigester() -> KillphraseDigester {
