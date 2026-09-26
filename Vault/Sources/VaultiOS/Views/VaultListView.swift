@@ -38,8 +38,7 @@ struct VaultListView<
 
     enum Modal: Hashable, IdentifiableSelf {
         case detail(Identifier<VaultItem>, VaultItem, DerivedEncryptionKey?)
-        case choosingItemType
-        case creatingItem(CreatingItem)
+        case creatingItem
     }
 
     var body: some View {
@@ -51,7 +50,7 @@ struct VaultListView<
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    modal = .choosingItemType
+                    modal = .creatingItem
                 } label: {
                     Label("Add Item", systemImage: "plus")
                 }
@@ -71,23 +70,10 @@ struct VaultListView<
                         navigationPath: $navigationPath,
                     )
                 }
-            case .choosingItemType:
-                // A `Modal` case rather than its own `.sheet`: presenting
-                // the create flow from the picker's `onDismiss` is dropped
-                // by SwiftUI often enough to be unusable, whereas changing
-                // the item lets it sequence the dismiss and present itself.
-                CreateItemPickerView { creatingItem in
-                    modal = .creatingItem(creatingItem)
-                }
-            case let .creatingItem(creatingItem):
-                // The editor sizes the sheet to each step. Every view shown
-                // here sets its detents, because this sheet follows the
-                // picker: without them the picker's fitted detent leaks into
-                // this presentation and a tap on the sheet's empty space
-                // dismisses it.
+            case .creatingItem:
+                // Choosing the kind of item is the sheet's first step.
                 NavigationStack(path: $navigationPath) {
-                    VaultDetailCreateView(
-                        creatingItem: creatingItem,
+                    CreateItemFlowView(
                         previewGenerator: viewGenerator,
                         copyActionHandler: copyActionHandler,
                         navigationPath: $navigationPath,

@@ -4,10 +4,12 @@ import VaultFeed
 
 /// The top of an editor step: how far through the editor it is, then the step's icon, title and what it's for.
 ///
-/// Laid out like a row of the new-item picker, so each step reads as the next card in that flow.
+/// The new-item sheet's first step, choosing what kind of item to make, is headed the same way, so the steps that
+/// follow read as the rest of that flow.
 struct DetailEditorStepHeader: View {
-    var step: DetailEditorStep
-    var kind: DetailEditorItemKind
+    var systemImage: String
+    var title: String
+    var subtitle: String
     /// Where the step comes in a walkthrough, or `nil` when it was opened on its own.
     var position: Position?
 
@@ -19,6 +21,22 @@ struct DetailEditorStepHeader: View {
 
     @ScaledMetric(relativeTo: .title2) private var iconSize: Double = 52
 
+    init(systemImage: String, title: String, subtitle: String, position: Position? = nil) {
+        self.systemImage = systemImage
+        self.title = title
+        self.subtitle = subtitle
+        self.position = position
+    }
+
+    init(step: DetailEditorStep, kind: DetailEditorItemKind, position: Position?) {
+        self.init(
+            systemImage: step.systemImage(for: kind),
+            title: step.title(for: kind),
+            subtitle: step.subtitle(for: kind),
+            position: position,
+        )
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             if let position {
@@ -26,7 +44,7 @@ struct DetailEditorStepHeader: View {
             }
 
             HStack(alignment: .center, spacing: 14) {
-                Image(systemName: step.systemImage(for: kind))
+                Image(systemName: systemImage)
                     .font(.title2.weight(.semibold))
                     .foregroundStyle(.white)
                     .frame(width: iconSize, height: iconSize)
@@ -34,11 +52,11 @@ struct DetailEditorStepHeader: View {
                     .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(step.title(for: kind))
+                    Text(title)
                         .font(.title2.bold())
                         .foregroundStyle(Color(uiColor: .label))
                         .accessibilityAddTraits(.isHeader)
-                    Text(step.subtitle(for: kind))
+                    Text(subtitle)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

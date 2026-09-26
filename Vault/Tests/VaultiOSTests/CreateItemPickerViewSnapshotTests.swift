@@ -6,17 +6,15 @@ import Testing
 
 @MainActor
 struct CreateItemPickerViewSnapshotTests {
+    /// The new-item sheet's first step: choosing the kind of item.
     @Test
     func layout() {
-        let colorSchemes: [ColorScheme] = [.light, .dark]
-        let dynamicTypeSizes: [DynamicTypeSize] = [.xSmall, .medium, .xxLarge]
-        for colorScheme in colorSchemes {
-            for dynamicTypeSize in dynamicTypeSizes {
-                // The sheet sizes itself to this content, so the frame is
-                // the phone width only and the height comes from the view.
+        for colorScheme in [ColorScheme.light, .dark] {
+            for dynamicTypeSize in [DynamicTypeSize.xSmall, .medium, .xxLarge] {
                 let sut = CreateItemPickerView { _ in }
                     .dynamicTypeSize(dynamicTypeSize)
-                    .frame(width: 390)
+                    .framedForTest(height: 700)
+                    // The sheet the choice is shown in.
                     .background(Color(UIColor.systemBackground))
 
                 assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)_\(dynamicTypeSize)")
