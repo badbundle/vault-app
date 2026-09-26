@@ -41,9 +41,11 @@ public struct OTPCodeTextView: View {
     }
 
     private func makeCodeView(text: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: spacing) {
-            ForEach(splitText(text: text)) { value in
-                Text(value.text)
+        CodeChunksLayout(spacing: spacing) {
+            // Chunks are identified by position, so a new code updates the
+            // same views rather than replacing every one.
+            ForEach(Array(splitText(text: text).enumerated()), id: \.offset) { _, chunk in
+                Text(chunk)
                     .lineLimit(1)
                     .minimumScaleFactor(0.1)
                     .multilineTextAlignment(.leading)
@@ -59,17 +61,8 @@ public struct OTPCodeTextView: View {
         #endif
     }
 
-    private struct TextPart: Identifiable {
-        let id = UUID()
-        var text: String
-    }
-
-    private func splitText(text: String) -> [TextPart] {
-        let chunkSize = chunkSize(length: text.count)
-        let chunks = Array(text).chunked(by: chunkSize)
-        return chunks.map { chunk in
-            TextPart(text: chunk)
-        }
+    private func splitText(text: String) -> [String] {
+        Array(text).chunked(by: chunkSize(length: text.count))
     }
 
     private func chunkSize(length: Int) -> Int {
@@ -84,6 +77,79 @@ public struct OTPCodeTextView: View {
             5
         default:
             3
+        }
+    }
+}
+
+/// Lays a code's chunks out in a row, scaling every chunk and gap down by the
+/// same factor when the row is narrower than they are, so every digit stays
+/// the same size.
+///
+/// An `HStack` gives the least flexible chunk its full width first, so the
+/// lone last digit of a 7-digit code would stay full size while the chunks
+/// before it shrink.
+private struct CodeChunksLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache _: inout ()) -> CGSize {
+        let frames = frames(of: subviews, width: proposal.width)
+        return CGSize(
+            width: frames.last?.maxX ?? 0,
+            height: frames.map(\.maxY).max() ?? 0,
+        )
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal _: ProposedViewSize, subviews: Subviews, cache _: inout ()) {
+        for (subview, frame) in zip(subviews, frames(of: subviews, width: bounds.width)) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                proposal: ProposedViewSize(frame.size),
+            )
+        }
+    }
+
+    func explicitAlignment(
+        of guide: VerticalAlignment,
+        in bounds: CGRect,
+        proposal _: ProposedViewSize,
+        subviews: Subviews,
+        cache _: inout (),
+    ) -> CGFloat? {
+        guard guide == .firstTextBaseline || guide == .lastTextBaseline,
+              let first = subviews.first,
+              let frame = frames(of: subviews, width: bounds.width).first
+        else { return nil }
+        return frame.minY + first.dimensions(in: ProposedViewSize(frame.size))[guide]
+    }
+
+    /// Each chunk's frame, relative to the row's top-leading corner, with
+    /// their baselines lined up.
+    private func frames(of subviews: Subviews, width: CGFloat?) -> [CGRect] {
+        let idealSizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let gaps = spacing * CGFloat(max(subviews.count - 1, 0))
+        let idealWidth = idealSizes.map(\.width).reduce(0, +) + gaps
+        let scale: CGFloat = if let width, idealWidth > width, idealWidth > 0 {
+            width / idealWidth
+        } else {
+            1
+        }
+
+        var nextX: CGFloat = 0
+        var placed: [(x: CGFloat, dimensions: ViewDimensions)] = []
+        for (subview, idealSize) in zip(subviews, idealSizes) {
+            let dimensions = subview.dimensions(in: ProposedViewSize(width: idealSize.width * scale, height: nil))
+            placed.append((nextX, dimensions))
+            nextX += dimensions.width + spacing * scale
+        }
+
+        let baseline = placed.map { $0.dimensions[.firstTextBaseline] }.max() ?? 0
+        return placed.map { originX, dimensions in
+            CGRect(
+                x: originX,
+                y: baseline - dimensions[.firstTextBaseline],
+                width: dimensions.width,
+                height: dimensions.height,
+            )
         }
     }
 }
