@@ -275,17 +275,20 @@ struct RecoveryPhraseDetailView: View {
 
     private var titleEditingSection: some View {
         Section {
-            TextField("Title", text: $viewModel.editingModel.detail.title)
+            LabeledTextField("Title", text: $viewModel.editingModel.detail.title)
                 .focused($focusedField, equals: .title)
                 .submitLabel(.next)
                 .onSubmit {
                     focusedField = .contents
                 }
 
-            TextField("Description", text: $viewModel.editingModel.detail.contents, axis: .vertical)
-                .lineLimit(2 ... 8)
-                .focused($focusedField, equals: .contents)
-                .privacySensitive()
+            LabeledTextField(
+                "Description",
+                text: $viewModel.editingModel.detail.contents,
+                kind: .multiline(minLines: 2),
+            )
+            .focused($focusedField, equals: .contents)
+            .privacySensitive()
         } header: {
             VStack(spacing: 6) {
                 iconHeader
@@ -423,25 +426,17 @@ struct RecoveryPhraseDetailView: View {
 
     private var seedPassphraseEditingSection: some View {
         Section {
-            HStack {
-                Group {
-                    if isSeedPassphraseRevealed {
-                        TextField("Passphrase", text: $viewModel.editingModel.detail.seedPassphrase)
-                    } else {
-                        SecureField("Passphrase", text: $viewModel.editingModel.detail.seedPassphrase)
-                    }
-                }
-                .font(.body.monospaced())
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .writingToolsBehavior(.disabled)
-                .privacySensitive()
-                .focused($focusedField, equals: .seedPassphrase)
-
-                revealSeedPassphraseButton
-            }
-        } header: {
-            Text("Passphrase")
+            LabeledTextField(
+                "Passphrase",
+                text: $viewModel.editingModel.detail.seedPassphrase,
+                kind: .secure(isRevealed: $isSeedPassphraseRevealed),
+            )
+            .fontDesign(.monospaced)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .writingToolsBehavior(.disabled)
+            .privacySensitive()
+            .focused($focusedField, equals: .seedPassphrase)
         } footer: {
             VStack(alignment: .leading, spacing: 6) {
                 if !viewModel.editingModel.detail.isSeedPassphraseAllowedByStandard {

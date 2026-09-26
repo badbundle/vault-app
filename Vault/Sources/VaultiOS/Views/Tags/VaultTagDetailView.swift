@@ -119,7 +119,7 @@ struct VaultTagDetailView: View {
 
     private var nameSection: some View {
         Section {
-            TextField("My Tag", text: $viewModel.currentTag.name)
+            LabeledTextField("Name", text: $viewModel.currentTag.name, prompt: "My Tag")
         } header: {
             previewHeader
                 .containerRelativeFrame(.horizontal)

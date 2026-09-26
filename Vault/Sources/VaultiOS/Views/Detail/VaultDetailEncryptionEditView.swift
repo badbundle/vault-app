@@ -76,20 +76,15 @@ struct VaultDetailEncryptionEditView: View {
     @ViewBuilder
     private func passwordEntrySection(actionTitle: String, systemImage: String) -> some View {
         Section {
-            FormRow(image: Image(systemName: "lock.fill"), color: .primary, style: .standard) {
-                SecureField("Password...", text: $newEncryptionPassword)
-            }
+            LabeledTextField("Password", text: $newEncryptionPassword, kind: .secure())
 
             if newEncryptionPassword.isNotBlank {
-                FormRow(
-                    image: Image(
-                        systemName: doPasswordsMatch ? "checkmark.circle.fill" : "xmark.circle.fill",
-                    ),
-                    color: doPasswordsMatch ? .green : .red,
-                    style: .standard,
-                ) {
-                    SecureField("Confirm Password", text: $newEncryptionPasswordConfirm)
-                }
+                LabeledTextField(
+                    "Confirm Password",
+                    text: $newEncryptionPasswordConfirm,
+                    kind: .secure(),
+                    status: .passwordConfirmation(matches: doPasswordsMatch),
+                )
             }
         }
 

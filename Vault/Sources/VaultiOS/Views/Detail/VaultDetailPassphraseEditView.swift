@@ -38,13 +38,11 @@ struct VaultDetailPassphraseEditView: View {
                     .font(.body)
             }
             if viewConfig.isEnabled {
-                FormRow(image: Image(systemName: "textformat"), color: .secondary, style: .standard) {
-                    TextField("Enter passphrase...", text: $passphrase)
-                        .keyboardType(.default)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .textInputAutocapitalization(.never)
-                }
+                LabeledTextField("Passphrase", text: $passphrase)
+                    .keyboardType(.default)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .textInputAutocapitalization(.never)
             }
         } footer: {
             if viewConfig.isEnabled {

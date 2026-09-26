@@ -53,9 +53,12 @@ struct BackupKeyDecryptorView: View {
 
     private var entrySection: some View {
         Section {
-            FormRow(image: Image(systemName: "lock.fill"), color: .primary, style: .standard) {
-                SecureField("Enter decryption password...", text: $viewModel.enteredPassword)
-            }
+            LabeledTextField(
+                "Backup Password",
+                text: $viewModel.enteredPassword,
+                kind: .secure(),
+                status: viewModel.decryptionKeyState.isError ? .error() : .none,
+            )
             .disabled(viewModel.isDecrypting)
         }
     }

@@ -261,13 +261,14 @@ struct SecureNoteDetailView: View {
 
     private var noteContentsEditingSection: some View {
         Section {
-            TextEditor(text: $viewModel.editingModel.detail.contents)
-                .font(.subheadline)
-                .fontDesign(.monospaced)
-                .frame(minHeight: 400)
-                .keyboardType(.default)
-                .contentMargins(12, for: .scrollContent)
-                .listRowInsets(EdgeInsets())
+            LabeledTextField(
+                viewModel.strings.noteContentsTitle,
+                text: $viewModel.editingModel.detail.contents,
+                prompt: "The first line is the note's title",
+                kind: .multiline(minLines: 16),
+            )
+            .font(.subheadline)
+            .fontDesign(.monospaced)
         } header: {
             noteIconEditingHeader
                 .containerRelativeFrame(.horizontal)
