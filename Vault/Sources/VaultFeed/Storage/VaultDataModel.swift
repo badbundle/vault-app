@@ -186,6 +186,9 @@ public final class VaultDataModel {
     private let searchPassphraseRehashService: SearchPassphraseRehashService?
     private let backupEventLogger: any BackupEventLogger
     private var observationBag = Set<AnyCancellable>()
+    /// Counts `purgeVaultContents()` calls. A reload that started before the
+    /// latest one is out of date by the time it finishes, so it's dropped.
+    @ObservationIgnored private var contentsGeneration = 0
 
     public init(
         vaultStore: any VaultStore,
@@ -315,6 +318,32 @@ extension VaultDataModel {
         // re-fetched silently from keychain on next launch, and clearing
         // it would break killphrase deletion until the next setup call.
     }
+
+    /// Forgets everything read from the vault, for when the app locks: the
+    /// items and tags, what the item caches hold, and the search and tag
+    /// filter, which might be a search passphrase and what it revealed.
+    /// Also everything `purgeSensitiveData()` forgets.
+    ///
+    /// `reloadData()` reads it all again once the app is unlocked. A reload
+    /// that's still underway when this is called finishes without putting
+    /// anything back.
+    public func purgeVaultContents() async {
+        purgeSensitiveData()
+        contentsGeneration += 1
+        itemsSearchQuery = ""
+        itemsFilteringByTags = []
+        items = []
+        itemErrors = []
+        hasAnyItems = false
+        itemsState = .base
+        itemsRetrievalError = nil
+        allTags = []
+        allTagsState = .base
+        allTagsRetrievalError = nil
+        for itemCache in itemCaches {
+            await itemCache.vaultItemCacheClearAll()
+        }
+    }
 }
 
 // MARK: - Backup Password
@@ -383,6 +412,7 @@ extension VaultDataModel {
 
     /// Reloads only the items of the model, based on the current query.
     public func reloadItems() async {
+        let generation = contentsGeneration
         do {
             let query = VaultStoreQuery(
                 filterText: itemsSanitizedQuery,
@@ -405,10 +435,14 @@ extension VaultDataModel {
                 query: query,
                 searchPassphraseMatcher: searchPassphraseDigester,
             )
-            items = result.items
-            itemErrors = result.errors
-            itemsRetrievalError = nil
-            hasAnyItems = try await vaultStore.hasAnyItems
+            let hasAnyItems = try await vaultStore.hasAnyItems
+            // Purged for a lock while this was reading: what it read stays unseen.
+            if generation == contentsGeneration {
+                items = result.items
+                itemErrors = result.errors
+                itemsRetrievalError = nil
+                self.hasAnyItems = hasAnyItems
+            }
 
             // If killphrase deletion occurred, sync OTP autofill store to remove deleted items
             if didDeleteKillphraseItems {
@@ -423,6 +457,7 @@ extension VaultDataModel {
                 onDataChanged?()
             }
         } catch {
+            guard generation == contentsGeneration else { return }
             itemsRetrievalError = PresentationError(
                 userTitle: "Error Loading",
                 userDescription: "Unable to load items",
@@ -433,10 +468,15 @@ extension VaultDataModel {
 
     /// Reloads only the tags of the model.
     public func reloadTags() async {
+        let generation = contentsGeneration
         do {
-            allTags = try await vaultTagStore.retrieveTags()
+            let tags = try await vaultTagStore.retrieveTags()
+            // Purged for a lock while this was reading: what it read stays unseen.
+            guard generation == contentsGeneration else { return }
+            allTags = tags
             allTagsState = .loaded
         } catch {
+            guard generation == contentsGeneration else { return }
             allTagsRetrievalError = PresentationError(
                 userTitle: "Error Loading",
                 userDescription: "Unable to load tags",
