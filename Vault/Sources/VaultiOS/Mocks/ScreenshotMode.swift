@@ -86,7 +86,7 @@ enum ScreenshotMode {
     /// - Returns: The identifier of the item the `detail` scene opens.
     @MainActor
     static func seed(
-        store: PersistedLocalVaultStore,
+        store: some VaultStore & VaultTagStore,
         dataModel: VaultDataModel,
         backupEventLogger: any BackupEventLogger,
     ) async throws -> Identifier<VaultItem> {

@@ -48,14 +48,18 @@ public enum VaultRoot {
     static let vaultStorageDirectory: URL = VaultSharedStorage.directory(fileManager: fileManager)
 
     /// Non-nil when the on-disk vault store could not be opened (even
-    /// after recovery) and `vaultStore` is an empty in-memory fallback.
+    /// after recovery) and `plainVaultStore` is an empty in-memory fallback.
     /// The main scene checks this before wiring `setup()` and shows a
     /// failure screen instead of the vault.
     @MainActor
     public private(set) static var vaultStoreLoadFailureMessage: String?
 
+    /// Today's SQLite store in the App Group container.
+    ///
+    /// Read and written through `vaultStore`, apart from the killphrase and
+    /// search passphrase migrations, which only ever apply to this store.
     @MainActor
-    public static let vaultStore: PersistedLocalVaultStore = {
+    static let plainVaultStore: PersistedLocalVaultStore = {
         #if DEBUG
         // Likewise the vault: an in-memory one, so the simulator's stored
         // vault is never shown or modified.
@@ -86,6 +90,12 @@ public enum VaultRoot {
         }
     }()
 
+    /// Where everything reads and writes the vault. It opens on the plain
+    /// store, as the app always has, and can switch store (or lock) while
+    /// the app runs.
+    @MainActor
+    public static let vaultStore: VaultStoreSession = .init(target: .plain(plainVaultStore))
+
     public static let backupPasswordStore: some BackupPasswordStore =
         BackupPasswordStoreImpl(secureStorage: secureStorage, clock: clock)
 
@@ -106,10 +116,10 @@ public enum VaultRoot {
 
     @MainActor
     private static func makeKillphraseRehashService() -> KillphraseRehashService {
-        // Capture vaultStore (an actor reference, Sendable) into a local
+        // Capture the store (an actor reference, Sendable) into a local
         // so the writer closure can hop straight onto the store actor
         // without re-crossing MainActor on every call.
-        let store = vaultStore
+        let store = plainVaultStore
         return KillphraseRehashService(
             storeDirectory: vaultStorageDirectory,
             fileManager: fileManager,
@@ -121,7 +131,7 @@ public enum VaultRoot {
 
     @MainActor
     private static func makeSearchPassphraseRehashService() -> SearchPassphraseRehashService {
-        let store = vaultStore
+        let store = plainVaultStore
         return SearchPassphraseRehashService(
             storeDirectory: vaultStorageDirectory,
             fileManager: fileManager,
@@ -261,15 +271,15 @@ public enum VaultRoot {
         didChangeSettings: reloadWidgetTimelines,
     )
 
-    /// Clears what a locked app shouldn't be holding: everything backgrounding clears, and the search, which might
-    /// be a search passphrase and the items it revealed.
+    /// Clears what a locked app shouldn't be holding: everything read from
+    /// the vault, and the search, which might be a search passphrase. The
+    /// feed reads the vault again once the app is unlocked.
     @MainActor
     private static func purgeSensitiveDataForAppLock() {
+        // Straight away, before the task below has had a chance to run.
         vaultDataModel.purgeSensitiveData()
-        guard vaultDataModel.itemsSearchQuery.isNotEmpty else { return }
-        vaultDataModel.itemsSearchQuery = ""
         Task {
-            await vaultDataModel.reloadItems()
+            await vaultDataModel.purgeVaultContents()
         }
     }
 
