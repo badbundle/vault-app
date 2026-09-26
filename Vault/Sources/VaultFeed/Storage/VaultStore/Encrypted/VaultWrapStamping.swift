@@ -29,13 +29,19 @@ public protocol VaultWrapStamping: Sendable {
 ///
 /// The stamp is saved before it's returned, in a keychain item on this device only (`VaultWrapStampKeychainStorage`),
 /// so every later stamp is later still, across launches. If it can't be saved, it throws and nothing is wrapped,
-/// because a later wrap could get the same time. Every vault that opens raises it to its own wrap time
-/// (`noteWrap(at:)`), so after a restore onto a new device, where the stamp isn't restored, wraps made once the user
-/// has opened a vault there still follow that vault's.
+/// because a later wrap could get the same time.
 ///
-/// What's left: on a device whose stamp is gone, a duress vault made before the user has opened the real vault there
-/// is stamped only after the clock and the duress vault it's made from, so a clock set back can still make it older
-/// than the real vault.
+/// **It tracks the device's last use, not its last wrap.** The keychain item is readable at rest by forensic tools, and
+/// a stamp that only moved when a key was wrapped would tell someone holding one vault's password that a wrap was
+/// made after it: a duress vault made, or another vault's password changed. So every vault that opens moves it too
+/// (`noteUse(ofVaultWrappedAt:)`), to the latest of the stamp, now and the vault's wrap time, and saves it every
+/// time. A wrap is always at least now as well. Then the stamp is always about when the device was last unlocked, like
+/// the file's modification time. It also means that after a restore onto a new device, where the stamp isn't
+/// restored, wraps made once the user has opened a vault there follow that vault's.
+///
+/// What's left: on a device whose stamp is missing, or older than the real vault's wrap, a duress vault made before the
+/// user has opened the real vault there is stamped only after the clock and the duress vault it's made from, so a
+/// clock set back can still make it older than the real vault.
 ///
 /// Stamps are milliseconds since 1970, as the slot file stores them. Never log, print or measure them.
 public final class VaultDeviceWrapStamper: VaultWrapStamping {
@@ -66,16 +72,18 @@ public final class VaultDeviceWrapStamper: VaultWrapStamping {
         }
     }
 
-    /// Raises the stamp to at least `date`, for a vault that's just opened, so wraps made from now on follow its.
+    /// Moves the stamp to the latest of itself, now and `wrappedAt`, and saves it, for a vault that's just opened:
+    /// every time, whether or not it moves, so the work is the same whatever the stamp was.
     ///
+    /// - Parameter wrappedAt: The wrap time of the vault that opened, so wraps made from now on follow it.
     /// - Throws: If the stamp couldn't be read or saved.
-    public func noteWrap(at date: Date) throws {
+    public func noteUse(ofVaultWrappedAt wrappedAt: Date) throws {
         try lock.modify { _ in
-            let wrappedAt = Self.milliseconds(since1970: date)
-            if let stamp = try storage.load(), stamp >= wrappedAt {
-                return
+            var stamp = max(Self.milliseconds(since1970: currentDate()), Self.milliseconds(since1970: wrappedAt))
+            if let saved = try storage.load() {
+                stamp = max(stamp, saved)
             }
-            try storage.save(wrappedAt)
+            try storage.save(stamp)
         }
     }
 
@@ -90,6 +98,8 @@ protocol VaultWrapStampStorage: Sendable {
     func load() throws -> UInt64?
     /// Replaces the stamp. It's in storage by the time this returns.
     func save(_ stamp: UInt64) throws
+    /// Removes the stamp, for erasing (VAULT-52). Does nothing if there isn't one.
+    func remove() throws
 }
 
 /// Keeps the wrap stamp in the keychain, on this device only, in the App Group's access group.
@@ -121,10 +131,7 @@ struct VaultWrapStampKeychainStorage: VaultWrapStampStorage {
 
     func save(_ stamp: UInt64) throws {
         let query = Self.itemQuery(accessGroup: accessGroup)
-        let attributes: [String: Any] = try [
-            kSecValueData as String: JSONEncoder().encode(stamp),
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
-        ]
+        let attributes = try Self.attributes(for: stamp)
         switch SecItemUpdate(query as CFDictionary, attributes as CFDictionary) {
         case errSecSuccess:
             return
@@ -132,6 +139,13 @@ struct VaultWrapStampKeychainStorage: VaultWrapStampStorage {
             let status = SecItemAdd(query.merging(attributes) { $1 } as CFDictionary, nil)
             guard status == errSecSuccess else { throw SwiftSecurityError(rawValue: status) }
         case let status:
+            throw SwiftSecurityError(rawValue: status)
+        }
+    }
+
+    func remove() throws {
+        let status = SecItemDelete(Self.itemQuery(accessGroup: accessGroup) as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
             throw SwiftSecurityError(rawValue: status)
         }
     }
@@ -149,5 +163,13 @@ struct VaultWrapStampKeychainStorage: VaultWrapStampStorage {
             query[kSecAttrAccessGroup as String] = accessGroup
         }
         return query
+    }
+
+    /// What's stored in the item: the stamp, readable only while the device is unlocked, on this device only.
+    static func attributes(for stamp: UInt64) throws -> [String: Any] {
+        try [
+            kSecValueData as String: JSONEncoder().encode(stamp),
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+        ]
     }
 }

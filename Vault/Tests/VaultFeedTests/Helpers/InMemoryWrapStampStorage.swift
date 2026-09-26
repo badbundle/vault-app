@@ -7,6 +7,7 @@ final class InMemoryWrapStampStorage: VaultWrapStampStorage {
     struct Failure: Error {}
 
     private let stamp = SharedMutex<UInt64?>(nil)
+    private let saves = SharedMutex(0)
     private let failsToSave = SharedMutex(false)
     private let log: SharedMutex<[String]>?
 
@@ -20,6 +21,11 @@ final class InMemoryWrapStampStorage: VaultWrapStampStorage {
         stamp.value
     }
 
+    /// How many times it's been saved.
+    var saveCount: Int {
+        saves.value
+    }
+
     func failToSave() {
         failsToSave.modify { $0 = true }
     }
@@ -31,7 +37,12 @@ final class InMemoryWrapStampStorage: VaultWrapStampStorage {
     func save(_ newStamp: UInt64) throws {
         guard !failsToSave.value else { throw Failure() }
         stamp.modify { $0 = newStamp }
+        saves.modify { $0 += 1 }
         log?.modify { $0.append("stamp the wrap") }
+    }
+
+    func remove() throws {
+        stamp.modify { $0 = nil }
     }
 }
 

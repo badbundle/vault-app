@@ -646,8 +646,10 @@ the same deadline. What differs afterwards is decoding time, which is proportion
 - **Ties** in the most recently wrapped slot go to the lowest index. Wrap times are stamped by the device that
   wrapped the key, and only ever go forward on that device (see [Same passwords](#same-passwords)). A file restored
   from another device keeps that device's stamps.
-- **The wrap clock is raised** to the wrap time of every vault that opens (`VaultDeviceWrapStamper.noteWrap(at:)`), best
-  effort, so later wraps on this device follow it even where the stamp was lost.
+- **Every unlock moves the wrap stamp on** to the latest of the stamp, now and the opened vault's wrap time, and saves
+  it, under the file's lock, best effort (`VaultDeviceWrapStamper.noteUse(ofVaultWrappedAt:)`). It's saved every time,
+  so real and duress unlocks do the same work, and the stamp shows when the device was last used, not when a key was
+  last wrapped. Later wraps on this device also follow the opened vault even where the stamp was lost.
 - **Failures after counting** (a vault that opens but can't be read, say) are reported at the deadline as well.
 - **The counter is only reset when a vault opens.** If resetting fails, the vault stays locked and the error is
   shown, rather than opening with a count that would carry on.
@@ -767,9 +769,14 @@ payloads.
   `max(now, the last stamp + 1 ms, the previous wrap time + 1 ms)`, where the previous wrap time is the slot's own,
   or, for a vault made from another, that vault's. The stamp is saved before the wrap is made, in a keychain item on
   this device only, in the App Group's access group. Every vault that opens raises it to its own wrap time.
-- **What's left:** a device whose stamp is gone, because its keychain was reset or it's a new device restored from
-  a backup, and where the user hasn't opened the real vault since. There a duress vault made with the clock set
-  back is stamped only after the duress vault it's made from, and can be older than the real vault.
+- **What's left:** a device whose stamp is missing or older than the real vault's wrap, because its keychain was reset
+  or it's a new device restored from a backup, and where the user hasn't opened the real vault since. There a duress
+  vault made with the clock set back is stamped only after the duress vault it's made from, and can be older than the
+  real vault.
+- **The stamp is readable at rest** by forensic keychain tools. If it only moved when a key was wrapped, someone with
+  one vault's password could tell a wrap was made after it: a duress vault made, or another vault's password
+  changed. So it moves on every unlock too, and always to at least now, and it only ever says when the device was
+  last unlocked, as the file's modification time does.
 - **As built**, the check tries the new password's key on the open vault's own key box and nothing else, so its
   result depends only on the open vault. A vault whose key is wrapped by the device key (password off) never
   matches.
@@ -849,6 +856,7 @@ configuration, which the app can't edit. Turning on the password should tell use
 | Pending rehash files | Plaintext phrases (old-schema upgrades) | Removed; precondition of migration |
 | Failed-open archives | Plaintext copies of the vault | Removed, with confirmation |
 | `UserDefaults` and keychain settings | Dates, a payload hash, auto-backup configuration, the backup key | Same. VAULT-23 moves the per-vault parts into the payload. |
+| Wrap stamp (keychain, this device only) | Not there | When the device was last unlocked, or a key last wrapped: the same as the file's modification time |
 | Keyboard learning from note editors | Words typed with autocorrection on | Same. Outside storage; separate ticket VAULT-54. |
 
 ## Residual limits

@@ -643,7 +643,7 @@ extension VaultUnlockServiceTests {
         #expect(try await sut.session.retrieve(query: .init()).items.isEmpty)
     }
 
-    /// On a device without a stamp, as after a restore, opening the real vault raises the clock to its wrap time, so
+    /// On a device without a stamp, as after a restore, opening the real vault raises the stamp to its wrap time, so
     /// a duress vault made after that, with the clock set back, is still newer than it.
     @Test
     func unlock_onADeviceWithoutAStamp_raisesTheClockToTheVaultThatOpens() async throws {
@@ -666,6 +666,25 @@ extension VaultUnlockServiceTests {
 
         #expect(try await sut.service.unlock(password: "real") == .unlocked)
         #expect(try await sut.session.retrieve(query: .init()).items.isEmpty)
+    }
+
+    /// Every unlock moves the stamp on and saves it, the real vault's and a duress vault's alike, so the stamp says
+    /// when the device was last used, and doesn't show whether a wrap came after the vault that opened.
+    @Test(arguments: ["real", "duress"])
+    func unlock_movesTheStampOnToNowAndSavesIt(password: String) async throws {
+        let duress = TestVault(
+            password: "duress",
+            slot: duressSlot,
+            items: [],
+            wrappedAt: Date(timeIntervalSince1970: 1_790_000_100),
+        )
+        let sut = try makeSUT(vaults: [realVault, duress], wrapStamp: 1_790_000_200_000)
+        sut.wrapDate.modify { $0 = Date(timeIntervalSince1970: 1_790_000_300) }
+
+        #expect(try await sut.service.unlock(password: password) == .unlocked)
+
+        #expect(sut.wrapStamp.value == 1_790_000_300_000)
+        #expect(sut.wrapStamp.saveCount == 1)
     }
 
     /// A wrong password opens nothing, so it raises nothing.

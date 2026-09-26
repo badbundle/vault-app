@@ -17,9 +17,9 @@ import os
 ///    a decoy instead, a random slot's body with a throwaway key, which fails.
 /// 6. Drops `K_pw` and every wrap key but the opened slot's. They're `SymmetricKey`s, which are zeroed when released.
 ///    The opened slot's wrap key and data key stay with its store until the vault locks.
-/// 7. Waits for the deadline. Then it resets the count, raises the wrap stamp to the vault's wrap time
-///    (`VaultDeviceWrapStamper.noteWrap(at:)`), and switches the store session to the vault, or reports a wrong
-///    password.
+/// 7. Waits for the deadline. Then it resets the count, moves the wrap stamp on
+///    (`VaultDeviceWrapStamper.noteUse(ofVaultWrappedAt:)`), and switches the store session to the vault, or reports
+///    a wrong password.
 ///
 /// So real, duress and wrong passwords do the same work, and finish at the same deadline.
 ///
@@ -179,9 +179,13 @@ extension VaultUnlockService {
             return .wrongPassword
         case let .success(opened?):
             try await attemptCounter.reset()
-            // So a wrap made from now on is later than this vault's, even on a device that's lost its stamp, as
-            // after a restore. Best effort: a vault that opened stays open.
-            try? wrapStamper.noteWrap(at: opened.slot.wrappedAt)
+            // Moves the stamp on to now, as every unlock does, so it shows when the device was last used rather than
+            // when a key was last wrapped, and so a wrap made from now on follows this vault's even on a device that's
+            // lost its stamp. Under the file's lock, with the wraps that stamp it. Best effort: a vault that opened
+            // stays open.
+            try? await file.withLock { [wrapStamper] _ in
+                try wrapStamper.noteUse(ofVaultWrappedAt: opened.slot.wrappedAt)
+            }
             let store = EncryptedVaultStore(
                 file: file,
                 slot: opened.slot,

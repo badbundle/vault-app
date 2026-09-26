@@ -78,24 +78,51 @@ struct VaultDeviceWrapStamperTests {
         #expect(Set(stamps).count == 100)
     }
 
+    /// Opening a vault wrapped later than the stamp, as on a device that lost its stamp, moves it to that vault's
+    /// wrap time, so wraps made from now on follow it.
     @Test
-    func noteWrap_raisesTheStampToALaterWrap() throws {
+    func noteUse_ofAVaultWrappedLater_movesTheStampToItsWrapTime() throws {
         let storage = InMemoryWrapStampStorage(stamp: 1000)
         let sut = VaultDeviceWrapStamper.inMemory(storage: storage) { [longAgo] in longAgo }
 
-        try sut.noteWrap(at: now)
+        try sut.noteUse(ofVaultWrappedAt: now)
 
         #expect(storage.value == 1_790_000_000_000)
         #expect(try sut.nextWrapStamp(rewrapping: .distantPast) == Date(timeIntervalSince1970: 1_790_000_000.001))
     }
 
+    /// The stamp shows when the device was last used, not when a key was last wrapped: opening a vault moves it on to
+    /// now.
     @Test
-    func noteWrap_neverLowersTheStamp() throws {
+    func noteUse_movesTheStampOnToNow() throws {
+        let storage = InMemoryWrapStampStorage(stamp: 1_700_000_000_000)
+        let sut = VaultDeviceWrapStamper.inMemory(storage: storage) { [now] in now }
+
+        try sut.noteUse(ofVaultWrappedAt: Date(timeIntervalSince1970: 1_600_000_000))
+
+        #expect(storage.value == 1_790_000_000_000)
+    }
+
+    @Test
+    func noteUse_neverMovesTheStampBack() throws {
         let storage = InMemoryWrapStampStorage(stamp: 1_790_000_000_000)
         let sut = VaultDeviceWrapStamper.inMemory(storage: storage) { [longAgo] in longAgo }
 
-        try sut.noteWrap(at: Date(timeIntervalSince1970: 1000))
+        try sut.noteUse(ofVaultWrappedAt: Date(timeIntervalSince1970: 1000))
 
         #expect(storage.value == 1_790_000_000_000)
+    }
+
+    /// It's saved every time, even when it doesn't move, so opening a vault takes the same work whatever the stamp
+    /// was.
+    @Test
+    func noteUse_savesEveryTime() throws {
+        let storage = InMemoryWrapStampStorage(stamp: 1_790_000_000_000)
+        let sut = VaultDeviceWrapStamper.inMemory(storage: storage) { [longAgo] in longAgo }
+
+        try sut.noteUse(ofVaultWrappedAt: longAgo)
+        try sut.noteUse(ofVaultWrappedAt: longAgo)
+
+        #expect(storage.saveCount == 2)
     }
 }
