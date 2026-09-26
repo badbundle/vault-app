@@ -87,7 +87,7 @@ public enum VaultRoot {
     }()
 
     public static let backupPasswordStore: some BackupPasswordStore =
-        BackupPasswordStoreImpl(secureStorage: secureStorage)
+        BackupPasswordStoreImpl(secureStorage: secureStorage, clock: clock)
 
     public static let killphraseKeyStore: some KillphraseKeyStore<KeyData<32>> =
         KillphraseKeyStoreImpl(secureStorage: secureStorage)

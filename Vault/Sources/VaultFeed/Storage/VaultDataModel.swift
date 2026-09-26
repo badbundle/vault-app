@@ -119,7 +119,7 @@ public final class VaultDataModel {
     public private(set) var backupPasswordLoadingState: LoadingState = .notLoading
 
     public enum BackupPasswordStatus: Sendable, Equatable {
-        /// Not loaded yet, or the store couldn't be read.
+        /// Not loaded yet, or the store couldn't be read and nothing was known before.
         case unknown
         case notSet
         case set(BackupPasswordMetadata)
@@ -135,7 +135,9 @@ public final class VaultDataModel {
     /// Whether a backup password is set, for surfaces that aren't behind device authentication.
     ///
     /// Unlike `backupPassword`, loading this never loads the key itself or asks the user to
-    /// authenticate: if the store can't answer without authentication, it stays `.unknown`.
+    /// authenticate. If the store can't answer, it keeps what was already known (`.unknown` at
+    /// first), so a status the user has seen doesn't disappear. Setting or loading the password
+    /// also brings it up to date.
     public private(set) var backupPasswordStatus: BackupPasswordStatus = .unknown
 
     /// Derived from the unlocked vault key. Cached here so the killphrase
@@ -322,8 +324,10 @@ extension VaultDataModel {
             let password = try await backupPasswordStore.fetchPassword()
             if let password {
                 backupPassword = .fetched(password)
+                await markBackupPasswordStatusSet()
             } else {
                 backupPassword = .notCreated
+                backupPasswordStatus = .notSet
             }
         } catch {
             backupPassword = .error(PresentationError(
@@ -343,14 +347,20 @@ extension VaultDataModel {
                 backupPasswordStatus = .notSet
             }
         } catch {
-            backupPasswordStatus = .unknown
+            // A failed read says nothing new, so keep what's known: a status the user has already
+            // seen mustn't disappear.
         }
     }
 
     public func store(backupPassword: DerivedEncryptionKey) async throws {
         try await backupPasswordStore.set(password: backupPassword)
         self.backupPassword = .fetched(backupPassword)
-        // It's set now, even if the store can't say when.
+        await markBackupPasswordStatusSet()
+    }
+
+    /// Marks the backup password as set, once it's known to exist.
+    private func markBackupPasswordStatusSet() async {
+        // It's set, even if the store can't say when.
         let metadata = try? await backupPasswordStore.fetchPasswordMetadata()
         backupPasswordStatus = .set(metadata ?? BackupPasswordMetadata(lastSetDate: nil))
     }

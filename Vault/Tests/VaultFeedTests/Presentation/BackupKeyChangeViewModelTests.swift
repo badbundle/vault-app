@@ -176,6 +176,30 @@ struct BackupKeyChangeViewModelTests {
         #expect(sut.didReplaceExistingPassword == true)
     }
 
+    /// Coming back to the sheet after setting a password, even where the stored password's own
+    /// attributes can't be read without authenticating.
+    @Test
+    func reopeningAfterSettingPassword_showsCurrentPasswordAndReplacesIt() async {
+        let storage = InMemorySecureStorage(canReadAttributesWithoutAuthentication: false)
+        let store = BackupPasswordStoreImpl(secureStorage: storage, clock: EpochClockMock(currentTime: 1_700_000_000))
+        let dataModel = anyVaultDataModel(backupPasswordStore: store)
+        let first = makeSUT(dataModel: dataModel)
+        await first.onAppear()
+        first.newlyEnteredPassword = "hello"
+        first.newlyEnteredPasswordConfirm = "hello"
+        await first.saveEnteredPassword()
+        first.didDisappear()
+
+        let reopened = makeSUT(dataModel: dataModel)
+        await reopened.onAppear()
+        #expect(reopened.currentPasswordStatus == .set(.init(lastSetDate: Date(timeIntervalSince1970: 1_700_000_000))))
+
+        reopened.newlyEnteredPassword = "hello again"
+        reopened.newlyEnteredPasswordConfirm = "hello again"
+        await reopened.saveEnteredPassword()
+        #expect(reopened.didReplaceExistingPassword == true)
+    }
+
     @Test
     func saveEnteredPassword_keygenErrorDoesNotReplaceExisting() async {
         let store = BackupPasswordStoreMock()
