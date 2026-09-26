@@ -36,13 +36,15 @@ struct SecureNoteDetailView: View {
         }
     }
 
+    /// A new note, locked as `newItemDefaults` say.
     init(
         newNoteWithEditor editor: any SecureNoteDetailEditor,
         navigationPath: Binding<NavigationPath>,
         dataModel: VaultDataModel,
+        newItemDefaults: NewItemDefaults,
     ) {
         self.init(
-            viewModel: .init(mode: .creating, dataModel: dataModel, editor: editor),
+            viewModel: .init(mode: .creating(defaults: newItemDefaults), dataModel: dataModel, editor: editor),
             navigationPath: navigationPath,
         )
         viewModel.startEditing()
@@ -207,6 +209,7 @@ struct SecureNoteDetailView: View {
             searchPassphraseRehashService: nil,
             backupEventLogger: BackupEventLoggerMock(),
         ),
+        newItemDefaults: NewItemDefaults(),
     )
     .environment(DeviceAuthenticationService(policy: .alwaysAllow))
 }

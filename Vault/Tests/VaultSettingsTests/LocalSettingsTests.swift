@@ -114,6 +114,26 @@ struct LocalSettingsTests {
         let sutRetrieve = try makeSUT(defaults: defaults)
         #expect(sutRetrieve.state.allowUniversalClipboardForOTPs)
     }
+
+    @Test
+    func newItems_startUnlockedAndOutOfQuickTypeByDefault() throws {
+        let sut = try makeSUT(defaults: .nonPersistent())
+
+        #expect(sut.state.lockNewItems == false)
+        #expect(sut.state.showNewCodesInQuickType == false)
+    }
+
+    @Test
+    func newItems_savesStateAfterStateChanged() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sutSave = try makeSUT(defaults: defaults)
+        sutSave.state.lockNewItems = true
+        sutSave.state.showNewCodesInQuickType = true
+
+        let sutRetrieve = try makeSUT(defaults: defaults)
+        #expect(sutRetrieve.state.lockNewItems)
+        #expect(sutRetrieve.state.showNewCodesInQuickType)
+    }
 }
 
 // MARK: - Helpers

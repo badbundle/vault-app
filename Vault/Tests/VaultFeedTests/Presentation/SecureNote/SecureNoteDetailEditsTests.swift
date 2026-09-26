@@ -6,7 +6,7 @@ import Testing
 struct SecureNoteDetailEditsTests {
     @Test
     func isValid_validForTitleWithContents() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.contents = "Nice"
 
         #expect(sut.isValid)
@@ -14,7 +14,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func isValid_invalidForEmptySearchPassphrase() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.viewConfig = .requiresSearchPassphrase
         sut.searchPassphrase = ""
 
@@ -23,7 +23,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func isValid_validForNonEmptySearchPassphrase() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.viewConfig = .requiresSearchPassphrase
         sut.searchPassphrase = "passphrase"
 
@@ -32,7 +32,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func title_isFirstLineOfContent() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.contents = "First\nSecond\nThird"
 
         #expect(sut.titleLine == "First")
@@ -40,7 +40,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func title_skipsEmptyLines() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.contents = "\n\nFirst\n\nSecond\nThird"
 
         #expect(sut.titleLine == "First")
@@ -48,7 +48,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func contentPreviewLine_isSecondLineOfContent() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.contents = "First\nSecond\nThird"
 
         #expect(sut.contentPreviewLine == "Second")
@@ -56,7 +56,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func contentPreviewLine_isEmptyIfNoSecondLine() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.contents = "First"
 
         #expect(sut.contentPreviewLine == "")
@@ -64,7 +64,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func contentPreviewLine_skipsEmptyLines() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.contents = "\n\nFirst\n\nSecond\nThird"
 
         #expect(sut.contentPreviewLine == "Second")
@@ -72,7 +72,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func contentPreviewLine_isEmptyIfNoteEncrpyted() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.contents = "First\n\nSecond\nThird"
         sut.existingEncryptionKey = .init(key: .random(), salt: .random(count: 10), keyDervier: .testing)
 
@@ -81,7 +81,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func contentPreviewLine_isEmptyIfNoteAboutToBeENcrpyted() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.contents = "First\n\nSecond\nThird"
         sut.newEncryptionPassword = "password"
 
@@ -90,7 +90,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func contentPreviewLine_isEmptyWhenPreviewModeIsTitleOnly() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.contents = "First\nSecond\nThird"
         sut.previewMode = .titleOnly
 
@@ -99,7 +99,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func contentPreviewLine_isEmptyWhenPreviewModeIsHidden() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.contents = "First\nSecond\nThird"
         sut.previewMode = .hidden
 
@@ -108,7 +108,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func isValid_validWhenExistingSearchPassphraseRequiresBlankPassphrase() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         sut.contents = "Nice"
         sut.viewConfig = .requiresSearchPassphrase
         sut.hasExistingSearchPassphrase = true
@@ -119,7 +119,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func killphrasePropertiesReflectEnabledState() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
 
         #expect(sut.killphraseIsEnabled == false)
         #expect(sut.killphraseEnabledText == "None")
@@ -134,7 +134,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func encryptionTextReflectsEncryptionState() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
 
         #expect(sut.encrypted == false)
         #expect(sut.encryptionEnabledText == "None")
@@ -147,7 +147,7 @@ struct SecureNoteDetailEditsTests {
 
     @Test
     func isKillphraseValid_rejectsWhitespaceOnlyValue() {
-        var sut = SecureNoteDetailEdits.new()
+        var sut = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
 
         sut.newKillphrase = ""
         #expect(sut.isKillphraseValid)

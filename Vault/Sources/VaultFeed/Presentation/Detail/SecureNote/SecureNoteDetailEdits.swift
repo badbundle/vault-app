@@ -171,8 +171,8 @@ public struct SecureNoteDetailEdits: DetailEditorEditableState {
 
 extension SecureNoteDetailEdits {
     /// Create an `SecureNoteDetailEdits` in a blank state with initial input values, for creation.
-    /// All initial values are sensible defaults.
-    public static func new() -> SecureNoteDetailEdits {
+    /// All initial values are sensible defaults, and it's locked as `defaults` say.
+    public static func new(defaults: NewItemDefaults) -> SecureNoteDetailEdits {
         .init(
             contents: "",
             textFormat: .markdown,
@@ -183,7 +183,7 @@ extension SecureNoteDetailEdits {
             killphraseEnabled: false,
             newKillphrase: "",
             tags: [],
-            lockState: .notLocked,
+            lockState: defaults.lockState,
             relativeOrder: .min,
             existingEncryptionKey: nil,
             previewMode: .titleAndFirstLine,

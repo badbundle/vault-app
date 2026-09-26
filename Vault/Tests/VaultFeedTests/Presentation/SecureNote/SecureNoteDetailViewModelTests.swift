@@ -52,6 +52,38 @@ struct SecureNoteDetailViewModelTests {
         #expect(sut.editingModel.detail.existingEncryptionKey == nil)
     }
 
+    @Test(arguments: [false, true])
+    func init_creatingStartsFromNewItemDefaults(lockNewItems: Bool) {
+        let sut = makeSUTCreating(defaults: NewItemDefaults(lockNewItems: lockNewItems))
+
+        #expect(sut.editingModel.detail.lockState.isLocked == lockNewItems)
+    }
+
+    @Test
+    func init_editingKeepsTheNotesOwnLock() {
+        let metadata = anyVaultItemMetadata(lockState: .notLocked)
+
+        // Editing never takes new-item defaults, so an existing note keeps what it has.
+        let sut = makeSUTEditing(storedMetadata: metadata)
+
+        #expect(sut.editingModel.detail.lockState == .notLocked)
+    }
+
+    @Test
+    func saveChanges_creatingSavesTheNewItemDefaults() async {
+        let editor = SecureNoteDetailEditorMock()
+        let sut = makeSUTCreating(editor: editor, defaults: NewItemDefaults(lockNewItems: true))
+
+        await confirmation { confirm in
+            editor.createNoteHandler = { edits in
+                #expect(edits.lockState == .lockedWithNativeSecurity)
+                confirm()
+            }
+
+            await sut.saveChanges()
+        }
+    }
+
     @Test
     func isInEditMode_editingInitiallyFalse() {
         let sut = makeSUTEditing()
@@ -557,6 +589,7 @@ extension SecureNoteDetailViewModelTests {
     @MainActor
     private func makeSUTCreating(
         editor: SecureNoteDetailEditorMock = SecureNoteDetailEditorMock(),
+        defaults: NewItemDefaults = NewItemDefaults(),
         dataModel: VaultDataModel = VaultDataModel(
             vaultStore: VaultStoreStub(),
             vaultTagStore: VaultTagStoreStub(),
@@ -572,7 +605,7 @@ extension SecureNoteDetailViewModelTests {
             backupEventLogger: BackupEventLoggerMock(),
         ),
     ) -> SecureNoteDetailViewModel {
-        SecureNoteDetailViewModel(mode: .creating, dataModel: dataModel, editor: editor)
+        SecureNoteDetailViewModel(mode: .creating(defaults: defaults), dataModel: dataModel, editor: editor)
     }
 
     @MainActor
@@ -593,7 +626,7 @@ extension SecureNoteDetailViewModelTests {
             backupEventLogger: BackupEventLoggerMock(),
         ),
     ) -> SecureNoteDetailViewModel {
-        SecureNoteDetailViewModel(mode: .creating, dataModel: dataModel, editor: editor)
+        SecureNoteDetailViewModel(mode: .creating(defaults: NewItemDefaults()), dataModel: dataModel, editor: editor)
     }
 
     @MainActor

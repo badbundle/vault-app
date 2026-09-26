@@ -9,7 +9,8 @@ public final class OTPCodeDetailViewModel: DetailViewModel {
     public var editingModel: DetailEditingModel<OTPCodeDetailEdits>
 
     public enum Mode {
-        case creating(initialCode: OTPAuthCode? = nil)
+        /// A new code, starting from what `defaults` say, and from `initialCode` if it came with its key.
+        case creating(initialCode: OTPAuthCode? = nil, defaults: NewItemDefaults)
         case editing(code: OTPAuthCode, metadata: VaultItem.Metadata)
     }
 
@@ -35,11 +36,11 @@ public final class OTPCodeDetailViewModel: DetailViewModel {
         case let .editing(_, metadata): metadata.lockState.isLocked
         }
         editingModel = switch mode {
-        case .creating(.none):
-            .init(detail: .new())
-        case let .creating(.some(initialCode)):
+        case let .creating(.none, defaults):
+            .init(detail: .new(defaults: defaults))
+        case let .creating(.some(initialCode), defaults):
             .init(
-                detail: .new(hydratedFromCode: initialCode),
+                detail: .new(hydratedFromCode: initialCode, defaults: defaults),
                 isInitiallyDirty: true,
             )
         case let .editing(code, metadata):
@@ -64,9 +65,9 @@ public final class OTPCodeDetailViewModel: DetailViewModel {
     /// can't be changed, so its editor has no key step.
     private static func makeEditorFlow(mode: Mode) -> DetailEditorFlow {
         switch mode {
-        case .creating(.none):
+        case .creating(.none, _):
             DetailEditorFlow(steps: DetailEditorStep.allCases, style: .guided)
-        case .creating(.some):
+        case .creating(.some, _):
             DetailEditorFlow(steps: DetailEditorStep.allCases, style: .guided, startingAt: .details)
         case .editing:
             DetailEditorFlow(steps: [.details, .appearance, .security], style: .overview)

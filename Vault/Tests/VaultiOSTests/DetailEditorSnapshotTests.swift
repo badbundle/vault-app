@@ -167,7 +167,7 @@ extension DetailEditorSnapshotTests {
 
     private func makeCodeCreating(dataModel: VaultDataModel? = nil) -> OTPCodeDetailViewModel {
         let viewModel = OTPCodeDetailViewModel(
-            mode: .creating(),
+            mode: .creating(defaults: NewItemDefaults()),
             dataModel: dataModel ?? anyVaultDataModel(),
             editor: OTPCodeDetailEditorMock(),
         )
@@ -188,7 +188,7 @@ extension DetailEditorSnapshotTests {
 
     private func makeNoteCreating() -> SecureNoteDetailViewModel {
         let viewModel = SecureNoteDetailViewModel(
-            mode: .creating,
+            mode: .creating(defaults: NewItemDefaults()),
             dataModel: anyVaultDataModel(),
             editor: SecureNoteDetailEditorMock(),
         )
