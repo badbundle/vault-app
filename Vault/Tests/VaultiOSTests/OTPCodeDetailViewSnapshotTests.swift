@@ -136,6 +136,40 @@ final class OTPCodeDetailViewSnapshotTests {
         snapshotScenarios(view: sut)
     }
 
+    /// Near the end of the countdown, with Show Next Code on, the next code shows above the bar.
+    @Test
+    func nextCodeShowing() {
+        let sut = OTPCodeDetailView(
+            editingExistingCode: .init(type: .totp(period: 30), data: .init(secret: .empty(), accountName: "")),
+            navigationPath: .constant(NavigationPath()),
+            dataModel: anyVaultDataModel(),
+            storedMetadata: .init(
+                id: .new(),
+                created: fixedTestDate(),
+                updated: fixedTestDate(),
+                relativeOrder: .min,
+                userDescription: "",
+                tags: [],
+                visibility: .always,
+                searchableLevel: .full,
+                searchPassphrase: nil,
+                killphrase: nil,
+                lockState: .notLocked,
+                color: nil,
+                showInQuickType: true,
+                previewMode: .titleAndFirstLine,
+            ),
+            editor: OTPCodeDetailEditorMock(),
+            previewGenerator: makeCodePreviewGenerator(nextCode: "654321"),
+            copyActionHandler: VaultItemCopyActionHandlerMock(),
+            openInEditMode: false,
+            presentationMode: .none,
+        )
+        .environment(\.showsNextCode, true)
+
+        snapshotScenarios(view: sut)
+    }
+
     @Test
     func editMode_emptyState() {
         let sut = OTPCodeDetailView(
@@ -294,7 +328,12 @@ extension OTPCodeDetailViewSnapshotTests {
     }
 
     /// Draws a code's preview as the app does, with a fixed code and, for a TOTP code, a countdown partway through.
-    private func makeCodePreviewGenerator(isHOTP: Bool = false) -> VaultItemPreviewViewGeneratorMock {
+    ///
+    /// - Parameter nextCode: The next code, as though the countdown is near its end.
+    private func makeCodePreviewGenerator(
+        isHOTP: Bool = false,
+        nextCode: String? = nil,
+    ) -> VaultItemPreviewViewGeneratorMock {
         .mockGenerating { _, _, behaviour in
             let viewModel = OTPCodePreviewViewModel(
                 accountName: "",
@@ -302,6 +341,7 @@ extension OTPCodeDetailViewSnapshotTests {
                 color: .default,
                 isLocked: false,
                 fixedCodeState: .visible("123456"),
+                fixedNextCode: nextCode,
             )
             if isHOTP {
                 HOTPCodePreviewView(

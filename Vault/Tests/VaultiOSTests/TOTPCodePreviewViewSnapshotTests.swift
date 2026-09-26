@@ -112,11 +112,51 @@ final class TOTPCodePreviewViewSnapshotTests {
         assertSnapshot(of: sut, colorScheme: .light)
     }
 
+    // MARK: - Next code
+
+    /// Near the end of the countdown, the next code shows above the bar without moving anything else on the card.
+    @Test(arguments: [ColorScheme.light, .dark])
+    func nextCode_showsAboveTheBar(colorScheme: ColorScheme) {
+        let sut = makeBarLabelSUT(nextCode: "654321")
+
+        assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
+
+    @Test
+    func nextCode_showsAboveTheBarAtALargerTextSize() {
+        let sut = makeBarLabelSUT(nextCode: "65432198")
+            .dynamicTypeSize(.xxxLarge)
+
+        assertSnapshot(of: sut, colorScheme: .light)
+    }
+
+    /// Editing hides the next code along with the current one.
+    @Test
+    func nextCode_hiddenWhileEditing() {
+        let sut = makeBarLabelSUT(nextCode: "654321", behaviour: .editingState(message: "Tap to View"))
+
+        assertSnapshot(of: sut, colorScheme: .light)
+    }
+
+    /// With Show Next Code off, the card doesn't show it, even when it's due.
+    @Test
+    func nextCode_hiddenWithSettingOff() {
+        let sut = makeBarLabelSUT(nextCode: "654321", showsNextCode: false)
+
+        assertSnapshot(of: sut, colorScheme: .light)
+    }
+
     // MARK: - Helpers
 
     /// A card whose timer is a real bar, part way through its countdown, which draws the bar's label.
+    ///
+    /// - Parameters:
+    ///   - nextCode: The next code, as though the countdown is near its end.
+    ///   - showsNextCode: The Show Next Code setting.
     private func makeBarLabelSUT(
         state: OTPCodeState = .visible("123456"),
+        nextCode: String? = nil,
+        showsNextCode: Bool = true,
         behaviour: VaultItemViewBehaviour = .normal,
     ) -> some View {
         let preview = OTPCodePreviewViewModel(
@@ -125,12 +165,14 @@ final class TOTPCodePreviewViewSnapshotTests {
             color: .default,
             isLocked: false,
             fixedCodeState: state,
+            fixedNextCode: nextCode,
         )
         return TOTPCodePreviewView(
             previewViewModel: preview,
             timerView: HorizontalTimerProgressBarView(fractionCompleted: 0.2, color: .blue),
             behaviour: behaviour,
         )
+        .environment(\.showsNextCode, showsNextCode)
         .frame(width: 250)
     }
 

@@ -20,6 +20,7 @@ public final class TOTPPreviewViewRepositoryImpl: TOTPPreviewViewRepository {
     private let updaterFactory: any OTPCodeTimerUpdaterFactory
     private var timerUpdaterCache = Cache<UInt64, any OTPCodeTimerUpdater>()
     private var timerPeriodStateCache = Cache<UInt64, OTPCodeTimerPeriodState>()
+    private var nextCodeWindowCache = Cache<UInt64, TOTPNextCodeWindow>()
     private var viewModelCache = Cache<Identifier<VaultItem>, OTPCodePreviewViewModel>()
 
     public init(
@@ -45,7 +46,17 @@ public final class TOTPPreviewViewRepositoryImpl: TOTPPreviewViewRepository {
                 color: metadata.color ?? .default,
                 isLocked: metadata.lockState.isLocked,
                 codePublisher: codePublisher,
+                nextCodePublisher: TOTPNextCodePublisher(
+                    window: nextCodeWindow(period: code.period),
+                    totpGenerator: totpGenerator,
+                ),
             )
+        }
+    }
+
+    private func nextCodeWindow(period: UInt64) -> TOTPNextCodeWindow {
+        nextCodeWindowCache.getOrCreateValue(for: period) {
+            TOTPNextCodeWindow(timerUpdater: timerUpdater(period: period), intervalTimer: timer, clock: clock)
         }
     }
 
@@ -68,9 +79,13 @@ public final class TOTPPreviewViewRepositoryImpl: TOTPPreviewViewRepository {
         }
     }
 
+    /// Stops the next code windows too. They follow the timers, so they pick up again when those restart.
     public func stopAllTimers() {
         for timerUpdater in timerUpdaterCache.values {
             timerUpdater.cancel()
+        }
+        for nextCodeWindow in nextCodeWindowCache.values {
+            nextCodeWindow.cancel()
         }
     }
 
@@ -101,6 +116,7 @@ extension TOTPPreviewViewRepositoryImpl: VaultItemCache {
         await MainActor.run {
             viewModelCache.removeAll()
             timerPeriodStateCache.removeAll()
+            nextCodeWindowCache.removeAll()
             timerUpdaterCache.removeAll()
         }
     }
@@ -122,5 +138,9 @@ extension TOTPPreviewViewRepositoryImpl: VaultItemCache {
 
     var cachedPeriodStateCount: Int {
         timerPeriodStateCache.count
+    }
+
+    var cachedNextCodeWindowCount: Int {
+        nextCodeWindowCache.count
     }
 }

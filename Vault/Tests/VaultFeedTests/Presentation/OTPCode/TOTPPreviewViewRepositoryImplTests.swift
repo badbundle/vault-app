@@ -12,6 +12,33 @@ struct TOTPPreviewViewRepositoryImplTests {
         #expect(sut.cachedViewsCount == 0)
         #expect(sut.cachedPeriodStateCount == 0)
         #expect(sut.cachedTimerControllerCount == 0)
+        #expect(sut.cachedNextCodeWindowCount == 0)
+    }
+
+    @Test
+    func previewViewModel_sharesANextCodeWindowBetweenCodesWithTheSamePeriod() {
+        let sut = makeSUT()
+
+        _ = sut.previewViewModel(metadata: anyVaultItemMetadata(), code: anyTOTPCode(period: 30))
+        _ = sut.previewViewModel(metadata: anyVaultItemMetadata(), code: anyTOTPCode(period: 30))
+        #expect(sut.cachedNextCodeWindowCount == 1)
+
+        _ = sut.previewViewModel(metadata: anyVaultItemMetadata(), code: anyTOTPCode(period: 60))
+        #expect(sut.cachedNextCodeWindowCount == 2)
+    }
+
+    @Test
+    func previewViewModel_showsTheNextCodeNearTheEndOfThePeriod() async throws {
+        let updater = OTPCodeTimerUpdaterMock()
+        let sut = makeSUT(clock: EpochClockMock(currentTime: 125), updater: updater)
+        let viewModel = sut.previewViewModel(metadata: anyVaultItemMetadata(), code: anyTOTPCode(period: 30))
+
+        try await viewModel.waitForChange(to: \.nextCode) {
+            updater.timerUpdatedPublisherSubject.send(OTPCodeTimerState(startTime: 100, endTime: 130))
+        }
+
+        let nextCode = try #require(viewModel.nextCode)
+        #expect(viewModel.code != .visible(nextCode), "The next code isn't the current one")
     }
 
     @Test
@@ -201,12 +228,14 @@ struct TOTPPreviewViewRepositoryImplTests {
         #expect(sut.cachedViewsCount == 2)
         #expect(sut.cachedPeriodStateCount == 2)
         #expect(sut.cachedTimerControllerCount == 2)
+        #expect(sut.cachedNextCodeWindowCount == 1)
 
         await sut.vaultItemCacheClearAll()
 
         #expect(sut.cachedViewsCount == 0)
         #expect(sut.cachedPeriodStateCount == 0)
         #expect(sut.cachedTimerControllerCount == 0)
+        #expect(sut.cachedNextCodeWindowCount == 0)
     }
 }
 

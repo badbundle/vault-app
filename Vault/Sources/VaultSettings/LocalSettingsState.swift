@@ -22,11 +22,20 @@ public struct LocalSettingsState {
     /// What tapping a code in the feed does.
     @DefaultsStored public var codeTapAction: CodeTapAction
 
+    /// When `true`, a time-based code shows the code after it during the last seconds of its countdown. Off by
+    /// default.
+    @DefaultsStored public var showsNextCode: Bool
+
     init(defaults: Defaults) {
         _codeTapAction = DefaultsStored(
             defaults: defaults,
             defaultsKey: .init(VaultIdentifiers.Preferences.General.codeTapAction),
             defaultValue: .default,
+        )
+        _showsNextCode = DefaultsStored(
+            defaults: defaults,
+            defaultsKey: .init(VaultIdentifiers.Preferences.General.showsNextCode),
+            defaultValue: false,
         )
         _pasteTimeToLive = DefaultsStored(
             defaults: defaults,

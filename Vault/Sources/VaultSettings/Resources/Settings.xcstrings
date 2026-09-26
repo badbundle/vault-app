@@ -211,6 +211,17 @@
         }
       }
     },
+    "showNextCode.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Next Code"
+          }
+        }
+      }
+    },
     "termsOfUse.title" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -10,6 +10,7 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
     var behaviour: VaultItemViewBehaviour
 
     @Environment(\.showsCodeOnly) private var showsCodeOnly
+    @Environment(\.showsNextCode) private var showsNextCode
 
     var body: some View {
         if showsCodeOnly {
@@ -29,6 +30,7 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
                 codeState: previewViewModel.code,
                 behaviour: behaviour,
             )
+            .nextCodeAbove(nextCode, isProminent: true)
         }
         .padding(.vertical, 8)
         .animation(.snappy, value: behaviour)
@@ -59,6 +61,7 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
                 codeState: previewViewModel.code,
                 behaviour: behaviour,
             )
+            .nextCodeAbove(nextCode)
         }
         .padding(16)
         .animation(.snappy, value: behaviour)
@@ -130,6 +133,13 @@ struct TOTPCodePreviewView<TimerBar: View>: View {
         case .normal: false
         case .editingState: true
         }
+    }
+
+    /// The code after this one, when the setting is on and the countdown is near its end. The view model already
+    /// holds it back whenever the current code is hidden; editing hides both here.
+    private var nextCode: String? {
+        guard showsNextCode, !isEditing else { return nil }
+        return previewViewModel.nextCode
     }
 }
 

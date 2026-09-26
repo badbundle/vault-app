@@ -123,6 +123,25 @@ struct LocalSettingsTests {
     }
 
     @Test
+    func showsNextCode_isOffByDefault() throws {
+        let sut = try makeSUT(defaults: .nonPersistent())
+
+        #expect(!sut.state.showsNextCode)
+    }
+
+    @Test
+    func showsNextCode_savesStateAfterTurningOnAndOff() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sut = try makeSUT(defaults: defaults)
+
+        sut.state.showsNextCode = true
+        #expect(try makeSUT(defaults: defaults).state.showsNextCode)
+
+        sut.state.showsNextCode = false
+        #expect(try !makeSUT(defaults: defaults).state.showsNextCode)
+    }
+
+    @Test
     func universalClipboard_savesStateAfterStateChanged() throws {
         let defaults = try Defaults.nonPersistent()
         let sutSave = try makeSUT(defaults: defaults)

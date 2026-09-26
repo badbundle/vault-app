@@ -165,6 +165,101 @@ struct OTPCodePreviewViewModelTests {
         }
     }
 
+    // MARK: - Next code
+
+    @Test
+    func nextCode_isNilWithoutANextCodePublisher() async throws {
+        let (codePublisher, sut) = makeSUT()
+
+        try await sut.waitForChange(to: \.code) {
+            codePublisher.subject.send("123456")
+        }
+
+        #expect(sut.nextCode == nil)
+    }
+
+    @Test
+    func nextCode_followsTheNextCodeWhileTheCodeIsVisible() async throws {
+        let (codePublisher, nextCodePublisher, sut) = makeSUTWithNextCode()
+        try await sut.waitForChange(to: \.code) {
+            codePublisher.subject.send("123456")
+        }
+
+        try await sut.waitForChange(to: \.nextCode) {
+            nextCodePublisher.subject.send("654321")
+        }
+        #expect(sut.nextCode == "654321")
+
+        try await sut.waitForChange(to: \.nextCode) {
+            nextCodePublisher.subject.send(nil)
+        }
+        #expect(sut.nextCode == nil)
+    }
+
+    @Test
+    func nextCode_isHiddenWheneverTheCodeIsHidden() async throws {
+        let hiddenStates: [OTPCodeState] = [
+            .locked(code: "123456"),
+            .obfuscated(.privacy),
+            .obfuscated(.expiry),
+            .notReady,
+            .finished,
+            .error(.init(userTitle: "", debugDescription: ""), digits: 6),
+        ]
+        for hiddenState in hiddenStates {
+            let (_, nextCodePublisher, sut) = makeSUTWithNextCode()
+            sut.update(.visible("123456"))
+            try await sut.waitForChange(to: \.nextCode) {
+                nextCodePublisher.subject.send("654321")
+            }
+
+            sut.update(hiddenState)
+
+            #expect(sut.nextCode == nil, "\(hiddenState) hides the next code")
+        }
+    }
+
+    @Test
+    func nextCode_returnsOnceThePrivacyObfuscationIsRemoved() async throws {
+        let (_, nextCodePublisher, sut) = makeSUTWithNextCode()
+        sut.update(.visible("123456"))
+        try await sut.waitForChange(to: \.nextCode) {
+            nextCodePublisher.subject.send("654321")
+        }
+
+        sut.update(.obfuscated(.privacy))
+        #expect(sut.nextCode == nil)
+        sut.updateRemovePrivacyObfuscation()
+
+        #expect(sut.nextCode == "654321")
+    }
+
+    @Test
+    func pasteboardCopyText_isTheCurrentCodeWhileTheNextCodeShows() async throws {
+        let (_, nextCodePublisher, sut) = makeSUTWithNextCode()
+        sut.update(.visible("123456"))
+        try await sut.waitForChange(to: \.nextCode) {
+            nextCodePublisher.subject.send("654321")
+        }
+
+        let expected = VaultTextCopyAction(text: "123456", requiresAuthenticationToCopy: false, contentType: .otp)
+        #expect(sut.pasteboardCopyText == expected)
+    }
+
+    @Test
+    func nextCode_isTheFixedNextCode() {
+        let sut = OTPCodePreviewViewModel(
+            accountName: "any",
+            issuer: "any",
+            color: .default,
+            isLocked: false,
+            fixedCodeState: .visible("123456"),
+            fixedNextCode: "654321",
+        )
+
+        #expect(sut.nextCode == "654321")
+    }
+
     // MARK: - Helpers
 
     private func makeSUT(
@@ -180,5 +275,19 @@ struct OTPCodePreviewViewModelTests {
             codePublisher: codePublisher,
         )
         return (codePublisher, viewModel)
+    }
+
+    private func makeSUTWithNextCode() -> (OTPCodePublisherMock, OTPNextCodePublisherMock, OTPCodePreviewViewModel) {
+        let codePublisher = OTPCodePublisherMock()
+        let nextCodePublisher = OTPNextCodePublisherMock()
+        let viewModel = OTPCodePreviewViewModel(
+            accountName: "any",
+            issuer: "any",
+            color: .default,
+            isLocked: false,
+            codePublisher: codePublisher,
+            nextCodePublisher: nextCodePublisher,
+        )
+        return (codePublisher, nextCodePublisher, viewModel)
     }
 }

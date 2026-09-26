@@ -40,6 +40,10 @@ extension SettingsViewModel {
         localized(key: "codeTapAction.title")
     }
 
+    public var showNextCodeTitle: String {
+        localized(key: "showNextCode.title")
+    }
+
     public var saveBackupTitle: String {
         localized(key: "saveBackup.title")
     }

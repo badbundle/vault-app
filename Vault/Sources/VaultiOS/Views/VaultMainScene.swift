@@ -68,6 +68,8 @@ public struct VaultMainScene: Scene {
         )
         .installToast(position: .top)
         .environment(appLockService)
+        // Here rather than in the shared views, so the AutoFill extension doesn't show next codes.
+        .environment(\.showsNextCode, localSettings.state.showsNextCode)
     }
 
     private var initialSelection: VaultMainNavigationView.SidebarItem {
