@@ -11,6 +11,10 @@ public enum VaultIdentifiers {
 
     public enum SecureStorageKey {
         public static let backupPassword = "vault.secure-storage.backup-password.v1"
+        /// Non-secret record that a backup password is set, and when. Stored
+        /// with `.whenUnlocked` access (no biometric), unlike the password
+        /// itself, so the status can be shown without authenticating.
+        public static let backupPasswordMetadata = "vault.secure-storage.backup-password-metadata.v1"
         /// HMAC key for per-item killphrase digests. Stored with
         /// `.whenUnlocked` access (no biometric) so the killphrase
         /// match path works as soon as the device is unlocked.

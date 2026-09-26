@@ -35,6 +35,10 @@ public protocol SecureStorage: Sendable {
     /// presence, it throws instead of prompting. Returns `nil` if no data
     /// exists for this key.
     func attributes(key: String) async throws -> SecureStorageAttributes?
+
+    /// Removes the data stored for this key, however it was stored. Does
+    /// nothing if there isn't any.
+    func remove(key: String) async throws
 }
 
 /// Metadata about an item in `SecureStorage`, readable without its data.
@@ -77,6 +81,10 @@ public actor SecureStorageImpl: SecureStorage {
     public func attributes(key: String) throws -> SecureStorageAttributes? {
         guard let info = try keychain.info(for: Self.attributesQuery(key: key)) else { return nil }
         return SecureStorageAttributes(modificationDate: info.modificationDate)
+    }
+
+    public func remove(key: String) throws {
+        try keychain.remove(.credential(for: key))
     }
 
     /// The query `attributes(key:)` runs, which asks for attributes only (never
