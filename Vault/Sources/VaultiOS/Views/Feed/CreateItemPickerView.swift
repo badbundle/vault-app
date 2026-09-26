@@ -55,9 +55,7 @@ struct CreateItemPickerView: View {
             onSelect(item)
         } label: {
             OptionCardLabel(title: title, subtitle: subtitle, systemImage: systemImage)
-                .padding(16)
-                .background(.fill.quaternary, in: .rect(cornerRadius: 20))
-                .contentShape(.rect(cornerRadius: 20))
+                .optionCardBackground()
         }
         .buttonStyle(.plain)
     }

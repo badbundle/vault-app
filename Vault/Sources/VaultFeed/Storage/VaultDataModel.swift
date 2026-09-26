@@ -556,9 +556,10 @@ extension VaultDataModel {
 extension VaultDataModel {
     public func deleteVault() async throws {
         try await vaultDeleter.deleteVault()
-        try await vaultOtpAutofillStore.removeAll()
+        // Reload before clearing AutoFill, so the feed never shows items that are already gone if that fails.
         await reloadItems()
         await reloadTags()
+        try await vaultOtpAutofillStore.removeAll()
     }
 }
 

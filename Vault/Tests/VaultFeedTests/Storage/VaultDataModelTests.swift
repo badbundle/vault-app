@@ -1060,6 +1060,26 @@ final class VaultDataModelTests {
     }
 
     @Test
+    func deleteVault_reloadsDataEvenIfClearingAutofillFails() async {
+        let vaultStore = VaultStoreStub()
+        let vaultTagStore = VaultTagStoreStub()
+        let vaultOtpAutofillStore = VaultOTPAutofillStoreMock()
+        vaultOtpAutofillStore.removeAllHandler = { throw TestError() }
+        let sut = makeSUT(
+            vaultStore: vaultStore,
+            vaultTagStore: vaultTagStore,
+            vaultOtpAutofillStore: vaultOtpAutofillStore,
+        )
+
+        await #expect(throws: TestError.self) {
+            try await sut.deleteVault()
+        }
+
+        #expect(vaultStore.calledMethods == [.retrieve])
+        #expect(vaultTagStore.calledMethods == [.retrieveTags])
+    }
+
+    @Test
     func code_returnsMatchingItemFromLoadedItems() {
         let expected = uniqueVaultItem()
         let sut = makeSUT()

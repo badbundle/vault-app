@@ -12,30 +12,21 @@ struct UniversalClipboardSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Universal Clipboard")
-                    .font(.title2.bold())
-                    .accessibilityAddTraits(.isHeader)
-                Text(
-                    "Copy on this device, then paste on your other Apple devices nearby. Turn it on only for what you need there.",
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                // Wraps rather than truncating while the sheet measures itself.
-                .fixedSize(horizontal: false, vertical: true)
-            }
+            SheetHeader(
+                title: "Universal Clipboard",
+                message: "Copy on this device, then paste on your other Apple devices nearby. Turn it on only for what you need there.",
+            )
 
             VStack(spacing: 12) {
-                card {
-                    OptionCardToggle(
-                        title: "One-Time Codes",
-                        subtitle: localSettings.state.allowUniversalClipboardForOTPs
-                            ? "Codes you copy can be pasted on your other devices."
-                            : "Codes you copy stay on this device.",
-                        systemImage: "qrcode",
-                        isOn: $localSettings.state.allowUniversalClipboardForOTPs.animation(),
-                    )
-                }
+                OptionCardToggle(
+                    title: "One-Time Codes",
+                    subtitle: localSettings.state.allowUniversalClipboardForOTPs
+                        ? "Codes you copy can be pasted on your other devices."
+                        : "Codes you copy stay on this device.",
+                    systemImage: "qrcode",
+                    isOn: $localSettings.state.allowUniversalClipboardForOTPs.animation(),
+                )
+                .optionCardBackground()
             }
         }
         .padding(.horizontal, 20)
@@ -44,13 +35,6 @@ struct UniversalClipboardSheet: View {
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .fittedSheet()
-    }
-
-    /// Sits a card on the sheet's glass, like the New Item picker's.
-    private func card(@ViewBuilder content: () -> some View) -> some View {
-        content()
-            .padding(16)
-            .background(.fill.quaternary, in: .rect(cornerRadius: 20))
     }
 }
 

@@ -40,6 +40,9 @@ public final class RealCredentialIdentityStore: CredentialIdentityStore {
     }
 
     public func removeAllCredentialIdentities() async throws {
+        // With Vault turned off as an AutoFill provider the store refuses changes, and it holds nothing of ours to
+        // remove: the system clears a provider's identities when it's turned off.
+        guard await store.state().isEnabled else { return }
         try await store.removeAllCredentialIdentities()
     }
 
