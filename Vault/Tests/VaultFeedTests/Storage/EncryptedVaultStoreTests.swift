@@ -485,13 +485,18 @@ extension EncryptedVaultStoreTests {
 
     /// For example, another process changed the password.
     @Test
-    func save_afterTheSlotWasRewrapped_throwsSlotLostAndChangesNothing() async throws {
+    func save_afterTheSlotWasRekeyed_throwsSlotLostAndChangesNothing() async throws {
         let fixture = try EncryptedVaultFixture()
         let sut = try await fixture.openStore()
         try await fixture.file.withLock { file in
             var contents = try #require(try file.read())
             let slot = try contents.openSlot(fixture.slotIndex, with: fixture.rootKey)
-            try contents.rewrap(slot, with: .password(derivedKey: SymmetricKey(size: .bits256)), wrappedAt: Date())
+            try contents.rekey(
+                slot,
+                to: .password(derivedKey: SymmetricKey(size: .bits256)),
+                payload: EncryptedVaultPayload.encode(.empty),
+                wrappedAt: Date(),
+            )
             try file.write(contents) { _ in }
         }
         let bytesBefore = try fixture.bytes()

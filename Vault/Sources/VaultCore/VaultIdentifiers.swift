@@ -26,6 +26,9 @@ public enum VaultIdentifiers {
         /// Wrong attempts at the app lock password, and when the latest was made. Kept on this device only, and
         /// readable only while it's unlocked, with no biometric prompt.
         public static let appLockPasswordAttempts = "vault.secure-storage.app-lock-password-attempts.v1"
+        /// The device key, which wraps the encrypted vault's key while the App Lock Password is off. Readable once
+        /// the device has been unlocked after starting up, and restored with a backup.
+        public static let vaultDeviceKey = "vault.secure-storage.vault-device-key.v1"
     }
 
     public enum Backup {

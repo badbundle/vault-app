@@ -88,6 +88,14 @@ public struct VaultSlotFile: Equatable, Sendable {
         self.bytes = bytes
     }
 
+    /// Whether a file of `size` bytes could be a slot file: a header, and 16 slots of a size the format allows.
+    static func isPossibleFileSize(_ size: Int) -> Bool {
+        let slotsSize = size - Header.length
+        guard slotsSize > 0, slotsSize.isMultiple(of: slotCount) else { return false }
+        let slotSize = slotsSize / slotCount
+        return (minimumSlotSize ... maximumSlotSize).contains(slotSize) && slotSize.nonzeroBitCount == 1
+    }
+
     /// Reads a file from its bytes, checking the header and the length. Opening slots is separate.
     ///
     /// - Throws: `VaultSlotFileError.notASlotFile`, `.unsupportedVersion(_:)` or `.malformed`.
@@ -112,10 +120,10 @@ extension VaultSlotFile {
     public struct OpenedSlot: Sendable {
         /// The slot's index in the file.
         public let index: Int
-        /// Goes up by one on every write to the slot: creating it, saving and rewrapping.
+        /// Goes up by one on every write to the slot: creating it, saving and rekeying.
         public let generation: UInt64
         /// When the data key was last wrapped, in milliseconds since 1970: when the vault was created, or last
-        /// rewrapped. Saves don't change it.
+        /// rekeyed. Saves don't change it.
         let wrappedAtMilliseconds: UInt64
         let slotNonce: Data
         let wrapKey: SymmetricKey
@@ -123,7 +131,7 @@ extension VaultSlotFile {
         /// The length of the body box, from the start of the body to its tag.
         let bodyLength: Int
 
-        /// When the data key was last wrapped: when the vault was created, or last rewrapped. Saves don't change it.
+        /// When the data key was last wrapped: when the vault was created, or last rekeyed. Saves don't change it.
         /// When a password opens more than one slot, the most recently wrapped wins.
         public var wrappedAt: Date {
             Date(timeIntervalSince1970: TimeInterval(wrappedAtMilliseconds) / 1000)
@@ -149,7 +157,7 @@ extension VaultSlotFile {
     ///
     /// A save uses it on the file it's about to replace, to see whether anyone else has written the slot since.
     ///
-    /// - Throws: `VaultSlotFileError.slotDidNotOpen` if the slot has been rewrapped or replaced since.
+    /// - Throws: `VaultSlotFileError.slotDidNotOpen` if the slot has been rekeyed or replaced since.
     public func reopen(_ slot: OpenedSlot) throws -> OpenedSlot {
         try openKeyBox(slot.index, slotNonce: slotNonce(slot.index), wrapKey: slot.wrapKey)
     }
@@ -313,35 +321,52 @@ extension VaultSlotFile {
         return sealed
     }
 
-    /// Wraps an opened slot's data key under another root key, at the next generation: for a password change, or
-    /// switching between the password and the device key.
+    /// Moves an opened slot to another root key, at the next generation: for a password change, or switching between
+    /// the password and the device key. The vault gets a new data key, and its payload is sealed again under it.
     ///
-    /// Only the key box changes. The slot nonce and the body stay as they are, and the old root key no longer
+    /// Rotating the data key means an old password, together with an older copy of the file, recovers only the old
+    /// data key, which opens nothing written from now on. And the new key box can't be paired with an old body,
+    /// which could bring back items deleted since (MANIFESTO C6). The slot nonce stays; the old root key no longer
     /// opens the slot.
     ///
-    /// - Parameter wrappedAt: Now. It breaks ties when a password opens more than one slot.
-    /// - Throws: `VaultSlotFileError.slotChanged` if the slot has been written since `slot` was opened. The file is
-    ///   unchanged when it throws.
+    /// - Parameters:
+    ///   - payload: What the slot holds now, sealed again under the new data key.
+    ///   - wrappedAt: Now. It breaks ties when a password opens more than one slot.
+    /// - Throws: `VaultSlotFileError.slotChanged` if the slot has been written since `slot` was opened, or
+    ///   `.payloadTooLarge`. The file is unchanged when it throws.
     /// - Returns: The slot as written.
     @discardableResult
-    public mutating func rewrap(
+    public mutating func rekey(
         _ slot: OpenedSlot,
-        with rootKey: VaultSlotRootKey,
+        to rootKey: VaultSlotRootKey,
+        payload: VaultSlotPayload,
         wrappedAt: Date,
+        compression: VaultSlotCompression = .lzfse,
     ) throws -> OpenedSlot {
         let current = try requireUnchanged(slot)
-        let rewrapped = OpenedSlot(
+        guard payload.data.count <= Self.maximumPayloadLength else { throw VaultSlotFileError.payloadTooLarge }
+        var compressed = try compression.compress(payload.data)
+        defer { SlotRandom.wipe(&compressed) }
+        let slotSize = try slotSize(fittingCompressedLength: compressed.count)
+        let rekeyed = OpenedSlot(
             index: current.index,
             generation: current.generation + 1,
             wrappedAtMilliseconds: Self.milliseconds(since1970: wrappedAt),
             slotNonce: current.slotNonce,
             wrapKey: rootKey.wrapKey(slotNonce: current.slotNonce),
-            dataKey: current.dataKey,
-            bodyLength: current.bodyLength,
+            dataKey: SymmetricKey(size: .bits256),
+            bodyLength: slotSize - Self.bodyOffset,
         )
-        let keyBox = try sealedKeyBox(of: rewrapped)
-        place(rewrapped, keyBox: keyBox, body: nil)
-        return rewrapped
+        let body = try sealedBody(
+            of: rekeyed,
+            version: payload.version,
+            compression: compression,
+            compressed: compressed,
+        )
+        let keyBox = try sealedKeyBox(of: rekeyed)
+        grow(to: slotSize)
+        place(rekeyed, keyBox: keyBox, body: body)
+        return rekeyed
     }
 
     /// Throws `slotChanged` unless the slot's key box still opens with the slot's wrap key, at the same

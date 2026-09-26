@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import FoundationExtensions
 import Testing
@@ -142,6 +143,62 @@ struct VaultStorageRecoveryTests {
         }
     }
 
+    /// The app can launch in the background while the device is locked, when the encrypted file can't be read. It
+    /// only needs the file's size to know it's there.
+    @Test
+    func recover_whileDeletingThePlainStore_onALockedDevice_finishes() throws {
+        let fileSystem = InMemorySlotFileSystem()
+        let directory = EncryptedVaultFixture.inMemoryDirectory
+        for url in PersistedLocalVaultStoreFactory.storeFileURLs(storageDirectory: directory) {
+            fileSystem.setContents(Data("plain".utf8), at: url)
+        }
+        let encryptedFile = directory.appending(path: EncryptedVaultFile.fileName)
+        try fileSystem.createFile(
+            at: encryptedFile,
+            contents: VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters).bytes,
+            protection: .complete,
+        )
+        let stateFile = VaultStorageStateFile(directory: directory, fileSystem: fileSystem)
+        try stateFile.write(VaultStorageState(
+            mode: .password,
+            transition: .deletingPlainStore(archives: []),
+            unlockDeadline: .seconds(1),
+        ))
+        fileSystem.isDeviceLocked = true
+        #expect(throws: (any Error).self) { try fileSystem.contents(of: encryptedFile) }
+
+        let mode = try VaultStorageRecovery(
+            directory: directory,
+            fileSystem: fileSystem,
+            deviceKeyStore: InMemoryDeviceKeyStore(),
+        ).recoverAtLaunch()
+
+        #expect(mode == .password)
+        #expect(try Set(fileSystem.contentsOfDirectory(at: directory).map(\.lastPathComponent)) == [
+            EncryptedVaultFile.fileName,
+            VaultStorageStateFile.fileName,
+        ])
+        #expect(try stateFile.read().transition == .clearingSystemSurfaces)
+    }
+
+    /// An unlock attempt can raise the deadline while QuickType and the widgets are being cleared. Clearing the
+    /// journal afterwards mustn't put the old deadline back.
+    @Test
+    func finishClearingSystemSurfaces_keepsADeadlineRaisedWhileClearing() async throws {
+        try await withTemporaryDirectory { directory in
+            try Self.write(
+                VaultStorageState(mode: .password, transition: .clearingSystemSurfaces, unlockDeadline: .seconds(1)),
+                in: directory,
+            )
+
+            try await VaultStorageRecovery(directory: directory).finishClearingSystemSurfaces {
+                try? await VaultStorageStateFile(directory: directory).raiseUnlockDeadline(to: .seconds(3))
+            }
+
+            #expect(try Self.read(in: directory) == VaultStorageState(mode: .password, unlockDeadline: .seconds(3)))
+        }
+    }
+
     @Test
     func recover_encrypted_touchesNothingButStrayStateTempFiles() async throws {
         try await withTemporaryDirectory { directory in
@@ -153,6 +210,119 @@ struct VaultStorageRecoveryTests {
             #expect(try VaultStorageRecovery(directory: directory).recoverAtLaunch() == .password)
 
             #expect(try Self.fileNames(in: directory) == before)
+        }
+    }
+}
+
+// MARK: - Turning the password off or back on
+
+extension VaultStorageRecoveryTests {
+    /// The rekey is one rename, so the slot is wrapped with either the device key or the password. Whether the
+    /// device key opens it says which, whichever way the change was going.
+    @Test(arguments: [VaultStorageState.Transition.turningOff, .turningOn])
+    func recover_whileTurningThePasswordOffOrOn_withTheDeviceKeyOpeningTheVault_isDeviceKey(
+        transition: VaultStorageState.Transition,
+    ) throws {
+        let deviceKey = SymmetricKey(size: .bits256)
+        let sut = try TurningHarness(slotKey: .device(deviceKey), deviceKey: deviceKey, transition: transition)
+
+        #expect(try sut.recovery.recoverAtLaunch() == .deviceKey)
+
+        #expect(try sut.stateFile.read() == VaultStorageState(mode: .deviceKey, unlockDeadline: .seconds(1)))
+        #expect(sut.deviceKeyStore.key != nil)
+    }
+
+    @Test
+    func recover_whileTurningThePasswordOff_withTheSlotStillWrappedByThePassword_isPassword() throws {
+        let sut = try TurningHarness(
+            slotKey: .password(derivedKey: SymmetricKey(size: .bits256)),
+            deviceKey: SymmetricKey(size: .bits256),
+            transition: .turningOff,
+        )
+
+        #expect(try sut.recovery.recoverAtLaunch() == .password)
+
+        #expect(try sut.stateFile.read() == VaultStorageState(mode: .password, unlockDeadline: .seconds(1)))
+    }
+
+    /// The password is back on, so the device key opens nothing now, and goes.
+    @Test(arguments: [true, false])
+    func recover_whileTurningThePasswordOn_withTheSlotWrappedByThePassword_isPasswordWithoutADeviceKey(
+        hasDeviceKey: Bool,
+    ) throws {
+        let sut = try TurningHarness(
+            slotKey: .password(derivedKey: SymmetricKey(size: .bits256)),
+            deviceKey: hasDeviceKey ? SymmetricKey(size: .bits256) : nil,
+            transition: .turningOn,
+        )
+
+        #expect(try sut.recovery.recoverAtLaunch() == .password)
+
+        #expect(try sut.stateFile.read() == VaultStorageState(mode: .password, unlockDeadline: .seconds(1)))
+        #expect(sut.deviceKeyStore.key == nil)
+    }
+
+    @Test
+    func recover_whileTurningThePasswordOff_withoutAnEncryptedFile_changesNothing() throws {
+        let sut = try TurningHarness(
+            slotKey: .password(derivedKey: SymmetricKey(size: .bits256)),
+            deviceKey: SymmetricKey(size: .bits256),
+            transition: .turningOff,
+        )
+        try sut.fileSystem.removeItem(at: sut.encryptedFileURL)
+        let before = try sut.stateFile.read()
+
+        #expect(throws: VaultStorageRecovery.Failure.encryptedFileMissing) {
+            try sut.recovery.recoverAtLaunch()
+        }
+
+        #expect(try sut.stateFile.read() == before)
+    }
+
+    @Test
+    func recover_deviceKeyMode_touchesNothing() throws {
+        let deviceKey = SymmetricKey(size: .bits256)
+        let sut = try TurningHarness(slotKey: .device(deviceKey), deviceKey: deviceKey, transition: nil)
+        let before = try sut.fileSystem.contents(of: sut.encryptedFileURL)
+
+        #expect(try sut.recovery.recoverAtLaunch() == .deviceKey)
+
+        #expect(try sut.stateFile.read() == VaultStorageState(mode: .deviceKey, unlockDeadline: .seconds(1)))
+        #expect(try sut.fileSystem.contents(of: sut.encryptedFileURL) == before)
+    }
+
+    /// An encrypted file with a vault in slot 6 wrapped with `slotKey`, and the state journaling `transition`.
+    private struct TurningHarness {
+        let fileSystem = InMemorySlotFileSystem()
+        let deviceKeyStore: InMemoryDeviceKeyStore
+        let directory = EncryptedVaultFixture.inMemoryDirectory
+
+        init(slotKey: VaultSlotRootKey, deviceKey: SymmetricKey?, transition: VaultStorageState.Transition?) throws {
+            deviceKeyStore = InMemoryDeviceKeyStore(key: deviceKey)
+            var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
+            try contents.createVault(
+                inSlot: 6,
+                rootKey: slotKey,
+                payload: EncryptedVaultPayload.encode(.empty),
+                wrappedAt: Date(),
+            )
+            try fileSystem.createFile(at: encryptedFileURL, contents: contents.bytes)
+            let mode: VaultStorageState.Mode = transition == .turningOn || (transition == nil && deviceKey != nil)
+                ? .deviceKey
+                : .password
+            try stateFile.write(VaultStorageState(mode: mode, transition: transition, unlockDeadline: .seconds(1)))
+        }
+
+        var encryptedFileURL: URL {
+            directory.appending(path: EncryptedVaultFile.fileName)
+        }
+
+        var stateFile: VaultStorageStateFile {
+            VaultStorageStateFile(directory: directory, fileSystem: fileSystem)
+        }
+
+        var recovery: VaultStorageRecovery {
+            VaultStorageRecovery(directory: directory, fileSystem: fileSystem, deviceKeyStore: deviceKeyStore)
         }
     }
 }
@@ -183,6 +353,50 @@ extension VaultStorageRecoveryTests {
             #expect(try Self.fileNames(in: directory).isEmpty)
             #expect(try file.read() == .plain)
         }
+    }
+
+    @Test
+    func stateFile_update_changesOnlyWhatItChanges_andWritesNothingIfNothingChanged() async throws {
+        let fileSystem = FaultInjectingSlotFileSystem(wrapping: InMemorySlotFileSystem())
+        let file = VaultStorageStateFile(directory: EncryptedVaultFixture.inMemoryDirectory, fileSystem: fileSystem)
+        try file.write(VaultStorageState(
+            mode: .password,
+            transition: .clearingSystemSurfaces,
+            unlockDeadline: .seconds(2),
+        ))
+
+        let updated = try await file.update { $0.transition = nil }
+        let steps = fileSystem.log.count
+        let unchanged = try await file.update { $0.transition = nil }
+        let secondUpdate = Array(fileSystem.log.dropFirst(steps))
+
+        #expect(updated == VaultStorageState(mode: .password, unlockDeadline: .seconds(2)))
+        #expect(unchanged == updated)
+        #expect(try file.read() == updated)
+        #expect(secondUpdate == [
+            "lock vault-slots.lock",
+            "read vault-storage-state.json",
+            "unlock",
+        ])
+    }
+
+    /// The AutoFill extension raises the deadline from its own process, so an update waits for the lock any process
+    /// holds, as writers of the encrypted file do.
+    @Test
+    func stateFile_update_waitsForTheLockAnotherProcessHolds() async throws {
+        let fileSystem = InMemorySlotFileSystem()
+        let directory = EncryptedVaultFixture.inMemoryDirectory
+        let file = VaultStorageStateFile(directory: directory, fileSystem: fileSystem)
+        try file.write(VaultStorageState(mode: .password, unlockDeadline: .seconds(1)))
+        let held = try await EncryptedVaultFile(directory: directory, fileSystem: fileSystem).lockUntilReleased()
+
+        let raising = Task { try await file.raiseUnlockDeadline(to: .seconds(2)) }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(try file.read().unlockDeadline == .seconds(1))
+
+        held.release()
+        try await raising.value
+        #expect(try file.read().unlockDeadline == .seconds(2))
     }
 
     @Test

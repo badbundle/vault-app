@@ -13,7 +13,8 @@ import Foundation
 ///
 /// `RecordVaultStore` makes one save at a time, so a save always starts from the slot the last one left.
 actor SlotFilePersistence: VaultRecordPersistence {
-    let file: EncryptedVaultFile
+    /// The file, with the protection the storage mode gives it.
+    private(set) var file: EncryptedVaultFile
     /// The vault's slot, as this vault last saved or read it.
     private(set) var slot: VaultSlotFile.OpenedSlot
 
@@ -44,10 +45,56 @@ actor SlotFilePersistence: VaultRecordPersistence {
         return outcome
     }
 
+    /// Moves the slot to another root key, with a new data key (`VaultSlotFile.rekey(_:to:payload:wrappedAt:)`),
+    /// and gives the file `protection` from now on: for a password change, or turning the password off or on. The
+    /// wrap time is `wrapStamper`'s, for the slot as it's saved, read under the lock.
+    ///
+    /// The vault sealed is what's saved: `state`, unless another writer has saved the slot since, when it's what that
+    /// writer saved. `RecordVaultStore` runs this in a change's turn, so no save of its own is underway.
+    ///
+    /// - Returns: The state sealed, for the store to take as its own.
+    /// - Throws: `EncryptedVaultStoreError.slotLost` if the slot doesn't open with its wrap key any more. The file is
+    ///   unchanged when it throws.
+    func rekey(
+        _ state: VaultRecordState,
+        to rootKey: VaultSlotRootKey,
+        protection: SlotFileProtection,
+        wrapStamper: any VaultWrapStamping,
+    ) async throws -> VaultRecordState {
+        var newFile = file
+        newFile.protection = protection
+        let slot = slot
+        let (rekeyed, sealed) = try await newFile.withLock { file in
+            guard var contents = try file.read() else { throw EncryptedVaultStoreError.fileMissing }
+            let current: VaultSlotFile.OpenedSlot
+            do {
+                current = try contents.reopen(slot)
+            } catch {
+                throw EncryptedVaultStoreError.slotLost
+            }
+            let sealed = current.generation == slot.generation
+                ? state
+                : try EncryptedVaultPayload.decode(slot: current, in: contents)
+            var payload = try EncryptedVaultPayload.encode(sealed)
+            defer { SlotRandom.wipe(&payload.data) }
+            let wrappedAt = try wrapStamper.nextWrapStamp(rewrapping: current.wrappedAt)
+            let rekeyed = try contents.rekey(current, to: rootKey, payload: payload, wrappedAt: wrappedAt)
+            try file.write(contents) { written in
+                try Self.verify(written, holds: sealed, in: rekeyed)
+                // The old key box is gone: the old root key opens nothing.
+                guard (try? written.reopen(current)) == nil else { throw EncryptedVaultStoreError.verificationFailed }
+            }
+            return (rekeyed, sealed)
+        }
+        file = newFile
+        self.slot = rekeyed
+        return sealed
+    }
+
     /// The slot and the state saved in it, after another writer saved it.
     ///
     /// - Throws: `EncryptedVaultStoreError.slotLost` if the slot doesn't open with its wrap key any more: it's been
-    ///   rewrapped or replaced.
+    ///   rekeyed or replaced.
     private static func reload(
         _ slot: VaultSlotFile.OpenedSlot,
         from contents: VaultSlotFile,

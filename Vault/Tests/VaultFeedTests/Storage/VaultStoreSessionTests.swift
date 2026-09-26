@@ -224,6 +224,29 @@ struct VaultStoreSessionTests {
 
         #expect(await lockFinished.isSet)
     }
+
+    @Test
+    func lock_returnsItsOwnEpoch_evenIfTheSessionLocksAgainWhileItWaits() async throws {
+        let store = GatedVaultStore()
+        await store.hold()
+        let sut = VaultStoreSession(target: .plain(store))
+        let write = Task { try await sut.insert(item: uniqueVaultItem().makeWritable()) }
+        await store.waitUntilHolding()
+
+        let first = Task { await sut.lock() }
+        try await Task.sleep(for: .milliseconds(50))
+        let second = Task { await sut.lock() }
+        try await Task.sleep(for: .milliseconds(50))
+        await store.release()
+        _ = try await write.value
+        let firstEpoch = await first.value
+        let secondEpoch = await second.value
+
+        #expect(firstEpoch == 1)
+        #expect(secondEpoch == 2)
+        #expect(await !sut.switchTo(.plain(store), unlessLockedSince: firstEpoch))
+        #expect(await sut.isLocked)
+    }
 }
 
 // MARK: - Helpers

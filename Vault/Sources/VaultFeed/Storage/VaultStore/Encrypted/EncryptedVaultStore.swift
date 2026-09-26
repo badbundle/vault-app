@@ -21,6 +21,8 @@ import VaultCore
 /// `docs/on-device-encryption.md`.
 public final class EncryptedVaultStore: Sendable {
     let records: RecordVaultStore
+    /// Where the vault is saved: its slot of the file.
+    let persistence: SlotFilePersistence
 
     /// The vault in `slot`, whose payload has already been read.
     ///
@@ -35,12 +37,36 @@ public final class EncryptedVaultStore: Sendable {
         sortOrder: VaultStoreSortOrder = .relativeOrder,
         currentDate: @escaping @Sendable () -> Date = { Date() },
     ) {
+        let persistence = SlotFilePersistence(file: file, slot: slot)
+        self.persistence = persistence
         records = RecordVaultStore(
             state: state,
             sortOrder: sortOrder,
             currentDate: currentDate,
-            persistence: SlotFilePersistence(file: file, slot: slot),
+            persistence: persistence,
         )
+    }
+
+    /// The slot the vault is in.
+    var slotIndex: Int {
+        get async {
+            await persistence.slot.index
+        }
+    }
+
+    /// Moves the vault to another root key, with a new data key, and gives the file `protection` from now on: for
+    /// a password change, or turning the password off or on. Only this vault's slot changes. Its wrap time is
+    /// `wrapStamper`'s.
+    ///
+    /// It waits for any change underway to be saved first, and nothing is changed while it runs.
+    func rekey(
+        to rootKey: VaultSlotRootKey,
+        protection: SlotFileProtection,
+        wrapStamper: any VaultWrapStamping,
+    ) async throws {
+        try await records.whileChanging { [persistence] state in
+            try await persistence.rekey(state, to: rootKey, protection: protection, wrapStamper: wrapStamper)
+        }
     }
 
     /// Reads the vault in `slot`.

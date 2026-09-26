@@ -75,6 +75,11 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         return try base.prefix(of: url, length: length)
     }
 
+    func fileSize(of url: URL) throws -> Int? {
+        try step("size of \(Self.name(url))")
+        return try base.fileSize(of: url)
+    }
+
     func createFile(at url: URL, contents: Data, protection: SlotFileProtection) throws {
         try step("create \(Self.name(url))")
         try base.createFile(at: url, contents: contents, protection: protection)

@@ -654,6 +654,10 @@ final class GatedSlotFileSystem: SlotFileSystem {
         try base.prefix(of: url, length: length)
     }
 
+    func fileSize(of url: URL) throws -> Int? {
+        try base.fileSize(of: url)
+    }
+
     func synchronizeFile(at url: URL) throws {
         try base.synchronizeFile(at: url)
     }

@@ -98,6 +98,60 @@ extension VaultEncryptionConverterTests {
             #expect(retrieved.items.count + retrieved.errors.count == before.items.count)
         }
     }
+
+    /// The conversion holds `vault-slots.lock`, so every file step happens with background time asked for.
+    @Test
+    func encrypt_runsEveryStepWithBackgroundTime() async throws {
+        try await withTemporaryDirectory { directory in
+            let steps = SharedMutex([String]())
+            let harness = try PlainVaultConversionHarness(directory: directory, backgroundTime: { fileSystem in
+                VaultBackgroundTime {
+                    steps.modify { $0.append("begin at step \(fileSystem.log.count)") }
+                    return { steps.modify { $0.append("end at step \(fileSystem.log.count)") } }
+                }
+            })
+
+            try await harness.encrypt()
+
+            #expect(steps.value == ["begin at step 0", "end at step \(harness.fileSystem.log.count)"])
+            #expect(harness.fileSystem.log.count > 10)
+        }
+    }
+
+    @Test
+    func encrypt_thatFails_stillGivesTheBackgroundTimeBack() async throws {
+        try await withTemporaryDirectory { directory in
+            let ended = SharedMutex(false)
+            let harness = try PlainVaultConversionHarness(directory: directory, backgroundTime: { _ in
+                VaultBackgroundTime { { ended.modify { $0 = true } } }
+            })
+            harness.fileSystem.inject(.fail(atStep: 1))
+
+            await #expect(throws: FaultInjectingSlotFileSystem.InjectedFault.self) {
+                try await harness.encrypt()
+            }
+
+            #expect(ended.value)
+        }
+    }
+
+    /// An unlock attempt can raise the deadline once the conversion has committed, while it clears QuickType. The
+    /// conversion's last steps update the state, rather than write the deadline it started with over it.
+    @Test
+    func encrypt_keepsAnUnlockDeadlineRaisedAfterTheCommit() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try PlainVaultConversionHarness(directory: directory, clearingCredentialIdentities: {
+                let stateFile = VaultStorageStateFile(directory: directory)
+                guard var state = try? stateFile.read() else { return }
+                state.unlockDeadline = .seconds(3)
+                try? stateFile.write(state)
+            })
+
+            try await harness.encrypt()
+
+            #expect(try harness.stateFile.read() == VaultStorageState(mode: .password, unlockDeadline: .seconds(3)))
+        }
+    }
 }
 
 // MARK: - Preconditions
@@ -431,7 +485,7 @@ extension VaultEncryptionConverterTests {
         case .plain:
             #expect(!names.contains(EncryptedVaultFile.fileName), context)
             #expect(!names.contains(VaultStorageStateFile.fileName), context)
-        case .password:
+        case .password, .deviceKey:
             #expect(try !harness.plainStoreFilesExist(), context)
             #expect(try harness.stateFile.read().transition == nil, context)
         }

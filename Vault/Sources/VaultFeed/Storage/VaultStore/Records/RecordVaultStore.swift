@@ -467,6 +467,15 @@ extension RecordVaultStore {
         throw EncryptedVaultStoreError.conflict
     }
 
+    /// Runs `body` in a change's turn, with the state as it is now, and takes the state it returns as the store's:
+    /// for work on how the vault is saved rather than what's in it, such as moving it to another key
+    /// (`EncryptedVaultStore.rekey(to:protection:)`).
+    func whileChanging(_ body: @Sendable (VaultRecordState) async throws -> VaultRecordState) async throws {
+        await waitForTurnToChange()
+        defer { finishChange() }
+        state = try await body(state)
+    }
+
     private func waitForTurnToChange() async {
         guard isChanging else {
             isChanging = true
