@@ -6,7 +6,7 @@ import Testing
 struct LightweightViewModelCoverageTests {
     @Test
     func backupRestoreViewModel_exposesStrings() {
-        let sut = BackupRestoreViewModel()
+        let sut = BackupRestoreViewModel(authenticationService: DeviceAuthenticationService(policy: .alwaysAllow))
 
         #expect(sut.strings.homeTitle.isEmpty == false)
         #expect(sut.strings.backupPasswordImportTitle.isEmpty == false)

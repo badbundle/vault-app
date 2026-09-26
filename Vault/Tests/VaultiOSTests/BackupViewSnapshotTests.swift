@@ -127,28 +127,59 @@ struct BackupViewSnapshotTests {
         assertSnapshot(of: sut, as: .image)
     }
 
+    /// Locked over a vault with items, so the reference would change if any restore option showed.
     @Test
-    func backupRestore_noItems() async {
-        let vaultStore = VaultStoreStub()
-        vaultStore.hasAnyItemsHandler = { false }
-        let dataModel = anyVaultDataModel(vaultStore: vaultStore)
-        await dataModel.reloadData()
-
-        let sut = makeBackupRestoreSUT(dataModel: dataModel)
-            .framedForTest()
+    func backupRestore_locked() async {
+        let sut = makeBackupRestoreSUT(
+            dataModel: await restoreDataModel(hasItems: true),
+            viewModel: restoreViewModel(policy: .alwaysAllow),
+        )
 
         assertSnapshot(of: sut, as: .image)
     }
 
     @Test
-    func backupRestore_hasItems() async {
-        let vaultStore = VaultStoreStub()
-        vaultStore.hasAnyItemsHandler = { true }
-        let dataModel = anyVaultDataModel(vaultStore: vaultStore)
-        await dataModel.reloadData()
+    func backupRestore_locked_dark() async {
+        let sut = makeBackupRestoreSUT(
+            dataModel: await restoreDataModel(hasItems: true),
+            viewModel: restoreViewModel(policy: .alwaysAllow),
+        )
 
-        let sut = makeBackupRestoreSUT(dataModel: dataModel)
-            .framedForTest()
+        assertSnapshot(of: sut, colorScheme: .dark)
+    }
+
+    @Test
+    func backupRestore_authenticationFailed() async {
+        let viewModel = restoreViewModel(policy: .alwaysDeny)
+        await viewModel.authenticate()
+        let sut = makeBackupRestoreSUT(
+            dataModel: await restoreDataModel(hasItems: true),
+            viewModel: viewModel,
+        )
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
+    func backupRestore_unlockedEmptyVault() async {
+        let viewModel = restoreViewModel(policy: .alwaysAllow)
+        await viewModel.authenticate()
+        let sut = makeBackupRestoreSUT(
+            dataModel: await restoreDataModel(hasItems: false),
+            viewModel: viewModel,
+        )
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
+    func backupRestore_unlockedWithItems() async {
+        let viewModel = restoreViewModel(policy: .alwaysAllow)
+        await viewModel.authenticate()
+        let sut = makeBackupRestoreSUT(
+            dataModel: await restoreDataModel(hasItems: true),
+            viewModel: viewModel,
+        )
 
         assertSnapshot(of: sut, as: .image)
     }
@@ -191,10 +222,25 @@ extension BackupViewSnapshotTests {
 
     private func makeBackupRestoreSUT(
         dataModel: VaultDataModel,
+        viewModel: BackupRestoreViewModel,
     ) -> some View {
-        let injector = anyVaultInjector()
-        return BackupRestoreView()
-            .environment(dataModel)
-            .environment(injector)
+        NavigationStack {
+            BackupRestoreView(viewModel: viewModel)
+        }
+        .environment(dataModel)
+        .environment(anyVaultInjector())
+        .framedForTest()
+    }
+
+    private func restoreDataModel(hasItems: Bool) async -> VaultDataModel {
+        let vaultStore = VaultStoreStub()
+        vaultStore.hasAnyItemsHandler = { hasItems }
+        let dataModel = anyVaultDataModel(vaultStore: vaultStore)
+        await dataModel.reloadData()
+        return dataModel
+    }
+
+    private func restoreViewModel(policy: some DeviceAuthenticationPolicy) -> BackupRestoreViewModel {
+        BackupRestoreViewModel(authenticationService: DeviceAuthenticationService(policy: policy))
     }
 }

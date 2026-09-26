@@ -7,7 +7,8 @@ import VaultFeed
 ///
 /// The hub itself is reachable without device authentication — it exposes
 /// navigation, backup recency and whether a backup password is set only.
-/// Every sub-surface that loads or uses the backup key authenticates on entry.
+/// Every sub-surface authenticates before it loads the backup key or offers to
+/// restore over the vault.
 @MainActor
 struct BackupHomeView: View {
     @Environment(VaultDataModel.self) var dataModel
@@ -95,7 +96,7 @@ struct BackupHomeView: View {
     private var restoreSection: some View {
         Section {
             NavigationLink {
-                BackupRestoreView()
+                BackupRestoreView(viewModel: .init(authenticationService: authenticationService))
             } label: {
                 FormRow(image: Image(systemName: "square.and.arrow.down.fill"), color: .accentColor) {
                     Text("Restore")
