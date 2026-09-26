@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import FoundationExtensions
+import TestHelpers
 import Testing
 import VaultCore
 import VaultFeed
@@ -111,29 +112,20 @@ final class PasteboardTests {
     }
 
     @Test
-    func copy_universalClipboardPolicyIsPerType() throws {
+    func copy_isLocalOnlyByDefault() async throws {
         let pasteboard = SystemPasteboardMock()
-        let defaults = try makeDefaults()
-        let settings = LocalSettings(defaults: defaults)
-        settings.state.allowUniversalClipboardForOTPs = true
-        settings.state.allowUniversalClipboardForPasswords = false
+        // A suite of its own: the other tests here share one, and set the setting in it.
+        let settings = try LocalSettings(defaults: .nonPersistent())
         let sut = makeSUT(pasteboard: pasteboard, localSettings: settings)
 
-        var observed: [(PasteboardContentType, Bool)] = []
-        pasteboard.copyHandler = { _, _, localOnly in
-            // record only; assertions after
-            observed.append((.otp, localOnly))
-        }
-        sut.copy(anyAction(contentType: .otp))
+        await confirmation { confirm in
+            pasteboard.copyHandler = { _, _, localOnly in
+                #expect(localOnly == true)
+                confirm()
+            }
 
-        pasteboard.copyHandler = { _, _, localOnly in
-            observed.append((.password, localOnly))
+            sut.copy(anyAction(contentType: .otp))
         }
-        sut.copy(anyAction(contentType: .password))
-
-        #expect(observed.count == 2)
-        #expect(observed[0] == (.otp, false))
-        #expect(observed[1] == (.password, true))
     }
 }
 

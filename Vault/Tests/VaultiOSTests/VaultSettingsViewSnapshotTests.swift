@@ -17,12 +17,9 @@ struct VaultSettingsViewSnapshotTests {
 
     @Test
     func layout_dark() throws {
-        // Not `preferredColorScheme`: that sets the test host's window, where it outlasts this snapshot.
         let sut = try makeSUT()
-            .environment(\.colorScheme, .dark)
 
-        // The environment alone doesn't reach the form's UIKit-backed rows; the host's traits do.
-        assertSnapshot(of: sut, as: .image(traits: UITraitCollection(userInterfaceStyle: .dark)))
+        assertSnapshot(of: sut, colorScheme: .dark)
     }
 
     @Test
@@ -31,13 +28,27 @@ struct VaultSettingsViewSnapshotTests {
 
         assertSnapshot(of: sut, as: .image)
     }
+
+    @Test(arguments: [ColorScheme.light, .dark])
+    func universalClipboardOn(colorScheme: ColorScheme) throws {
+        let sut = try makeSUT { state in
+            state.allowUniversalClipboardForOTPs = true
+        }
+
+        assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
 }
 
 // MARK: - Helpers
 
 extension VaultSettingsViewSnapshotTests {
-    private func makeSUT(dynamicTypeSize: DynamicTypeSize = .medium, height: CGFloat = 1200) throws -> some View {
+    private func makeSUT(
+        dynamicTypeSize: DynamicTypeSize = .medium,
+        height: CGFloat = 1200,
+        configure: (inout LocalSettingsState) -> Void = { _ in },
+    ) throws -> some View {
         let localSettings = try LocalSettings(defaults: .nonPersistent())
+        configure(&localSettings.state)
         return VaultSettingsView(viewModel: .init(), localSettings: localSettings)
             .environment(anyVaultDataModel())
             .environment(DeviceAuthenticationService(policy: .alwaysDeny))

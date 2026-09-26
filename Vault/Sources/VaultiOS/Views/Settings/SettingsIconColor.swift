@@ -8,6 +8,5 @@ import SwiftUI
 /// here that no other section uses.
 enum SettingsIconColor {
     static let clipboard = Color.blue
-    static let universalClipboard = Color.indigo
     static let danger = Color.red
 }
