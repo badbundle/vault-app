@@ -311,6 +311,11 @@ public enum VaultRoot {
             autoBackupService.notifyDataChanged()
             reloadWidgetTimelines()
         }
+        // Deleting all data only refreshes the widgets, so they stop showing codes that are gone. It doesn't
+        // auto-backup the empty vault.
+        vaultDataModel.onVaultDeleted = {
+            reloadWidgetTimelines()
+        }
         reloadWidgetTimelines()
     }
 

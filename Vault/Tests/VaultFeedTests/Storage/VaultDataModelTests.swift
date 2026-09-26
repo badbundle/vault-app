@@ -1060,6 +1060,49 @@ final class VaultDataModelTests {
     }
 
     @Test
+    func deleteVault_notifiesVaultDeletedButNotDataChanged() async throws {
+        let sut = makeSUT()
+        var vaultDeletedCount = 0
+        sut.onVaultDeleted = { vaultDeletedCount += 1 }
+        // `onDataChanged` triggers auto-backup, which shouldn't back up an empty vault.
+        sut.onDataChanged = { Issue.record("Deleting the vault shouldn't notify a data change") }
+
+        try await sut.deleteVault()
+
+        #expect(vaultDeletedCount == 1)
+    }
+
+    @Test
+    func deleteVault_notifiesVaultDeletedEvenIfClearingAutofillFails() async {
+        let vaultOtpAutofillStore = VaultOTPAutofillStoreMock()
+        vaultOtpAutofillStore.removeAllHandler = { throw TestError() }
+        let sut = makeSUT(vaultOtpAutofillStore: vaultOtpAutofillStore)
+        var vaultDeletedCount = 0
+        sut.onVaultDeleted = { vaultDeletedCount += 1 }
+
+        await #expect(throws: TestError.self) {
+            try await sut.deleteVault()
+        }
+
+        #expect(vaultDeletedCount == 1)
+    }
+
+    @Test
+    func deleteVault_doesNotNotifyVaultDeletedWhenDeletingFails() async {
+        let deleter = VaultStoreDeleterMock()
+        deleter.deleteVaultHandler = { throw TestError() }
+        let sut = makeSUT(vaultDeleter: deleter)
+        var vaultDeletedCount = 0
+        sut.onVaultDeleted = { vaultDeletedCount += 1 }
+
+        await #expect(throws: TestError.self) {
+            try await sut.deleteVault()
+        }
+
+        #expect(vaultDeletedCount == 0)
+    }
+
+    @Test
     func deleteVault_reloadsDataEvenIfClearingAutofillFails() async {
         let vaultStore = VaultStoreStub()
         let vaultTagStore = VaultTagStoreStub()
