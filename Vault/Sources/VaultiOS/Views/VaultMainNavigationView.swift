@@ -139,6 +139,7 @@ struct VaultMainNavigationView: View {
         .environment(deviceAuthenticationService)
         .environment(vaultDataModel)
         .environment(injector)
+        .environment(\.newItemDefaults, localSettings.state.newItemDefaults)
         .onChange(of: pendingOpenItemDetail) { _, newValue in
             if newValue != nil {
                 selectedView = .items

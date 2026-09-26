@@ -45,6 +45,12 @@ public enum VaultIdentifiers {
             public static let hideWhileScreenCaptured = "vault.preferences.general.hide-while-screen-captured"
         }
 
+        /// What a new item starts with.
+        public enum NewItems {
+            public static let lock = "vault.preferences.new-items.lock"
+            public static let showCodesInQuickType = "vault.preferences.new-items.show-codes-in-quicktype"
+        }
+
         /// Earlier versions also stored `allow-passwords` and `allow-other`, though nothing was ever copied as either.
         /// Don't reuse those keys for a new kind of value: an old choice would silently apply to it.
         public enum UniversalClipboard {

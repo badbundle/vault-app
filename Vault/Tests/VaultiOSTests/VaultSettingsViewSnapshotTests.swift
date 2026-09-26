@@ -24,7 +24,7 @@ struct VaultSettingsViewSnapshotTests {
 
     @Test
     func layout_largeText() throws {
-        let sut = try makeSUT(dynamicTypeSize: .accessibility2, height: 1600)
+        let sut = try makeSUT(dynamicTypeSize: .accessibility2, height: 2800)
 
         assertSnapshot(of: sut, as: .image)
     }
@@ -42,6 +42,16 @@ struct VaultSettingsViewSnapshotTests {
     func hideWhileRecordingOff(colorScheme: ColorScheme) throws {
         let sut = try makeSUT { state in
             state.hidesVaultWhileScreenCaptured = false
+        }
+
+        assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
+    }
+
+    @Test(arguments: [ColorScheme.light, .dark])
+    func newItemDefaultsOn(colorScheme: ColorScheme) throws {
+        let sut = try makeSUT { state in
+            state.lockNewItems = true
+            state.showNewCodesInQuickType = true
         }
 
         assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
@@ -74,7 +84,7 @@ struct VaultSettingsViewSnapshotTests {
 extension VaultSettingsViewSnapshotTests {
     private func makeSUT(
         dynamicTypeSize: DynamicTypeSize = .medium,
-        height: CGFloat = 1200,
+        height: CGFloat = 1500,
         isAppLockEnabled: Bool = false,
         appLockDelay: AppLockDelay = .immediately,
         policy: some DeviceAuthenticationPolicy = .alwaysDeny,

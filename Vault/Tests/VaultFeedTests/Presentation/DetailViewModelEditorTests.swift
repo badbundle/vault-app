@@ -292,7 +292,7 @@ struct DetailViewModelEditorTests {
 extension DetailViewModelEditorTests {
     private func makeCodeCreating(initialCode: OTPAuthCode? = nil) -> OTPCodeDetailViewModel {
         OTPCodeDetailViewModel(
-            mode: .creating(initialCode: initialCode),
+            mode: .creating(initialCode: initialCode, defaults: NewItemDefaults()),
             dataModel: anyVaultDataModel(),
             editor: OTPCodeDetailEditorMock(),
         )
@@ -311,7 +311,11 @@ extension DetailViewModelEditorTests {
     }
 
     private func makeNoteCreating() -> SecureNoteDetailViewModel {
-        SecureNoteDetailViewModel(mode: .creating, dataModel: anyVaultDataModel(), editor: SecureNoteDetailEditorMock())
+        SecureNoteDetailViewModel(
+            mode: .creating(defaults: NewItemDefaults()),
+            dataModel: anyVaultDataModel(),
+            editor: SecureNoteDetailEditorMock(),
+        )
     }
 
     private func makeNoteEditing(note: SecureNote = anySecureNote()) -> SecureNoteDetailViewModel {

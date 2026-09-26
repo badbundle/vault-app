@@ -139,7 +139,7 @@ struct OTPCodeDetailEditsTests {
 
     @Test
     func isValid_invalidForEmptySecret() {
-        var sut = OTPCodeDetailEdits.new()
+        var sut = OTPCodeDetailEdits.new(defaults: NewItemDefaults())
         sut.secretBase32String = ""
 
         #expect(!sut.isValid)
@@ -147,7 +147,7 @@ struct OTPCodeDetailEditsTests {
 
     @Test
     func isValid_invalidForEmptyIssuer() {
-        var sut = OTPCodeDetailEdits.new()
+        var sut = OTPCodeDetailEdits.new(defaults: NewItemDefaults())
         sut.issuerTitle = ""
 
         #expect(!sut.isValid)
@@ -155,7 +155,7 @@ struct OTPCodeDetailEditsTests {
 
     @Test
     func isValid_invalidSecretIsInvalid() {
-        var sut = OTPCodeDetailEdits.new()
+        var sut = OTPCodeDetailEdits.new(defaults: NewItemDefaults())
         sut.secretBase32String = "A" // this is invalid
 
         #expect(!sut.isValid)
@@ -163,7 +163,7 @@ struct OTPCodeDetailEditsTests {
 
     @Test
     func isValid_invalidForEmptyPassphrase() {
-        var sut = OTPCodeDetailEdits.new()
+        var sut = OTPCodeDetailEdits.new(defaults: NewItemDefaults())
         sut.searchPassphrase = ""
         sut.viewConfig = .requiresSearchPassphrase
 
@@ -172,7 +172,7 @@ struct OTPCodeDetailEditsTests {
 
     @Test
     func isValid_validForNonEmptyPassphrase() {
-        var sut = OTPCodeDetailEdits.new()
+        var sut = OTPCodeDetailEdits.new(defaults: NewItemDefaults())
         sut.secretBase32String = "AA"
         sut.issuerTitle = "any"
         sut.searchPassphrase = "passphrase"
@@ -227,7 +227,7 @@ struct OTPCodeDetailEditsTests {
 
     @Test
     func asOTPAuthCode_throwsErrorIfBase32SecretIsInvalid() throws {
-        var sut = OTPCodeDetailEdits.new()
+        var sut = OTPCodeDetailEdits.new(defaults: NewItemDefaults())
         sut.secretBase32String = "e~~"
 
         #expect(throws: (any Error).self) {
@@ -237,7 +237,7 @@ struct OTPCodeDetailEditsTests {
 
     @Test
     func isValid_validWhenExistingSearchPassphraseRequiresBlankPassphrase() {
-        var sut = OTPCodeDetailEdits.new()
+        var sut = OTPCodeDetailEdits.new(defaults: NewItemDefaults())
         sut.secretBase32String = "AA"
         sut.issuerTitle = "issuer"
         sut.viewConfig = .requiresSearchPassphrase
@@ -249,7 +249,7 @@ struct OTPCodeDetailEditsTests {
 
     @Test
     func killphrasePropertiesReflectEnabledState() {
-        var sut = OTPCodeDetailEdits.new()
+        var sut = OTPCodeDetailEdits.new(defaults: NewItemDefaults())
 
         #expect(sut.killphraseIsEnabled == false)
         #expect(sut.killphraseEnabledText == "None")
@@ -264,7 +264,7 @@ struct OTPCodeDetailEditsTests {
 
     @Test
     func isKillphraseValid_rejectsWhitespaceOnlyValue() {
-        var sut = OTPCodeDetailEdits.new()
+        var sut = OTPCodeDetailEdits.new(defaults: NewItemDefaults())
 
         sut.newKillphrase = ""
         #expect(sut.isKillphraseValid)

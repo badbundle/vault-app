@@ -56,6 +56,76 @@ struct OTPCodeDetailViewModelTests {
     }
 
     @Test
+    func init_creatingStartsUnlockedAndOutOfQuickTypeWithStandardDefaults() {
+        let sut = makeSUTCreating(defaults: NewItemDefaults())
+
+        #expect(sut.editingModel.detail.lockState == .notLocked)
+        #expect(sut.editingModel.detail.showInQuickType == false)
+    }
+
+    @Test(arguments: [false, true], [false, true])
+    func init_creatingStartsFromNewItemDefaults(lockNewItems: Bool, showNewCodesInQuickType: Bool) {
+        let defaults = NewItemDefaults(lockNewItems: lockNewItems, showNewCodesInQuickType: showNewCodesInQuickType)
+
+        let sut = makeSUTCreating(defaults: defaults)
+
+        #expect(sut.editingModel.detail.lockState.isLocked == lockNewItems)
+        #expect(sut.editingModel.detail.showInQuickType == showNewCodesInQuickType)
+    }
+
+    @Test(arguments: [false, true], [false, true])
+    func init_creatingWithCodeStartsFromNewItemDefaults(lockNewItems: Bool, showNewCodesInQuickType: Bool) {
+        let defaults = NewItemDefaults(lockNewItems: lockNewItems, showNewCodesInQuickType: showNewCodesInQuickType)
+
+        let sut = makeSUTCreating(initialCode: anyOTPAuthCode(), defaults: defaults)
+
+        #expect(sut.editingModel.detail.lockState.isLocked == lockNewItems)
+        #expect(sut.editingModel.detail.showInQuickType == showNewCodesInQuickType)
+    }
+
+    @Test
+    func applyScannedCode_keepsNewItemDefaults() {
+        let sut = makeSUTCreating(defaults: NewItemDefaults(lockNewItems: true, showNewCodesInQuickType: true))
+        sut.startEditing()
+
+        sut.applyScannedCode(anyOTPAuthCode(issuerName: "Scanned"))
+
+        #expect(sut.editingModel.detail.issuerTitle == "Scanned")
+        #expect(sut.editingModel.detail.lockState == .lockedWithNativeSecurity)
+        #expect(sut.editingModel.detail.showInQuickType == true)
+    }
+
+    @Test
+    func init_editingKeepsTheCodesOwnLockAndQuickType() {
+        let metadata = anyVaultItemMetadata(lockState: .notLocked, showInQuickType: true)
+
+        // Editing never takes new-item defaults, so an existing code keeps what it has.
+        let sut = makeSUTEditing(metadata: metadata)
+
+        #expect(sut.editingModel.detail.lockState == .notLocked)
+        #expect(sut.editingModel.detail.showInQuickType == true)
+    }
+
+    @Test
+    func saveChanges_creatingSavesTheNewItemDefaults() async {
+        let editor = OTPCodeDetailEditorMock()
+        let sut = makeSUTCreating(
+            editor: editor,
+            defaults: NewItemDefaults(lockNewItems: true, showNewCodesInQuickType: true),
+        )
+
+        await confirmation { confirm in
+            editor.createCodeHandler = { edits in
+                #expect(edits.lockState == .lockedWithNativeSecurity)
+                #expect(edits.showInQuickType == true)
+                confirm()
+            }
+
+            await sut.saveChanges()
+        }
+    }
+
+    @Test
     func init_editingModelUsesInitialData() {
         let code = OTPAuthCode(
             type: .totp(),
@@ -487,6 +557,7 @@ extension OTPCodeDetailViewModelTests {
     private func makeSUTCreating(
         editor: OTPCodeDetailEditorMock = .defaultMock(),
         initialCode: OTPAuthCode? = nil,
+        defaults: NewItemDefaults = NewItemDefaults(),
         dataModel: VaultDataModel = VaultDataModel(
             vaultStore: VaultStoreStub(),
             vaultTagStore: VaultTagStoreStub(),
@@ -504,7 +575,7 @@ extension OTPCodeDetailViewModelTests {
         allTags _: [VaultItemTag] = [],
     ) -> OTPCodeDetailViewModel {
         OTPCodeDetailViewModel(
-            mode: .creating(initialCode: initialCode),
+            mode: .creating(initialCode: initialCode, defaults: defaults),
             dataModel: dataModel,
             editor: editor,
         )

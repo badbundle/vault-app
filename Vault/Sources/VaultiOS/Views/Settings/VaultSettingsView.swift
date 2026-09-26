@@ -31,6 +31,7 @@ struct VaultSettingsView: View {
         Form {
             AppLockSettingsSection()
             ScreenRecordingSettingsSection(localSettings: localSettings)
+            NewItemsSettingsSection(localSettings: localSettings)
             clipboardSection
             dangerSection
         }

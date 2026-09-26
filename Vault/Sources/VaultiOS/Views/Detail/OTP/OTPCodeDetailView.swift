@@ -41,17 +41,19 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
         }
     }
 
-    /// A new code, starting from scanning or entering its key.
+    /// A new code, starting from scanning or entering its key, and locked and offered in QuickType as
+    /// `newItemDefaults` say.
     init(
         newCodeWithEditor editor: any OTPCodeDetailEditor,
         navigationPath: Binding<NavigationPath>,
         dataModel: VaultDataModel,
+        newItemDefaults: NewItemDefaults,
         previewGenerator: PreviewGenerator,
         copyActionHandler: any VaultItemCopyActionHandler,
         presentationMode: Binding<PresentationMode>?,
     ) {
         self.init(
-            viewModel: .init(mode: .creating(), dataModel: dataModel, editor: editor),
+            viewModel: .init(mode: .creating(defaults: newItemDefaults), dataModel: dataModel, editor: editor),
             navigationPath: navigationPath,
             previewGenerator: previewGenerator,
             copyActionHandler: copyActionHandler,

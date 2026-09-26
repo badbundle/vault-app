@@ -190,7 +190,7 @@ struct VaultDataModelEditorAdapterTests {
         await loadDigesters(on: dataModel)
         let sut = makeSUT(dataModel: dataModel)
 
-        var initialEdits = SecureNoteDetailEdits.new()
+        var initialEdits = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         initialEdits.contents = "first line\nsecond line"
         initialEdits.viewConfig = .requiresSearchPassphrase
         initialEdits.searchPassphrase = "pass"
@@ -235,7 +235,7 @@ struct VaultDataModelEditorAdapterTests {
         }
         let sut = makeSUT(dataModel: dataModel, keyDeriverFactory: keyDeriverFactory)
 
-        var initialEdits = SecureNoteDetailEdits.new()
+        var initialEdits = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         initialEdits.contents = "first line\nsecond line"
         initialEdits.viewConfig = .requiresSearchPassphrase
         initialEdits.searchPassphrase = "pass"
@@ -290,7 +290,7 @@ struct VaultDataModelEditorAdapterTests {
         keyDeriverFactory.makeVaultItemKeyDeriverHandler = { .testing }
         let sut = makeSUT(dataModel: dataModel, keyDeriverFactory: keyDeriverFactory)
 
-        var initialEdits = SecureNoteDetailEdits.new()
+        var initialEdits = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         initialEdits.contents = "first line\nsecond line"
         initialEdits.viewConfig = .requiresSearchPassphrase
         initialEdits.searchPassphrase = "pass"
@@ -336,7 +336,7 @@ struct VaultDataModelEditorAdapterTests {
         let sut = makeSUT(dataModel: dataModel)
 
         await #expect(throws: (any Error).self) {
-            try await sut.createNote(initialEdits: .new())
+            try await sut.createNote(initialEdits: .new(defaults: NewItemDefaults()))
         }
     }
 
@@ -355,7 +355,7 @@ struct VaultDataModelEditorAdapterTests {
         var item = uniqueVaultItem(item: .secureNote(note))
         item.metadata.userDescription = "old description"
 
-        var edits = SecureNoteDetailEdits.new()
+        var edits = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
         edits.textFormat = .markdown
         edits.contents = "first line\nsecond line"
         edits.viewConfig = .alwaysVisible
@@ -394,7 +394,7 @@ struct VaultDataModelEditorAdapterTests {
         let sut = makeSUT(dataModel: dataModel)
 
         await #expect(throws: (any Error).self) {
-            try await sut.updateNote(id: .new(), item: anySecureNote(), edits: .new())
+            try await sut.updateNote(id: .new(), item: anySecureNote(), edits: .new(defaults: NewItemDefaults()))
         }
     }
 

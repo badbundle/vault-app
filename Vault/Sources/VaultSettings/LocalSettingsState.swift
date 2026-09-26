@@ -14,6 +14,11 @@ public struct LocalSettingsState {
     /// (MANIFESTO C7). Recovery phrases hide then whatever this says.
     @DefaultsStored public var hidesVaultWhileScreenCaptured: Bool
 
+    /// When `true`, new codes and notes start locked. Only read when an item is created.
+    @DefaultsStored public var lockNewItems: Bool
+    /// When `true`, new codes start out offered in QuickType. Only read when a code is created.
+    @DefaultsStored public var showNewCodesInQuickType: Bool
+
     init(defaults: Defaults) {
         _pasteTimeToLive = DefaultsStored(
             defaults: defaults,
@@ -28,6 +33,17 @@ public struct LocalSettingsState {
         _allowUniversalClipboardForOTPs = DefaultsStored(
             defaults: defaults,
             defaultsKey: .init(VaultIdentifiers.Preferences.UniversalClipboard.allowOTPs),
+            defaultValue: false,
+        )
+        _lockNewItems = DefaultsStored(
+            defaults: defaults,
+            defaultsKey: .init(VaultIdentifiers.Preferences.NewItems.lock),
+            defaultValue: false,
+        )
+        // Off, so a code is only offered to AutoFill once the user chooses (MANIFESTO C7).
+        _showNewCodesInQuickType = DefaultsStored(
+            defaults: defaults,
+            defaultsKey: .init(VaultIdentifiers.Preferences.NewItems.showCodesInQuickType),
             defaultValue: false,
         )
     }

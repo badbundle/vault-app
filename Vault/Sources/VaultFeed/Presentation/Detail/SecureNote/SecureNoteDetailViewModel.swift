@@ -9,7 +9,8 @@ public final class SecureNoteDetailViewModel: DetailViewModel {
     public var editingModel: DetailEditingModel<SecureNoteDetailEdits>
 
     public enum Mode {
-        case creating
+        /// A new note, starting from what `defaults` say.
+        case creating(defaults: NewItemDefaults)
         case editing(
             note: SecureNote,
             metadata: VaultItem.Metadata,
@@ -36,8 +37,8 @@ public final class SecureNoteDetailViewModel: DetailViewModel {
         case let .editing(_, metadata, _): metadata.lockState.isLocked
         }
         editingModel = switch mode {
-        case .creating:
-            .init(detail: .new())
+        case let .creating(defaults):
+            .init(detail: .new(defaults: defaults))
         case let .editing(note, metadata, encryptionKey):
             .init(detail: .init(
                 contents: note.contents,

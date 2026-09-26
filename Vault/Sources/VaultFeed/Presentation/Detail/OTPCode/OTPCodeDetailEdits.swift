@@ -235,10 +235,10 @@ public struct OTPCodeDetailEdits: DetailEditorEditableState, Sendable {
 
 extension OTPCodeDetailEdits {
     /// Create an `OTPCodeDetailEdits` in a blank state with initial input values, for creation.
-    /// All initial values are sensible defaults.
+    /// All initial values are sensible defaults, and it's locked and offered in QuickType as `defaults` say.
     ///
     /// Uses standards suggested by https://datatracker.ietf.org/doc/html/rfc6238
-    public static func new() -> OTPCodeDetailEdits {
+    public static func new(defaults: NewItemDefaults) -> OTPCodeDetailEdits {
         .init(
             codeType: .totp,
             relativeOrder: .min,
@@ -256,13 +256,15 @@ extension OTPCodeDetailEdits {
             killphraseEnabled: false,
             newKillphrase: "",
             tags: [],
-            lockState: .notLocked,
+            lockState: defaults.lockState,
             color: nil,
-            showInQuickType: true,
+            showInQuickType: defaults.showNewCodesInQuickType,
         )
     }
 
-    public static func new(hydratedFromCode code: OTPAuthCode) -> OTPCodeDetailEdits {
+    /// Create an `OTPCodeDetailEdits` for a new code that came with its key, such as a scanned one. It's locked and
+    /// offered in QuickType as `defaults` say.
+    public static func new(hydratedFromCode code: OTPAuthCode, defaults: NewItemDefaults) -> OTPCodeDetailEdits {
         .init(
             hydratedFromCode: code,
             relativeOrder: .min,
@@ -273,8 +275,8 @@ extension OTPCodeDetailEdits {
             hasExistingSearchPassphrase: false,
             killphraseEnabled: false,
             tags: [],
-            lockState: .notLocked,
-            showInQuickType: true,
+            lockState: defaults.lockState,
+            showInQuickType: defaults.showNewCodesInQuickType,
         )
     }
 }

@@ -13,6 +13,7 @@ struct VaultDetailCreateView<
     @Environment(VaultInjector.self) private var injector
     @Environment(DeviceAuthenticationService.self) private var authenticationService
     @Environment(\.presentationMode) private var presentationMode
+    @Environment(\.newItemDefaults) private var newItemDefaults
 
     var body: some View {
         switch creatingItem {
@@ -24,6 +25,7 @@ struct VaultDetailCreateView<
                 ),
                 navigationPath: $navigationPath,
                 dataModel: dataModel,
+                newItemDefaults: newItemDefaults,
                 previewGenerator: previewGenerator,
                 copyActionHandler: copyActionHandler,
                 presentationMode: presentationMode,
@@ -36,6 +38,7 @@ struct VaultDetailCreateView<
                 ),
                 navigationPath: $navigationPath,
                 dataModel: dataModel,
+                newItemDefaults: newItemDefaults,
             )
         case .recoveryPhrase:
             if authenticationService.canAuthenticate {
