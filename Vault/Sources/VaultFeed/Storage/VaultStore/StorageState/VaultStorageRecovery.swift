@@ -13,6 +13,8 @@ import Foundation
 ///   its pending rehash files and the confirmed archives. That's safe to repeat.
 /// - **Clearing the system surfaces**: the app then clears QuickType and reloads the widgets
 ///   (`finishClearingSystemSurfaces(_:)`), once it can.
+/// - **Erasing**: it leaves the files alone and reports `.erasing`. The app opens no store, and finishes the erase
+///   with `VaultEraser`, which needs the keychain and the app's hooks as well as the files.
 ///
 /// It never deletes the only copy of anything: an encrypted file goes only if the plain store is there to be the
 /// vault, and the plain store only if there's an encrypted file that reads as one. See "Migration: plain to
@@ -25,6 +27,17 @@ public struct VaultStorageRecovery: Sendable {
         /// The state says the conversion committed, but there's no encrypted file that reads as one: deleting the
         /// plain store might delete the only copy of the vault, so nothing is deleted.
         case plainStoreWithoutEncryptedFile
+    }
+
+    /// How the vault is stored, once recovery has finished or undone what it could.
+    public enum Outcome: Equatable, Sendable {
+        /// The plain store is the vault.
+        case plain
+        /// The encrypted file is the vault.
+        case password
+        /// An erase was underway. Open no store: finish it with `VaultEraser.erase()` first, which leaves a fresh,
+        /// empty plain store.
+        case erasing
     }
 
     private let directory: URL
@@ -41,13 +54,14 @@ public struct VaultStorageRecovery: Sendable {
 
     /// Finishes or undoes any change underway, apart from clearing the system surfaces.
     ///
-    /// - Returns: How the vault is stored now.
+    /// - Returns: How the vault is stored now, or `.erasing` if an erase is still to finish.
     /// - Throws: If the state can't be read or a step fails, `Failure` if deleting would risk the only copy of the
     ///   vault. Nothing should open a store then.
-    public func recoverAtLaunch() throws -> VaultStorageState.Mode {
+    public func recoverAtLaunch() throws -> Outcome {
         let stateFile = VaultStorageStateFile(directory: directory, fileSystem: fileSystem)
         try stateFile.removeStrayTemporaryFiles()
         var state = try stateFile.read()
+        guard state.transition != .erasing else { return .erasing }
         switch state.mode {
         case .plain:
             try removeEncryptedFiles()

@@ -506,6 +506,7 @@ error is thrown. `deleteItems(matchingKillphrase:using:)` returns `false` instea
 | A password change | Old or new file, never a mix | Either the old or the new password works |
 | Slot growth | Old or new file; one rename covers every slot | None needed |
 | Enabling the password | See [Migration](#migration-plain-to-encrypted) | Journal |
+| An erase | The vault is as it was if the erase hadn't been journaled yet; otherwise it's partly erased, and every vault is unreadable once the encrypted file is gone | Journal: finished at the next launch, before any store opens (see [Erasing](#erasing-after-failed-attempts-vault-34)) |
 | A torn write or storage fault (not expected on APFS) | A slot fails to authenticate | The file is **never** reset automatically. The failure screen offers restoring from a backup, or erasing. |
 
 The atomicity comes from one file, one `rename`, and `F_FULLFSYNC` before it. No path overwrites the only copy
@@ -772,6 +773,36 @@ Honest limits:
 
 The counter is per device and shared by all vaults. The duress password is a correct password: it opens a slot
 and resets the counter.
+
+**As built** (`VaultEraser`, VAULT-52):
+
+- **The entry point** is `VaultEraser.erase()`. The unlock service's `wrongPassword(reachesEraseThreshold:)` says
+  when an attempt is the tenth wrong one in a row or later. VAULT-34's lock screen calls `erase()` then, if the user
+  has turned erasing on. Tests call it directly.
+- **Before step 1,** it locks the store session, lets go of the plain store if one is open (a hook), and journals
+  `erasing` in the storage state, in place of any other transition underway: whatever a conversion had left to do,
+  the erase does or makes moot. If the journal can't be written, perhaps because the disk is full, it does step 1
+  first, which frees space, and tries again. Until the journal is in place nothing has been removed, and a count of
+  ten or more is still in the keychain, so the next wrong attempt erases again.
+- **Step 1 removes every copy of a vault:** the encrypted file first, then its temp files and lock file, the plain
+  store's files and its failed-open archives, which are plaintext copies. It holds the file's lock while it does, if
+  it can, so a save underway in the AutoFill extension can't put the file back: a save reads the file under the lock,
+  and fails if there isn't one.
+- **Step 2** deletes the killphrase and search passphrase HMAC keys, the backup password and its record, and the
+  attempt count. There's no device key until VAULT-48; it adds its keychain item to the list.
+- **Step 3** removes the pending rehash files. The storage state goes last, when the journal is cleared.
+- **The per-vault settings still kept per device** (the last backup event and the auto-backup configuration) stay,
+  as they do for Delete All Data, until VAULT-51 moves them into each vault's payload, where step 1 erases them.
+- **Step 5** creates the store without the plain store's failed-open recovery, so it never sets a copy aside, then
+  clears the journal, which removes the state file, and switches the session to the new store.
+- **At launch**, recovery reports `erasing` before looking at anything else, and deletes nothing itself. The app
+  opens no store, and `setup()` calls `erase()` again, which finishes it; the vault's views wait for it, so nothing
+  loads the keys it deletes first. Every step is safe to repeat. The extensions treat the vault as locked until
+  then.
+- **A failure** stops the erase with the session still locked. Calling `erase()` again, or launching again, finishes
+  it.
+- **What the app holds in memory** is the caller's to reset once it's done: the items, the backup password, and the
+  killphrase and search passphrase digesters, which were made from the keys step 2 deletes.
 
 ## Widgets, AutoFill and QuickType
 

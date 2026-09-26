@@ -50,7 +50,7 @@ extension VaultUnlockServiceTests {
 
         let result = try await sut.service.unlock(password: "wrong")
 
-        #expect(result == .wrongPassword)
+        #expect(result == .wrongPassword(reachesEraseThreshold: false))
         #expect(sut.clock.sleeps == [start.advanced(by: deadline)])
         #expect(await sut.session.isLocked)
         #expect(!sut.log.value.contains("reset the count"))
@@ -166,6 +166,31 @@ extension VaultUnlockServiceTests {
         #expect(log.first == "count the attempt")
         #expect(log.dropFirst().first == "derive")
         #expect(log.last == "reset the count")
+    }
+
+    /// The tenth wrong attempt in a row says so, for the erase after too many (VAULT-34). The ninth doesn't.
+    @Test(arguments: [(earlier: 8, reaches: false), (earlier: 9, reaches: true), (earlier: 12, reaches: true)])
+    func unlock_withAWrongPassword_saysWhetherItReachesTheEraseThreshold(earlier: Int, reaches: Bool) async throws {
+        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])])
+        // The earlier attempts' wait is over.
+        sut.attemptStorage.setRecord(count: earlier, latestAt: sut.attemptClock.now)
+        sut.attemptClock.advance(by: .seconds(60 * 60))
+
+        let result = try await sut.service.unlock(password: "wrong")
+
+        #expect(result == .wrongPassword(reachesEraseThreshold: reaches))
+    }
+
+    /// A password that opens a vault unlocks it, however many wrong attempts came before.
+    @Test
+    func unlock_withTheRightPasswordAtTheEraseThreshold_unlocks() async throws {
+        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])])
+        sut.attemptStorage.setRecord(count: 9, latestAt: sut.attemptClock.now)
+        sut.attemptClock.advance(by: .seconds(60 * 60))
+
+        let result = try await sut.service.unlock(password: "real")
+
+        #expect(result == .unlocked)
     }
 
     @Test
