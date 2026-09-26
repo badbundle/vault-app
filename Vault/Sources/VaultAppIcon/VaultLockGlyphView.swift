@@ -4,10 +4,9 @@ import SwiftUI
 ///
 /// One drawing serves both the app icon (wheel at rest, door shut) and every frame
 /// of the lock animation (wheel spinning, door swinging on its left-hand hinge).
-/// The door and wheel are the palette's two tones. The depth comes from layering
-/// gradients alone: a metal gradient and rim light on the door, and the turned
-/// metal of `VaultWheelView`. No blur, shadow or material effects, so it renders
-/// the same on screen, in `ImageRenderer` and in snapshots.
+/// The door and wheel are the palette's two tones, each a flat, solid fill: no
+/// gradients, blur, shadow or material effects, so it renders the same on screen,
+/// in `ImageRenderer` and in snapshots.
 public struct VaultLockGlyphView: View {
     public var wheelRotation: Angle
     /// 0 is shut; 1 is swung open by `metrics.doorOpenAngle`.
@@ -41,7 +40,7 @@ public struct VaultLockGlyphView: View {
     public var body: some View {
         GeometryReader { proxy in
             let side = min(proxy.size.width, proxy.size.height)
-            artwork(side: side)
+            artwork
                 .frame(width: side, height: side)
                 .rotation3DEffect(
                     .degrees(-doorOpening * metrics.doorOpenAngle),
@@ -54,15 +53,13 @@ public struct VaultLockGlyphView: View {
         .aspectRatio(1, contentMode: .fit)
     }
 
-    private func artwork(side: CGFloat) -> some View {
-        let door = VaultDoorShape(metrics: metrics)
-
-        return ZStack {
-            door.fill(palette.door.faceGradient)
-            door
-                .stroke(palette.door.rimGradient, lineWidth: side * metrics.highlightWidth)
-                .clipShape(door)
-            VaultWheelView(rotation: wheelRotation, metal: palette.wheel, metrics: metrics, side: side)
+    private var artwork: some View {
+        ZStack {
+            VaultDoorShape(metrics: metrics)
+                .fill(palette.door)
+            VaultWheelShape(metrics: metrics)
+                .fill(palette.wheel)
+                .rotationEffect(wheelRotation)
         }
     }
 }
