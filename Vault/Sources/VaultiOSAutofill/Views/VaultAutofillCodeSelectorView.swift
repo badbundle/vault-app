@@ -22,7 +22,6 @@ struct VaultAutofillCodeSelectorView<Generator: VaultItemPreviewViewGenerator<Va
             localSettings: localSettings,
             viewGenerator: interactableViewGenerator(),
             state: VaultItemFeedState(),
-            gridSpacing: 12,
         )
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
