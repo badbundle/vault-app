@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import TestHelpers
 import Testing
@@ -43,17 +44,20 @@ struct BackupCreatePDFViewModelTests {
     }
 
     @Test
-    func createPDF_recordsBackupEvent() async throws {
+    func createPDF_stampsGeneratedPDFWithCreationDate() async throws {
         let vaultStore = VaultStoreStub()
         vaultStore.exportVaultHandler = { _ in
             .init(userDescription: "Hello", items: [], tags: [])
         }
-        let logger = BackupEventLoggerMock()
-        let sut = try makeSUT(vaultStore: vaultStore, backupEventLogger: logger)
+        let sut = try makeSUT(vaultStore: vaultStore, clock: EpochClockMock(currentTime: 1234))
+
+        var generated = [BackupCreatePDFViewModel.GeneratedPDF]()
+        let cancellable = sut.generatedPDFPublisher().sink { generated.append($0) }
+        defer { cancellable.cancel() }
 
         await sut.createPDF()
 
-        #expect(logger.exportedToPDFCallCount == 1)
+        #expect(generated.map(\.createdDate) == [Date(timeIntervalSince1970: 1234)])
     }
 
     @Test
@@ -80,7 +84,6 @@ extension BackupCreatePDFViewModelTests {
         backupPasswordStore: any BackupPasswordStore = BackupPasswordStoreMock(),
         backupPassword: DerivedEncryptionKey = anyBackupPassword(),
         clock: some EpochClock = EpochClockMock(currentTime: 100),
-        backupEventLogger: any BackupEventLogger = BackupEventLoggerMock(),
     ) throws -> BackupCreatePDFViewModel {
         let defaults = try testUserDefaults()
         return BackupCreatePDFViewModel(
@@ -100,7 +103,6 @@ extension BackupCreatePDFViewModelTests {
                 backupEventLogger: BackupEventLoggerMock(),
             ),
             clock: clock,
-            backupEventLogger: backupEventLogger,
             defaults: Defaults(userDefaults: defaults),
             fileManager: FileManager(),
         )
