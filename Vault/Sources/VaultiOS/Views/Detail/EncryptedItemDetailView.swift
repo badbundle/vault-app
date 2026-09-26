@@ -166,6 +166,7 @@ struct EncryptedItemDetailView: View {
                 kind: .secure(),
                 status: viewModel.state.presentationError == nil ? .none : .error(),
             )
+            .secretTextInput(.verbatim)
             .disabled(viewModel.isDecrypted)
         }
         .onChange(of: viewModel.enteredEncryptionPassword) { _, _ in

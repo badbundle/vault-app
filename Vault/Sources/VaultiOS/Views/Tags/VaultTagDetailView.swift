@@ -120,6 +120,8 @@ struct VaultTagDetailView: View {
     private var nameSection: some View {
         Section {
             LabeledTextField("Name", text: $viewModel.currentTag.name, prompt: "My Tag")
+                // A tag's name says what the vault holds.
+                .secretTextInput(.prose)
         } header: {
             previewHeader
                 .containerRelativeFrame(.horizontal)

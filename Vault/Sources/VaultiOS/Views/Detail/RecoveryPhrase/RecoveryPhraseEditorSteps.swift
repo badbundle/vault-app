@@ -137,10 +137,7 @@ struct RecoveryPhraseWordsStep: View {
                 Text(viewModel.strings.wordNumber(index + 1))
             }
             .font(.body.monospaced())
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .writingToolsBehavior(.disabled)
-            .keyboardType(usesASCIIKeyboard ? .asciiCapable : .default)
+            .secretTextInput(SecretTextInput(capitalization: .never, isASCIIOnly: usesASCIIKeyboard))
             .privacySensitive()
             .focused($focusedField, equals: .word(index))
             .submitLabel(index == viewModel.editingModel.detail.wordCount - 1 ? .done : .next)
@@ -166,9 +163,7 @@ struct RecoveryPhraseWordsStep: View {
                 kind: .secure(isRevealed: $isSeedPassphraseRevealed),
             )
             .fontDesign(.monospaced)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .writingToolsBehavior(.disabled)
+            .secretTextInput(.verbatim)
             .privacySensitive()
             .focused($focusedField, equals: .seedPassphrase)
         } footer: {
@@ -289,6 +284,7 @@ struct RecoveryPhraseNameStep: View {
     var body: some View {
         Section {
             LabeledTextField("Title", text: $viewModel.editingModel.detail.title)
+                .secretTextInput(.prose)
                 .focused($focusedField, equals: .title)
                 .submitLabel(.next)
                 .onSubmit {
@@ -300,6 +296,7 @@ struct RecoveryPhraseNameStep: View {
                 text: $viewModel.editingModel.detail.contents,
                 kind: .multiline(minLines: 2),
             )
+            .secretTextInput(.prose)
             .focused($focusedField, equals: .contents)
             .privacySensitive()
         } footer: {

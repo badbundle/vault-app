@@ -59,6 +59,7 @@ struct BackupKeyDecryptorView: View {
                 kind: .secure(),
                 status: viewModel.decryptionKeyState.isError ? .error() : .none,
             )
+            .secretTextInput(.verbatim)
             .disabled(viewModel.isDecrypting)
         }
     }
