@@ -32,8 +32,7 @@ struct DetailEditorVisibilitySection: View {
                     prompt: hasExistingPassphrase ? "Leave empty to keep the current one" : nil,
                     status: .init(errorFrom: passphraseValidation),
                 )
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
+                .secretTextInput(.verbatim)
                 .submitLabel(.done)
             }
         } header: {
@@ -100,8 +99,7 @@ struct DetailEditorKillphraseSection: View {
                     prompt: hasExistingKillphrase ? "Leave empty to keep the current one" : nil,
                     status: isValid ? .none : .error(message: "Enter some text, not just spaces."),
                 )
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
+                .secretTextInput(.verbatim)
                 .submitLabel(.done)
             }
         } footer: {

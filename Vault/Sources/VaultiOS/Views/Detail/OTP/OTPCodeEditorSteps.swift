@@ -63,8 +63,8 @@ private struct OTPCodeKeySections: View {
                 status: keyStatus,
             )
             .fontDesign(.monospaced)
-            .autocorrectionDisabled()
-            .textInputAutocapitalization(.characters)
+            // A Base32 key: letters and digits.
+            .secretTextInput(SecretTextInput(capitalization: .characters, isASCIIOnly: true))
 
             Picker(selection: $viewModel.editingModel.detail.codeType) {
                 ForEach(OTPAuthType.Kind.allCases) { authType in
@@ -138,14 +138,14 @@ struct OTPCodeNameStep: View {
                 text: $viewModel.editingModel.detail.issuerTitle,
                 status: .init(errorFrom: viewModel.editingModel.detail.$issuerTitle),
             )
+            .secretTextInput(.prose)
 
             LabeledTextField(
                 strings.accountNameTitle,
                 text: $viewModel.editingModel.detail.accountNameTitle,
                 prompt: strings.accountNameExample,
             )
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
+            .secretTextInput(.verbatim)
         }
 
         Section {
@@ -155,6 +155,7 @@ struct OTPCodeNameStep: View {
                 prompt: strings.descriptionSubtitle,
                 kind: .multiline(minLines: 3),
             )
+            .secretTextInput(.prose)
         } footer: {
             Text("Optional. Shown with the code, and searchable.")
         }

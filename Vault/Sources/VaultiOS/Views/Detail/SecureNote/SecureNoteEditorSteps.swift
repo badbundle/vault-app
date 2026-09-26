@@ -14,6 +14,7 @@ struct SecureNoteContentStep: View {
                 prompt: "The first line is the note's title",
                 kind: .multiline(minLines: 12),
             )
+            .secretTextInput(.prose)
             .font(.subheadline)
             .fontDesign(.monospaced)
         }

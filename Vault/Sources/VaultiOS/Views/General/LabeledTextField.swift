@@ -9,9 +9,10 @@ import VaultFeed
 /// the value as soon as the field is focused or filled. The floating label is tinted while the field is focused and
 /// turns red when the value has an error, with the error's message under the value.
 ///
-/// Made for a `Form` row, so it draws no background of its own. Text input modifiers such as `keyboardType(_:)`,
-/// `textInputAutocapitalization(_:)`, `submitLabel(_:)`, `onSubmit(of:_:)` and `focused(_:equals:)` apply to it just
-/// as they would to a `TextField`.
+/// Made for a `Form` row, so it draws no background of its own. Modifiers such as `submitLabel(_:)`,
+/// `onSubmit(of:_:)` and `focused(_:equals:)` apply to it just as they would to a `TextField`. The keyboard is set up
+/// by the `secretTextInput(_:)` declared on the field, which no text input modifier applied around it can override,
+/// so the keyboard never learns from what's typed. A field that doesn't declare one is set up as `.verbatim`.
 struct LabeledTextField: View {
     enum Kind {
         /// A single line of text.
@@ -48,6 +49,7 @@ struct LabeledTextField: View {
     @FocusState private var isFocused: Bool
     @State private var floatingLabelHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.secretTextInput) private var declaredTextInput
 
     /// - Parameters:
     ///   - title: Names what the field is for. Always visible, and read by VoiceOver.
@@ -172,6 +174,11 @@ struct LabeledTextField: View {
 
     // MARK: - Input
 
+    /// Applied to each input itself, so it wins over text input modifiers applied around the field.
+    private var textInput: SecretTextInput {
+        declaredTextInput ?? .verbatim
+    }
+
     @ViewBuilder
     private var input: some View {
         switch kind {
@@ -184,6 +191,7 @@ struct LabeledTextField: View {
                 TextField(text: .constant("")) {
                     EmptyView()
                 }
+                .secretTextInput(textInput)
                 .hidden()
 
                 if isRevealed?.wrappedValue == true {
@@ -192,6 +200,7 @@ struct LabeledTextField: View {
                     SecureField(text: $text, prompt: Self.noPrompt) {
                         Text(title)
                     }
+                    .secretTextInput(textInput)
                     .focused($isFocused)
                 }
             }
@@ -204,6 +213,7 @@ struct LabeledTextField: View {
         TextField(text: $text, prompt: Self.noPrompt, axis: axis) {
             Text(title)
         }
+        .secretTextInput(textInput)
         .focused($isFocused)
     }
 
@@ -222,6 +232,7 @@ struct LabeledTextField: View {
             .hidden()
             .overlay {
                 TextEditor(text: $text)
+                    .secretTextInput(textInput)
                     .focused($isFocused)
                     .scrollContentBackground(.hidden)
                     // Line the text up with the label, and with the text of the other fields.
@@ -373,22 +384,28 @@ extension LabeledTextField.Status {
     Form {
         Section {
             LabeledTextField("Site Name", text: $siteName)
+                .secretTextInput(.prose)
             LabeledTextField("Account Name", text: $accountName, prompt: "user@example.com")
+                .secretTextInput(.verbatim)
         }
 
         Section {
             LabeledTextField("Key", text: $key, status: .error(message: "Invalid data"))
+                .secretTextInput(SecretTextInput(capitalization: .characters, isASCIIOnly: true))
             LabeledTextField("Password", text: $password, kind: .secure(isRevealed: $isPasswordRevealed))
+                .secretTextInput(.verbatim)
             LabeledTextField(
                 "Confirm Password",
                 text: $password,
                 kind: .secure(),
                 status: .passwordConfirmation(matches: true),
             )
+            .secretTextInput(.verbatim)
         }
 
         Section {
             LabeledTextField("Description", text: $description, kind: .multiline(minLines: 3))
+                .secretTextInput(.prose)
         }
     }
 }

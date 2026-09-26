@@ -77,6 +77,7 @@ struct VaultDetailEncryptionEditView: View {
     private func passwordEntrySection(actionTitle: String, systemImage: String) -> some View {
         Section {
             LabeledTextField("Password", text: $newEncryptionPassword, kind: .secure())
+                .secretTextInput(.verbatim)
 
             if newEncryptionPassword.isNotBlank {
                 LabeledTextField(
@@ -85,6 +86,7 @@ struct VaultDetailEncryptionEditView: View {
                     kind: .secure(),
                     status: .passwordConfirmation(matches: doPasswordsMatch),
                 )
+                .secretTextInput(.verbatim)
             }
         }
 

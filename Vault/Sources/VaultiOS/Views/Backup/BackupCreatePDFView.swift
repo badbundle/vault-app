@@ -63,6 +63,7 @@ struct BackupCreatePDFView: View {
                 text: $viewModel.userHint,
                 kind: .multiline(minLines: 3),
             )
+            .secretTextInput(.prose)
         } header: {
             Text("Options")
         } footer: {

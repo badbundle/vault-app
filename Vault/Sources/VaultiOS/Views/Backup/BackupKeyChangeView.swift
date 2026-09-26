@@ -166,6 +166,7 @@ struct BackupKeyChangeView: View {
     private var passwordSection: some View {
         Section {
             LabeledTextField("New Password", text: $viewModel.newlyEnteredPassword, kind: .secure())
+                .secretTextInput(.verbatim)
                 .focused($focusedField, equals: .new)
                 .submitLabel(.next)
                 .onSubmit {
@@ -180,6 +181,7 @@ struct BackupKeyChangeView: View {
                     kind: .secure(),
                     status: .passwordConfirmation(matches: viewModel.passwordConfirmMatches),
                 )
+                .secretTextInput(.verbatim)
                 .focused($focusedField, equals: .confirm)
                 .submitLabel(.done)
                 .onSubmit(saveEnteredPassword)

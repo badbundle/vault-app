@@ -576,8 +576,8 @@ public struct VaultItemFeedView<
                 TextField("Search", text: $dataModel.itemsSearchQuery)
                     .focused($isSearchFieldFocused)
                     .submitLabel(.search)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
+                    // Passphrases and killphrases are typed here.
+                    .secretTextInput(.verbatim)
                     .onSubmit {
                         isSearchFieldFocused = false
                     }
