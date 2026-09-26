@@ -3,7 +3,8 @@ import SwiftUI
 import VaultFeed
 import VaultKeygen
 
-/// Screen for exporting the vault: PDF backup and device transfer.
+/// Screen for exporting the vault: a PDF backup to keep, or a one-off transfer to another device
+/// by QR codes. Both carry the whole vault, encrypted with the backup password.
 @MainActor
 struct BackupExportView: View {
     @Environment(VaultDataModel.self) var dataModel
@@ -20,6 +21,8 @@ struct BackupExportView: View {
 
     var body: some View {
         Form {
+            headerSection
+
             switch dataModel.backupPassword {
             case .error:
                 authenticateSection(isError: true)
@@ -93,6 +96,21 @@ struct BackupExportView: View {
         }
     }
 
+    // MARK: - Header Section
+
+    /// What exporting is for, and what every option has in common, before the options themselves.
+    private var headerSection: some View {
+        Section {
+            BackupHeroHeader(
+                title: "Export Your Vault",
+                subtitle: "Take a copy of your whole vault, encrypted with your backup password. You'll need that password to restore it.",
+                systemImage: "square.and.arrow.up.fill",
+                color: .accentColor,
+                iconSize: 56,
+            )
+        }
+    }
+
     // MARK: - Authenticate Section
 
     private func authenticateSection(isError: Bool) -> some View {
@@ -126,35 +144,76 @@ struct BackupExportView: View {
         } header: {
             Text("Backup Password")
         } footer: {
-            Text("Create a backup password to protect your vault backups.")
+            Text("Exports are encrypted with your backup password, so you'll need to set one up first.")
         }
     }
 
     // MARK: - PDF Backup Section
 
+    /// A backup to keep: a file that outlasts this device.
     private func pdfBackupSection(password: DerivedEncryptionKey) -> some View {
         Section {
-            ProminentActionButton("Create PDF Backup", systemImage: "printer.filled.and.paper") {
+            exportOption(
+                title: "PDF Backup",
+                detail: "An encrypted file you can save or print.",
+                systemImage: "doc.text.fill",
+                color: .accentColor,
+            ) {
                 modal = .pdfBackup(password)
             }
         } header: {
-            Text("PDF Backup")
+            Text("Keep a Backup")
         } footer: {
-            Text("Create an offline backup you can print or save.")
+            Text(
+                "Keep it somewhere safe, like iCloud Drive or a paper copy stored away from home. You can restore from it at any time, on any device.",
+            )
         }
     }
 
     // MARK: - Device Transfer Section
 
+    /// A move, not a backup: the codes only exist while this screen shows them.
     private func deviceTransferSection(password: DerivedEncryptionKey) -> some View {
         Section {
-            ProminentActionButton("Start Transfer", systemImage: "qrcode") {
+            exportOption(
+                title: "Transfer with QR Codes",
+                detail: "Show codes for another device to scan, without saving a file.",
+                systemImage: "qrcode",
+                color: .indigo,
+            ) {
                 modal = .deviceTransfer(password)
             }
         } header: {
-            Text("Transfer to Another Device")
+            Text("Move to Another Device")
         } footer: {
-            Text("Display QR codes to scan with another device.")
+            Text(
+                "On the other device, open Backups, choose Restore and scan the codes. Keep both devices nearby until it's done.",
+            )
         }
+    }
+
+    // MARK: - Export Option
+
+    /// One way to export, as a row that says what it makes, in the style of the rows on the Backups screen.
+    private func exportOption(
+        title: String,
+        detail: String,
+        systemImage: String,
+        color: Color,
+        action: @escaping () -> Void,
+    ) -> some View {
+        Button(action: action) {
+            FormRow(image: Image(systemName: systemImage), color: color) {
+                HStack {
+                    TextAndSubtitle(title: title, subtitle: detail)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .tint(.primary)
     }
 }

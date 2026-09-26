@@ -111,6 +111,23 @@ struct BackupViewSnapshotTests {
     }
 
     @Test
+    func backupExport_passwordFetched_largeText() async {
+        let backupPasswordStore = BackupPasswordStoreMock()
+        backupPasswordStore.fetchPasswordHandler = { .init(
+            key: .random(),
+            salt: .random(count: 32),
+            keyDervier: .testing,
+        ) }
+        let dataModel = anyVaultDataModel(backupPasswordStore: backupPasswordStore)
+        await dataModel.loadBackupPassword()
+        await dataModel.reloadData()
+
+        let sut = makeBackupExportSUT(dataModel: dataModel, dynamicTypeSize: .accessibility2, height: 1500)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
     func backupRestore_noItems() async {
         let vaultStore = VaultStoreStub()
         vaultStore.hasAnyItemsHandler = { false }
@@ -159,6 +176,8 @@ extension BackupViewSnapshotTests {
 
     private func makeBackupExportSUT(
         dataModel: VaultDataModel,
+        dynamicTypeSize: DynamicTypeSize = .large,
+        height: CGFloat = 1000,
     ) -> some View {
         NavigationStack {
             BackupExportView()
@@ -166,7 +185,8 @@ extension BackupViewSnapshotTests {
         .environment(dataModel)
         .environment(DeviceAuthenticationService(policy: .alwaysAllow))
         .environment(anyVaultInjector())
-        .framedForTest()
+        .dynamicTypeSize(dynamicTypeSize)
+        .framedForTest(height: height)
     }
 
     private func makeBackupRestoreSUT(
