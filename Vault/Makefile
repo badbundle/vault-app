@@ -4,6 +4,12 @@ SHELL = /bin/sh
 benchmark-keygen:
 	swift run -c release vault-keygen-speedtest
 
+# Calibrates the app lock key derivation (Argon2id) for this machine, as the
+# app does on the device when it creates an encrypted vault.
+.PHONY: calibrate-app-lock
+calibrate-app-lock:
+	swift run -c release vault-keygen-speedtest --app-lock
+
 # App icon: renders Sources/VaultAppIcon into the app's asset catalog as the
 # light, dark and tinted 1024px PNGs plus Contents.json. Commit the output.
 .PHONY: app-icon

@@ -185,7 +185,7 @@ lifecycle details.
 
 ### 4. Encrypted record store (recommended)
 
-The same whole-file approach, but the unlocked vault is held as plain `VaultRecord` values, a field-for-field
+The same whole-file approach, but the unlocked vault is held as plain `VaultItemRecord` values, a field-for-field
 mirror of the persisted schema, in an actor that implements the existing store protocols. No SwiftData is
 involved.
 
@@ -236,7 +236,7 @@ involved.
                       └──────────────────────────────────────────────────────────┘
 
   unlock:  password ──Argon2id(salt)──► K_pw ──HKDF(slot nonce)──► W_i ──open──► data key K
-           K ──open body──► lzfse ──► JSON ──► [VaultRecord] ──► RecordVaultStore (in memory)
+           K ──open body──► lzfse ──► JSON ──► [VaultItemRecord] ──► RecordVaultStore (in memory)
 ```
 
 ### Storage modes
@@ -275,8 +275,10 @@ derivation test every slot. It also means the parameters can't be raised later f
 ### Key derivation
 
 **Argon2id, m = 64 MiB, p = 1, with the number of passes `t` calibrated on the device that creates the file.**
-It comes from the PHC reference implementation, vendored as a C target. The reference is CC0 or Apache-2.0,
-about 3,800 lines, and compiles without warnings.
+It comes from the PHC reference implementation, vendored unmodified as the `CArgon2` target (CC0 or Apache-2.0,
+about 3,800 lines, no warnings). It's compiled with `-O3` in every configuration: with Xcode's default `-Os`, a
+pass took about 1.7 times as long on the M5 Max, which would buy that much less attacker cost in the same half
+second.
 
 **Calibration.** The parameters live in the file header, so they're chosen when the file is created: at the
 first conversion (sub-issue 8), and again after an erase if a password is set anew. On that device:
@@ -378,25 +380,26 @@ records the algorithm, so it can change later.
 
 ```
 { "version": 1,
-  "items": [VaultRecord],   // every PersistedSchemaV3.PersistedVaultItem field + details, raw strings
-  "tags":  [TagRecord],
+  "items": [VaultItemRecord],   // every PersistedSchemaV3.PersistedVaultItem field + details, raw strings
+  "tags":  [VaultTagRecord],
   "vault": { "duressSlots": [UInt8] /* VAULT-23 */, "settings": { /* per-vault settings, VAULT-23 */ } } }
 ```
 
-- **`VaultRecord` mirrors the persisted schema, not the domain model.** Migration is then a field-for-field copy
-  that can't fail, and an item that fails domain decoding in SQLite today survives the migration byte for byte.
+- **`VaultItemRecord` mirrors the persisted schema, not the domain model.** Migration is then a field-for-field
+  copy that can't fail, and an item that fails domain decoding in SQLite today survives the migration byte for
+  byte.
 - **One encoder and one decoder.** `PersistedVaultItemEncoder` and `PersistedVaultItemDecoder` are refactored to
-  produce and consume `VaultRecord`. The SwiftData store copies records to and from `@Model` objects.
+  produce and consume `VaultItemRecord`. The SwiftData store copies records to and from `@Model` objects.
 - **Payload version.** Each version adds optional fields with defaults, and the decoder accepts every older
   version. SwiftData schema migrations don't apply to encrypted vaults.
-- **A schema parity test** fails if the latest `VersionedSchema` has an attribute that `VaultRecord` doesn't
+- **A schema parity test** fails if the latest `VersionedSchema` has an attribute that `VaultItemRecord` doesn't
   carry. Forgetting a field would otherwise silently drop data at migration.
 
 ### Reading and writing while unlocked
 
 `RecordVaultStore` is an actor. It implements `VaultStoreReader`, `VaultStoreWriter`, `VaultStoreReorderable`,
 `VaultStoreExporter`, `VaultStoreImporter`, `VaultStoreDeleter`, `VaultStoreKillphraseDeleter`,
-`VaultStoreHOTPIncrementer` and `VaultTagStore` over `[VaultRecord]` and `[TagRecord]`, keyed by id.
+`VaultStoreHOTPIncrementer` and `VaultTagStore` over `[VaultItemRecord]` and `[VaultTagRecord]`, keyed by id.
 `EncryptedVaultStore` wraps it with the slot file. Each mutation:
 
 1. Computes the new records from the current ones, without publishing them.
@@ -449,7 +452,7 @@ Steps:
 
 1. Derive `K_pw` with a fresh salt. Choose the real vault's slot `r` uniformly at random, never a fixed index,
    and generate `K_r`.
-2. Snapshot the SQLite store to `[VaultRecord]`.
+2. Snapshot the SQLite store to `[VaultItemRecord]`.
 3. Build the file in memory: the header, slot `r` sealed (its `duressSlots` are four random slots ≠ `r`), the
    other slots random.
 4. Write the journal: `migrating(temp: name)`.
@@ -723,7 +726,7 @@ configuration, which the app can't edit. Turning on the password should tell use
   - A **differential test** applies seeded random operation sequences (insert, update, delete, reorder, tag
     changes, import merge and override, killphrase and search passphrase queries) to both engines and compares
     `exportVault`, `retrieve` and `retrieveTags`.
-  - A schema parity test between `VaultRecord` and the latest `VersionedSchema`.
+  - A schema parity test between `VaultItemRecord` and the latest `VersionedSchema`.
 - **Crash safety and fault injection.** An injectable `SlotFileSystem` (write, `F_FULLFSYNC`, rename, remove,
   flock) with two modes:
   - **fail at step k**: the operation throws. Assert nothing changed on disk or in memory.
@@ -785,9 +788,9 @@ These are in implementation order. Each is one PR with its own tests. Keys and o
    - `VaultDataModel` purges items, tags and caches when it locks.
    - No behavior change: the plain store opens at launch as today.
    - **Tests:** forwarding, locked behavior, purge. Prerequisite for VAULT-22.
-2. **VAULT-41: Introduce `VaultRecord` and share the item and tag codecs.** Storage core.
+2. **VAULT-41: Introduce `VaultItemRecord` and share the item and tag codecs.** Storage core.
    - `PersistedVaultItemEncoder` and `PersistedVaultItemDecoder` (and the tag pair) produce and consume
-     `VaultRecord`. The SwiftData store copies records to and from `@Model` objects.
+     `VaultItemRecord`. The SwiftData store copies records to and from `@Model` objects.
    - Adds the schema parity test. No behavior change.
    - **Tests:** round trips, parity, and the existing suite.
 3. **VAULT-42: Add the in-memory `RecordVaultStore`.** Storage core.
