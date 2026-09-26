@@ -15,7 +15,17 @@ struct VaultStoreDifferentialTests {
     /// Compared against the SwiftData store both in memory and on SQLite, as the app stores a vault today.
     @Test(arguments: [VaultStoreEngine.swiftData, .swiftDataSQLite], 0 ..< 40)
     func storesAgreeOnRandomOperations(reference: VaultStoreEngine, seed: UInt64) async throws {
-        var harness = try await DifferentialHarness(reference: reference, seed: seed)
+        var harness = try await DifferentialHarness(reference: reference, candidate: .records, seed: seed)
+        for step in 0 ..< 80 {
+            try await harness.runRandomStep(step)
+        }
+    }
+
+    /// The encrypted store is the record store plus saving, so it runs fewer seeds. Every step it's checked through
+    /// reads the vault back from the file and requires it to match memory.
+    @Test(arguments: 0 ..< 8)
+    func encryptedStoreAgreesOnRandomOperations(seed: UInt64) async throws {
+        var harness = try await DifferentialHarness(reference: .swiftData, candidate: .encrypted, seed: seed)
         for step in 0 ..< 80 {
             try await harness.runRandomStep(step)
         }
@@ -41,12 +51,13 @@ private struct DifferentialHarness {
     private var step = 0
     private var operation = ""
 
-    init(reference: VaultStoreEngine, seed: UInt64) async throws {
+    /// - Parameter candidate: A store built on `RecordVaultStore`, compared against `reference`.
+    init(reference: VaultStoreEngine, candidate: VaultStoreEngine, seed: UInt64) async throws {
         self.seed = seed
         rng = SeededRandomNumberGenerator(seed: seed)
         let sortOrder: VaultStoreSortOrder = seed.isMultiple(of: 2) ? .relativeOrder : .createdDate
         swiftData = try await reference.makeStore(sortOrder: sortOrder)
-        records = try await VaultStoreEngine.records.makeStore(sortOrder: sortOrder)
+        records = try await candidate.makeStore(sortOrder: sortOrder)
         let clock = clock
         let now: @Sendable () -> Date = { clock.get { $0 } }
         await swiftData.updateCurrentDate(now)

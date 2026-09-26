@@ -100,14 +100,14 @@ struct Argon2idKeyDeriverTests {
         }
     }
 
+    /// The reference's known answer for t = 2, m = 256 KiB, p = 1.
     @Test
-    func withKeyBytes_handsOverTheSameKeyAsKey() throws {
-        let sut = Argon2idKeyDeriver<32>(parameters: .fastForTesting)
-        let salt = Data(repeating: 0x01, count: 16)
+    func withKeyBytes_handsOverTheReferenceKnownAnswer() throws {
+        let sut = Argon2idKeyDeriver<32>(parameters: .init(memoryKiB: 256, iterations: 2, parallelism: 1))
 
-        let bytes = try sut.withKeyBytes(password: Data("password".utf8), salt: salt) { Data($0) }
+        let bytes = try sut.withKeyBytes(password: Data("password".utf8), salt: Data("somesalt".utf8)) { Data($0) }
 
-        #expect(try bytes == sut.key(password: Data("password".utf8), salt: salt).data)
+        #expect(bytes == Data(hex: "9dfeb910e80bad0311fee20f9c0e2b12c17987b4cac90c2ef54d5b3021c68bfe"))
     }
 
     @Test

@@ -416,6 +416,27 @@ extension VaultSlotFileTests {
         }
     }
 
+    /// Most single-byte changes make the header fail to parse, so they never reach the associated data. These set
+    /// an Argon2id parameter to another value the format accepts: the file parses, and only the associated data
+    /// stops the slot opening. (The KDF id and the slot count each have one valid value, so any change to them
+    /// fails to parse.)
+    @Test(arguments: HeaderChange.stillValid)
+    func changingAKDFParameterToAnotherValidValueStopsTheSlotOpening(change: HeaderChange) throws {
+        var file = try makeFile()
+        let rootKey = randomKey()
+        try file.createVault(inSlot: 6, rootKey: rootKey, payload: payload("vault"), wrappedAt: date)
+        var bytes = file.bytes
+        bytes.replaceSubrange(change.offset ..< change.offset + change.bytes.count, with: change.bytes)
+
+        let changed = try VaultSlotFile(bytes: bytes)
+
+        #expect(changed.header.kdfParameters != file.header.kdfParameters)
+        #expect(changed.header.salt == file.header.salt)
+        #expect(throws: VaultSlotFileError.slotDidNotOpen) {
+            try changed.openSlot(6, with: rootKey)
+        }
+    }
+
     @Test
     func changingAnyNonceOrKeyBoxByteStopsTheSlotOpening() throws {
         var file = try makeFile()
@@ -517,13 +538,42 @@ extension VaultSlotFileTests {
         }
     }
 
+    @Test(arguments: VaultSlotCompression.allCases)
+    func decompress_stopsPastTheMaximumLength(compression: VaultSlotCompression) throws {
+        let data = Data(String(repeating: "vault ", count: 20000).utf8)
+        let compressed = try compression.compress(data)
+
+        #expect(try compression.decompress(compressed, maximumLength: data.count) == data)
+        #expect(throws: VaultSlotFileError.payloadTooLarge) {
+            try compression.decompress(compressed, maximumLength: data.count - 1)
+        }
+    }
+
+    @Test
+    func createVaultAndSeal_refuseAPayloadLongerThanTheMaximum() throws {
+        var file = try makeFile()
+        let created = try file.createVault(inSlot: 0, rootKey: randomKey(), payload: payload("first"), wrappedAt: date)
+        let before = file.bytes
+        // Zeros compress to almost nothing, so only the length itself is too large.
+        let tooLong = VaultSlotPayload(version: 1, data: Data(count: VaultSlotFile.maximumPayloadLength + 1))
+
+        #expect(throws: VaultSlotFileError.payloadTooLarge) {
+            try file.createVault(inSlot: 1, rootKey: randomKey(), payload: tooLong, wrappedAt: date)
+        }
+        #expect(throws: VaultSlotFileError.payloadTooLarge) {
+            try file.seal(tooLong, in: created)
+        }
+        #expect(file.bytes == before)
+        #expect(VaultSlotFile.maximumPayloadLength == 64 * mebibyte)
+    }
+
     @Test
     func lzfse_refusesAStreamThatIsCutShortOrIsNotLZFSE() throws {
         let compressed = try VaultSlotCompression.lzfse.compress(Data(String(repeating: "vault ", count: 20000).utf8))
 
         for broken in [Data(), compressed.prefix(compressed.count / 2), Data(repeating: 0xAB, count: 256)] {
             #expect(throws: VaultSlotFileError.compressionFailed) {
-                try VaultSlotCompression.lzfse.decompress(broken)
+                try VaultSlotCompression.lzfse.decompress(broken, maximumLength: .max)
             }
         }
     }
@@ -707,9 +757,10 @@ extension VaultSlotFileTests {
         #expect(VaultSlotFile.slotSize(fittingCompressedLength: 0, from: mib) == mib)
         #expect(VaultSlotFile.slotSize(fittingCompressedLength: capacity(mib), from: mib) == mib)
         #expect(VaultSlotFile.slotSize(fittingCompressedLength: capacity(mib) + 1, from: mib) == 2 * mib)
-        #expect(VaultSlotFile.slotSize(fittingCompressedLength: capacity(8 * mib) + 1, from: mib) == 16 * mib)
-        #expect(VaultSlotFile.slotSize(fittingCompressedLength: capacity(64 * mib), from: mib) == 64 * mib)
-        #expect(VaultSlotFile.slotSize(fittingCompressedLength: capacity(64 * mib) + 1, from: mib) == nil)
+        #expect(VaultSlotFile.slotSize(fittingCompressedLength: capacity(2 * mib) + 1, from: mib) == 4 * mib)
+        #expect(VaultSlotFile.slotSize(fittingCompressedLength: capacity(4 * mib), from: mib) == 4 * mib)
+        #expect(VaultSlotFile.slotSize(fittingCompressedLength: capacity(4 * mib) + 1, from: mib) == nil)
+        #expect(VaultSlotFile.maximumSlotSize == 4 * mib)
         #expect(VaultSlotFile.slotSize(fittingCompressedLength: 0, from: 4 * mib) == 4 * mib)
     }
 }
@@ -866,6 +917,7 @@ extension VaultSlotFileTests {
             HeaderChange(name: "slot size 512 KiB", offset: 12, bytes: [0x00, 0x08, 0x00, 0x00]),
             HeaderChange(name: "slot size not a power of two", offset: 12, bytes: [0x00, 0x18, 0x00, 0x00]),
             HeaderChange(name: "slot size 2 MiB, file 1 MiB", offset: 12, bytes: [0x00, 0x20, 0x00, 0x00]),
+            HeaderChange(name: "slot size 8 MiB", offset: 12, bytes: [0x00, 0x80, 0x00, 0x00]),
             HeaderChange(name: "slot size 128 MiB", offset: 12, bytes: [0x08, 0x00, 0x00, 0x00]),
             HeaderChange(name: "KDF id 2", offset: 16, bytes: [0x00, 0x02]),
             HeaderChange(name: "memory 4 KiB", offset: 18, bytes: [0x00, 0x00, 0x00, 0x04]),
@@ -876,6 +928,16 @@ extension VaultSlotFileTests {
             HeaderChange(name: "lanes 9", offset: 26, bytes: [0x09]),
             HeaderChange(name: "gap not zero", offset: 27, bytes: [0x01]),
             HeaderChange(name: "reserved not zero", offset: 127, bytes: [0x01]),
+        ]
+
+        /// Changes from the test file's parameters (64 KiB, 1 pass, 1 lane) to others inside the format's limits.
+        static let stillValid = [
+            HeaderChange(name: "memory 8 KiB", offset: 18, bytes: [0x00, 0x00, 0x00, 0x08]),
+            HeaderChange(name: "memory 128 KiB", offset: 18, bytes: [0x00, 0x00, 0x00, 0x80]),
+            HeaderChange(name: "passes 2", offset: 22, bytes: [0x00, 0x00, 0x00, 0x02]),
+            HeaderChange(name: "passes 32", offset: 22, bytes: [0x00, 0x00, 0x00, 0x20]),
+            HeaderChange(name: "lanes 2", offset: 26, bytes: [0x02]),
+            HeaderChange(name: "lanes 8", offset: 26, bytes: [0x08]),
         ]
     }
 

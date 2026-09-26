@@ -15,11 +15,12 @@ struct VaultRecordState: Equatable, Sendable {
 ///
 /// It implements every vault store protocol with the same behavior as `PersistedLocalVaultStore`, down to the
 /// quirks. `VaultStoreContractTests` run one suite against both stores, and `VaultStoreDifferentialTests` run random
-/// sequences of operations on both and compare every result. This is the store that holds an unlocked encrypted
-/// vault (see `docs/on-device-encryption.md`).
+/// sequences of operations on both and compare every result. It's what holds an unlocked encrypted vault, inside
+/// `EncryptedVaultStore` (see `docs/on-device-encryption.md`).
 ///
-/// Every change builds the new state from the current one and only then replaces it, so a change that fails part
-/// way through leaves the store exactly as it was.
+/// Every change builds the new state from the current one, saves it through `persistence` if there is one, and only
+/// then replaces it (`change(_:)`). So a change that fails part way through, or fails to save, leaves the store
+/// exactly as it was. Changes take turns: one waits for the one before it to be saved.
 actor RecordVaultStore {
     enum Error: Swift.Error, Equatable {
         case itemNotFound
@@ -40,14 +41,26 @@ actor RecordVaultStore {
     /// The current time, for the created and updated dates of writes. Tests set it to make dates predictable.
     var currentDate: @Sendable () -> Date
 
+    /// Where each new state is saved before it's published, or `nil` to keep the vault in memory only.
+    let persistence: (any VaultRecordPersistence)?
+
+    /// How many times a change is worked out again after another writer saved first, before it gives up.
+    static let conflictAttempts = 3
+
+    /// Whether a change is underway, and the changes waiting for their turn.
+    private var isChanging = false
+    private var changesWaiting = [CheckedContinuation<Void, Never>]()
+
     init(
         state: VaultRecordState = .empty,
         sortOrder: VaultStoreSortOrder = .relativeOrder,
         currentDate: @escaping @Sendable () -> Date = { Date() },
+        persistence: (any VaultRecordPersistence)? = nil,
     ) {
         self.state = state
         self.sortOrder = sortOrder
         self.currentDate = currentDate
+        self.persistence = persistence
     }
 }
 
@@ -175,27 +188,28 @@ extension RecordVaultStore: VaultStoreReader {
 extension RecordVaultStore: VaultStoreWriter {
     @discardableResult
     func insert(item: VaultItem.Write) async throws -> Identifier<VaultItem> {
-        var newState = state
-        let record = try PersistedVaultItemEncoder(currentDate: currentDate).encode(item: item)
-        newState.upsert(record)
-        commit(newState)
-        return Identifier(id: record.id)
+        let encoder = PersistedVaultItemEncoder(currentDate: currentDate)
+        return try await change { state in
+            let record = try encoder.encode(item: item)
+            state.upsert(record)
+            return Identifier(id: record.id)
+        }
     }
 
     func update(id: Identifier<VaultItem>, item: VaultItem.Write) async throws {
-        var newState = state
-        guard let existing = newState.items.first(where: { $0.id == id.rawValue }) else {
-            throw Error.itemNotFound
+        let encoder = PersistedVaultItemEncoder(currentDate: currentDate)
+        try await change { state in
+            guard let existing = state.items.first(where: { $0.id == id.rawValue }) else {
+                throw Error.itemNotFound
+            }
+            try state.upsert(encoder.encode(item: item, existing: existing))
         }
-        let record = try PersistedVaultItemEncoder(currentDate: currentDate).encode(item: item, existing: existing)
-        newState.upsert(record)
-        commit(newState)
     }
 
     func delete(id: Identifier<VaultItem>) async throws {
-        var newState = state
-        newState.items.removeAll { $0.id == id.rawValue }
-        commit(newState)
+        try await change { state in
+            state.items.removeAll { $0.id == id.rawValue }
+        }
     }
 }
 
@@ -205,16 +219,16 @@ extension RecordVaultStore: VaultStoreHOTPIncrementer {
     /// Advances the stored counter of an OTP item. A code with no counter (a TOTP code) is left as it is, and the
     /// item's updated date doesn't change, as in the SwiftData store.
     func incrementCounter(id: Identifier<VaultItem>) async throws {
-        var newState = state
-        guard let index = newState.items.firstIndex(where: { $0.id == id.rawValue }) else {
-            throw Error.itemNotFound
+        try await change { state in
+            guard let index = state.items.firstIndex(where: { $0.id == id.rawValue }) else {
+                throw Error.itemNotFound
+            }
+            guard var otp = state.items[index].otpDetails else {
+                throw Error.invalidItem
+            }
+            otp.counter = otp.counter.map { $0 + 1 }
+            state.items[index].otpDetails = otp
         }
-        guard var otp = newState.items[index].otpDetails else {
-            throw Error.invalidItem
-        }
-        otp.counter = otp.counter.map { $0 + 1 }
-        newState.items[index].otpDetails = otp
-        commit(newState)
     }
 }
 
@@ -224,26 +238,26 @@ extension RecordVaultStore: VaultStoreReorderable {
     /// Moves the items to the position, then renumbers every item's relative order from 0 in the resulting order,
     /// as the SwiftData store does.
     func reorder(items: Set<Identifier<VaultItem>>, to position: VaultReorderingPosition) async throws {
-        var ordered = sortedForRetrieval(state.items)
         let movingIDs = items.reducedToSet(\.rawValue)
-        let destination = switch position {
-        case .start:
-            0
-        case let .after(id):
-            if let index = ordered.firstIndex(where: { $0.id == id.rawValue }) {
-                index + 1
-            } else {
-                throw Error.relativeItemNotFound
+        try await change { state in
+            var ordered = sortedForRetrieval(state.items)
+            let destination = switch position {
+            case .start:
+                0
+            case let .after(id):
+                if let index = ordered.firstIndex(where: { $0.id == id.rawValue }) {
+                    index + 1
+                } else {
+                    throw Error.relativeItemNotFound
+                }
+            }
+            ordered.moveSubranges(ordered.indices(where: { movingIDs.contains($0.id) }), to: destination)
+
+            let relativeOrders = Dictionary(uniqueKeysWithValues: ordered.enumerated().map { ($1.id, UInt64($0)) })
+            for index in state.items.indices {
+                state.items[index].relativeOrder = relativeOrders[state.items[index].id] ?? 0
             }
         }
-        ordered.moveSubranges(ordered.indices(where: { movingIDs.contains($0.id) }), to: destination)
-
-        var newState = state
-        let relativeOrders = Dictionary(uniqueKeysWithValues: ordered.enumerated().map { ($1.id, UInt64($0)) })
-        for index in newState.items.indices {
-            newState.items[index].relativeOrder = relativeOrders[newState.items[index].id] ?? 0
-        }
-        commit(newState)
     }
 }
 
@@ -284,30 +298,30 @@ extension RecordVaultStore: VaultTagStoreReader {
 extension RecordVaultStore: VaultTagStoreWriter {
     @discardableResult
     func insertTag(item: VaultItemTag.Write) async throws -> Identifier<VaultItemTag> {
-        var newState = state
-        let record = PersistedVaultTagEncoder().encode(tag: item)
-        newState.upsert(record)
-        commit(newState)
-        return Identifier(id: record.id)
+        try await change { state in
+            let record = PersistedVaultTagEncoder().encode(tag: item)
+            state.upsert(record)
+            return Identifier(id: record.id)
+        }
     }
 
     func updateTag(id: Identifier<VaultItemTag>, item: VaultItemTag.Write) async throws {
-        var newState = state
-        guard let existing = newState.tags.first(where: { $0.id == id.id }) else {
-            throw Error.tagNotFound
+        try await change { state in
+            guard let existing = state.tags.first(where: { $0.id == id.id }) else {
+                throw Error.tagNotFound
+            }
+            state.upsert(PersistedVaultTagEncoder().encode(tag: item, existing: existing))
         }
-        newState.upsert(PersistedVaultTagEncoder().encode(tag: item, existing: existing))
-        commit(newState)
     }
 
     /// Deletes the tag and removes it from every item that carries it. Does nothing if there's no such tag.
     func deleteTag(id: Identifier<VaultItemTag>) async throws {
-        var newState = state
-        newState.tags.removeAll { $0.id == id.id }
-        for index in newState.items.indices {
-            newState.items[index].tagIDs.remove(id.id)
+        try await change { state in
+            state.tags.removeAll { $0.id == id.id }
+            for index in state.items.indices {
+                state.items[index].tagIDs.remove(id.id)
+            }
         }
-        commit(newState)
     }
 }
 
@@ -318,17 +332,17 @@ extension RecordVaultStore: VaultStoreImporter {
     ///
     /// Throws, changing nothing, if a stored item doesn't decode, because its updated date can't be compared.
     func importAndMergeVault(payload: VaultApplicationPayload) async throws {
-        let exported = try await exportVault(userDescription: "")
-        let storedUpdatedDates = exported.items.reduce(into: [Identifier<VaultItem>: Date]()) { dates, item in
-            dates[item.id] = item.metadata.updated
+        let currentDate = currentDate
+        try await change { state in
+            let decoder = PersistedVaultItemDecoder()
+            let storedUpdatedDates = try state.items.reduce(into: [UUID: Date]()) { dates, record in
+                dates[record.id] = try decoder.decode(record: record).metadata.updated
+            }
+            let itemsToImport = payload.items.filter {
+                $0.metadata.updated > storedUpdatedDates[$0.id.rawValue, default: .distantPast]
+            }
+            try state.importing(tags: payload.tags, items: itemsToImport, currentDate: currentDate)
         }
-        let itemsToImport = payload.items.filter {
-            $0.metadata.updated > storedUpdatedDates[$0.id, default: .distantPast]
-        }
-
-        var newState = state
-        try newState.importing(tags: payload.tags, items: itemsToImport, currentDate: currentDate)
-        commit(newState)
     }
 
     /// Replaces the whole vault with the payload.
@@ -336,9 +350,12 @@ extension RecordVaultStore: VaultStoreImporter {
     /// The new vault is built in full before it replaces the old one, so a failure leaves the stored vault as it
     /// was.
     func importAndOverrideVault(payload: VaultApplicationPayload) async throws {
-        var newState = VaultRecordState.empty
-        try newState.importing(tags: payload.tags, items: payload.items, currentDate: currentDate)
-        commit(newState)
+        let currentDate = currentDate
+        try await change { state in
+            var imported = VaultRecordState.empty
+            try imported.importing(tags: payload.tags, items: payload.items, currentDate: currentDate)
+            state = imported
+        }
     }
 }
 
@@ -346,40 +363,86 @@ extension RecordVaultStore: VaultStoreImporter {
 
 extension RecordVaultStore: VaultStoreDeleter {
     func deleteVault() async throws {
-        commit(.empty)
+        try await change { state in
+            state = .empty
+        }
     }
 }
 
 // MARK: - VaultStoreKillphraseDeleter
 
 extension RecordVaultStore: VaultStoreKillphraseDeleter {
+    /// If another writer saved first, the phrase is matched again against what it saved, like any other change.
     @discardableResult
     func deleteItems(matchingKillphrase: String, using matcher: any KillphraseMatcher) async -> Bool {
         guard matchingKillphrase.isNotBlank else { return false }
-
-        // Check every item that carries a killphrase, with no early exit, so the time taken doesn't reveal which
-        // item matched.
-        var idsToDelete = Set<UUID>()
-        for record in state.items {
-            guard let salt = record.killphraseSalt, let digest = record.killphraseDigest else { continue }
-            if matcher.matches(query: matchingKillphrase, salt: salt, digest: digest) {
-                idsToDelete.insert(record.id)
+        do {
+            return try await change { state in
+                // Check every item that carries a killphrase, with no early exit, so the time taken doesn't reveal
+                // which item matched.
+                var idsToDelete = Set<UUID>()
+                for record in state.items {
+                    guard let salt = record.killphraseSalt, let digest = record.killphraseDigest else { continue }
+                    if matcher.matches(query: matchingKillphrase, salt: salt, digest: digest) {
+                        idsToDelete.insert(record.id)
+                    }
+                }
+                state.items.removeAll { idsToDelete.contains($0.id) }
+                return idsToDelete.isNotEmpty
             }
+        } catch {
+            // A failure to save reads as "nothing matched", like every other way this finds nothing (MANIFESTO C2).
+            return false
         }
-        guard idsToDelete.isNotEmpty else { return false }
-
-        var newState = state
-        newState.items.removeAll { idsToDelete.contains($0.id) }
-        commit(newState)
-        return true
     }
 }
 
 // MARK: - Helpers
 
 extension RecordVaultStore {
-    private func commit(_ newState: VaultRecordState) {
-        state = newState
+    /// Works out a change from the current state, saves it, and only then publishes it. A change that leaves the
+    /// state as it was saves nothing.
+    ///
+    /// Changes take turns, so each starts from the state the one before it saved. If another writer (the AutoFill
+    /// extension, say) saved first, this takes what it saved and works the change out again on top of it: every
+    /// change is a function of the state, so neither writer's change is lost. After `conflictAttempts` tries it
+    /// throws `EncryptedVaultStoreError.conflict`, holding what the other writer saved.
+    ///
+    /// Tests also call it, to save states the operations can't produce.
+    @discardableResult
+    func change<Result>(_ makeChange: (inout VaultRecordState) throws -> Result) async throws -> Result {
+        await waitForTurnToChange()
+        defer { finishChange() }
+        for _ in 0 ..< Self.conflictAttempts {
+            var newState = state
+            let result = try makeChange(&newState)
+            guard newState != state else { return result }
+            switch try await persistence?.save(newState) ?? .saved {
+            case .saved:
+                state = newState
+                return result
+            case let .conflict(saved):
+                state = saved
+            }
+        }
+        throw EncryptedVaultStoreError.conflict
+    }
+
+    private func waitForTurnToChange() async {
+        guard isChanging else {
+            isChanging = true
+            return
+        }
+        await withCheckedContinuation { changesWaiting.append($0) }
+    }
+
+    /// Hands the turn to the next change waiting, if there is one.
+    private func finishChange() {
+        if changesWaiting.isEmpty {
+            isChanging = false
+        } else {
+            changesWaiting.removeFirst().resume()
+        }
     }
 }
 

@@ -320,6 +320,12 @@ Calibration adds about 0.3–1.5 s, once, to setting the password. It runs behin
   always unlock.
 - It derives before building any vault UI, and releases the working memory straight after.
 - The unlock service (sub-issue 7) exposes the check. Sub-issue 10 uses it.
+- **Writes need memory too.** A HOTP counter write from the sheet replaces the whole file, and a save holds the
+  file twice at its peak: the new file and the copy read back to verify it. That's about 32 MiB at the minimum
+  size, after the derivation's 64 MiB has been freed, and 128 MiB at the largest (4 MiB slots). So before
+  writing, the extension checks `os_proc_available_memory()` against twice the file's size plus the same margin,
+  and otherwise asks the user to open Vault. Mapping the file instead of reading it wouldn't help: slot writes
+  modify the bytes, and writing to a mapped `Data` crashes.
 
 **Why Argon2id.**
 
@@ -369,7 +375,7 @@ changes it for slots the app can't open, and `i` is 2 bytes. It's `VaultSlotFile
   Changes to the payload don't need one: the body records its payload version and compression (0 = none,
   1 = lzfse).
 - **Header limits.** Before deriving anything, a reader refuses Argon2id parameters outside 8 KiB–1 GiB of memory,
-  1–32 passes and 1–8 lanes, and a slot size that isn't 1 MiB × 2^k up to 64 MiB or doesn't match the file's
+  1–32 passes and 1–8 lanes, and a slot size that isn't 1 MiB × 2^k up to 4 MiB or doesn't match the file's
   length. A changed header can't make unlocking run for hours or ask for gigabytes.
 - **Generations and wrap times.** Every write to a slot increments its generation: creating it, saving and
   rewrapping. A write is refused if the slot's current key box doesn't open at the generation the writer loaded.
@@ -383,9 +389,12 @@ changes it for slots the app can't open, and `i` is 2 bytes. It's `VaultSlotFile
   checks instead.
 - **Padding.** Each vault writes its body to fill its slot, so a slot's contents reveal nothing about its size.
 - **Slot size** starts at 1 MiB, which holds about 3,500 typical items or 1,400 heavy-note items once
-  compressed. It doubles when any vault outgrows it, up to 64 MiB; a payload too large for that is refused. On
-  growth, the vault being written re-seals its own slot at the new size, and every other slot is copied byte for
-  byte with random fill appended. Their key box carries their real body length, so they still open. Slots never
+  compressed. It doubles when any vault outgrows it, up to 4 MiB (about 14,000 typical items, and a 64 MiB file);
+  a payload too large for that is refused, as is one over 64 MiB before compression (opening stops decompressing
+  past that too). The ceiling bounds memory as well as the file (see
+  [Memory and the AutoFill extension](#key-derivation)). On growth, the vault being written re-seals its own slot
+  at the new size, and every other slot is copied byte for byte with random fill appended. Their key box carries
+  their real body length, so they still open. Each re-seals at the full size the next time it saves. Slots never
   shrink, because the app can't know what the others hold.
 - **Total size** is 16 MiB at the minimum (16 slots of 1 MiB). Rewriting it takes 9 ms on the M5 Max. After a
   growth to 2 MiB slots it's 32 MiB.
@@ -397,20 +406,25 @@ changes it for slots the app can't open, and `i` is 2 bytes. It's `VaultSlotFile
 
 ### Payload
 
-JSON, with dates as milliseconds since 1970 and data as base64, compressed with lzfse. The body header
-records the algorithm, so it can change later.
+JSON, with data as base64, compressed with lzfse. The body header records the payload version and the
+compression, so either can change later. It's `EncryptedVaultPayload` (VAULT-45).
 
+- **Dates** use `Date`'s own encoding, seconds since 2001 as a JSON number, which reads back exactly.
+  Milliseconds since 1970, as first planned, rounded about half of all dates, so a vault read back wouldn't equal
+  the one saved, and verifying a save would fail.
 - lzfse decompresses fastest, which is what unlocking waits on: 0.5 ms at 1,000 items and 3 ms at 5,000,
   against 4 ms and 21 ms for zlib.
 - Compress with the Compression framework's streaming API. `NSData`'s one-shot lzfse took 155 ms to compress
   the 4.4 MiB payload at 5,000 items, against 49 ms for zlib.
 
 ```
-{ "version": 1,
-  "items": [VaultItemRecord],   // every PersistedSchemaV3.PersistedVaultItem field + details, raw strings
+{ "items": [VaultItemRecord],   // every PersistedSchemaV3.PersistedVaultItem field + details, raw strings
   "tags":  [VaultTagRecord],
-  "vault": { "duressSlots": [UInt8] /* VAULT-23 */, "settings": { /* per-vault settings, VAULT-23 */ } } }
+  "vault": { "duressSlots": [UInt8] /* VAULT-51 */, "settings": { /* per-vault settings, VAULT-23 */ } } }
 ```
+
+The keys are the records' property names. The version is the body header's, not a JSON field. `vault` arrives
+with VAULT-51.
 
 - **`VaultItemRecord` mirrors the persisted schema, not the domain model.** Migration is then a field-for-field
   copy that can't fail, and an item that fails domain decoding in SQLite today survives the migration byte for
@@ -418,7 +432,8 @@ records the algorithm, so it can change later.
 - **One encoder and one decoder.** `PersistedVaultItemEncoder` and `PersistedVaultItemDecoder` are refactored to
   produce and consume `VaultItemRecord`. The SwiftData store copies records to and from `@Model` objects.
 - **Payload version.** Each version adds optional fields with defaults, and the decoder accepts every older
-  version. SwiftData schema migrations don't apply to encrypted vaults.
+  version. A version newer than the app knows is refused rather than read, because saving it would drop what the
+  newer app added. SwiftData schema migrations don't apply to encrypted vaults.
 - **A schema parity test** fails if the latest `VersionedSchema` has an attribute that `VaultItemRecord` doesn't
   carry. Forgetting a field would otherwise silently drop data at migration.
 
@@ -427,28 +442,42 @@ records the algorithm, so it can change later.
 `RecordVaultStore` is an actor. It implements `VaultStoreReader`, `VaultStoreWriter`, `VaultStoreReorderable`,
 `VaultStoreExporter`, `VaultStoreImporter`, `VaultStoreDeleter`, `VaultStoreKillphraseDeleter`,
 `VaultStoreHOTPIncrementer` and `VaultTagStore` over `[VaultItemRecord]` and `[VaultTagRecord]`, keyed by id.
-`EncryptedVaultStore` wraps it with the slot file. Each mutation:
+`EncryptedVaultStore` wraps it with the slot file. Mutations take turns, and each one:
 
-1. Computes the new records from the current ones, without publishing them.
+1. Computes the new records from the current ones, without publishing them. If nothing changed, it stops there.
 2. Takes `flock(LOCK_EX)` on `vault-slots.lock` and reads the current file. If our slot's generation isn't the
-   one we loaded, another process has written it: it stops with a conflict and reloads.
+   one we loaded, another process has written it: it stops with a conflict and reloads, then works the mutation
+   out again on top of what the other process saved and goes back to this step. Every mutation is a function of
+   the records, so neither process's change is lost; a killphrase is matched again. After three conflicts in a
+   row it throws `EncryptedVaultStoreError.conflict`. If the slot doesn't open with our wrap key any more (it was
+   rewrapped or replaced), the store can't save again until the vault is unlocked again.
 3. Encodes, compresses and seals the body with generation + 1, reseals the key box, and builds the new file
    bytes with the other slots copied unchanged.
-4. Writes a temp file, `.vault-slots.tmp-<random>`, and calls `F_FULLFSYNC`.
-5. **Verifies** the temp file: opens our slot's key box and body from it, decodes, and compares with the new
-   records.
-6. Renames the temp file over `vault-slots.v1`, then `fsync`s the directory.
-7. Publishes the new records in memory and releases the lock.
+4. Removes temp files a writer that crashed left behind. Each is an old copy of the whole file, which could hold
+   items deleted since, under the same keys (C6). If one can't be removed, the save fails.
+5. Writes a temp file, `.vault-slots.tmp-<random>`, and calls `F_FULLFSYNC`.
+6. **Verifies** the temp file: reads it back, requires it to match byte for byte, opens our slot's key box and
+   body from it, decodes, and compares with the new records. The read most likely comes from the page cache, so
+   this proves the sealing and encoding round-trip, not what reached storage; `F_FULLFSYNC` is what covers that.
+7. Renames the temp file over `vault-slots.v1`, then flushes the directory with `F_FULLFSYNC` (on Darwin, plain
+   `fsync` doesn't flush the drive's cache).
+8. Publishes the new records in memory and releases the lock.
 
-If any step fails, the temp file is removed, the in-memory records stay as they were, and the error is thrown.
-`deleteItems(matchingKillphrase:using:)` returns `false` instead, exactly as it does for "no match" today, so C2
-holds. Search, killphrase matching and search passphrase matching are all in memory.
+If any step up to the rename fails, the temp file is removed, the in-memory records stay as they were, and the
+error is thrown. `deleteItems(matchingKillphrase:using:)` returns `false` instead, exactly as it does for
+"no match" today, so C2 holds. Search, killphrase matching and search passphrase matching are all in memory.
+
+- **The rename is the commit point.** Once it succeeds the file holds the change, so a failure to `fsync` the
+  directory afterwards doesn't undo it, and the change is published.
+- **Waiting for the lock** polls with `LOCK_NB` and `Task.sleep`, so it doesn't block a thread, and gives up
+  after 10 s, so a stuck holder can't hang the store, which would also stop the vault locking.
+- **The file I/O is `SlotFileSystem`**, which tests replace to fail or crash at every step.
 
 ### Crash safety
 
 | Crash or failure during | State afterwards | Recovery |
 | --- | --- | --- |
-| A save, before the rename | Old file intact; maybe a stray temp file | Temp files are deleted at launch. The change was never reported as saved. |
+| A save, before the rename | Old file intact; maybe a stray temp file | The next save, by any process, or the next unlock deletes the temp file. The change was never reported as saved. |
 | A save, after the rename | New file, already verified | None needed |
 | Disk full, or verification fails | Old file intact | Error shown; nothing changes in memory |
 | A password change | Old or new file, never a mix | Either the old or the new password works |
@@ -553,10 +582,15 @@ deadline. What differs afterwards is decoding time, which is proportional to wha
 
 **Zeroing, honestly:**
 
-- Keys live in `SymmetricKey` and are zeroed.
-- Swift `String` and `Data` copies of decoded items can't be reliably zeroed. They're freed and eventually
-  reused. Process memory isn't readable by other apps, but a forensic tool with code execution on an unlocked,
-  exploited device can read a suspended process.
+- Keys live in `SymmetricKey` and are zeroed. `K_pw` goes straight from the derivation's wiped buffer into one.
+- Buffers the storage code owns are `memset_s`'d when it's done with them: the key box and body plaintexts, the
+  compressed payload, the compression scratch buffer, the JSON encoded for a save, and the JSON decompressed to
+  read a vault, including when a save verifies. The compression output is sized up front, so it never leaves
+  copies behind by reallocating.
+- The records decoded from the JSON, which are Swift `String`s and `Data`, can't be reliably zeroed, and nor can
+  the JSON coders' own buffers, the compression stream's internal state, or CryptoKit's. They're freed and eventually reused. Process memory isn't readable by
+  other apps, but a forensic tool with code execution on an unlocked, exploited device can read a suspended
+  process.
 - The password comes from a `SecureField`. The binding is cleared after use, but the `String` isn't zeroed.
 
 **Store session.** `VaultRoot.vaultStore` is a `static let PersistedLocalVaultStore` today. It becomes a
@@ -713,13 +747,18 @@ configuration, which the app can't edit. Turning on the password should tell use
    app can't open can't be re-randomized.
 
    Mitigations:
-   - Use the duress vault now and then.
+   - Use the duress vault now and then. Every save also re-seals it at the full slot size, which covers limit 4.
    - An opt-in "exclude the vault from device backups". It isn't offered for now, and it trades against
      restoring from a device backup.
 3. **Nested duress creation.** The real vault is guaranteed untouched for eleven levels at N = 16, L = 10. Beyond
    that it isn't; see [Duress vault](#duress-vault-vault-23).
 4. **Slot size.** The slot size bucket reveals that some vault once exceeded the previous bucket. It starts at
    1 MiB, about 3,500 items, so this only applies to very large vaults.
+
+   Growth also leaves a mark in the vaults it didn't write. Their key boxes keep their real body length, shorter
+   than the slot, until each saves again. So if a vault opened under coercion has a body length below
+   slot size − 116 bytes, it can't be the one that grew the file, which shows another vault did. Saving in the
+   duress vault now and then (limit 2) removes the mark.
 5. **Fixed KDF parameters.** They're calibrated once, on the device that creates the file.
    - Raising them later needs a new format version whose unlock derives under both parameter sets (twice the
      time) during a transition, or an erase and re-create.

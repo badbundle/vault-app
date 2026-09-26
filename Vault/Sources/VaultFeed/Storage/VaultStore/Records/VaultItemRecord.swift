@@ -11,7 +11,10 @@ import Foundation
 /// decode: an unknown algorithm, no detail at all, or more than one. Copying records between stores can never
 /// drop or change an item, even one that only shows up as a decoding error. `VaultRecordSchemaParityTests` fail
 /// if the schema gains a field the record doesn't carry.
-struct VaultItemRecord: Equatable, Sendable {
+///
+/// An encrypted vault stores its records as JSON (`EncryptedVaultPayload`), keyed by these property names, so
+/// renaming a property changes the file format.
+struct VaultItemRecord: Codable, Equatable, Sendable {
     var id: UUID
     var relativeOrder: UInt64
     var createdDate: Date
@@ -43,7 +46,7 @@ struct VaultItemRecord: Equatable, Sendable {
 
 extension VaultItemRecord {
     /// Mirrors `PersistedNoteDetails`.
-    struct NoteDetails: Equatable, Sendable {
+    struct NoteDetails: Codable, Equatable, Sendable {
         var title: String
         var contents: String
         /// One of `VaultEncodingConstants.TextFormat`.
@@ -51,7 +54,7 @@ extension VaultItemRecord {
     }
 
     /// Mirrors `PersistedOTPDetails`.
-    struct OTPDetails: Equatable, Sendable {
+    struct OTPDetails: Codable, Equatable, Sendable {
         var accountName: String
         var issuer: String
         /// One of `VaultEncodingConstants.OTPAuthAlgorithm`.
@@ -69,7 +72,7 @@ extension VaultItemRecord {
     }
 
     /// Mirrors `PersistedEncryptedItemDetails`.
-    struct EncryptedItemDetails: Equatable, Sendable {
+    struct EncryptedItemDetails: Codable, Equatable, Sendable {
         var version: String
         var title: String
         var data: Data

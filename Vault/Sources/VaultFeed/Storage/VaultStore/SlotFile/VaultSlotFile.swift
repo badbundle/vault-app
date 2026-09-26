@@ -24,9 +24,18 @@ public struct VaultSlotFile: Equatable, Sendable {
     public static let slotCount = 16
     /// The slot size of a new file. It holds about 3,500 typical items once compressed.
     public static let minimumSlotSize = 1 << 20
-    /// The largest slot size growth goes to, 64 MiB, which makes a 1 GiB file. A payload that doesn't fit is
-    /// refused.
-    public static let maximumSlotSize = 1 << 26
+    /// The largest slot size growth goes to: 4 MiB, which holds about 14,000 typical items and makes a 64 MiB file.
+    /// A payload that doesn't fit is refused.
+    ///
+    /// It bounds memory as well as the file: a save holds the whole file twice at its peak, the new file and the copy
+    /// read back to verify it, which is 128 MiB at this size.
+    public static let maximumSlotSize = 1 << 22
+    /// The largest payload a slot holds before compression: 64 MiB, 16 times the largest slot, and far more than
+    /// the largest slot holds of any real vault (about 12 MiB of JSON).
+    ///
+    /// Sealing refuses anything larger, and opening stops decompressing past it. The body is authenticated, so only
+    /// this app could have written such a payload; the limit is a second line of defence against a bug.
+    public static let maximumPayloadLength = 16 * maximumSlotSize
 
     /// The indices of the slots.
     public static var slotIndices: Range<Int> {
@@ -147,8 +156,9 @@ extension VaultSlotFile {
 
     /// Opens and decompresses the payload of a slot opened in this file.
     ///
-    /// - Throws: `VaultSlotFileError.bodyDidNotOpen` if the body is damaged or has been tampered with, or
-    ///   `.unsupportedCompression(_:)` if it was compressed in a way this app doesn't know.
+    /// - Throws: `VaultSlotFileError.bodyDidNotOpen` if the body is damaged or has been tampered with,
+    ///   `.unsupportedCompression(_:)` if it was compressed in a way this app doesn't know, or `.payloadTooLarge` if
+    ///   it decompresses past `maximumPayloadLength`.
     public func openPayload(of slot: OpenedSlot) throws -> VaultSlotPayload {
         let bodyStart = slotRange(slot.index).lowerBound + Self.bodyOffset
         guard slot.bodyLength <= header.slotSize - Self.bodyOffset else {
@@ -181,7 +191,7 @@ extension VaultSlotFile {
         do {
             // Scoped so the slice is gone before the plaintext is wiped: a live slice would make the wipe copy.
             let compressed = plaintext.dropFirst(Self.bodyHeaderLength).prefix(Int(compressedLength))
-            data = try compression.decompress(compressed)
+            data = try compression.decompress(compressed, maximumLength: Self.maximumPayloadLength)
         }
         return VaultSlotPayload(version: version, data: data)
     }
@@ -227,7 +237,8 @@ extension VaultSlotFile {
     /// doesn't fit, every slot grows first, as for `seal(_:in:compression:)`.
     ///
     /// - Parameter wrappedAt: Now. It breaks ties when a password opens more than one slot.
-    /// - Throws: `VaultSlotFileError.payloadTooLarge` if the payload doesn't fit the largest slot size. The file is
+    /// - Throws: `VaultSlotFileError.payloadTooLarge` if the payload is longer than `maximumPayloadLength`, or
+    ///   doesn't fit the largest slot size once compressed. The file is
     ///   unchanged when it throws.
     /// - Returns: The slot as written.
     @discardableResult
@@ -239,7 +250,9 @@ extension VaultSlotFile {
         compression: VaultSlotCompression = .lzfse,
     ) throws -> OpenedSlot {
         precondition(Self.slotIndices.contains(index), "Slot index out of range")
-        let compressed = try compression.compress(payload.data)
+        guard payload.data.count <= Self.maximumPayloadLength else { throw VaultSlotFileError.payloadTooLarge }
+        var compressed = try compression.compress(payload.data)
+        defer { SlotRandom.wipe(&compressed) }
         let slotSize = try slotSize(fittingCompressedLength: compressed.count)
         let slotNonce = SlotRandom.bytes(count: Self.slotNonceLength)
         let slot = OpenedSlot(
@@ -265,7 +278,8 @@ extension VaultSlotFile {
     /// copied byte for byte with random fill appended, so it still opens.
     ///
     /// - Throws: `VaultSlotFileError.slotChanged` if the slot has been written since `slot` was opened, or
-    ///   `.payloadTooLarge` if the payload doesn't fit the largest slot size. The file is unchanged when it throws.
+    ///   `.payloadTooLarge` if the payload is longer than `maximumPayloadLength`, or doesn't fit the largest slot
+    ///   size once compressed. The file is unchanged when it throws.
     /// - Returns: The slot as written.
     @discardableResult
     public mutating func seal(
@@ -274,7 +288,9 @@ extension VaultSlotFile {
         compression: VaultSlotCompression = .lzfse,
     ) throws -> OpenedSlot {
         let current = try requireUnchanged(slot)
-        let compressed = try compression.compress(payload.data)
+        guard payload.data.count <= Self.maximumPayloadLength else { throw VaultSlotFileError.payloadTooLarge }
+        var compressed = try compression.compress(payload.data)
+        defer { SlotRandom.wipe(&compressed) }
         let slotSize = try slotSize(fittingCompressedLength: compressed.count)
         let sealed = OpenedSlot(
             index: current.index,
