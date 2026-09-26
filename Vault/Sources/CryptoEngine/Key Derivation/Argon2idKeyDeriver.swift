@@ -33,8 +33,20 @@ public struct Argon2idKeyDeriver<let bytes: Int>: KeyDeriver {
     }
 
     public func key(password: Data, salt: Data) throws -> KeyData<bytes> {
-        let output = try Argon2id.hash(password: password, salt: salt, parameters: parameters, length: bytes)
-        return try KeyData(data: output)
+        try KeyData(data: withKeyBytes(password: password, salt: salt) { Data($0) })
+    }
+
+    /// Derives the key and hands its bytes to `body`, then wipes them.
+    ///
+    /// `key(password:salt:)` returns the key in `Data`, which can't be reliably wiped. Use this instead to move the
+    /// key straight into storage that is wiped, such as CryptoKit's `SymmetricKey`. The bytes are only valid inside
+    /// `body`.
+    public func withKeyBytes<Result>(
+        password: Data,
+        salt: Data,
+        _ body: (UnsafeRawBufferPointer) throws -> Result,
+    ) throws -> Result {
+        try Argon2id.withHash(password: password, salt: salt, parameters: parameters, length: bytes, body: body)
     }
 
     public var uniqueAlgorithmIdentifier: String {
@@ -90,10 +102,34 @@ enum Argon2id {
         allocate: AllocateMemory? = nil,
         free: FreeMemory? = nil,
     ) throws -> Data {
+        try withHash(
+            password: password,
+            salt: salt,
+            secret: secret,
+            associatedData: associatedData,
+            parameters: parameters,
+            length: length,
+            allocate: allocate,
+            free: free,
+        ) { Data($0) }
+    }
+
+    /// Derives `length` bytes from the password and hands them to `body`. They're wiped once `body` returns.
+    static func withHash<Result>(
+        password: Data,
+        salt: Data,
+        secret: Data = Data(),
+        associatedData: Data = Data(),
+        parameters: Argon2idParameters,
+        length: Int,
+        allocate: AllocateMemory? = nil,
+        free: FreeMemory? = nil,
+        body: (UnsafeRawBufferPointer) throws -> Result,
+    ) throws -> Result {
         var passwordCopy = [UInt8](password)
         defer { wipe(&passwordCopy) }
         return try passwordCopy.withUnsafeMutableBytes { passwordBuffer in
-            try hash(
+            try withHash(
                 passwordBuffer: passwordBuffer,
                 salt: salt,
                 secret: secret,
@@ -102,13 +138,14 @@ enum Argon2id {
                 length: length,
                 allocate: allocate,
                 free: free,
+                body: body,
             )
         }
     }
 
     /// Derives `length` bytes from the password in `passwordBuffer`, which the reference wipes as soon as it's
-    /// been absorbed.
-    static func hash(
+    /// been absorbed, and hands them to `body`. They're wiped once `body` returns.
+    static func withHash<Result>(
         passwordBuffer: UnsafeMutableRawBufferPointer,
         salt: Data,
         secret: Data = Data(),
@@ -117,7 +154,8 @@ enum Argon2id {
         length: Int,
         allocate: AllocateMemory? = nil,
         free: FreeMemory? = nil,
-    ) throws -> Data {
+        body: (UnsafeRawBufferPointer) throws -> Result,
+    ) throws -> Result {
         var salt = [UInt8](salt)
         var secret = [UInt8](secret)
         var associatedData = [UInt8](associatedData)
@@ -159,7 +197,7 @@ enum Argon2id {
         guard result == ARGON2_OK.rawValue else {
             throw Argon2idError(code: result)
         }
-        return Data(output)
+        return try output.withUnsafeBytes(body)
     }
 
     /// Overwrites the bytes with zeros in a way the compiler can't optimize away.

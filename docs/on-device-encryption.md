@@ -356,16 +356,33 @@ Slot i (slotSize bytes; every byte looks random)
   …        random fill up to slotSize (only after another slot grew the file)
 ```
 
+Integers are big-endian. In the AAD, `header` is the 128 header bytes with the slot size zeroed, because growth
+changes it for slots the app can't open, and `i` is 2 bytes. It's `VaultSlotFile` in `VaultFeed` (VAULT-44).
+
+- **Versioning.** A reader checks the magic, then the version, and refuses any version it doesn't know before
+  reading anything else, so a newer layout is never misread. A change to the header or slot layout gets a new
+  version, and can use the reserved bytes. Version 1 requires them, and the gap after the lanes, to be zero.
+  Changes to the payload don't need one: the body records its payload version and compression (0 = none,
+  1 = lzfse).
+- **Header limits.** Before deriving anything, a reader refuses Argon2id parameters outside 8 KiB–1 GiB of memory,
+  1–32 passes and 1–8 lanes, and a slot size that isn't 1 MiB × 2^k up to 64 MiB or doesn't match the file's
+  length. A changed header can't make unlocking run for hours or ask for gigabytes.
+- **Generations and wrap times.** Every write to a slot increments its generation: creating it, saving and
+  rewrapping. A write is refused if the slot's current key box doesn't open at the generation the writer loaded.
+  The wrapped-at time is set when a vault is created or rewrapped, and saves keep it.
+- **Rewrapping** (password change, or switching between the password and the device key) reseals the key box
+  only. The slot nonce and body stay as they are.
 - **Unused slots** are random bytes. AES-GCM output is indistinguishable from random, so an empty slot, a real
   vault and a duress vault look the same.
 - **The header is authenticated** as AAD, so tampering with the KDF parameters or the salt makes every slot fail
-  closed.
+  closed. The slot size is left out because growth changes it. A changed slot size fails the length and layout
+  checks instead.
 - **Padding.** Each vault writes its body to fill its slot, so a slot's contents reveal nothing about its size.
 - **Slot size** starts at 1 MiB, which holds about 3,500 typical items or 1,400 heavy-note items once
-  compressed. It doubles when any vault outgrows it. On growth, the vault being written re-seals its own slot at
-  the new size, and every other slot is copied byte for byte with random fill appended. Their key box carries
-  their real body length, so they still open. Slots never shrink, because the app can't know what the others
-  hold.
+  compressed. It doubles when any vault outgrows it, up to 64 MiB; a payload too large for that is refused. On
+  growth, the vault being written re-seals its own slot at the new size, and every other slot is copied byte for
+  byte with random fill appended. Their key box carries their real body length, so they still open. Slots never
+  shrink, because the app can't know what the others hold.
 - **Total size** is 16 MiB at the minimum (16 slots of 1 MiB). Rewriting it takes 9 ms on the M5 Max. After a
   growth to 2 MiB slots it's 32 MiB.
 - **File protection** is `.complete` in password mode: only the foreground app and the AutoFill sheet read it,
