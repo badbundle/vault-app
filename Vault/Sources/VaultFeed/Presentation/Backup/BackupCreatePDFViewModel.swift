@@ -66,11 +66,29 @@ public final class BackupCreatePDFViewModel {
     }
 
     /// Exported PDF document that has been generated.
+    ///
+    /// It only exists as a temporary file until the user saves it somewhere, so it isn't a backup yet.
     public struct GeneratedPDF: Equatable, Hashable {
         public let document: PDFDocument
         public let diskURL: URL
         public let size: Size
         public let dataHash: Digest<VaultApplicationPayload>.SHA256
+        /// When the vault was exported into this PDF.
+        public let createdDate: Date
+
+        public init(
+            document: PDFDocument,
+            diskURL: URL,
+            size: Size,
+            dataHash: Digest<VaultApplicationPayload>.SHA256,
+            createdDate: Date,
+        ) {
+            self.document = document
+            self.diskURL = diskURL
+            self.size = size
+            self.dataHash = dataHash
+            self.createdDate = createdDate
+        }
 
         public static func == (lhs: Self, rhs: Self) -> Bool {
             lhs.dataHash == rhs.dataHash
@@ -96,7 +114,6 @@ public final class BackupCreatePDFViewModel {
     private let backupPassword: DerivedEncryptionKey
     private let dataModel: VaultDataModel
     private let clock: any EpochClock
-    private let backupEventLogger: any BackupEventLogger
     private let defaults: Defaults
     private let fileManager: FileManager
 
@@ -104,14 +121,12 @@ public final class BackupCreatePDFViewModel {
         backupPassword: DerivedEncryptionKey,
         dataModel: VaultDataModel,
         clock: any EpochClock,
-        backupEventLogger: any BackupEventLogger,
         defaults: Defaults,
         fileManager: FileManager,
     ) {
         self.backupPassword = backupPassword
         self.dataModel = dataModel
         self.clock = clock
-        self.backupEventLogger = backupEventLogger
         self.defaults = defaults
         self.fileManager = fileManager
 
@@ -135,10 +150,17 @@ public final class BackupCreatePDFViewModel {
             let tempURL = fileManager.temporaryDirectory.appending(path: filename)
             document.write(to: tempURL)
             let hash = try DigestHasher().sha256(value: payload)
-            generatedPDFSubject.send(.init(document: document, diskURL: tempURL, size: size, dataHash: hash))
+            generatedPDFSubject.send(.init(
+                document: document,
+                diskURL: tempURL,
+                size: size,
+                dataHash: hash,
+                createdDate: currentDate,
+            ))
 
+            // The backup event is logged once the PDF is saved (see `BackupGeneratedPDFViewModel`), not
+            // here: a PDF that's never saved isn't a backup.
             commitLatestSettings()
-            backupEventLogger.exportedToPDF(date: currentDate, hash: hash)
             state = .success
         } catch {
             state = .error(.init(
