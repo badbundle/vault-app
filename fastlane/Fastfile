@@ -28,7 +28,8 @@ private_lane :next_release_build_number do
     initial_build_number: current_project_build
   ).to_i
 
-  ([current_project_build, latest_uploaded_build].max + 1).to_s
+  # A project bumped ahead of TestFlight releases with its own number; otherwise the build after the latest upload.
+  [current_project_build, latest_uploaded_build + 1].max.to_s
 rescue => error
   UI.user_error!("Unable to determine the next App Store build number: #{error.message}")
 end
