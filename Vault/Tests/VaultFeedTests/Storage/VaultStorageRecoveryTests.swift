@@ -280,6 +280,88 @@ struct VaultStorageRecoveryTests {
         }
     }
 
+    /// The app stopped after turning the password off, before filling QuickType again and reloading the widgets.
+    @Test
+    func finishSyncingSystemSurfaces_fillsThemOnceThenClearsTheJournal() async throws {
+        try await withTemporaryDirectory { directory in
+            try Self.write(
+                VaultStorageState(mode: .deviceKey, transition: .syncingSystemSurfaces, unlockDeadline: .seconds(1)),
+                in: directory,
+            )
+            let fills = SharedMutex(0)
+            let recovery = VaultStorageRecovery(directory: directory)
+
+            try await recovery.finishSyncingSystemSurfaces { fills.modify { $0 += 1 } }
+            try await recovery.finishSyncingSystemSurfaces { fills.modify { $0 += 1 } }
+
+            #expect(fills.value == 1)
+            #expect(try Self.read(in: directory) == VaultStorageState(mode: .deviceKey, unlockDeadline: .seconds(1)))
+        }
+    }
+
+    @Test
+    func finishSyncingSystemSurfaces_fillFails_keepsTheJournal() async throws {
+        try await withTemporaryDirectory { directory in
+            struct FillFailure: Error {}
+            let state = VaultStorageState(
+                mode: .deviceKey,
+                transition: .syncingSystemSurfaces,
+                unlockDeadline: .seconds(1),
+            )
+            try Self.write(state, in: directory)
+            let recovery = VaultStorageRecovery(directory: directory)
+
+            await #expect(throws: FillFailure.self) {
+                try await recovery.finishSyncingSystemSurfaces { throw FillFailure() }
+            }
+            #expect(try Self.read(in: directory) == state)
+        }
+    }
+
+    /// Each finishes only its own step: QuickType is never filled while the password is on, or left filled when
+    /// it's off.
+    @Test(arguments: [
+        VaultStorageState(mode: .password, transition: .clearingSystemSurfaces, unlockDeadline: .seconds(1)),
+        VaultStorageState(mode: .deviceKey, transition: .syncingSystemSurfaces, unlockDeadline: .seconds(1)),
+        VaultStorageState(mode: .password, transition: .turningOn, unlockDeadline: .seconds(1)),
+        VaultStorageState(mode: .deviceKey, unlockDeadline: .seconds(1)),
+    ])
+    func finishSystemSurfaces_runsOnlyForItsOwnStep(state: VaultStorageState) async throws {
+        try await withTemporaryDirectory { directory in
+            try Self.write(state, in: directory)
+            let ran = SharedMutex([String]())
+            let recovery = VaultStorageRecovery(directory: directory)
+
+            try await recovery.finishSyncingSystemSurfaces { ran.modify { $0.append("fill") } }
+            try await recovery.finishClearingSystemSurfaces { ran.modify { $0.append("empty") } }
+
+            switch state.transition {
+            case .syncingSystemSurfaces?: #expect(ran.value == ["fill"])
+            case .clearingSystemSurfaces?: #expect(ran.value == ["empty"])
+            default:
+                #expect(ran.value.isEmpty)
+                #expect(try Self.read(in: directory) == state)
+            }
+        }
+    }
+
+    /// Launch leaves filling QuickType to the app, which opens the vault with the device key to do it.
+    @Test
+    func recover_deviceKeyMode_syncingSystemSurfaces_leavesTheJournal() throws {
+        let deviceKey = SymmetricKey(size: .bits256)
+        let sut = try TurningHarness(
+            slotKey: .device(deviceKey),
+            deviceKey: deviceKey,
+            transition: .syncingSystemSurfaces,
+            mode: .deviceKey,
+        )
+        let journal = try sut.stateFile.read()
+
+        #expect(try sut.recovery.recoverAtLaunch() == .deviceKey)
+
+        #expect(try sut.stateFile.read() == journal)
+    }
+
     @Test
     func recover_encrypted_touchesNothingButStrayStateTempFiles() async throws {
         try await withTemporaryDirectory { directory in
@@ -299,7 +381,8 @@ struct VaultStorageRecoveryTests {
 
 extension VaultStorageRecoveryTests {
     /// The rekey is one rename, so the slot is wrapped with either the device key or the password. Whether the
-    /// device key opens it says which, whichever way the change was going.
+    /// device key opens it says which, whichever way the change was going. The journal is left with the system
+    /// surfaces to catch up with the mode it settled in.
     @Test(arguments: [VaultStorageState.Transition.turningOff, .turningOn])
     func recover_whileTurningThePasswordOffOrOn_withTheDeviceKeyOpeningTheVault_isDeviceKey(
         transition: VaultStorageState.Transition,
@@ -309,7 +392,11 @@ extension VaultStorageRecoveryTests {
 
         #expect(try sut.recovery.recoverAtLaunch() == .deviceKey)
 
-        #expect(try sut.stateFile.read() == VaultStorageState(mode: .deviceKey, unlockDeadline: .seconds(1)))
+        #expect(try sut.stateFile.read() == VaultStorageState(
+            mode: .deviceKey,
+            transition: .syncingSystemSurfaces,
+            unlockDeadline: .seconds(1),
+        ))
         #expect(sut.deviceKeyStore.key != nil)
     }
 
@@ -323,7 +410,11 @@ extension VaultStorageRecoveryTests {
 
         #expect(try sut.recovery.recoverAtLaunch() == .password)
 
-        #expect(try sut.stateFile.read() == VaultStorageState(mode: .password, unlockDeadline: .seconds(1)))
+        #expect(try sut.stateFile.read() == VaultStorageState(
+            mode: .password,
+            transition: .clearingSystemSurfaces,
+            unlockDeadline: .seconds(1),
+        ))
     }
 
     /// The password is back on, so the device key opens nothing now, and goes.
@@ -339,7 +430,11 @@ extension VaultStorageRecoveryTests {
 
         #expect(try sut.recovery.recoverAtLaunch() == .password)
 
-        #expect(try sut.stateFile.read() == VaultStorageState(mode: .password, unlockDeadline: .seconds(1)))
+        #expect(try sut.stateFile.read() == VaultStorageState(
+            mode: .password,
+            transition: .clearingSystemSurfaces,
+            unlockDeadline: .seconds(1),
+        ))
         #expect(sut.deviceKeyStore.key == nil)
     }
 
@@ -388,7 +483,11 @@ extension VaultStorageRecoveryTests {
 
         sut.fileSystem.isDeviceLocked = false
         #expect(try await sut.recovery.settleTurningThePasswordOffOrOn() == .password)
-        #expect(try sut.stateFile.read() == VaultStorageState(mode: .password, unlockDeadline: .seconds(1)))
+        #expect(try sut.stateFile.read() == VaultStorageState(
+            mode: .password,
+            transition: .clearingSystemSurfaces,
+            unlockDeadline: .seconds(1),
+        ))
         #expect(sut.deviceKeyStore.key == nil)
     }
 
@@ -402,7 +501,11 @@ extension VaultStorageRecoveryTests {
 
         #expect(try sut.recovery.recoverAtLaunch() == .deviceKey)
 
-        #expect(try sut.stateFile.read() == VaultStorageState(mode: .deviceKey, unlockDeadline: .seconds(1)))
+        #expect(try sut.stateFile.read() == VaultStorageState(
+            mode: .deviceKey,
+            transition: .syncingSystemSurfaces,
+            unlockDeadline: .seconds(1),
+        ))
     }
 
     /// A device key left over with the password on, from a turn off that failed or a deletion that did, goes once
@@ -473,7 +576,7 @@ extension VaultStorageRecoveryTests {
 
         held.release()
         #expect(try await recovering.value == .deviceKey)
-        #expect(try sut.stateFile.read().transition == nil)
+        #expect(try sut.stateFile.read().transition == .syncingSystemSurfaces)
     }
 
     @Test

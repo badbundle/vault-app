@@ -12,18 +12,20 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
 
     override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
         // Decided for every request, not once for the process: the app can
-        // turn encryption on while the extension's process lives on. With the
-        // vault encrypted, the sheet unlocks it with the App Lock Password
-        // after device authentication, never device authentication alone
-        // (MANIFESTO C4).
-        let storage: AutofillVaultStorage = switch VaultRoot.autofillVaultMode {
-        case .plain: .plain
-        case .encrypted: .encrypted(VaultRoot.autofillPasswordService())
-        case .unavailable: .unavailable
+        // change how the vault's stored while the extension's process lives
+        // on. With the password on, the sheet unlocks the vault with it after
+        // device authentication, never device authentication alone
+        // (MANIFESTO C4). With it off, the device key opens the vault, and
+        // device authentication is all it takes, as for a plain vault.
+        let storage = AutofillVaultStorage(VaultRoot.vaultAccessMode)
+        let vaultService: AutofillVaultService? = switch storage {
+        case .deviceKey, .password: VaultRoot.autofillVaultService()
+        case .plain, .unavailable: VaultRoot.existingAutofillVaultService
         }
         vaultAutofillViewModel = VaultAutofillViewModel(
             localSettings: VaultRoot.localSettings,
             storage: storage,
+            vaultService: vaultService,
             appLockSettings: VaultRoot.appLockSettingsStore,
             authenticationService: VaultRoot.deviceAuthenticationService,
             purgeVaultContents: {
@@ -132,12 +134,13 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
     @MainActor
     private func provideOTPCredential(for request: any ASCredentialRequest) async {
         let identity = request.credentialIdentity as? ASOneTimeCodeCredentialIdentity
+        let accessMode = VaultRoot.vaultAccessMode
         let resolver = AutofillOTPCredentialResolver(
-            retrieveItems: { try await VaultRoot.vaultStore.retrieve(query: .init()) },
+            retrieveItems: { try await Self.retrieveItemsForQuickType(accessMode) },
             copyActionHandler: VaultRoot.vaultItemCopyHandler,
             clock: VaultRoot.clock,
             isAppLockEnabled: VaultRoot.appLockSettingsStore.isEnabled,
-            isVaultPlain: VaultRoot.isVaultPlain,
+            accessMode: accessMode,
         )
 
         switch await resolver.resolve(recordIdentifier: identity?.recordIdentifier) {
@@ -150,6 +153,28 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
             extensionContext.cancelRequest(withError: ASExtensionError(.credentialIdentityNotFound))
         case .failure:
             extensionContext.cancelRequest(withError: ASExtensionError(.failed))
+        }
+    }
+
+    /// The vault's items for a QuickType request, which has no sheet. With the password off, the device key opens the
+    /// vault just for this, and it's locked again straight after.
+    @MainActor
+    private static func retrieveItemsForQuickType(
+        _ accessMode: VaultAccessMode,
+    ) async throws -> VaultRetrievalResult<VaultItem> {
+        guard accessMode == .deviceKey else {
+            return try await VaultRoot.vaultStore.retrieve(query: .init())
+        }
+        let service = VaultRoot.autofillVaultService()
+        await service.lockVault()
+        do {
+            try await service.openWithDeviceKey()
+            let items = try await VaultRoot.vaultStore.retrieve(query: .init())
+            await service.lockVault()
+            return items
+        } catch {
+            await service.lockVault()
+            throw error
         }
     }
 

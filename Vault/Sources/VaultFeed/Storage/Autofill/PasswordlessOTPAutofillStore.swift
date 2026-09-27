@@ -3,23 +3,25 @@ import Foundation
 // swiftlint:disable:next no_preconcurrency
 @preconcurrency import AuthenticationServices
 
-/// Keeps the QuickType identity store empty while the vault is encrypted with the App Lock Password.
+/// Keeps the QuickType identity store empty while only the App Lock Password opens the vault.
 ///
 /// The identity store lives outside the app's sandbox and holds the issuer and account name of every code it
-/// suggests, readable without the password. So while the vault isn't plain (encrypted, or being converted), nothing
-/// is written to it: a sync of one item does nothing, and a sync of everything empties it instead. Removing
-/// identities is always allowed. With a plain vault, everything goes through to `base` as before.
+/// suggests, readable without the password. So while the vault needs the password (or is being converted, rekeyed or
+/// erased), nothing is written to it: a sync of one item does nothing, and a sync of everything empties it instead.
+/// Removing identities is always allowed. While the vault opens without the password, plain or with the device key,
+/// everything goes through to `base`, so QuickType works as it always has.
 ///
 /// See "Widgets, AutoFill and QuickType" in `docs/on-device-encryption.md`.
-public final class PlainVaultOnlyOTPAutofillStore: VaultOTPAutofillStore {
+public final class PasswordlessOTPAutofillStore: VaultOTPAutofillStore {
     private let base: any VaultOTPAutofillStore
-    private let isVaultPlain: @Sendable () -> Bool
+    private let opensWithoutPassword: @Sendable () -> Bool
 
-    /// - Parameter isVaultPlain: Whether the vault is in the plain store right now, with no change of mode underway.
-    ///   Asked before every write, since the mode can change while the app runs.
-    public init(base: any VaultOTPAutofillStore, isVaultPlain: @escaping @Sendable () -> Bool) {
+    /// - Parameter opensWithoutPassword: Whether the vault opens without the App Lock Password right now
+    ///   (`VaultAccessMode.opensWithoutPassword`). Asked before every write, since the mode can change while the app
+    ///   runs.
+    public init(base: any VaultOTPAutofillStore, opensWithoutPassword: @escaping @Sendable () -> Bool) {
         self.base = base
-        self.isVaultPlain = isVaultPlain
+        self.opensWithoutPassword = opensWithoutPassword
     }
 
     public func sync(
@@ -29,7 +31,7 @@ public final class PlainVaultOnlyOTPAutofillStore: VaultOTPAutofillStore {
         searchableLevel: VaultItemSearchableLevel,
         showInQuickType: Bool,
     ) async throws {
-        guard isVaultPlain() else { return }
+        guard opensWithoutPassword() else { return }
         try await base.sync(
             id: id,
             item: item,
@@ -40,7 +42,7 @@ public final class PlainVaultOnlyOTPAutofillStore: VaultOTPAutofillStore {
     }
 
     public func syncAll(items: [VaultItem]) async throws {
-        if isVaultPlain() {
+        if opensWithoutPassword() {
             try await base.syncAll(items: items)
         } else {
             try await base.removeAll()

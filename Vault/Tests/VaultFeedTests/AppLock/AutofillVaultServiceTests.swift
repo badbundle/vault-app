@@ -1,12 +1,13 @@
+import CryptoKit
 import Foundation
 import FoundationExtensions
 import Testing
 @testable import VaultFeed
 
-/// `AutofillVaultPasswordService` over a real `VaultUnlockService`, with a file holding a vault, and the attempt
+/// `AutofillVaultService` over a real `VaultUnlockService`, with a file holding a vault, and the attempt
 /// counter it shares with the app.
 @MainActor
-struct AutofillVaultPasswordServiceTests {
+struct AutofillVaultServiceTests {
     private static let password = "correct horse"
 
     // MARK: - Unlocking
@@ -85,7 +86,7 @@ struct AutofillVaultPasswordServiceTests {
         var notified = false
         sut.service.onNotEnoughMemory = { notified = true }
 
-        await #expect(throws: AutofillVaultPasswordService.NotEnoughMemoryError.self) {
+        await #expect(throws: AutofillVaultService.NotEnoughMemoryError.self) {
             try await sut.service.unlock(password: Self.password)
         }
 
@@ -112,6 +113,50 @@ struct AutofillVaultPasswordServiceTests {
             await Task.yield()
         }
         #expect(notified)
+        #expect(try await sut.file.open()?.bytes == fileBefore)
+    }
+
+    // MARK: - The device key
+
+    /// With the password off, the device key opens the vault: nothing is counted, and no password is asked for.
+    @Test
+    func openWithDeviceKey_opensTheVaultTheDeviceKeyWraps() async throws {
+        let item = uniqueVaultItem()
+        let sut = try makeSUT(items: [item], wrappedWithTheDeviceKey: true)
+
+        try await sut.service.openWithDeviceKey()
+
+        #expect(try await sut.session.retrieve(query: .init()).items == [item])
+        #expect(!sut.log.value.contains("count the attempt"))
+    }
+
+    @Test
+    func openWithDeviceKey_notEnoughMemory_opensNothingAndSaysSo() async throws {
+        let sut = try makeSUT(wrappedWithTheDeviceKey: true, availableMemory: 1 << 20)
+        var notified = false
+        sut.service.onNotEnoughMemory = { notified = true }
+
+        await #expect(throws: AutofillVaultService.NotEnoughMemoryError.self) {
+            try await sut.service.openWithDeviceKey()
+        }
+
+        #expect(notified)
+        #expect(await sut.session.isLocked)
+    }
+
+    /// A HOTP increment with the device key goes through the encrypted file's lock and generation check, and needs
+    /// the memory to replace the file, just as it does with the password.
+    @Test
+    func openWithDeviceKey_saveWithoutTheMemory_writesNothing() async throws {
+        let sut = try makeSUT(wrappedWithTheDeviceKey: true, availableMemory: 1 << 32)
+        try await sut.service.openWithDeviceKey()
+        let fileBefore = try await sut.file.open()?.bytes
+
+        sut.availableMemory.modify { $0 = 1 << 20 }
+        await #expect(throws: EncryptedVaultStoreError.notEnoughMemory) {
+            try await sut.session.insert(item: uniqueVaultItem().makeWritable())
+        }
+
         #expect(try await sut.file.open()?.bytes == fileBefore)
     }
 
@@ -147,13 +192,16 @@ struct AutofillVaultPasswordServiceTests {
         #expect(try await sut.unlockDeadline() == .seconds(1))
     }
 
-    /// The password counts as set whenever the vault isn't plain, including while it's being converted, or when the
-    /// state can't be read: the extension mustn't open the vault on device authentication alone then.
+    /// The password counts as set whenever the vault doesn't open without it, including while it's being converted
+    /// or rekeyed, or when the state can't be read: the extension mustn't open the vault on device authentication
+    /// alone then. It's read afresh each time, since the app can turn the password on or off meanwhile.
     @Test(arguments: [
         (nil, false),
         (VaultStorageState(mode: .password), true),
         (VaultStorageState(mode: .password, transition: .clearingSystemSurfaces), true),
         (VaultStorageState(mode: .plain, transition: .encrypting), true),
+        (VaultStorageState(mode: .deviceKey), false),
+        (VaultStorageState(mode: .deviceKey, transition: .turningOn), true),
     ] as [(VaultStorageState?, Bool)])
     func init_readsWhetherThePasswordIsSetFromTheStorageState(
         state: VaultStorageState?,
@@ -165,7 +213,7 @@ struct AutofillVaultPasswordServiceTests {
             try VaultStorageStateFile(directory: directory).write(state)
         }
 
-        let sut = AutofillVaultPasswordService(
+        let sut = AutofillVaultService(
             directory: directory,
             session: VaultStoreSession(target: .locked),
             purgeVaultContents: {},
@@ -174,13 +222,32 @@ struct AutofillVaultPasswordServiceTests {
         #expect(sut.isPasswordSet == isPasswordSet)
     }
 
+    /// The password turned back on while the extension's process lived on: the same service needs it now.
+    @Test
+    func isPasswordSet_followsThePasswordTurnedBackOn() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let stateFile = VaultStorageStateFile(directory: directory)
+        try stateFile.write(VaultStorageState(mode: .deviceKey))
+        let sut = AutofillVaultService(
+            directory: directory,
+            session: VaultStoreSession(target: .locked),
+            purgeVaultContents: {},
+        )
+        #expect(!sut.isPasswordSet)
+
+        try stateFile.write(VaultStorageState(mode: .password))
+
+        #expect(sut.isPasswordSet)
+    }
+
     @Test
     func init_unreadableStorageState_countsThePasswordAsSet() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         try Data("not json".utf8).write(to: directory.appending(path: VaultStorageStateFile.fileName))
 
-        let sut = AutofillVaultPasswordService(
+        let sut = AutofillVaultService(
             directory: directory,
             session: VaultStoreSession(target: .locked),
             purgeVaultContents: {},
@@ -192,9 +259,9 @@ struct AutofillVaultPasswordServiceTests {
 
 // MARK: - Helpers
 
-extension AutofillVaultPasswordServiceTests {
+extension AutofillVaultServiceTests {
     private struct SUT {
-        let service: AutofillVaultPasswordService
+        let service: AutofillVaultService
         let session: VaultStoreSession
         let file: EncryptedVaultFile
         let availableMemory: SharedMutex<Int?>
@@ -203,13 +270,17 @@ extension AutofillVaultPasswordServiceTests {
 
     private func makeSUT(
         items: [VaultItem] = [],
+        wrappedWithTheDeviceKey: Bool = false,
         availableMemory: Int? = nil,
         purges: SharedMutex<Int> = SharedMutex(0),
     ) throws -> SUT {
         var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
+        let deviceKey = SymmetricKey(size: .bits256)
         try contents.createVault(
             inSlot: 3,
-            rootKey: contents.header.passwordKey(for: Self.password),
+            rootKey: wrappedWithTheDeviceKey
+                ? .device(deviceKey)
+                : contents.header.passwordKey(for: Self.password),
             payload: EncryptedVaultPayload.encode(EncryptedVaultStoreTests.state(items: items)),
             wrappedAt: Date(),
         )
@@ -221,7 +292,7 @@ extension AutofillVaultPasswordServiceTests {
         let log = SharedMutex([String]())
         let clock = ManualUnlockClock()
         let memory = SharedMutex(availableMemory)
-        let service = AutofillVaultPasswordService(
+        let service = AutofillVaultService(
             file: file,
             session: session,
             attemptCounter: AppLockPasswordAttemptCounter(
@@ -229,8 +300,9 @@ extension AutofillVaultPasswordServiceTests {
                 clock: FakeAppLockClock(),
             ),
             deadlineStore: FakeUnlockDeadlineStore(deadline: .seconds(1)),
+            deviceKeyStore: InMemoryDeviceKeyStore(key: wrappedWithTheDeviceKey ? deviceKey : nil),
             purgeVaultContents: { purges.modify { $0 += 1 } },
-            isPasswordSet: true,
+            needsPassword: { !wrappedWithTheDeviceKey },
             clock: clock,
             work: SpyUnlockWork(log: log, clock: clock),
             availableMemory: { memory.value },

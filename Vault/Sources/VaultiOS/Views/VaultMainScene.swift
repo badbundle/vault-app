@@ -113,7 +113,7 @@ public struct VaultMainScene: Scene {
     #endif
 
     private func handle(url: URL) {
-        guard let action = WidgetDeepLink.parse(url), action.isAllowed(isVaultPlain: VaultRoot.isVaultPlain) else {
+        guard let action = WidgetDeepLink.parse(url), action.isAllowed(in: VaultRoot.vaultAccessMode) else {
             return
         }
         switch action {
@@ -128,11 +128,12 @@ public struct VaultMainScene: Scene {
 }
 
 extension WidgetDeepLink.Action {
-    /// Whether the app follows this link from a widget now. Widgets never offer to advance a HOTP counter while the
-    /// vault is encrypted, and a link left from before it was doesn't either.
-    func isAllowed(isVaultPlain: Bool) -> Bool {
+    /// Whether the app follows this link from a widget now. Widgets never offer to advance a HOTP counter while only
+    /// the
+    /// App Lock Password opens the vault, and a link left from before it did doesn't either.
+    func isAllowed(in accessMode: VaultAccessMode) -> Bool {
         switch self {
-        case .incrementHOTP: isVaultPlain
+        case .incrementHOTP: accessMode.opensWithoutPassword
         case .openItemDetail: true
         }
     }

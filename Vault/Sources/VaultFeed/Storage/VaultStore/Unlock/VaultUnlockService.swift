@@ -427,6 +427,7 @@ extension VaultUnlockService {
             state: state,
             work: work,
             wrapStamper: wrapStamper,
+            memoryCheck: writeMemoryCheck,
         )
         guard await session.switchTo(.unlocked(store), unlessLockedSince: lockEpoch) else {
             throw CancellationError()

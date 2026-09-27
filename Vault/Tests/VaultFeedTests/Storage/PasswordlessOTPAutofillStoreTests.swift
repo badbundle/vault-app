@@ -5,12 +5,12 @@ import Testing
 @testable import VaultFeed
 
 /// Checked against the real `VaultOTPAutofillStoreImpl`, so what reaches the system's identity store is what's counted.
-struct PlainVaultOnlyOTPAutofillStoreTests {
-    // MARK: - Plain vault
+struct PasswordlessOTPAutofillStoreTests {
+    // MARK: - Vault that opens without the password
 
     @Test
-    func sync_plainVault_savesTheIdentity() async throws {
-        let (sut, identityStore, _) = makeSUT(isVaultPlain: true)
+    func sync_noPasswordNeeded_savesTheIdentity() async throws {
+        let (sut, identityStore, _) = makeSUT(opensWithoutPassword: true)
 
         try await syncOne(with: sut)
 
@@ -18,8 +18,8 @@ struct PlainVaultOnlyOTPAutofillStoreTests {
     }
 
     @Test
-    func syncAll_plainVault_replacesTheIdentities() async throws {
-        let (sut, identityStore, _) = makeSUT(isVaultPlain: true)
+    func syncAll_noPasswordNeeded_replacesTheIdentities() async throws {
+        let (sut, identityStore, _) = makeSUT(opensWithoutPassword: true)
 
         try await sut.syncAll(items: [uniqueVaultItem()])
 
@@ -27,11 +27,11 @@ struct PlainVaultOnlyOTPAutofillStoreTests {
         #expect(identityStore.saveCredentialIdentitiesCallCount == 1)
     }
 
-    // MARK: - Encrypted vault
+    // MARK: - Vault that needs the password
 
     @Test
-    func sync_encryptedVault_writesNothing() async throws {
-        let (sut, identityStore, _) = makeSUT(isVaultPlain: false)
+    func sync_passwordNeeded_writesNothing() async throws {
+        let (sut, identityStore, _) = makeSUT(opensWithoutPassword: false)
 
         try await syncOne(with: sut)
 
@@ -40,8 +40,8 @@ struct PlainVaultOnlyOTPAutofillStoreTests {
     }
 
     @Test
-    func syncAll_encryptedVault_emptiesTheStoreAndSavesNothing() async throws {
-        let (sut, identityStore, _) = makeSUT(isVaultPlain: false)
+    func syncAll_passwordNeeded_emptiesTheStoreAndSavesNothing() async throws {
+        let (sut, identityStore, _) = makeSUT(opensWithoutPassword: false)
 
         try await sut.syncAll(items: [uniqueVaultItem()])
 
@@ -50,8 +50,8 @@ struct PlainVaultOnlyOTPAutofillStoreTests {
     }
 
     @Test
-    func removing_encryptedVault_stillRemoves() async throws {
-        let (sut, identityStore, _) = makeSUT(isVaultPlain: false)
+    func removing_passwordNeeded_stillRemoves() async throws {
+        let (sut, identityStore, _) = makeSUT(opensWithoutPassword: false)
 
         try await sut.remove(id: UUID(), code: nil)
         try await sut.removeAll()
@@ -62,11 +62,11 @@ struct PlainVaultOnlyOTPAutofillStoreTests {
 
     /// The password can be turned on while the app runs, so the mode is asked before every write.
     @Test
-    func sync_vaultEncryptedWhileRunning_stopsWriting() async throws {
-        let (sut, identityStore, isVaultPlain) = makeSUT(isVaultPlain: true)
+    func sync_passwordTurnedOnWhileRunning_stopsWriting() async throws {
+        let (sut, identityStore, opensWithoutPassword) = makeSUT(opensWithoutPassword: true)
         try await syncOne(with: sut)
 
-        isVaultPlain.modify { $0 = false }
+        opensWithoutPassword.modify { $0 = false }
         try await syncOne(with: sut)
 
         #expect(identityStore.saveCredentialIdentitiesCallCount == 1)
@@ -75,20 +75,20 @@ struct PlainVaultOnlyOTPAutofillStoreTests {
 
 // MARK: - Helpers
 
-extension PlainVaultOnlyOTPAutofillStoreTests {
+extension PasswordlessOTPAutofillStoreTests {
     private func makeSUT(
-        isVaultPlain: Bool,
-    ) -> (PlainVaultOnlyOTPAutofillStore, CredentialIdentityStoreMock, SharedMutex<Bool>) {
+        opensWithoutPassword: Bool,
+    ) -> (PasswordlessOTPAutofillStore, CredentialIdentityStoreMock, SharedMutex<Bool>) {
         let identityStore = CredentialIdentityStoreMock()
-        let isPlain = SharedMutex(isVaultPlain)
-        let sut = PlainVaultOnlyOTPAutofillStore(
+        let isPlain = SharedMutex(opensWithoutPassword)
+        let sut = PasswordlessOTPAutofillStore(
             base: VaultOTPAutofillStoreImpl(store: identityStore),
-            isVaultPlain: { isPlain.value },
+            opensWithoutPassword: { isPlain.value },
         )
         return (sut, identityStore, isPlain)
     }
 
-    private func syncOne(with sut: PlainVaultOnlyOTPAutofillStore) async throws {
+    private func syncOne(with sut: PasswordlessOTPAutofillStore) async throws {
         try await sut.sync(
             id: UUID(),
             item: .otpCode(anyOTPAuthCode()),

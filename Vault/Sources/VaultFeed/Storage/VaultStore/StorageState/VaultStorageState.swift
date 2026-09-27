@@ -25,10 +25,14 @@ public struct VaultStorageState: Codable, Equatable, Sendable {
         /// The conversion has committed. Recovery finishes deleting the plain store's files, its pending rehash
         /// files, and these archives of it (folder names), whose deletion the user confirmed.
         case deletingPlainStore(archives: [String])
-        /// The plain store is gone. The QuickType identity store still has to be cleared and the widgets reloaded,
-        /// which the app does at its next launch if it was stopped first
+        /// The plain store is gone, or the password has just been turned back on. The QuickType identity store still
+        /// has to be cleared and the widgets reloaded, which the app does at its next launch if it was stopped first
         /// (`VaultStorageRecovery.finishClearingSystemSurfaces(_:)`).
         case clearingSystemSurfaces
+        /// The password has just been turned off. The QuickType identity store still has to be filled again from the
+        /// vault and the widgets reloaded, which the app does at its next launch if it was stopped first
+        /// (`VaultStorageRecovery.finishSyncingSystemSurfaces(_:)`).
+        case syncingSystemSurfaces
         /// Erasing every vault, back to a fresh plain store (`VaultEraser`), whatever the mode says. Nothing may open
         /// a store until the erase has finished: the app finishes it at launch.
         case erasing
@@ -64,6 +68,15 @@ public struct VaultStorageState: Codable, Equatable, Sendable {
     /// Whether the journal shows the password being turned off or back on.
     var isTurningThePasswordOffOrOn: Bool {
         transition == .turningOff || transition == .turningOn
+    }
+
+    /// Whether the mode is settled, with at most the system surfaces still to catch up with it: they don't change
+    /// what opens the vault.
+    var isSettled: Bool {
+        switch transition {
+        case nil, .clearingSystemSurfaces?, .syncingSystemSurfaces?: true
+        case .encrypting?, .deletingPlainStore?, .erasing?, .turningOff?, .turningOn?: false
+        }
     }
 }
 

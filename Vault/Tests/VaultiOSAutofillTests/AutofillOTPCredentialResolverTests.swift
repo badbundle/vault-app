@@ -111,9 +111,10 @@ struct AutofillOTPCredentialResolverTests {
         #expect(retrieveCount == 0)
     }
 
-    /// QuickType never serves a code from an encrypted vault: it needs the App Lock Password, in the extension's UI.
+    /// QuickType never serves a code while only the App Lock Password opens the vault: it needs the password, in the
+    /// extension's UI.
     @Test
-    func resolve_vaultNotPlain_returnsUserInteractionRequiredWithoutReadingTheVault() async {
+    func resolve_passwordNeeded_returnsUserInteractionRequiredWithoutReadingTheVault() async {
         let item = VaultItem(metadata: anyVaultItemMetadata(), item: .otpCode(makeTOTPCode(period: 30)))
         var retrieveCount = 0
         let sut = makeSUT(
@@ -121,13 +122,29 @@ struct AutofillOTPCredentialResolverTests {
                 retrieveCount += 1
                 return .init(items: [item])
             },
-            isVaultPlain: false,
+            accessMode: .password,
         )
 
         let outcome = await sut.resolve(recordIdentifier: item.id.rawValue.uuidString)
 
         #expect(outcome == .userInteractionRequired)
         #expect(retrieveCount == 0)
+    }
+}
+
+extension AutofillOTPCredentialResolverTests {
+    /// With the password off, the device key opens the vault and QuickType serves codes as it does for a plain vault.
+    @Test
+    func resolve_passwordOff_servesTheCode() async throws {
+        let item = VaultItem(metadata: anyVaultItemMetadata(), item: .otpCode(makeTOTPCode(period: 30)))
+        let sut = makeSUT(retrieveItems: { .init(items: [item]) }, accessMode: .deviceKey)
+
+        let outcome = await sut.resolve(recordIdentifier: item.id.rawValue.uuidString)
+
+        guard case .code = outcome else {
+            Issue.record("Expected a code, got \(outcome)")
+            return
+        }
     }
 }
 
@@ -151,14 +168,14 @@ extension AutofillOTPCredentialResolverTests {
         requiresAuthenticationToCopy: Bool = false,
         clock: EpochClockMock = EpochClockMock(currentTime: 100),
         isAppLockEnabled: Bool = false,
-        isVaultPlain: Bool = true,
+        accessMode: VaultAccessMode = .plain,
     ) -> AutofillOTPCredentialResolver {
         AutofillOTPCredentialResolver(
             retrieveItems: retrieveItems,
             copyActionHandler: CopyActionHandlerStub(requiresAuthenticationToCopy: requiresAuthenticationToCopy),
             clock: clock,
             isAppLockEnabled: isAppLockEnabled,
-            isVaultPlain: isVaultPlain,
+            accessMode: accessMode,
         )
     }
 

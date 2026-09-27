@@ -78,11 +78,10 @@ extension VaultAutofillViewModelTests {
         #expect(!sut.appLock.isPasswordSet)
     }
 
-    /// Never Face ID alone for an encrypted vault (MANIFESTO C4).
+    /// Never Face ID alone while the password is on (MANIFESTO C4).
     @Test
-    func encryptedVault_asksForThePasswordAfterDeviceAuthentication() async throws {
-        let service = FakeAutofillPasswordService()
-        let sut = try makeSUT(storage: .encrypted(service))
+    func passwordOn_asksForThePasswordAfterDeviceAuthentication() async throws {
+        let sut = try makeSUT(storage: .password, vaultService: FakeAutofillVaultService())
         await sut.prepareToUnlock()
 
         await sut.appLock.unlock()
@@ -92,28 +91,28 @@ extension VaultAutofillViewModelTests {
     }
 
     @Test
-    func encryptedVault_isCheckedBeforeAnythingIsAsked() throws {
-        let sut = try makeSUT(storage: .encrypted(FakeAutofillPasswordService()))
+    func passwordOn_isCheckedBeforeAnythingIsAsked() throws {
+        let sut = try makeSUT(storage: .password, vaultService: FakeAutofillVaultService())
 
         #expect(sut.unlockAvailability == .checking)
     }
 
     /// An unlock left from an earlier request, and anything read then, don't carry over.
     @Test
-    func prepareToUnlock_encryptedVault_locksItFirst() async throws {
-        let service = FakeAutofillPasswordService()
-        let sut = try makeSUT(storage: .encrypted(service))
+    func prepareToUnlock_passwordOn_locksFirst() async throws {
+        let service = FakeAutofillVaultService()
+        let sut = try makeSUT(storage: .password, vaultService: service)
 
         await sut.prepareToUnlock()
 
-        #expect(service.lockCount == 1)
+        #expect(service.log == ["lock"])
         #expect(sut.unlockAvailability == .available)
     }
 
     /// Deriving the key without the memory would get the extension stopped mid-attempt, having counted a wrong one.
     @Test
-    func prepareToUnlock_notEnoughMemory_needsTheApp() async throws {
-        let sut = try makeSUT(storage: .encrypted(FakeAutofillPasswordService(headroom: .notEnough)))
+    func prepareToUnlock_passwordOnWithoutTheMemory_needsTheApp() async throws {
+        let sut = try makeSUT(storage: .password, vaultService: FakeAutofillVaultService(headroom: .notEnough))
 
         await sut.prepareToUnlock()
 
@@ -123,8 +122,8 @@ extension VaultAutofillViewModelTests {
     /// Checked again before the password is tried, and before any save: either sends the user to the app.
     @Test
     func runningOutOfMemoryLater_needsTheApp() async throws {
-        let service = FakeAutofillPasswordService()
-        let sut = try makeSUT(storage: .encrypted(service))
+        let service = FakeAutofillVaultService()
+        let sut = try makeSUT(storage: .password, vaultService: service)
         await sut.prepareToUnlock()
 
         service.runOutOfMemory()
@@ -152,8 +151,8 @@ extension VaultAutofillViewModelTests {
         await first.appLock.unlock()
         #expect(first.appLock.state == .unlocked)
 
-        let service = FakeAutofillPasswordService()
-        let second = try makeSUT(storage: .encrypted(service))
+        let service = FakeAutofillVaultService()
+        let second = try makeSUT(storage: .password, vaultService: service)
         await second.prepareToUnlock()
         await second.appLock.unlock()
 
@@ -161,12 +160,87 @@ extension VaultAutofillViewModelTests {
         #expect(second.appLock.state == .locked(.init(step: .password)))
     }
 
-    // MARK: - Locking
+    /// Whatever an earlier request in this process opened is locked first, whatever the mode now: after an erase, a
+    /// plain request mustn't find the erased vault still open.
+    @Test(arguments: [AutofillVaultStorage.plain, .unavailable])
+    func prepareToUnlock_earlierServiceInThisProcess_locksItFirst(storage: AutofillVaultStorage) async throws {
+        let earlier = FakeAutofillVaultService()
+        let sut = try makeSUT(storage: storage, vaultService: earlier)
+
+        if storage == .plain {
+            #expect(sut.unlockAvailability == .checking)
+        }
+        await sut.prepareToUnlock()
+
+        #expect(earlier.log == ["lock"])
+        #expect(earlier.deviceKeyOpenCount == 0)
+    }
+
+    // MARK: - Password off
+
+    /// With the password off, the device key opens the vault, and device authentication is all it takes: no password
+    /// step, as for a plain vault.
+    @Test
+    func passwordOff_opensWithTheDeviceKeyAndAsksForNoPassword() async throws {
+        let service = FakeAutofillVaultService()
+        let sut = try makeSUT(storage: .deviceKey, vaultService: service, isAppLockEnabled: true)
+
+        await sut.prepareToUnlock()
+        await sut.appLock.unlock()
+
+        #expect(service.log == ["lock", "open with the device key"])
+        #expect(sut.unlockAvailability == .available)
+        #expect(!sut.appLock.isPasswordSet)
+        #expect(sut.appLock.state == .unlocked)
+    }
 
     @Test
-    func endRequest_locksTheVault() async throws {
-        let service = FakeAutofillPasswordService()
-        let sut = try makeSUT(storage: .encrypted(service))
+    func passwordOff_withoutTheMemory_needsTheApp() async throws {
+        let service = FakeAutofillVaultService(headroom: .notEnough)
+        let sut = try makeSUT(storage: .deviceKey, vaultService: service)
+
+        await sut.prepareToUnlock()
+
+        #expect(sut.unlockAvailability == .needsTheApp(.notEnoughMemory))
+        #expect(service.deviceKeyOpenCount == 0)
+    }
+
+    /// Such as while the device is locked after starting up, when the device key can't be read.
+    @Test
+    func passwordOff_deviceKeyCannotOpenIt_needsTheApp() async throws {
+        let service = FakeAutofillVaultService()
+        service.failsToOpenWithDeviceKey = true
+        let sut = try makeSUT(storage: .deviceKey, vaultService: service)
+
+        await sut.prepareToUnlock()
+
+        #expect(sut.unlockAvailability == .needsTheApp(.unavailable))
+    }
+
+    /// When the sheet's lock locks, the vault locks straight away, and it's opened again, once it has, before device
+    /// authentication is asked for again.
+    @Test
+    func passwordOff_sheetLocks_getsTheVaultReadyAgain() async throws {
+        let service = FakeAutofillVaultService()
+        let sut = try makeSUT(storage: .deviceKey, vaultService: service, isAppLockEnabled: true)
+        await sut.prepareToUnlock()
+        await sut.appLock.unlock()
+        let preparation = sut.preparation
+
+        sut.appLock.scenePhaseDidChange(to: .background)
+
+        #expect(sut.unlockAvailability == .checking)
+        #expect(sut.preparation == preparation + 1)
+        await sut.prepareToUnlock()
+        #expect(service.log == ["lock", "open with the device key", "lock", "lock", "open with the device key"])
+    }
+
+    // MARK: - Locking
+
+    @Test(arguments: [AutofillVaultStorage.deviceKey, .password])
+    func endRequest_locksTheVault(storage: AutofillVaultStorage) async throws {
+        let service = FakeAutofillVaultService()
+        let sut = try makeSUT(storage: storage, vaultService: service)
 
         await sut.endRequest()
 
@@ -191,13 +265,19 @@ extension VaultAutofillViewModelTests {
 extension VaultAutofillViewModelTests {
     private func makeSUT(
         storage: AutofillVaultStorage = .plain,
+        vaultService: FakeAutofillVaultService? = nil,
+        isAppLockEnabled: Bool = false,
         appLockSettings: AppLockSettingsStore? = nil,
         purges: Counter = Counter(),
     ) throws -> VaultAutofillViewModel {
         let settings = try appLockSettings ?? AppLockSettingsStore(userDefaults: .nonPersistent())
+        if isAppLockEnabled {
+            settings.isEnabled = true
+        }
         return try VaultAutofillViewModel(
             localSettings: LocalSettings(defaults: Defaults.nonPersistent()),
             storage: storage,
+            vaultService: vaultService,
             appLockSettings: settings,
             authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
             purgeVaultContents: { purges.increment() },

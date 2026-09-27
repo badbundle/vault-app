@@ -54,7 +54,7 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
                     AppLockOpenVaultView(reason: .unavailableHere, cancel: cancel)
                 }
             }
-            .task {
+            .task(id: viewModel.preparation) {
                 await viewModel.prepareToUnlock()
             }
         case let .unimplemented(name):

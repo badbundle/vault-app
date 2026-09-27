@@ -1,4 +1,5 @@
 import Foundation
+import FoundationExtensions
 import TestHelpers
 import Testing
 import VaultCore
@@ -14,7 +15,7 @@ struct OTPWidgetLoadingTests {
             .failure(.open),
             .success(store),
         ])
-        let loader = WidgetVaultLoader(isVaultPlain: { true }, makeStore: { try factory.makeStore() })
+        let loader = WidgetVaultLoader(accessMode: { .plain }, makeStore: { _ in try factory.makeStore() })
 
         await #expect(throws: WidgetTestError.open) {
             try await loader.eligibleItems()
@@ -33,7 +34,7 @@ struct OTPWidgetLoadingTests {
         let factory = StoreFactoryScript(results: [.success(FakeVaultStoreReader(results: [
             .success(.init(items: [item])),
         ]))])
-        let loader = WidgetVaultLoader(isVaultPlain: { false }, makeStore: { try factory.makeStore() })
+        let loader = WidgetVaultLoader(accessMode: { .password }, makeStore: { _ in try factory.makeStore() })
 
         let items = try await loader.eligibleItems()
 
@@ -50,7 +51,7 @@ struct OTPWidgetLoadingTests {
             .success(failingStore),
             .success(succeedingStore),
         ])
-        let loader = WidgetVaultLoader(isVaultPlain: { true }, makeStore: { try factory.makeStore() })
+        let loader = WidgetVaultLoader(accessMode: { .plain }, makeStore: { _ in try factory.makeStore() })
 
         await #expect(throws: WidgetTestError.retrieve) {
             try await loader.eligibleItems()
@@ -72,8 +73,8 @@ struct OTPWidgetLoadingTests {
             .success(store),
         ])
         let query = OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(
-            isVaultPlain: { true },
-            makeStore: { try factory.makeStore() },
+            accessMode: { .plain },
+            makeStore: { _ in try factory.makeStore() },
         ))
 
         let firstResult = try await query.suggestedEntities()
@@ -93,7 +94,7 @@ struct OTPWidgetLoadingTests {
     @Test
     func entitiesForIdentifiers_returnEmptyOnFailure() async throws {
         let id = UUID()
-        let query = OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(isVaultPlain: { true }, makeStore: {
+        let query = OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(accessMode: { .plain }, makeStore: { _ in
             throw WidgetTestError.open
         }))
 
@@ -184,8 +185,8 @@ struct OTPWidgetLoadingTests {
         let factory = StoreFactoryScript(results: [])
         let loader = try WidgetVaultLoader(
             appLockSettings: appLockOff(),
-            isVaultPlain: { false },
-            makeStore: { try factory.makeStore() },
+            accessMode: { .password },
+            makeStore: { _ in try factory.makeStore() },
         )
         let provider = OTPWidgetProvider(loader: loader)
         let entity = OTPWidgetItemEntity(id: UUID(), issuer: "issuer", accountName: "account")
@@ -202,8 +203,8 @@ struct OTPWidgetLoadingTests {
         let factory = StoreFactoryScript(results: [])
         let query = try OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(
             appLockSettings: appLockOff(),
-            isVaultPlain: { false },
-            makeStore: { try factory.makeStore() },
+            accessMode: { .password },
+            makeStore: { _ in try factory.makeStore() },
         ))
 
         let suggested = try await query.suggestedEntities()
@@ -218,11 +219,76 @@ struct OTPWidgetLoadingTests {
     func isLocked_plainVaultAndLockOff_isFalse() throws {
         let loader = try WidgetVaultLoader(
             appLockSettings: appLockOff(),
-            isVaultPlain: { true },
-            makeStore: { throw WidgetTestError.open },
+            accessMode: { .plain },
+            makeStore: { _ in throw WidgetTestError.open },
         )
 
         #expect(!loader.isLocked)
+    }
+
+    // MARK: - Password off
+
+    /// With the password off, the widget shows codes again, from the vault the device key opens.
+    @Test
+    func providerTimeline_passwordOff_showsTheCode() async throws {
+        let item = makeOTPVaultItem(accountName: "account", issuer: "issuer")
+        let opened = SharedMutex([VaultAccessMode]())
+        let loader = try WidgetVaultLoader(appLockSettings: appLockOff(), accessMode: { .deviceKey }) { mode in
+            opened.modify { $0.append(mode) }
+            return FakeVaultStoreReader(results: [.success(.init(items: [item]))])
+        }
+        let provider = OTPWidgetProvider(loader: loader)
+        let entity = OTPWidgetItemEntity(id: item.id.rawValue, issuer: "issuer", accountName: "account")
+
+        let timeline = await provider.makeTimeline(for: .init(item: entity))
+
+        guard case let .totp(totp) = timeline.entries.first?.snapshot else {
+            Issue.record("Expected a TOTP entry, got \(String(describing: timeline.entries.first?.snapshot))")
+            return
+        }
+        #expect(totp.itemID == item.id.rawValue)
+        #expect(!loader.isLocked)
+        #expect(opened.value == [.deviceKey])
+    }
+
+    @Test
+    func entityQuery_passwordOff_listsTheVaultsItems() async throws {
+        let item = makeOTPVaultItem(accountName: "account", issuer: "issuer")
+        let query = try OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(
+            appLockSettings: appLockOff(),
+            accessMode: { .deviceKey },
+            makeStore: { _ in FakeVaultStoreReader(results: [.success(.init(items: [item]))]) },
+        ))
+
+        let entities = try await query.suggestedEntities()
+
+        #expect(entities.map(\.id) == [item.id.rawValue])
+    }
+
+    /// The device key's store holds the vault in memory, and the app may change the file meanwhile, so every read
+    /// opens it afresh.
+    @Test
+    func passwordOff_opensTheVaultAfreshForEveryRead() async throws {
+        let opens = SharedMutex(0)
+        let loader = try WidgetVaultLoader(appLockSettings: appLockOff(), accessMode: { .deviceKey }) { _ in
+            opens.modify { $0 += 1 }
+            return FakeVaultStoreReader(results: [.success(.init(items: []))])
+        }
+
+        _ = try await loader.eligibleItems()
+        _ = try await loader.eligibleItems()
+
+        #expect(opens.value == 2)
+    }
+
+    /// With the password off and the app lock on, the widget shows the vault locked, as for a plain vault.
+    @Test
+    func passwordOff_appLockOn_isLocked() throws {
+        let loader = try WidgetVaultLoader(appLockSettings: appLockOn(), accessMode: { .deviceKey }) { _ in
+            throw WidgetTestError.open
+        }
+
+        #expect(loader.isLocked)
     }
 
     @Test

@@ -214,6 +214,10 @@ public struct VaultStorageRecovery: Sendable {
     /// Settles a turn off or on in `state`, from what the device key opens. Run it holding `vault-slots.lock`, so no
     /// rekey changes the file meanwhile. If the file can't be read while the device is locked, `state` is left as it
     /// was.
+    ///
+    /// Settling leaves the system surfaces to catch up with the mode it lands in, which the app does straight after,
+    /// or at its next launch if it's stopped first: filling QuickType again from the vault once the password is off
+    /// (`finishSyncingSystemSurfaces(_:)`), or emptying it once it's on (`finishClearingSystemSurfaces(_:)`).
     private func settleTurning(_ state: inout VaultStorageState) throws -> DeviceKeyTrial {
         let trial = try tryDeviceKey()
         switch trial {
@@ -221,10 +225,10 @@ public struct VaultStorageRecovery: Sendable {
             break
         case .opensASlot:
             state.mode = .deviceKey
-            state.transition = nil
+            state.transition = .syncingSystemSurfaces
         case .noDeviceKey, .opensNothing:
             state.mode = .password
-            state.transition = nil
+            state.transition = .clearingSystemSurfaces
         }
         return trial
     }
@@ -266,17 +270,34 @@ public struct VaultStorageRecovery: Sendable {
         }
     }
 
-    /// Clears the QuickType identity store and reloads the widgets, if a committed conversion hadn't yet, then clears
-    /// the journal. Call it once at launch, after `recoverAtLaunch()`. It's safe to repeat.
+    /// Clears the QuickType identity store and reloads the widgets, if a committed conversion, or turning the password
+    /// back on, hadn't yet, then clears the journal. Call it once at launch, after `recoverAtLaunch()`, and after
+    /// turning the password on. It's safe to repeat.
     ///
     /// If `clear` throws, the journal stays, so the next launch tries again.
     public func finishClearingSystemSurfaces(_ clear: @Sendable () async throws -> Void) async throws {
+        try await finishSystemSurfaces(.clearingSystemSurfaces, clear)
+    }
+
+    /// Fills the QuickType identity store again from the vault and reloads the widgets, if turning the password off
+    /// hadn't yet, then clears the journal. Call it once at launch, after `recoverAtLaunch()`, and after turning the
+    /// password off. It's safe to repeat.
+    ///
+    /// If `sync` throws, the journal stays, so the next launch tries again.
+    public func finishSyncingSystemSurfaces(_ sync: @Sendable () async throws -> Void) async throws {
+        try await finishSystemSurfaces(.syncingSystemSurfaces, sync)
+    }
+
+    private func finishSystemSurfaces(
+        _ step: VaultStorageState.Transition,
+        _ work: @Sendable () async throws -> Void,
+    ) async throws {
         let stateFile = VaultStorageStateFile(directory: directory, fileSystem: fileSystem)
-        guard try stateFile.read().transition == .clearingSystemSurfaces else { return }
-        try await clear()
-        // Read again: an unlock may have raised the deadline while clearing.
+        guard try stateFile.read().transition == step else { return }
+        try await work()
+        // Read again: an unlock may have raised the deadline meanwhile, or a change moved the journal on.
         try await stateFile.update { state in
-            if state.transition == .clearingSystemSurfaces {
+            if state.transition == step {
                 state.transition = nil
             }
         }

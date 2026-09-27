@@ -1,4 +1,5 @@
 import Foundation
+import FoundationExtensions
 import TestHelpers
 import Testing
 import VaultCore
@@ -44,14 +45,38 @@ struct WidgetVaultLoaderCodeActionTests {
         let store = IncrementingFakeStore(items: [item])
         let loader = try WidgetVaultLoader(
             appLockSettings: AppLockSettingsStore(userDefaults: .nonPersistent()),
-            isVaultPlain: { false },
-            makeStore: { store },
+            accessMode: { .password },
+            makeStore: { _ in store },
         )
 
         let code = try await loader.incrementAndRenderHOTPCode(id: item.id.rawValue)
 
         #expect(code == nil)
         #expect(await store.incrementedIDs == [])
+    }
+
+    /// With the password off, the increment goes through the store the device key opened, and so through the
+    /// encrypted file's lock and generation check. It reads and writes through the one store.
+    @Test
+    func incrementAndRenderHOTPCode_passwordOff_incrementsThroughTheDeviceKeyStore() async throws {
+        let item = makeHOTPVaultItem(counter: 4)
+        let store = IncrementingFakeStore(items: [item])
+        let opens = SharedMutex(0)
+        let loader = try WidgetVaultLoader(
+            appLockSettings: AppLockSettingsStore(userDefaults: .nonPersistent()),
+            accessMode: { .deviceKey },
+            makeStore: { mode in
+                #expect(mode == .deviceKey)
+                opens.modify { $0 += 1 }
+                return store
+            },
+        )
+
+        let code = try await loader.incrementAndRenderHOTPCode(id: item.id.rawValue)
+
+        #expect(code != nil)
+        #expect(await store.incrementedIDs == [item.id])
+        #expect(opens.value == 1)
     }
 
     @Test

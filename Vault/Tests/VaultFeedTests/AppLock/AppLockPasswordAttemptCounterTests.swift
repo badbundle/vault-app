@@ -346,10 +346,11 @@ private final class InMemoryAppLockPasswordAttemptStorage: AppLockPasswordAttemp
         state.withLock(\.accessesOutsideExclusiveAccess)
     }
 
-    func withExclusiveAccess<T>(_ body: () throws -> T) throws -> T {
+    func acquireExclusiveAccess() async throws -> AppLockPasswordAttemptAccess {
         state.withLock { $0.isExclusive = true }
-        defer { state.withLock { $0.isExclusive = false } }
-        return try body()
+        return AppLockPasswordAttemptAccess {
+            self.state.withLock { $0.isExclusive = false }
+        }
     }
 
     private func noteAccess() {
