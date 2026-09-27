@@ -94,6 +94,18 @@ public final class AutoBackupServiceImpl: AutoBackupService {
         }
     }
 
+    public func forgetConfiguration() async {
+        debounceTask?.cancel()
+        debounceTask = nil
+        for provider in providers {
+            await provider.clearConfiguration()
+        }
+        configuration = AutoBackupConfiguration()
+        defaults.clear(Self.configKey)
+        configurationSubject.send(configuration)
+        updateStatus()
+    }
+
     public func selectProvider(id: String) async {
         configuration.providerID = id
         await saveConfiguration()

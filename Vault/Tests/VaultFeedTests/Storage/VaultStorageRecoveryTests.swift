@@ -142,6 +142,24 @@ struct VaultStorageRecoveryTests {
         }
     }
 
+    /// An erase removed the vault but couldn't journal it. No password can open anything, so rather than report the
+    /// password mode, which would leave the device with no vault for good, recovery reports the erase to finish.
+    @Test(arguments: [nil, VaultStorageState.Transition.clearingSystemSurfaces])
+    func recover_passwordModeWithNoVaultLeft_reportsAnEraseToFinish(
+        transition: VaultStorageState.Transition?,
+    ) async throws {
+        try await withTemporaryDirectory { directory in
+            try Self.write(
+                VaultStorageState(mode: .password, transition: transition, unlockDeadline: .seconds(1)),
+                in: directory,
+            )
+            try Data("encrypted".utf8)
+                .write(to: directory.appending(path: EncryptedVaultFile.temporaryFilePrefix + "a"))
+
+            #expect(try VaultStorageRecovery(directory: directory).recoverAtLaunch() == .erasing)
+        }
+    }
+
     @Test
     func recover_encrypted_touchesNothingButStrayStateTempFiles() async throws {
         try await withTemporaryDirectory { directory in
@@ -199,6 +217,23 @@ extension VaultStorageRecoveryTests {
         }
     }
 
+    /// The app stopped mid-erase. Recovery reports it, whatever the mode, and leaves finishing it to `VaultEraser`,
+    /// which deletes the keychain items too: it deletes nothing itself, so no half-erased store opens meanwhile.
+    @Test(arguments: [VaultStorageState.Mode.plain, .password])
+    func recover_whileErasing_reportsItAndTouchesNothing(mode: VaultStorageState.Mode) async throws {
+        try await withTemporaryDirectory { directory in
+            try Self.makePlainStore(in: directory)
+            try Self.makeEncryptedFiles(in: directory)
+            try Self.write(VaultStorageState(mode: mode, transition: .erasing), in: directory)
+            let before = try Self.fileNames(in: directory)
+
+            #expect(try VaultStorageRecovery(directory: directory).recoverAtLaunch() == .erasing)
+
+            #expect(try Self.fileNames(in: directory) == before)
+            #expect(try Self.read(in: directory).transition == .erasing)
+        }
+    }
+
     @Test
     func isPlain_forAnExtension_onlyWhenThereIsNothingElseItCouldBe() async throws {
         try await withTemporaryDirectory { directory in
@@ -208,6 +243,8 @@ extension VaultStorageRecoveryTests {
                 VaultStorageState(mode: .plain, transition: .encrypting),
                 VaultStorageState(mode: .password, transition: .deletingPlainStore(archives: [])),
                 VaultStorageState(mode: .password),
+                VaultStorageState(mode: .plain, transition: .erasing),
+                VaultStorageState(mode: .password, transition: .erasing),
             ] {
                 try Self.write(state, in: directory)
                 #expect(!VaultStorageState.isPlain(inDirectory: directory), "\(state)")

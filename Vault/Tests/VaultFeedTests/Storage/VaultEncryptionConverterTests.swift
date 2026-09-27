@@ -92,7 +92,7 @@ extension VaultEncryptionConverterTests {
                 wrapStamper: .inMemory(),
             )
 
-            #expect(try await service.unlock(password: "wrong") == .wrongPassword)
+            #expect(try await service.unlock(password: "wrong") == .wrongPassword(reachesEraseThreshold: false))
             #expect(try await service.unlock(password: password) == .unlocked)
 
             let retrieved = try await session.retrieve(query: .init())

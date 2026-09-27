@@ -50,7 +50,7 @@ extension VaultUnlockServiceTests {
 
         let result = try await sut.service.unlock(password: "wrong")
 
-        #expect(result == .wrongPassword)
+        #expect(result == .wrongPassword(reachesEraseThreshold: false))
         #expect(sut.clock.sleeps == [start.advanced(by: deadline)])
         #expect(await sut.session.isLocked)
         #expect(!sut.log.value.contains("reset the count"))
@@ -166,6 +166,61 @@ extension VaultUnlockServiceTests {
         #expect(log.first == "count the attempt")
         #expect(log.dropFirst().first == "derive")
         #expect(log.last == "reset the count")
+    }
+
+    /// The tenth wrong attempt in a row says so, for the erase after too many (VAULT-34). The ninth doesn't.
+    @Test(arguments: [(earlier: 8, reaches: false), (earlier: 9, reaches: true), (earlier: 12, reaches: true)])
+    func unlock_withAWrongPassword_saysWhetherItReachesTheEraseThreshold(earlier: Int, reaches: Bool) async throws {
+        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])])
+        // The earlier attempts' wait is over.
+        sut.attemptStorage.setRecord(count: earlier, latestAt: sut.attemptClock.now)
+        sut.attemptClock.advance(by: .seconds(60 * 60))
+
+        let result = try await sut.service.unlock(password: "wrong")
+
+        #expect(result == .wrongPassword(reachesEraseThreshold: reaches))
+    }
+
+    /// A password that opens a vault unlocks it, however many wrong attempts came before.
+    @Test
+    func unlock_withTheRightPasswordAtTheEraseThreshold_unlocks() async throws {
+        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])])
+        sut.attemptStorage.setRecord(count: 9, latestAt: sut.attemptClock.now)
+        sut.attemptClock.advance(by: .seconds(60 * 60))
+
+        let result = try await sut.service.unlock(password: "real")
+
+        #expect(result == .unlocked)
+    }
+
+    /// A vault that's being erased mustn't open again, even if removing its file keeps failing: the attempt is refused
+    /// with the right password too, and nothing is counted or tried.
+    @Test
+    func unlock_whileErasing_refusesWithoutCountingOrTrying() async throws {
+        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [uniqueVaultItem()])])
+        sut.deadlineStore.startErasing()
+
+        await #expect(throws: VaultUnlockError.erasing) {
+            try await sut.service.unlock(password: "real")
+        }
+
+        #expect(sut.log.value.isEmpty)
+        #expect(sut.clock.sleeps.isEmpty)
+        #expect(await sut.session.isLocked)
+    }
+
+    /// The storage state file, as the deadline store, says when an erase is underway.
+    @Test
+    func stateFile_asTheDeadlineStore_saysWhenAnEraseIsUnderway() async throws {
+        try await withTemporaryDirectory { directory in
+            let stateFile = VaultStorageStateFile(directory: directory)
+            try stateFile.write(VaultStorageState(mode: .password, unlockDeadline: deadline))
+            #expect(try await !stateFile.isErasing())
+
+            try stateFile.write(VaultStorageState(mode: .password, transition: .erasing, unlockDeadline: deadline))
+
+            #expect(try await stateFile.isErasing())
+        }
     }
 
     @Test

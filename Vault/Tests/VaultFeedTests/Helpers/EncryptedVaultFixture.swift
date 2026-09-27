@@ -112,7 +112,12 @@ struct EncryptedVaultFixture {
 }
 
 /// Runs `body` with a new, empty directory on disk, and deletes it afterwards.
-func withTemporaryDirectory<T>(_ body: (URL) async throws -> T) async throws -> T {
+///
+/// It runs in the caller's isolation, so a test on the main actor can use it.
+func withTemporaryDirectory<T>(
+    isolation _: isolated (any Actor)? = #isolation,
+    _ body: (URL) async throws -> T,
+) async throws -> T {
     let directory = URL.temporaryDirectory.appending(
         path: "EncryptedVault-\(UUID().uuidString)",
         directoryHint: .isDirectory,

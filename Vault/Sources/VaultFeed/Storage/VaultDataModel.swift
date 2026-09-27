@@ -270,6 +270,12 @@ public final class VaultDataModel {
         }
     }
 
+    /// Reads the last backup event again, for when it's been cleared underneath the model, by an erase
+    /// (`VaultEraser`).
+    public func reloadLastBackupEvent() {
+        lastBackupEvent = backupEventLogger.lastBackupEvent()
+    }
+
     private func monitorBackupEvents() {
         lastBackupEvent = backupEventLogger.lastBackupEvent()
         backupEventLogger.loggedEventPublisher.sink { [weak self] newEvent in

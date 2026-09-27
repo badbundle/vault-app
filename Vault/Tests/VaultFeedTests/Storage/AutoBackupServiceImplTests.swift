@@ -38,6 +38,37 @@ struct AutoBackupServiceImplTests {
         #expect(sut.configuration.lastBackupHash == "abc123")
     }
 
+    // MARK: - Forgetting
+
+    /// After an erase, auto-backup mustn't remember where the erased vault's backups went: not in memory, where the
+    /// service read it at launch, not in its providers, and not in the defaults.
+    @Test @LeakTracked
+    func forgetConfiguration_turnsItOffAndForgetsTheProviderEverywhere() async throws {
+        let defaults = try testUserDefaults()
+        let key = Key<AutoBackupConfiguration>(VaultIdentifiers.AutoBackup.configuration)
+        try Defaults(userDefaults: defaults).set(
+            AutoBackupConfiguration(
+                isEnabled: true,
+                retentionDays: .year1,
+                providerID: "test-provider",
+                providerConfigs: ["test-provider": Data("folder".utf8)],
+                lastBackupHash: "abc123",
+                lastBackupDate: Date(timeIntervalSince1970: 1000),
+            ),
+            for: key,
+        )
+        let provider = BackupStorageProviderStub(id: "test-provider")
+        let sut = try makeSUT(defaults: defaults, providers: [provider])
+
+        await sut.forgetConfiguration()
+
+        #expect(sut.configuration == AutoBackupConfiguration())
+        #expect(sut.status == .disabled)
+        #expect(sut.selectedProvider == nil)
+        #expect(provider.clearedConfiguration)
+        #expect(Defaults(userDefaults: defaults).get(for: key) == nil)
+    }
+
     // MARK: - Set Enabled
 
     @Test @LeakTracked

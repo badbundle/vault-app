@@ -73,7 +73,7 @@ struct BackupPasswordStatusTests {
     @Test
     func passwordSetBeforeStatusWasRecorded_isKnownOnceLoaded() async throws {
         try await makeSUT().store(backupPassword: anyBackupPassword())
-        await storage.remove(key: VaultIdentifiers.SecureStorageKey.backupPasswordMetadata)
+        await storage.remove(key: VaultIdentifiers.SecureStorageKey.backupPasswordMetadata.rawValue)
         let sut = makeSUT()
 
         await sut.loadBackupPasswordStatus()
@@ -93,7 +93,7 @@ struct BackupPasswordStatusTests {
     func passwordSetBeforeStatusWasRecorded_usesReadableAttributes() async throws {
         let storage = InMemorySecureStorage(canReadAttributesWithoutAuthentication: true, modificationDate: setDate)
         try await makeSUT(storage: storage).store(backupPassword: anyBackupPassword())
-        await storage.remove(key: VaultIdentifiers.SecureStorageKey.backupPasswordMetadata)
+        await storage.remove(key: VaultIdentifiers.SecureStorageKey.backupPasswordMetadata.rawValue)
         let sut = makeSUT(storage: storage)
 
         await sut.loadBackupPasswordStatus()
@@ -106,7 +106,7 @@ struct BackupPasswordStatusTests {
     @Test
     func statusWithoutPassword_isClearedOnceLoaded() async throws {
         try await makeSUT().store(backupPassword: anyBackupPassword())
-        await storage.remove(key: VaultIdentifiers.SecureStorageKey.backupPassword)
+        await storage.remove(key: VaultIdentifiers.SecureStorageKey.backupPassword.rawValue)
         let sut = makeSUT()
         await sut.loadBackupPasswordStatus()
 

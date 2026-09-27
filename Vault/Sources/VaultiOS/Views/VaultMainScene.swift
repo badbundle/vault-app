@@ -14,6 +14,7 @@ public struct VaultMainScene: Scene {
     @State private var vaultDataModel: VaultDataModel = VaultRoot.vaultDataModel
     @State private var injector: VaultInjector = VaultRoot.vaultInjector
     @State private var pendingOpenItemDetail: Identifier<VaultItem>?
+    @State private var interruptedErase = VaultRoot.interruptedErase
     #if DEBUG
     @State private var isSeedingScreenshotVault = ScreenshotMode.isEnabled
     #endif
@@ -33,17 +34,24 @@ public struct VaultMainScene: Scene {
                 VaultStoreFailureView(message: failureMessage)
             } else {
                 AppLockContainer(appLock: appLockService, localSettings: localSettings) {
-                    #if DEBUG
-                    if isSeedingScreenshotVault {
-                        // Keeps the vault off screen until the demo data is in,
-                        // so the navigation view's own setup sees the seeded vault.
-                        Color.clear.task { await seedScreenshotVault() }
+                    if let interruptedErase, interruptedErase.state != .erased {
+                        // Keeps the vault off screen until an erase the app was
+                        // stopped in the middle of has finished, so the navigation
+                        // view's own setup never loads the keys it deletes.
+                        InterruptedEraseView(viewModel: interruptedErase)
                     } else {
+                        #if DEBUG
+                        if isSeedingScreenshotVault {
+                            // Keeps the vault off screen until the demo data is in,
+                            // so the navigation view's own setup sees the seeded vault.
+                            Color.clear.task { await seedScreenshotVault() }
+                        } else {
+                            mainNavigationView
+                        }
+                        #else
                         mainNavigationView
+                        #endif
                     }
-                    #else
-                    mainNavigationView
-                    #endif
                 }
                 // Out here to be heard while the app is locked: what a link
                 // opens waits until the app is unlocked.
