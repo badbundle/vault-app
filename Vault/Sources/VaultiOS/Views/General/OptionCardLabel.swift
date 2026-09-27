@@ -12,23 +12,21 @@ struct OptionCardLabel: View {
     var systemImage: String
     var color: Color = .accentColor
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         HStack(spacing: 14) {
-            OptionCardIcon(systemImage: systemImage, color: color)
+            // At the accessibility text sizes the icon goes above the text, which then has room to wrap in rather than
+            // a word to a line.
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 10))
+                : AnyLayout(HStackLayout(spacing: 14))
+            layout {
+                OptionCardIcon(systemImage: systemImage, color: color)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.headline)
-                    .foregroundStyle(Color(uiColor: .label))
-                Text(subtitle)
-                    .font(.subheadline)
-                    // Explicit, so a button in a list doesn't tint it.
-                    .foregroundStyle(Color(uiColor: .secondaryLabel))
+                text
             }
-            .multilineTextAlignment(.leading)
-            // A sheet that measures this to size itself would otherwise lay it out in a zero-height sheet first, and
-            // truncate the text to one line. Sizing the text to its own height lets the subtitle wrap.
-            .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 0)
 
@@ -40,6 +38,22 @@ struct OptionCardLabel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         // The whole card is the target, not just the text.
         .contentShape(.rect)
+    }
+
+    private var text: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.headline)
+                .foregroundStyle(Color(uiColor: .label))
+            Text(subtitle)
+                .font(.subheadline)
+                // Explicit, so a button in a list doesn't tint it.
+                .foregroundStyle(Color(uiColor: .secondaryLabel))
+        }
+        .multilineTextAlignment(.leading)
+        // A sheet that measures this to size itself would otherwise lay it out in a zero-height sheet first, and
+        // truncate the text to one line. Sizing the text to its own height lets the subtitle wrap.
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 

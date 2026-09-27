@@ -166,6 +166,8 @@ struct DetailEditorView<ViewModel: DetailViewModel, StepContent: View>: View {
                 }
             },
         )
+        // Past this, "Continue" breaks across two lines beside the back button.
+        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
     }
 
     private func position(of step: DetailEditorStep) -> DetailEditorStepHeader.Position? {

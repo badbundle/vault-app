@@ -18,6 +18,7 @@ public struct VaultItemFeedView<
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var state: VaultItemFeedState
     @Namespace private var barGlass
     @AccessibilityFocusState private var isStatusBarFocused: Bool
@@ -725,8 +726,11 @@ public struct VaultItemFeedView<
         16
     }
 
+    /// Cards are square, so one whose text makes it taller than its column is also wider, and runs off the screen.
+    /// At the accessibility text sizes they're given room for that: one to a row on a phone.
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: 150), spacing: itemSpacing, alignment: .top)]
+        let minimumWidth: Double = dynamicTypeSize.isAccessibilitySize ? 300 : 150
+        return [GridItem(.adaptive(minimum: minimumWidth), spacing: itemSpacing, alignment: .top)]
     }
 }
 

@@ -40,6 +40,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Copying a PDF backup from its share sheet counted as saving it, and put the backup on the clipboard. Copy and Markup are gone from that share sheet, and backup PDFs no longer stay behind in temporary files
 - The editor's Tags, Encryption and Password rows needed a second tap to open their sheets
 - VoiceOver read the editor's text fields and recovery phrase words without their names
+- At the largest text sizes, codes in the feed ran off the edge of the screen, and the item editor wrapped its titles a word to a line with "Continue" split in two. The feed now shows a card per row at those sizes, and the editor puts each step's icon above its title
 
 ### Changed
 
