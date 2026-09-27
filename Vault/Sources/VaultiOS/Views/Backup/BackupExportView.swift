@@ -137,7 +137,7 @@ struct BackupExportView: View {
             Button {
                 modal = .updatePassword
             } label: {
-                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
+                FormRow(image: Image(systemName: "lock.shield.fill"), color: .accentColor) {
                     Text("Create Backup Password")
                 }
             }

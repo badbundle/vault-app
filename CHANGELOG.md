@@ -56,6 +56,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Copied codes are cleared from the clipboard after 1 minute by default. Anyone who chose Never keeps it
 - New codes are no longer offered in QuickType unless Show New Codes in QuickType is on
 - Settings has a heading and short footer for every section, with icons colored by section, and Universal Clipboard opens its own sheet
+- The App Lock Password shows the lock screen's vault door wherever it's set, changed or managed, so it's plainly the password the lock screen asks for. The backup password has a shield wherever it's set, entered or changed
 - The Danger Zone is a sheet that says what deleting removes and what's kept, and asks you to confirm before it deletes anything
 - Item pages look like the editor: the item's badge at the top and cards beneath it, with a larger live code on a code's page
 - Tapping + opens one sheet that starts with choosing the kind of item and slides straight into its editor

@@ -124,14 +124,29 @@ extension PasteboardContentType {
 
 /// The label of a Settings row that opens a sheet: the setting's name, a summary of its value and a chevron, so it
 /// reads like the rows around it rather than as a tinted button.
-struct SheetRowLabel: View {
+struct SheetRowLabel<Icon: View>: View {
     var title: String
     var value: String
-    var systemImage: String
     var color: Color
+    var icon: Icon
+
+    init(title: String, value: String, color: Color, @ViewBuilder icon: () -> Icon) {
+        self.title = title
+        self.value = value
+        self.color = color
+        self.icon = icon()
+    }
+
+    init(title: String, value: String, systemImage: String, color: Color) where Icon == Image {
+        self.init(title: title, value: value, color: color) {
+            Image(systemName: systemImage)
+        }
+    }
 
     var body: some View {
-        FormRow(image: Image(systemName: systemImage), color: color) {
+        FormRow(color: color) {
+            icon
+        } content: {
             LabeledContent {
                 HStack(spacing: 8) {
                     Text(value)

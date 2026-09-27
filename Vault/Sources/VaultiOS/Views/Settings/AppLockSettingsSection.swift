@@ -65,9 +65,10 @@ struct AppLockSettingsSection: View {
             SheetRowLabel(
                 title: "App Lock Password",
                 value: appLock.isPasswordSet ? "On" : "Off",
-                systemImage: "ellipsis.rectangle.fill",
                 color: SettingsIconColor.security,
-            )
+            ) {
+                AppLockPasswordMark.RowIcon()
+            }
         }
         .disabled(isChanging)
         // What the sheet shows is fixed when it opens, so setting the password shows that it's set, rather than

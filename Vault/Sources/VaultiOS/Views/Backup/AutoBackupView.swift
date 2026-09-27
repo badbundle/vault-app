@@ -95,7 +95,7 @@ struct AutoBackupView: View {
             Button {
                 isShowingCreatePassword = true
             } label: {
-                FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
+                FormRow(image: Image(systemName: "lock.shield.fill"), color: .accentColor) {
                     Text("Create Backup Password")
                 }
             }

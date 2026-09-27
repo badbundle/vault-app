@@ -7,10 +7,15 @@ import SwiftUI
 /// Sits in its own `Form` section without a row background, so it reads as the screen's headline
 /// rather than as another row.
 struct BackupHeroHeader<Accessory: View>: View {
+    enum Icon {
+        case symbol(String, color: Color)
+        /// The vault door from the lock screen, for the App Lock Password (see `AppLockPasswordMark`).
+        case appLockPassword
+    }
+
     var title: String
     var subtitle: String
-    var systemImage: String
-    var color: Color
+    var icon: Icon
     /// Point size of the symbol at the default Dynamic Type size.
     var iconSize: Double
     /// Bounces the symbol once when the header first appears, to celebrate a finished step.
@@ -23,27 +28,41 @@ struct BackupHeroHeader<Accessory: View>: View {
     init(
         title: String,
         subtitle: String,
-        systemImage: String,
-        color: Color,
+        icon: Icon,
         iconSize: Double = 72,
         bouncesOnAppear: Bool = false,
         @ViewBuilder accessory: @escaping () -> Accessory,
     ) {
         self.title = title
         self.subtitle = subtitle
-        self.systemImage = systemImage
-        self.color = color
+        self.icon = icon
         self.iconSize = iconSize
         self.bouncesOnAppear = bouncesOnAppear
         self.accessory = accessory
     }
 
+    init(
+        title: String,
+        subtitle: String,
+        systemImage: String,
+        color: Color,
+        iconSize: Double = 72,
+        bouncesOnAppear: Bool = false,
+        @ViewBuilder accessory: @escaping () -> Accessory,
+    ) {
+        self.init(
+            title: title,
+            subtitle: subtitle,
+            icon: .symbol(systemImage, color: color),
+            iconSize: iconSize,
+            bouncesOnAppear: bouncesOnAppear,
+            accessory: accessory,
+        )
+    }
+
     var body: some View {
         VStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: iconSize * iconScale))
-                .foregroundStyle(color)
-                .symbolEffect(.bounce, value: hasAppeared)
+            iconView
                 .padding(.bottom, 4)
                 .accessibilityHidden(true)
             VStack(spacing: 12) {
@@ -68,6 +87,19 @@ struct BackupHeroHeader<Accessory: View>: View {
             }
         }
     }
+
+    @ViewBuilder
+    private var iconView: some View {
+        switch icon {
+        case let .symbol(systemImage, color):
+            Image(systemName: systemImage)
+                .font(.system(size: iconSize * iconScale))
+                .foregroundStyle(color)
+                .symbolEffect(.bounce, value: hasAppeared)
+        case .appLockPassword:
+            AppLockPasswordMark.Hero(size: iconSize * iconScale)
+        }
+    }
 }
 
 extension BackupHeroHeader where Accessory == EmptyView {
@@ -82,11 +114,16 @@ extension BackupHeroHeader where Accessory == EmptyView {
         self.init(
             title: title,
             subtitle: subtitle,
-            systemImage: systemImage,
-            color: color,
+            icon: .symbol(systemImage, color: color),
             iconSize: iconSize,
             bouncesOnAppear: bouncesOnAppear,
         ) {
+            EmptyView()
+        }
+    }
+
+    init(title: String, subtitle: String, icon: Icon, iconSize: Double = 72, bouncesOnAppear: Bool = false) {
+        self.init(title: title, subtitle: subtitle, icon: icon, iconSize: iconSize, bouncesOnAppear: bouncesOnAppear) {
             EmptyView()
         }
     }

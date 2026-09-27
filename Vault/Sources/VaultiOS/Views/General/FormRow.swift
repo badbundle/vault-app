@@ -1,8 +1,8 @@
 import Foundation
 import SwiftUI
 
-struct FormRow<Content: View>: View {
-    var image: Image
+struct FormRow<Icon: View, Content: View>: View {
+    var icon: Icon
     var color: Color
     var style: Style
     var alignment: VerticalAlignment
@@ -15,18 +15,29 @@ struct FormRow<Content: View>: View {
         case standard
     }
 
+    /// A row whose icon is `icon`, in white on a tile of `color` when prominent, or in `color` when standard.
+    init(
+        color: Color,
+        style: Style = .prominent,
+        alignment: VerticalAlignment = .center,
+        @ViewBuilder icon: () -> Icon,
+        @ViewBuilder content: @escaping () -> Content,
+    ) {
+        self.icon = icon()
+        self.color = color
+        self.style = style
+        self.alignment = alignment
+        self.content = content
+    }
+
     init(
         image: Image,
         color: Color,
         style: Style = .prominent,
         alignment: VerticalAlignment = .center,
         @ViewBuilder content: @escaping () -> Content,
-    ) {
-        self.image = image
-        self.color = color
-        self.style = style
-        self.alignment = alignment
-        self.content = content
+    ) where Icon == Image {
+        self.init(color: color, style: style, alignment: alignment, icon: { image }, content: content)
     }
 
     var body: some View {
@@ -44,7 +55,7 @@ struct FormRow<Content: View>: View {
     private var prominentIcon: some View {
         ZStack {
             color
-            image
+            icon
                 .font(.body)
         }
         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -53,7 +64,7 @@ struct FormRow<Content: View>: View {
     }
 
     private var standardIcon: some View {
-        image
+        icon
             .frame(width: prominentIconSize, height: prominentIconSize)
             .foregroundStyle(color)
     }
