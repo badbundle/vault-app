@@ -44,7 +44,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 ### Changed
 
 - The keyboard no longer learns from anything typed into Vault: every text field, from note bodies and descriptions to passphrases, killphrases, searches and tag names, has autocorrection, predictive text and Writing Tools turned off, so none of it can turn up as a keyboard suggestion in another app. Fields written like sentences still capitalize them
-- App icon refreshed: the same door and wheel, drawn flat in two tones on a white background: a black frame (silver in the dark icon) and a blue wheel. A locked or encrypted item's door and the lock screen match
+- App icon refreshed: the same door and wheel, drawn flat in black on a white background (silver in the dark icon). A locked or encrypted item's door and the lock screen match
 - The export page explains itself: a header says every export is the whole vault encrypted with your backup password, then the two options sit under "Keep a Backup" (a PDF to save or print) and "Move to Another Device" (QR codes for another device to scan, with no file saved), each saying what it makes and how to restore it
 - Decrypting an encrypted item plays its own take on the vault door: the wheel works a combination, turning one way, back the other and round to seat, then the door swings wide and the item opens. A wrong password floods the header red from the door, which rattles in its frame, with the error in white
 - The feed's bottom bar minimizes while scrolling down, to a capsule showing the item count and active filter beside the search button (or the current search), and returns on scrolling up, at the top, or with a tap. It keeps its space while minimized, so the feed doesn't jump and still bounces at the bottom
