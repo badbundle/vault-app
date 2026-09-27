@@ -20,6 +20,7 @@ public struct VaultMainScene: Scene {
     #endif
 
     public init() {
+        EditedTextClipboard.install(VaultRoot.pasteboard)
         // Don't wire auto-backup and widget reloads when the store failed
         // to open: the fallback store is empty, and backing it up would
         // replace a good backup with an empty vault.

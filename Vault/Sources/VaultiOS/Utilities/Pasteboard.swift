@@ -28,7 +28,7 @@ public final class Pasteboard {
     /// the user's other devices if Universal Clipboard is on for this kind of value.
     ///
     /// Every copy Vault makes goes through here, including Copy in the edit menu of selectable text (see
-    /// `SelectableText`). The exception is a text field being edited, whose Cut and Copy are the system's.
+    /// `SelectableText`), and Cut and Copy in text being edited (see `EditedTextClipboard`).
     func copy(_ text: String, as contentType: PasteboardContentType) {
         let ttl = localSettings.state.pasteTimeToLive.duration
         let localOnly = !localSettings.state.isUniversalClipboardAllowed(for: contentType)
