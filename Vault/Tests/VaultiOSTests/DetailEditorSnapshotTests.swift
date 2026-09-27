@@ -83,6 +83,16 @@ struct DetailEditorSnapshotTests {
         snapshotScenarios(view: makeNoteView(viewModel: viewModel), height: 1200)
     }
 
+    /// At the largest text size the step's icon sits above its title, and the action bar stops growing, so neither
+    /// the header nor "Continue" breaks a word to a line.
+    @Test
+    func note_contentStepAtLargestTextSize() {
+        let viewModel = makeNoteCreating()
+        viewModel.editingModel.detail.contents = "Home Wi-Fi"
+
+        snapshotScenarios(view: makeNoteView(viewModel: viewModel), dynamicTypeSizes: [.accessibility5], height: 1400)
+    }
+
     @Test
     func note_securityStep() {
         let viewModel = makeNoteCreating()

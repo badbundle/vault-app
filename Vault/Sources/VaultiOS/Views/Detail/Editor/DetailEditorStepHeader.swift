@@ -19,7 +19,7 @@ struct DetailEditorStepHeader: View {
         var count: Int
     }
 
-    @ScaledMetric(relativeTo: .title2) private var iconSize: Double = 52
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(systemImage: String, title: String, subtitle: String, position: Position? = nil) {
         self.systemImage = systemImage
@@ -43,13 +43,14 @@ struct DetailEditorStepHeader: View {
                 DetailEditorProgressView(position: position)
             }
 
-            HStack(alignment: .center, spacing: 14) {
-                Image(systemName: systemImage)
-                    .font(.title2.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: iconSize, height: iconSize)
-                    .background(Color.accentColor, in: .rect(cornerRadius: 14))
-                    .accessibilityHidden(true)
+            // At the accessibility text sizes the icon goes above the text, which then has the whole width to wrap in
+            // rather than a word to a line.
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
+                : AnyLayout(HStackLayout(alignment: .center, spacing: 14))
+            layout {
+                StepIcon(systemImage: systemImage)
+                    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
@@ -66,6 +67,23 @@ struct DetailEditorStepHeader: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .textCase(nil)
+    }
+}
+
+/// The step's symbol on an accent-colored tile. The header stops it growing past the largest standard text size:
+/// at the accessibility sizes it would crowd out the text it heads.
+private struct StepIcon: View {
+    var systemImage: String
+
+    @ScaledMetric(relativeTo: .title2) private var size: Double = 52
+
+    var body: some View {
+        Image(systemName: systemImage)
+            .font(.title2.weight(.semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(Color.accentColor, in: .rect(cornerRadius: 14))
+            .accessibilityHidden(true)
     }
 }
 

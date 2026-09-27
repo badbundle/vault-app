@@ -56,6 +56,28 @@ final class VaultItemFeedViewSnapshotTests {
         assertSnapshot(of: sut, as: .image)
     }
 
+    /// Cards are square, so at the accessibility text sizes each gets a row of its own and none runs off the screen.
+    @Test
+    func layout_multipleCodesAtAccessibilitySize() async {
+        let store = VaultStoreStub()
+        let tagStore = VaultTagStoreStub()
+        store.retrieveHandler = { _ in
+            .init(items: [
+                uniqueVaultItem(),
+                uniqueVaultItem(),
+                uniqueVaultItem(),
+            ])
+        }
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: tagStore)
+        await dataModel.reloadData()
+
+        let sut = makeSUT(dataModel: dataModel)
+            .dynamicTypeSize(.accessibility5)
+            .framedForTest()
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
     @Test
     func viewState_toggleEditingMode() async {
         let state = VaultItemFeedState()
