@@ -27,6 +27,7 @@ struct VaultEraserTests {
                 "remove vault-slots.v1",
                 "remove the killphrase key from the keychain",
                 "reset the attempt count",
+                "remove the wrap stamp",
                 "forget the vault's settings",
                 "clear QuickType",
                 "reload widgets",
@@ -46,6 +47,32 @@ struct VaultEraserTests {
 
             let removals = harness.fileSystem.log.filter { $0.hasPrefix("remove ") }
             #expect(removals.first == "remove vault-slots.v1")
+        }
+    }
+
+    /// The lock file goes after the encrypted file, including when the journal couldn't be written and the plain store
+    /// goes first. A writer that found no lock file would make a new one and take it at once, and could save over an
+    /// encrypted file that was still there.
+    @Test(arguments: [false, true])
+    func erase_removesTheLockFileAfterTheEncryptedFile(journalFails: Bool) async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try await VaultEraseHarness.encryptedDevice(in: directory)
+            if journalFails {
+                // Creating the journal's temp file, the second step.
+                harness.fileSystem.inject(.fail(atStep: 2))
+            }
+
+            try await harness.erase()
+
+            let log = harness.fileSystem.log
+            let encryptedFile = try #require(log.firstIndex(of: "remove vault-slots.v1"))
+            let lockFile = try #require(log.firstIndex(of: "remove vault-slots.lock"))
+            #expect(encryptedFile < lockFile)
+            if journalFails {
+                let plainStore = try #require(log.firstIndex(of: "remove vault-primary.sqlite"))
+                #expect(plainStore < encryptedFile)
+            }
+            try await harness.expectErased()
         }
     }
 
@@ -179,6 +206,7 @@ extension VaultEraserTests {
             for step in [
                 "remove the backup password from the keychain",
                 "reset the attempt count",
+                "remove the wrap stamp",
                 "create the plain store",
             ] {
                 #expect(names.contains(step))
@@ -243,8 +271,9 @@ extension VaultEraserTests {
                 } else {
                     #expect(outcome == .password, context)
                     #expect(try harness.encryptedFileBytes() == before, context)
-                    #expect(await harness.keychain.keys() == Set(VaultEraseHarness.everySecureStorageKey), context)
-                    #expect(harness.attemptStorage.hasRecord, context)
+                    for key in VaultIdentifiers.SecureStorageKey.allCases {
+                        #expect(await harness.isStored(key), "\(key), \(context.rawValue)")
+                    }
                 }
             }
         }
@@ -298,14 +327,9 @@ struct VaultEraseHarness {
         "reload widgets",
         "forget the vault's settings",
     ]
-    /// Every item the app keeps in `SecureStorage`, listed here rather than taken from `VaultEraser.keychainKeys`, so
-    /// that one the eraser misses shows. The attempt count is kept apart, by `AppLockPasswordAttemptCounter`.
-    static let everySecureStorageKey = [
-        VaultIdentifiers.SecureStorageKey.backupPassword,
-        VaultIdentifiers.SecureStorageKey.backupPasswordMetadata,
-        VaultIdentifiers.SecureStorageKey.killphraseKey,
-        VaultIdentifiers.SecureStorageKey.searchPassphraseKey,
-    ]
+    /// Keychain items an erase keeps on purpose, and why. There are none: every item belongs to a vault, or shows one
+    /// existed. Every other `SecureStorageKey` must be gone after an erase.
+    static let keptKeychainItems: [VaultIdentifiers.SecureStorageKey: String] = [:]
     /// The vault's settings still kept in the app's defaults, which an erase clears.
     static let vaultSettingsKeys = [
         VaultIdentifiers.Backup.lastBackupEvent,
@@ -325,6 +349,7 @@ struct VaultEraseHarness {
     let fileSystem: FaultInjectingSlotFileSystem
     let keychain: FaultInjectingSecureStorage
     let attemptStorage: FaultInjectingAttemptStorage
+    let wrapStamps: FaultInjectingWrapStampStorage
     let userDefaults: UserDefaults
     let defaults: Defaults
     let session: VaultStoreSession
@@ -335,6 +360,7 @@ struct VaultEraseHarness {
         self.fileSystem = fileSystem
         keychain = FaultInjectingSecureStorage(faults: fileSystem)
         attemptStorage = FaultInjectingAttemptStorage(faults: fileSystem)
+        wrapStamps = FaultInjectingWrapStampStorage(faults: fileSystem)
         userDefaults = try testUserDefaults()
         defaults = Defaults(userDefaults: userDefaults)
         self.session = session
@@ -388,14 +414,20 @@ struct VaultEraseHarness {
         return harness
     }
 
-    /// Puts everything an erase clears outside the vault's directory on the device: every keychain item, ten wrong
-    /// attempts in a row, the vault's settings, and a backup PDF left in the temporary directory. And a setting an
-    /// erase keeps.
+    /// Puts everything an erase clears outside the vault's directory on the device: every keychain item, including ten
+    /// wrong attempts in a row, the vault's settings, and a backup PDF left in the temporary directory. And a setting
+    /// an erase keeps.
     func seedDevice() async throws {
-        for key in Self.everySecureStorageKey {
-            await keychain.store(data: Data(key.utf8), forKey: key)
+        for key in VaultIdentifiers.SecureStorageKey.allCases {
+            switch key {
+            case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey:
+                await keychain.store(data: Data(key.rawValue.utf8), forKey: key.rawValue)
+            case .appLockPasswordAttempts:
+                attemptStorage.setCount(AppLockPasswordAttemptCounter.eraseThreshold)
+            case .vaultWrapStamp:
+                try wrapStamps.save(1_790_000_000_000)
+            }
         }
-        attemptStorage.setCount(AppLockPasswordAttemptCounter.eraseThreshold)
         try defaults.set(
             VaultBackupEvent(
                 backupDate: Date(timeIntervalSince1970: 100),
@@ -433,6 +465,7 @@ struct VaultEraseHarness {
             session: session,
             secureStorage: keychain,
             attemptCounter: AppLockPasswordAttemptCounter(storage: attemptStorage, clock: FakeAppLockClock()),
+            wrapStamps: wrapStamps,
             defaults: defaults,
             temporaryDirectory: temporaryDirectory,
             hooks: VaultEraser.Hooks(
@@ -493,6 +526,18 @@ struct VaultEraseHarness {
         return remaining.isEmpty
     }
 
+    /// Whether the keychain item is there, wherever it's kept.
+    func isStored(_ key: VaultIdentifiers.SecureStorageKey) async -> Bool {
+        switch key {
+        case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey:
+            await keychain.keys().contains(key.rawValue)
+        case .appLockPasswordAttempts:
+            attemptStorage.hasRecord
+        case .vaultWrapStamp:
+            wrapStamps.hasStamp
+        }
+    }
+
     var stateFile: VaultStorageStateFile {
         VaultStorageStateFile(directory: directory, fileSystem: LiveSlotFileSystem())
     }
@@ -525,8 +570,10 @@ struct VaultEraseHarness {
         #expect(state.items.isEmpty, context, sourceLocation: sourceLocation)
         #expect(state.tags.isEmpty, context, sourceLocation: sourceLocation)
 
-        #expect(await keychain.keys().isEmpty, context, sourceLocation: sourceLocation)
-        #expect(!attemptStorage.hasRecord, context, sourceLocation: sourceLocation)
+        for key in VaultIdentifiers.SecureStorageKey.allCases {
+            let kept = Self.keptKeychainItems[key] != nil
+            #expect(await isStored(key) == kept, "\(key)", sourceLocation: sourceLocation)
+        }
         for key in Self.vaultSettingsKeys {
             #expect(userDefaults.object(forKey: key) == nil, "\(key)", sourceLocation: sourceLocation)
         }
@@ -579,12 +626,12 @@ actor FaultInjectingSecureStorage: SecureStorage {
     }
 
     private static func name(_ key: String) -> String {
-        switch key {
-        case VaultIdentifiers.SecureStorageKey.killphraseKey: "the killphrase key"
-        case VaultIdentifiers.SecureStorageKey.searchPassphraseKey: "the search passphrase key"
-        case VaultIdentifiers.SecureStorageKey.backupPassword: "the backup password"
-        case VaultIdentifiers.SecureStorageKey.backupPasswordMetadata: "the backup password's record"
-        default: key
+        switch VaultIdentifiers.SecureStorageKey(rawValue: key) {
+        case .killphraseKey: "the killphrase key"
+        case .searchPassphraseKey: "the search passphrase key"
+        case .backupPassword: "the backup password"
+        case .backupPasswordMetadata: "the backup password's record"
+        case .appLockPasswordAttempts, .vaultWrapStamp, nil: key
         }
     }
 }
@@ -617,5 +664,32 @@ final class FaultInjectingAttemptStorage: AppLockPasswordAttemptStorage {
     func remove() throws {
         try faults.step("reset the attempt count")
         record.modify { $0 = nil }
+    }
+}
+
+/// The wrap stamp in memory, whose removal is a step of a `FaultInjectingSlotFileSystem`.
+final class FaultInjectingWrapStampStorage: VaultWrapStampStorage {
+    private let stamp = SharedMutex<UInt64?>(nil)
+    private let faults: FaultInjectingSlotFileSystem
+
+    init(faults: FaultInjectingSlotFileSystem) {
+        self.faults = faults
+    }
+
+    var hasStamp: Bool {
+        stamp.get { $0 != nil }
+    }
+
+    func load() throws -> UInt64? {
+        stamp.get { $0 }
+    }
+
+    func save(_ newStamp: UInt64) throws {
+        stamp.modify { $0 = newStamp }
+    }
+
+    func remove() throws {
+        try faults.step("remove the wrap stamp")
+        stamp.modify { $0 = nil }
     }
 }

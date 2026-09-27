@@ -127,7 +127,7 @@ extension BackupPasswordStoreImpl {
     }
 
     private enum KeychainKey {
-        static let backupPassword = VaultIdentifiers.SecureStorageKey.backupPassword
-        static let backupPasswordMetadata = VaultIdentifiers.SecureStorageKey.backupPasswordMetadata
+        static let backupPassword = VaultIdentifiers.SecureStorageKey.backupPassword.rawValue
+        static let backupPasswordMetadata = VaultIdentifiers.SecureStorageKey.backupPasswordMetadata.rawValue
     }
 }

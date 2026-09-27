@@ -49,7 +49,7 @@ struct KillphraseKeyStoreImplTests {
         _ = try await sut.loadOrCreate()
 
         let stored = await recorder.stored
-        #expect(stored?.key == VaultIdentifiers.SecureStorageKey.killphraseKey)
+        #expect(stored?.key == VaultIdentifiers.SecureStorageKey.killphraseKey.rawValue)
     }
 
     @Test

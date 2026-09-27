@@ -9,26 +9,29 @@ public enum VaultIdentifiers {
         public static let recoveryPhrase = "vault.item.recovery-phrase.v1"
     }
 
-    public enum SecureStorageKey {
-        public static let backupPassword = "vault.secure-storage.backup-password.v1"
+    /// Every item the app keeps in the keychain, whichever way it's stored: through `SecureStorage`, or directly by
+    /// the attempt counter and the wrap stamper. An item that isn't here isn't erased (`VaultEraser`), and adding one
+    /// here doesn't build until the erase says what happens to it.
+    public enum SecureStorageKey: String, CaseIterable, Sendable {
+        case backupPassword = "vault.secure-storage.backup-password.v1"
         /// Non-secret record that a backup password is set, and when. Stored
         /// with `.whenUnlocked` access (no biometric), unlike the password
         /// itself, so the status can be shown without authenticating.
-        public static let backupPasswordMetadata = "vault.secure-storage.backup-password-metadata.v1"
+        case backupPasswordMetadata = "vault.secure-storage.backup-password-metadata.v1"
         /// HMAC key for per-item killphrase digests. Stored with
         /// `.whenUnlocked` access (no biometric) so the killphrase
         /// match path works as soon as the device is unlocked.
-        public static let killphraseKey = "vault.secure-storage.killphrase-key.v1"
+        case killphraseKey = "vault.secure-storage.killphrase-key.v1"
         /// HMAC key for per-item search-passphrase digests. Same access
         /// class as `killphraseKey` so the case-folded match works the
         /// moment the device is unlocked.
-        public static let searchPassphraseKey = "vault.secure-storage.search-passphrase-key.v1"
+        case searchPassphraseKey = "vault.secure-storage.search-passphrase-key.v1"
         /// Wrong attempts at the app lock password, and when the latest was made. Kept on this device only, and
         /// readable only while it's unlocked, with no biometric prompt.
-        public static let appLockPasswordAttempts = "vault.secure-storage.app-lock-password-attempts.v1"
+        case appLockPasswordAttempts = "vault.secure-storage.app-lock-password-attempts.v1"
         /// The latest time this device stamped a vault's key wrap with, which later wraps must follow. Kept on this
         /// device only, and readable only while it's unlocked, with no biometric prompt.
-        public static let vaultWrapStamp = "vault.secure-storage.vault-wrap-stamp.v1"
+        case vaultWrapStamp = "vault.secure-storage.vault-wrap-stamp.v1"
     }
 
     public enum Backup {

@@ -49,7 +49,7 @@ struct SearchPassphraseKeyStoreImplTests {
         _ = try await sut.loadOrCreate()
 
         let stored = await recorder.stored
-        #expect(stored?.key == VaultIdentifiers.SecureStorageKey.searchPassphraseKey)
+        #expect(stored?.key == VaultIdentifiers.SecureStorageKey.searchPassphraseKey.rawValue)
     }
 
     @Test

@@ -154,7 +154,7 @@ struct VaultWrapStampKeychainStorage: VaultWrapStampStorage {
     static func itemQuery(accessGroup: String?) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: VaultIdentifiers.SecureStorageKey.vaultWrapStamp,
+            kSecAttrService as String: VaultIdentifiers.SecureStorageKey.vaultWrapStamp.rawValue,
             kSecAttrSynchronizable as String: false,
             // Makes macOS use the same keychain as iOS.
             kSecUseDataProtectionKeychain as String: true,

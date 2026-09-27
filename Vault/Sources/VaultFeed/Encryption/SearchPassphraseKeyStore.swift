@@ -36,6 +36,6 @@ public struct SearchPassphraseKeyStoreImpl: SearchPassphraseKeyStore {
     }
 
     private enum KeychainKey {
-        static let searchPassphraseKey = VaultIdentifiers.SecureStorageKey.searchPassphraseKey
+        static let searchPassphraseKey = VaultIdentifiers.SecureStorageKey.searchPassphraseKey.rawValue
     }
 }

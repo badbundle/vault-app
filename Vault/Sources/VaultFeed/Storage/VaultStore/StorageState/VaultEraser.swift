@@ -20,12 +20,13 @@ import VaultCore
 ///    the app stops in between, there's no journal, but no vault either, and launch recovery finishes the erase. In
 ///    this case it removes the plain store before the encrypted file, so the app can't stop with the encrypted file
 ///    gone and a plain store left, which recovery would keep, as it could be the only copy of the vault.
-/// 3. Removes every copy of a vault: the encrypted file first, then its temp files and its lock file, the plain
-///    store's files, and plain stores set aside because they couldn't be opened, which are plaintext copies. Nothing
+/// 3. Removes every copy of a vault: the encrypted file first, then its temp files, the plain store's files, plain
+///    stores set aside because they couldn't be opened, which are plaintext copies, and last the lock file. Nothing
 ///    can open a vault from here on. It holds the encrypted file's lock while it does, if it can, so a save underway
 ///    in an extension can't put the file back: a save reads the file under the lock, and fails if there isn't one.
-/// 4. Deletes the keychain items: the killphrase and search passphrase HMAC keys, the backup password and its
-///    record, and the count of attempts at the App Lock Password.
+/// 4. Deletes every keychain item (`VaultIdentifiers.SecureStorageKey`): the killphrase and search passphrase HMAC
+///    keys, the backup password and its record, the count of attempts at the App Lock Password, and the wrap stamp,
+///    which shows a password vault was used and about when.
 /// 5. Clears the vault's settings still kept on the device: the last backup event, the auto-backup configuration,
 ///    which says where the backups are, and the PDF backup's hint. Then whatever holds them in memory forgets them
 ///    too (a hook).
@@ -47,14 +48,6 @@ import VaultCore
 /// See "Erasing after failed attempts" in `docs/on-device-encryption.md`. Never log, print or measure anything about
 /// an erase: when it happens shows how many wrong passwords were tried.
 public actor VaultEraser {
-    /// The keychain items it deletes, apart from the attempt count, which `AppLockPasswordAttemptCounter` keeps.
-    static let keychainKeys = [
-        VaultIdentifiers.SecureStorageKey.killphraseKey,
-        VaultIdentifiers.SecureStorageKey.searchPassphraseKey,
-        VaultIdentifiers.SecureStorageKey.backupPassword,
-        VaultIdentifiers.SecureStorageKey.backupPasswordMetadata,
-    ]
-
     /// What the app does around an erase, outside storage. Each is called again if the erase is repeated.
     public struct Hooks: Sendable {
         /// Lets go of the plain store, if one is open, so its database closes before its files are deleted. The
@@ -88,6 +81,7 @@ public actor VaultEraser {
     private let session: VaultStoreSession
     private let secureStorage: any SecureStorage
     private let attemptCounter: AppLockPasswordAttemptCounter
+    private let wrapStamps: any VaultWrapStampStorage
     private let defaults: Defaults
     private let temporaryDirectory: URL
     private let hooks: Hooks
@@ -119,6 +113,7 @@ public actor VaultEraser {
             session: session,
             secureStorage: secureStorage,
             attemptCounter: attemptCounter,
+            wrapStamps: VaultWrapStampKeychainStorage(),
             defaults: defaults,
             temporaryDirectory: temporaryDirectory,
             hooks: hooks,
@@ -136,6 +131,7 @@ public actor VaultEraser {
         session: VaultStoreSession,
         secureStorage: any SecureStorage,
         attemptCounter: AppLockPasswordAttemptCounter,
+        wrapStamps: any VaultWrapStampStorage,
         defaults: Defaults,
         temporaryDirectory: URL,
         hooks: Hooks,
@@ -146,6 +142,7 @@ public actor VaultEraser {
         self.session = session
         self.secureStorage = secureStorage
         self.attemptCounter = attemptCounter
+        self.wrapStamps = wrapStamps
         self.defaults = defaults
         self.temporaryDirectory = temporaryDirectory
         self.hooks = hooks
@@ -257,27 +254,43 @@ extension VaultEraser {
         // In order of name, so every erase takes the same steps.
         for url in try fileSystem.contentsOfDirectory(at: directory).sorted(by: { $0.path < $1.path }) {
             let name = url.lastPathComponent
-            let isEncrypted = name.hasPrefix(EncryptedVaultFile.temporaryFilePrefix)
-                || name == EncryptedVaultFile.lockFileName
+            let isTemporary = name.hasPrefix(EncryptedVaultFile.temporaryFilePrefix)
             let isPlain = plainStoreFileNames.contains(name)
                 || name.hasPrefix(PersistedLocalVaultStoreArchives.directoryNamePrefix)
-            if isEncrypted || (includingThePlainStore && isPlain) {
+            if isTemporary || (includingThePlainStore && isPlain) {
                 try fileSystem.removeItem(at: url)
             }
         }
         if encryptedFileLast {
             try fileSystem.removeItem(at: encryptedFile)
         }
+        // The lock file only once the encrypted file is gone: a writer that found no lock file would make a new one,
+        // take it without waiting for this one, and could save over a file that was still there.
+        try fileSystem.removeItem(at: directory.appending(path: EncryptedVaultFile.lockFileName))
         // Attempted, not required: the files are gone once they're removed. If a power loss brought any back, the
         // journal would still say to erase them.
         try? fileSystem.synchronizeDirectory(at: directory)
     }
 
     private func deleteKeychainItems() async throws {
-        for key in Self.keychainKeys {
-            try await secureStorage.remove(key: key)
+        for key in VaultIdentifiers.SecureStorageKey.allCases {
+            try await delete(key)
         }
-        try await attemptCounter.reset()
+    }
+
+    /// Deletes a keychain item, wherever it's kept. Every item is erased, and none kept: they all belong to the vault
+    /// or show it existed. An item added to `SecureStorageKey` doesn't build until it's decided here what an erase
+    /// does with it.
+    private func delete(_ key: VaultIdentifiers.SecureStorageKey) async throws {
+        switch key {
+        case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey:
+            try await secureStorage.remove(key: key.rawValue)
+        case .appLockPasswordAttempts:
+            try await attemptCounter.reset()
+        case .vaultWrapStamp:
+            // It shows a password vault was used on this device, and about when one last opened (MANIFESTO C6).
+            try wrapStamps.remove()
+        }
     }
 
     /// Clears the vault's settings that are still kept on the device, rather than in the vault itself: they'd show an

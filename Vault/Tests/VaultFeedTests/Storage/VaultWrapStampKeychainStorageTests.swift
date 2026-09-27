@@ -18,7 +18,8 @@ struct VaultWrapStampKeychainStorageTests {
         let query = VaultWrapStampKeychainStorage.itemQuery(accessGroup: "group.any")
 
         #expect(query[kSecClass as String] as? String == kSecClassGenericPassword as String)
-        #expect(query[kSecAttrService as String] as? String == VaultIdentifiers.SecureStorageKey.vaultWrapStamp)
+        #expect(query[kSecAttrService as String] as? String == VaultIdentifiers.SecureStorageKey.vaultWrapStamp
+            .rawValue)
         #expect(query[kSecAttrAccessGroup as String] as? String == "group.any")
     }
 

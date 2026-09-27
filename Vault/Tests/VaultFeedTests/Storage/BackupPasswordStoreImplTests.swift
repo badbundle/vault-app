@@ -302,7 +302,7 @@ struct BackupPasswordStoreImplTests {
 
 extension BackupPasswordStoreImplTests {
     private var metadataKey: String {
-        VaultIdentifiers.SecureStorageKey.backupPasswordMetadata
+        VaultIdentifiers.SecureStorageKey.backupPasswordMetadata.rawValue
     }
 
     private func makeSUT(

@@ -37,6 +37,6 @@ public struct KillphraseKeyStoreImpl: KillphraseKeyStore {
     }
 
     private enum KeychainKey {
-        static let killphraseKey = VaultIdentifiers.SecureStorageKey.killphraseKey
+        static let killphraseKey = VaultIdentifiers.SecureStorageKey.killphraseKey.rawValue
     }
 }

@@ -832,13 +832,16 @@ and resets the counter.
   encrypted file gone and a plain store left, which recovery keeps as a possible only copy. If the journal still
   can't be written, or the app stops first, the device is in the password mode with no vault at all, which recovery
   also reports as an erase to finish.
-- **Step 1 removes every copy of a vault:** the encrypted file first, then its temp files and lock file, the plain
-  store's files and its failed-open archives, which are plaintext copies. It holds the file's lock while it does, if
+- **Step 1 removes every copy of a vault:** the encrypted file first, then its temp files, the plain store's files
+  and its failed-open archives, which are plaintext copies, and last the lock file, so a writer can't take a new
+  lock while the encrypted file is still there. It holds the file's lock while it does, if
   it can, so a save underway in the AutoFill extension can't put the file back: a save reads the file under the lock,
   and fails if there isn't one. Before the journal is cleared, it checks again, holding the lock, that a writer that
   had stalled hasn't put the file back.
-- **Step 2** deletes the killphrase and search passphrase HMAC keys, the backup password and its record, and the
-  attempt count. There's no device key until VAULT-48; it adds its keychain item to the list.
+- **Step 2** deletes every keychain item: the killphrase and search passphrase HMAC keys, the backup password and
+  its record, the attempt count, and the wrap stamp (VAULT-51), which shows a password vault was used and about
+  when. `VaultIdentifiers.SecureStorageKey` lists every item, however it's stored, and the erase switches over all of
+  them, so a new one, such as VAULT-48's device key, doesn't build until it's decided what an erase does with it.
 - **Step 3** clears the vault's settings still kept on the device: the last backup event, the auto-backup
   configuration, and the PDF backup's hint. They'd show a vault had been erased, and the auto-backup configuration
   says where its backups are: once a new backup password is set, auto-backup would write there, and its retention

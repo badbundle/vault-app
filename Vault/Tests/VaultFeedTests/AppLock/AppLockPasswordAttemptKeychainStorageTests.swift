@@ -19,7 +19,7 @@ struct AppLockPasswordAttemptKeychainStorageTests {
 
         #expect(query[kSecClass as String] as? String == kSecClassGenericPassword as String)
         let service = query[kSecAttrService as String] as? String
-        #expect(service == VaultIdentifiers.SecureStorageKey.appLockPasswordAttempts)
+        #expect(service == VaultIdentifiers.SecureStorageKey.appLockPasswordAttempts.rawValue)
         #expect(query[kSecAttrAccessGroup as String] as? String == "group.any")
     }
 
