@@ -72,17 +72,22 @@ public enum OTPWidgetSnapshot: Sendable, Equatable {
         public var issuer: String
         public var accountName: String
         public var digits: Int
+        /// Whether tapping the code opens the app to get the next one, rather than the widget getting it: while the
+        /// App Lock Password is off (`WidgetVaultLoader.advancesHOTPInTheApp`).
+        public var advancesInTheApp: Bool
 
         public init(
             itemID: UUID,
             issuer: String,
             accountName: String,
             digits: Int,
+            advancesInTheApp: Bool = false,
         ) {
             self.itemID = itemID
             self.issuer = issuer
             self.accountName = accountName
             self.digits = digits
+            self.advancesInTheApp = advancesInTheApp
         }
     }
 }

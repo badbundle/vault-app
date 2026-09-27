@@ -36,6 +36,8 @@ struct VaultAutofillViewSnapshotTests {
         let viewModel = try VaultAutofillViewModel(
             localSettings: LocalSettings(defaults: .nonPersistent()),
             storage: .unavailable,
+            vaultService: nil,
+            currentAccessMode: { .unavailable },
             appLockSettings: AppLockSettingsStore(userDefaults: .nonPersistent()),
             authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
             purgeVaultContents: {},
@@ -58,10 +60,12 @@ struct VaultAutofillViewSnapshotTests {
 // MARK: - Helpers
 
 extension VaultAutofillViewSnapshotTests {
-    private func makeViewModel(headroom: FakeAutofillPasswordService.Headroom) throws -> VaultAutofillViewModel {
+    private func makeViewModel(headroom: FakeAutofillVaultService.Headroom) throws -> VaultAutofillViewModel {
         let viewModel = try VaultAutofillViewModel(
             localSettings: LocalSettings(defaults: .nonPersistent()),
-            storage: .encrypted(FakeAutofillPasswordService(headroom: headroom)),
+            storage: .password,
+            vaultService: FakeAutofillVaultService(headroom: headroom),
+            currentAccessMode: { .password },
             appLockSettings: AppLockSettingsStore(userDefaults: .nonPersistent()),
             authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
             purgeVaultContents: {},

@@ -11,10 +11,9 @@ struct AutofillOTPCredentialResolver {
     enum Outcome: Equatable {
         /// A rendered TOTP code, safe to return without interaction.
         case code(String)
-        /// The app lock is on, the vault is encrypted with the App Lock
-        /// Password, the item is auth-gated, or it's an HOTP code (whose
-        /// counter must not increment without UI). The system shows the
-        /// extension UI.
+        /// The app lock is on, only the App Lock Password opens the vault, the
+        /// item is auth-gated, or it's an HOTP code (whose counter must not
+        /// increment without UI). The system shows the extension UI.
         case userInteractionRequired
         /// The record identifier is missing, malformed, or matches no
         /// unlocked OTP item.
@@ -27,30 +26,31 @@ struct AutofillOTPCredentialResolver {
     private let copyActionHandler: any VaultItemCopyActionHandler
     private let clock: any EpochClock
     private let isAppLockEnabled: Bool
-    private let isVaultPlain: Bool
+    private let accessMode: VaultAccessMode
 
-    /// - Parameter isVaultPlain: Whether the vault is in the plain store, with
-    ///   no change of mode underway. Otherwise it can only be opened with the
-    ///   App Lock Password.
+    /// - Parameter accessMode: How the vault can be opened now. A plain vault,
+    ///   or one the device key opens, is read as it always has been; one only
+    ///   the App Lock Password opens isn't read at all.
     init(
         retrieveItems: @escaping () async throws -> VaultRetrievalResult<VaultItem>,
         copyActionHandler: any VaultItemCopyActionHandler,
         clock: any EpochClock,
         isAppLockEnabled: Bool,
-        isVaultPlain: Bool,
+        accessMode: VaultAccessMode,
     ) {
         self.retrieveItems = retrieveItems
         self.copyActionHandler = copyActionHandler
         self.clock = clock
         self.isAppLockEnabled = isAppLockEnabled
-        self.isVaultPlain = isVaultPlain
+        self.accessMode = accessMode
     }
 
     func resolve(recordIdentifier: String?) async -> Outcome {
-        // With the app lock on, or the vault encrypted, no code leaves the
-        // vault until the user has unlocked it in the extension's UI, with the
-        // password if there is one. The vault isn't even read.
-        guard !isAppLockEnabled, isVaultPlain else {
+        // With the app lock on, or only the password opening the vault, no
+        // code leaves the vault until the user has unlocked it in the
+        // extension's UI, with the password if it's on. The vault isn't even
+        // read.
+        guard !isAppLockEnabled, accessMode.opensWithoutPassword else {
             return .userInteractionRequired
         }
 

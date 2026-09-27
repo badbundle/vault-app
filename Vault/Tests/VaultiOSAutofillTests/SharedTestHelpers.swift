@@ -1,5 +1,6 @@
 import Foundation
 import FoundationExtensions
+import Testing
 import VaultFeed
 @testable import VaultiOSAutofill
 
@@ -48,21 +49,32 @@ struct StubSearchPassphraseKeyStore: SearchPassphraseKeyStore {
     }
 }
 
-/// The AutoFill extension's App Lock Password, with the password kept in memory, that counts how often the vault is
-/// locked and can be told whether there's the memory to unlock.
+/// How the AutoFill extension opens the encrypted vault, with the password kept in memory. It counts how often the
+/// vault is locked and opened with the device key, and can be told whether there's the memory to open it.
 @MainActor
-final class FakeAutofillPasswordService: AutofillPasswordUnlocking {
+final class FakeAutofillVaultService: AutofillVaultUnlocking {
     enum Headroom {
         case enough
         case notEnough
         /// The check never answers, as if it's still reading the file.
         case neverAnswers
+        /// Each check waits for `answerHeadroomChecks(_:)`.
+        case answersWhenTold
     }
+
+    struct DeviceKeyFailure: Error {}
 
     var onNotEnoughMemory: (@MainActor () -> Void)?
     private(set) var lockCount = 0
+    private(set) var deviceKeyOpenCount = 0
+    /// Every lock and open, in order.
+    private(set) var log = [String]()
+    var failsToOpenWithDeviceKey = false
+    /// Runs while the vault's being opened with the device key, once it's open.
+    var whileOpening: (() -> Void)?
     private let base: FakeAppLockPasswordService
     private let headroom: Headroom
+    private var waitingHeadroomChecks = [CheckedContinuation<Bool, Never>]()
 
     init(password: String = "correct horse", headroom: Headroom = .enough) {
         base = FakeAppLockPasswordService(password: password)
@@ -82,11 +94,41 @@ final class FakeAutofillPasswordService: AutofillPasswordUnlocking {
         case .neverAnswers:
             try await Task.sleep(for: .seconds(60 * 60))
             return false
+        case .answersWhenTold:
+            return await withCheckedContinuation { waitingHeadroomChecks.append($0) }
         }
+    }
+
+    /// Waits until a headroom check is waiting for an answer.
+    func waitForHeadroomCheck() async throws {
+        for _ in 0 ..< 1000 where waitingHeadroomChecks.isEmpty {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        try #require(!waitingHeadroomChecks.isEmpty)
+    }
+
+    func answerHeadroomChecks(_ answer: Bool) {
+        let waiting = waitingHeadroomChecks
+        waitingHeadroomChecks.removeAll()
+        for check in waiting {
+            check.resume(returning: answer)
+        }
+    }
+
+    func openWithDeviceKey() async throws {
+        guard try await hasMemoryHeadroomToUnlock() else {
+            onNotEnoughMemory?()
+            throw AutofillVaultService.NotEnoughMemoryError()
+        }
+        guard !failsToOpenWithDeviceKey else { throw DeviceKeyFailure() }
+        deviceKeyOpenCount += 1
+        log.append("open with the device key")
+        whileOpening?()
     }
 
     func lockVault() async {
         lockCount += 1
+        log.append("lock")
     }
 
     /// Finds, as an unlock or a save would, that there isn't the memory.

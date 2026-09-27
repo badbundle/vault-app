@@ -1051,10 +1051,10 @@ and resets the counter.
 
 | Surface | `plain` | `encrypted(password)` | `encrypted(deviceKey)` |
 | --- | --- | --- | --- |
-| Widgets | As today | Locked placeholder. `OTPWidgetItemEntityQuery` returns nothing. `reloadAllTimelines()` when the password is turned on, so archived timelines with codes are replaced. | As today: the extension reads the slot file with the device key ([sub-issue 11](#sub-issues)) |
-| Widget HOTP increment | As today | Unavailable | As today (sub-issue 11) |
-| AutoFill sheet (`prepareOneTimeCodeCredentialList`) | As today | Asks for the app lock password in the sheet. Checks memory headroom, derives with 64 MiB, opens the slot. Writes (HOTP) go through the same `flock` and generation check. Never Face ID alone (C4). | As today (sub-issue 11) |
-| QuickType (`provideCredentialWithoutUserInteraction`) | As today | Identity store emptied when the password is turned on, and never written while it's on. Requests return `userInteractionRequired`. | Identity store synced again from the open vault when the password is turned off (sub-issue 11) |
+| Widgets | As today | Locked placeholder. `OTPWidgetItemEntityQuery` returns nothing. `reloadAllTimelines()` when the password is turned on, so archived timelines with codes are replaced. | Codes show. The extension opens the slot file with the device key only to read it: without the file's lock, leaving nothing behind (no lock file, no wrap stamp), afresh for every read, and every read checks the mode is still `deviceKey` (VAULT-50). See residual limit 11. |
+| Widget HOTP increment | As today | Unavailable | Through the app: the small widget links to it, as the lock-screen widgets already do. The widget hasn't the memory to save the file (residual limit 11). |
+| AutoFill sheet (`prepareOneTimeCodeCredentialList`) | As today | Asks for the app lock password in the sheet. Checks memory headroom, derives with 64 MiB, opens the slot. Writes (HOTP) go through the same `flock` and generation check. Never Face ID alone (C4). | Device authentication, if the app lock is on, then the device key opens the slot, only then, and only if the storage state still says `deviceKey`, before and after opening. Every call to the open vault checks the mode again, and a save checks once more under the file's lock (`VaultAccessGuard`), so a sheet left open while the password is turned on, or the vault erased, shows and saves nothing. Checks memory headroom first, with the password path's figure (residual limit 11). |
+| QuickType (`provideCredentialWithoutUserInteraction`) | As today | Identity store emptied when the password is turned on, and never written while it's on. Requests return `userInteractionRequired`. | Identity store filled again from the vault the device key opens when the password is turned off, if Vault is turned on as an AutoFill provider, and kept in sync. Journaled (`syncingSystemSurfaces`), so launch finishes it. A write the password came on during is emptied again. Requests read the vault with the device key in a session of their own, locked straight after. |
 
 Residual: a configured widget's saved `OTPWidgetItemEntity` (issuer, account name) sits in the system's widget
 configuration, which the app can't edit. Turning on the password should tell users to remove existing widgets.
@@ -1136,6 +1136,18 @@ configuration, which the app can't edit. Turning on the password should tell use
     gone, and the password the vault had before doesn't open it either: turning the password off rewrapped the key
     and rotated `K_i`. Today's plain store would restore fine. The app shows its failure screen, which says to
     restore an encrypted or iCloud backup, or a backup PDF, and the turn-off screen warns about it beforehand.
+11. **Extension memory with the password off.** The file is at least 16 MiB, and reading it with the device key
+    reads all of it.
+    - A widget extension gets about 30 MiB, so a large vault may take a widget over its limit. The system then stops
+      it, and it shows its placeholder. Nothing is counted or written.
+    - A save needs twice the file plus four times the JSON plus 16 MiB, which a widget never has. So the widget
+      sends a HOTP increment to the app instead of making it.
+    - AutoFill checks the password path's headroom (64 MiB plus the file plus 16 MiB) before it opens the vault with
+      the device key, which needs less. That's stricter than it has to be, so on a device short of memory the sheet
+      may send the user to Vault when it could have opened the vault.
+
+    Reading only the slot a key opens, rather than the whole file, would fix the first two. It needs a format
+    change.
 
 ## Test strategy
 

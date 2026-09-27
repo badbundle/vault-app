@@ -7,6 +7,7 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
     @State private var viewModel: VaultAutofillViewModel
     var generator: Generator
     var copyActionHandler: any VaultItemCopyActionHandler
+    @Environment(\.scenePhase) private var scenePhase
 
     init(
         viewModel: VaultAutofillViewModel,
@@ -40,13 +41,22 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
                         }
                 case .available:
                     AppLockGate(appLock: viewModel.appLock, cancel: cancel) {
-                        VaultAutofillCodeSelectorView(
-                            localSettings: viewModel.localSettings,
-                            viewGenerator: generator,
-                            copyActionHandler: copyActionHandler,
-                            textToInsertSubject: viewModel.textToInsertSubject,
-                            cancelSubject: viewModel.cancelRequestSubject,
-                        )
+                        if viewModel.isVaultReady {
+                            VaultAutofillCodeSelectorView(
+                                localSettings: viewModel.localSettings,
+                                viewGenerator: generator,
+                                copyActionHandler: copyActionHandler,
+                                textToInsertSubject: viewModel.textToInsertSubject,
+                                cancelSubject: viewModel.cancelRequestSubject,
+                            )
+                        } else {
+                            // Only once the sheet's lock is unlocked: the vault's checked, and opened with the device
+                            // key, now. Again after every lock.
+                            ProgressView()
+                                .task(id: viewModel.lockCount) {
+                                    await viewModel.getVaultReadyToShow()
+                                }
+                        }
                     }
                 case .needsTheApp(.notEnoughMemory):
                     AppLockOpenVaultView(reason: .notEnoughMemory, cancel: cancel)
@@ -56,6 +66,9 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
             }
             .task {
                 await viewModel.prepareToUnlock()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                viewModel.scenePhaseDidChange(to: phase)
             }
         case let .unimplemented(name):
             Text("Unimplemented \(name)")

@@ -689,7 +689,11 @@ extension VaultPasswordChangeServiceTests {
         let comment = Comment(rawValue: context)
         let mode = try sut.relaunch()
         let after = try #require(try await EncryptedVaultFile(directory: sut.directory, fileSystem: sut.base).open())
-        #expect(try sut.stateFile.read().transition == nil, comment)
+        // Only the system surfaces can be left to catch up with the mode it landed in, for the app to finish.
+        let surfacesStep: VaultStorageState.Transition = mode == .deviceKey
+            ? .syncingSystemSurfaces
+            : .clearingSystemSurfaces
+        #expect(try [nil, surfacesStep].contains(sut.stateFile.read().transition), comment)
         #expect(try sut.temporaryFileNames().isEmpty, comment)
         try Self.expectOnlySlotChanged(Self.realSlot, from: before, to: after)
 
@@ -954,6 +958,95 @@ extension VaultPasswordChangeServiceTests {
 
 // MARK: - Helpers
 
+// MARK: - System surfaces
+
+extension VaultPasswordChangeServiceTests {
+    /// Turning the password off brings QuickType and the widgets back: they're filled again from the vault, and the
+    /// journal's done with.
+    @Test
+    func turnOffPassword_fillsQuickTypeAgainAndReloadsTheWidgets() async throws {
+        let sut = try await makeSUT()
+
+        #expect(try await sut.service.turnOffPassword(current: "real") == .changed)
+
+        #expect(sut.surfaces.value == ["fill QuickType and reload widgets"])
+        #expect(try sut.stateFile.read() == VaultStorageState(mode: .deviceKey, unlockDeadline: Self.deadline))
+    }
+
+    @Test
+    func turnOnPassword_emptiesQuickTypeAndReloadsTheWidgets() async throws {
+        let sut = try await makeSUT(mode: .deviceKey)
+
+        try await sut.service.turnOnPassword("new password")
+
+        #expect(sut.surfaces.value == ["empty QuickType and reload widgets"])
+        #expect(try sut.stateFile.read() == VaultStorageState(mode: .password, unlockDeadline: Self.deadline))
+    }
+
+    /// If the app stops after the password is off, before QuickType is filled again, the journal says so, and the
+    /// next launch fills it.
+    @Test
+    func turnOffPassword_stoppedBeforeFillingQuickType_theNextLaunchFillsIt() async throws {
+        let sut = try await makeSUT()
+        sut.surfaceHooksFail.modify { $0 = true }
+
+        #expect(try await sut.service.turnOffPassword(current: "real") == .changed)
+        #expect(try sut.stateFile.read().transition == .syncingSystemSurfaces)
+        #expect(try VaultAccessMode(state: sut.stateFile.read()) == .deviceKey)
+
+        let recovery = VaultStorageRecovery(
+            directory: sut.directory,
+            fileSystem: sut.fileSystem,
+            deviceKeyStore: sut.deviceKeyStore,
+        )
+        #expect(try recovery.recoverAtLaunch() == .deviceKey)
+        try await recovery.finishSyncingSystemSurfaces {
+            sut.surfaces.modify { $0.append("fill QuickType at launch") }
+        }
+
+        #expect(sut.surfaces.value == ["fill QuickType at launch"])
+        #expect(try sut.stateFile.read().transition == nil)
+    }
+
+    /// Likewise turning it back on: QuickType mustn't keep anything once only the password opens the vault.
+    @Test
+    func turnOnPassword_stoppedBeforeEmptyingQuickType_theNextLaunchEmptiesIt() async throws {
+        let sut = try await makeSUT(mode: .deviceKey)
+        sut.surfaceHooksFail.modify { $0 = true }
+
+        try await sut.service.turnOnPassword("new password")
+        #expect(try sut.stateFile.read().transition == .clearingSystemSurfaces)
+        #expect(try VaultAccessMode(state: sut.stateFile.read()) == .password)
+
+        let recovery = VaultStorageRecovery(
+            directory: sut.directory,
+            fileSystem: sut.fileSystem,
+            deviceKeyStore: sut.deviceKeyStore,
+        )
+        #expect(try recovery.recoverAtLaunch() == .password)
+        try await recovery.finishClearingSystemSurfaces {
+            sut.surfaces.modify { $0.append("empty QuickType at launch") }
+        }
+
+        #expect(sut.surfaces.value == ["empty QuickType at launch"])
+        #expect(try sut.stateFile.read().transition == nil)
+    }
+
+    /// With QuickType still to fill, the password can still be turned back on: that empties it instead.
+    @Test
+    func turnOnPassword_whileQuickTypeIsStillToFill_emptiesItInstead() async throws {
+        let sut = try await makeSUT()
+        sut.surfaceHooksFail.modify { $0 = true }
+        #expect(try await sut.service.turnOffPassword(current: "real") == .changed)
+        sut.surfaceHooksFail.modify { $0 = false }
+
+        try await sut.service.turnOnPassword("new password")
+
+        #expect(sut.surfaces.value == ["empty QuickType and reload widgets"])
+        #expect(try sut.stateFile.read() == VaultStorageState(mode: .password, unlockDeadline: Self.deadline))
+    }
+}
+
 extension VaultPasswordChangeServiceTests {
     struct SUT {
         let service: VaultPasswordChangeService
@@ -978,6 +1071,10 @@ extension VaultPasswordChangeServiceTests {
         let realItem: VaultItem
         let realState: VaultRecordState
         let duressState: VaultRecordState
+        /// What the surface hooks did, in order.
+        let surfaces: SharedMutex<[String]>
+        /// Makes the surface hooks fail, as if the app stopped before they ran.
+        let surfaceHooksFail: SharedMutex<Bool>
 
         let directory = EncryptedVaultFixture.inMemoryDirectory
 
@@ -1108,6 +1205,9 @@ extension VaultPasswordChangeServiceTests {
             availableMemory: { nil },
             wrapStamper: .inMemory(storage: wrapStampStorage, currentDate: now),
         )
+        let surfaces = SharedMutex([String]())
+        let surfaceHooksFail = SharedMutex(false)
+        struct SurfaceHookFailure: Error {}
         let service = VaultPasswordChangeService(
             directory: directory,
             fileSystem: fileSystem,
@@ -1116,6 +1216,16 @@ extension VaultPasswordChangeServiceTests {
             attemptCounter: attemptCounter,
             deviceKeyStore: keychain,
             backgroundTime: backgroundTime(fileSystem),
+            hooks: VaultPasswordChangeService.Hooks(
+                passwordDidTurnOff: {
+                    guard !surfaceHooksFail.value else { throw SurfaceHookFailure() }
+                    surfaces.modify { $0.append("fill QuickType and reload widgets") }
+                },
+                passwordDidTurnOn: {
+                    guard !surfaceHooksFail.value else { throw SurfaceHookFailure() }
+                    surfaces.modify { $0.append("empty QuickType and reload widgets") }
+                },
+            ),
         )
         if mode == .deviceKey {
             try await unlockService.unlockWithDeviceKey()
@@ -1140,6 +1250,8 @@ extension VaultPasswordChangeServiceTests {
             realItem: realItem,
             realState: realState,
             duressState: duressState,
+            surfaces: surfaces,
+            surfaceHooksFail: surfaceHooksFail,
         )
     }
 

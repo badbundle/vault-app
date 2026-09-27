@@ -27,8 +27,29 @@ import Foundation
 ///
 /// Each asks for background time (`VaultBackgroundTime`), because rekeying holds `vault-slots.lock`.
 ///
+/// **System surfaces.** Once a turn off or on has settled, the widgets, QuickType and AutoFill catch up with the new
+/// mode through `Hooks`: turning it off fills QuickType again from the vault, turning it on empties it, and both
+/// reload the widgets. Settling journals the step, so if the app stops first, or the hook fails, the next launch runs
+/// it again (`VaultStorageRecovery.finishSyncingSystemSurfaces(_:)`, `finishClearingSystemSurfaces(_:)`).
+///
 /// See "Turning the password off, and why it doesn't convert back" in `docs/on-device-encryption.md`.
 public actor VaultPasswordChangeService {
+    /// What the app does outside storage once the password is off or on.
+    public struct Hooks: Sendable {
+        /// Fills the QuickType identity store from the vault, now the password is off, and reloads the widgets.
+        public var passwordDidTurnOff: @Sendable () async throws -> Void
+        /// Empties the QuickType identity store, now the password is on, and reloads the widgets.
+        public var passwordDidTurnOn: @Sendable () async throws -> Void
+
+        public init(
+            passwordDidTurnOff: @escaping @Sendable () async throws -> Void,
+            passwordDidTurnOn: @escaping @Sendable () async throws -> Void,
+        ) {
+            self.passwordDidTurnOff = passwordDidTurnOff
+            self.passwordDidTurnOn = passwordDidTurnOn
+        }
+    }
+
     private let directory: URL
     private let fileSystem: any SlotFileSystem
     private let session: VaultStoreSession
@@ -36,9 +57,12 @@ public actor VaultPasswordChangeService {
     private let attemptCounter: AppLockPasswordAttemptCounter
     private let deviceKeyStore: any VaultDeviceKeyStoring
     private let backgroundTime: VaultBackgroundTime
+    private let hooks: Hooks
     private var isChanging = false
 
-    /// - Parameter backgroundTime: Keeps the app running until a change has finished: `.application` in the app.
+    /// - Parameters:
+    ///   - backgroundTime: Keeps the app running until a change has finished: `.application` in the app.
+    ///   - hooks: Brings the widgets, QuickType and AutoFill up to date with the password turned off or on.
     public init(
         directory: URL,
         session: VaultStoreSession,
@@ -46,6 +70,7 @@ public actor VaultPasswordChangeService {
         attemptCounter: AppLockPasswordAttemptCounter,
         deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore(),
         backgroundTime: VaultBackgroundTime,
+        hooks: Hooks,
     ) {
         self.init(
             directory: directory,
@@ -55,6 +80,7 @@ public actor VaultPasswordChangeService {
             attemptCounter: attemptCounter,
             deviceKeyStore: deviceKeyStore,
             backgroundTime: backgroundTime,
+            hooks: hooks,
         )
     }
 
@@ -66,6 +92,7 @@ public actor VaultPasswordChangeService {
         attemptCounter: AppLockPasswordAttemptCounter,
         deviceKeyStore: any VaultDeviceKeyStoring,
         backgroundTime: VaultBackgroundTime = .none,
+        hooks: Hooks = Hooks(passwordDidTurnOff: {}, passwordDidTurnOn: {}),
     ) {
         self.directory = directory
         self.fileSystem = fileSystem
@@ -74,6 +101,7 @@ public actor VaultPasswordChangeService {
         self.attemptCounter = attemptCounter
         self.deviceKeyStore = deviceKeyStore
         self.backgroundTime = backgroundTime
+        self.hooks = hooks
     }
 }
 
@@ -162,7 +190,9 @@ extension VaultPasswordChangeService {
     ///   `VaultPasswordChangeError.changeUnderway`.
     public func settleInterruptedChange() async throws -> VaultStorageState.Mode {
         try await whileChanging {
-            try await recovery.settleTurningThePasswordOffOrOn()
+            let mode = try await recovery.settleTurningThePasswordOffOrOn()
+            await catchUpSystemSurfaces()
+            return mode
         }
     }
 }
@@ -195,7 +225,7 @@ extension VaultPasswordChangeService {
     }
 
     /// The open vault, if the vault is stored in `mode`. A turn off or on that couldn't record how it ended is settled
-    /// first.
+    /// first, and the system surfaces caught up with it.
     private func openVault(
         inMode mode: VaultStorageState.Mode,
         orThrow error: VaultPasswordChangeError,
@@ -203,9 +233,10 @@ extension VaultPasswordChangeService {
         var state = try stateFile.read()
         if state.isTurningThePasswordOffOrOn {
             _ = try await recovery.settleTurningThePasswordOffOrOn()
+            await catchUpSystemSurfaces()
             state = try stateFile.read()
         }
-        guard state.mode == mode, state.transition == nil else { throw error }
+        guard state.mode == mode, state.isSettled else { throw error }
         guard let (store, lockEpoch) = await session.unlockedStore else {
             throw VaultPasswordChangeError.noOpenVault
         }
@@ -249,23 +280,38 @@ extension VaultPasswordChangeService {
     ) async throws {
         let stateFile = stateFile
         let recovery = recovery
-        try await session.whileUnlocked(vault.store, since: vault.lockEpoch) {
-            let key = try rootKey()
-            try await stateFile.update { $0.transition = transition }
-            var rekeyError: (any Error)?
-            do {
-                try await vault.store.rekey(to: key, protection: EncryptedVaultFile.protection(for: mode))
-            } catch {
-                rekeyError = error
+        do {
+            try await session.whileUnlocked(vault.store, since: vault.lockEpoch) {
+                let key = try rootKey()
+                try await stateFile.update { $0.transition = transition }
+                var rekeyError: (any Error)?
+                do {
+                    try await vault.store.rekey(to: key, protection: EncryptedVaultFile.protection(for: mode))
+                } catch {
+                    rekeyError = error
+                }
+                var attempts = 0
+                while attempts < Self.settleAttempts, (try? await recovery.settleTurningThePasswordOffOrOn()) == nil {
+                    attempts += 1
+                }
+                if let rekeyError {
+                    throw rekeyError
+                }
             }
-            var attempts = 0
-            while attempts < Self.settleAttempts, (try? await recovery.settleTurningThePasswordOffOrOn()) == nil {
-                attempts += 1
-            }
-            if let rekeyError {
-                throw rekeyError
-            }
+        } catch {
+            // Settling journals the surfaces for whichever mode it landed in, even when the rekey failed.
+            await catchUpSystemSurfaces()
+            throw error
         }
+        await catchUpSystemSurfaces()
+    }
+
+    /// Brings the widgets, QuickType and AutoFill up to date with the mode settling landed in. If a hook fails, the
+    /// journal keeps the step for the next launch.
+    private func catchUpSystemSurfaces() async {
+        let recovery = recovery
+        try? await recovery.finishSyncingSystemSurfaces(hooks.passwordDidTurnOff)
+        try? await recovery.finishClearingSystemSurfaces(hooks.passwordDidTurnOn)
     }
 
     private static func normalized(_ password: String) -> String {

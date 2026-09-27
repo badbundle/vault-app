@@ -149,6 +149,7 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
                 issuer: otp.data.issuer,
                 accountName: otp.data.accountName,
                 digits: Int(otp.data.digits.value),
+                advancesInTheApp: loader.advancesHOTPInTheApp,
             )),
         )
         // HOTP only refreshes when the app pings `WidgetCenter.reloadAllTimelines()`

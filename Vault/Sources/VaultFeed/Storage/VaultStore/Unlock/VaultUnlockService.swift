@@ -69,6 +69,9 @@ public actor VaultUnlockService {
     private let wrapStamper: VaultDeviceWrapStamper
     /// Checked before every save of a vault this opens, in the AutoFill extension. `nil` in the app.
     private let writeMemoryCheck: VaultWriteMemoryCheck?
+    /// How the vault can be opened now, which an app extension checks before it opens the vault, and on every call to
+    /// it once it has (`VaultAccessGuard`). `nil` in the app.
+    private let currentAccessMode: (@Sendable () -> VaultAccessMode)?
 
     private var isUnlocking = false
 
@@ -99,6 +102,8 @@ public actor VaultUnlockService {
     /// - Parameters:
     ///   - availableMemory: The memory the process can still use, or `nil` if it has no limit.
     ///   - writeMemoryCheck: Checked before every save of a vault this opens, in the AutoFill extension.
+    ///   - currentAccessMode: How the vault can be opened now, in an app extension, which checks it before it opens
+    ///     the vault and on every call once it has.
     init(
         file: EncryptedVaultFile,
         session: VaultStoreSession,
@@ -111,6 +116,7 @@ public actor VaultUnlockService {
         availableMemory: @escaping @Sendable () -> Int? = VaultUnlockService.processAvailableMemory,
         wrapStamper: VaultDeviceWrapStamper,
         writeMemoryCheck: VaultWriteMemoryCheck? = nil,
+        currentAccessMode: (@Sendable () -> VaultAccessMode)? = nil,
     ) {
         self.file = file
         self.session = session
@@ -123,6 +129,24 @@ public actor VaultUnlockService {
         self.availableMemory = availableMemory
         self.wrapStamper = wrapStamper
         self.writeMemoryCheck = writeMemoryCheck
+        self.currentAccessMode = currentAccessMode
+    }
+
+    /// What a vault this opens checks on every call, in an app extension.
+    private func accessGuard(openedIn mode: VaultAccessMode, allowsWrites: Bool = true) -> VaultAccessGuard? {
+        guard let currentAccessMode else { return nil }
+        return VaultAccessGuard(openedIn: mode, currentMode: currentAccessMode, allowsWrites: allowsWrites)
+    }
+
+    /// Moves the wrap stamp on to a vault that's opened, as every unlock does, holding the file's lock with the wraps
+    /// that stamp it. Best effort: a vault that opened stays open. In an app extension, only while the vault is still
+    /// stored as it was, so an erase that's started, which deletes the stamp, isn't followed by a new one.
+    private func noteUse(of file: EncryptedVaultFile, wrappedAt: Date, openedIn mode: VaultAccessMode) async {
+        let accessGuard = accessGuard(openedIn: mode)
+        try? await file.withLock { [wrapStamper] _ in
+            guard accessGuard?.isStillOpen ?? true else { return }
+            try wrapStamper.noteUse(ofVaultWrappedAt: wrappedAt)
+        }
     }
 }
 
@@ -166,6 +190,9 @@ public enum VaultUnlockError: Error, Equatable, Sendable {
     /// The password is off, so device authentication opens the vault (`unlockWithDeviceKey()`), and no password
     /// does. Nothing was tried or counted.
     case passwordIsOff
+    /// The vault isn't stored with the device key now: the password is on, a change is underway, or it's being
+    /// erased. Nothing was read. Only an app extension checks, before it opens the vault with the device key.
+    case deviceKeyNotInUse
     /// The password was being turned off or back on, how that ended hasn't been recorded yet, and the device key
     /// still wraps the vault, so a right password could look wrong. Nothing was tried or counted. Settling it
     /// (`VaultPasswordChangeService.settleInterruptedChange()`, or the next launch) lets unlocking go ahead.
@@ -201,11 +228,8 @@ extension VaultUnlockService {
             try await attemptCounter.reset()
             // Moves the stamp on to now, as every unlock does, so it shows when the device was last used rather than
             // when a key was last wrapped, and so a wrap made from now on follows this vault's even on a device that's
-            // lost its stamp. Under the file's lock, with the wraps that stamp it. Best effort: a vault that opened
-            // stays open.
-            try? await file.withLock { [wrapStamper] _ in
-                try wrapStamper.noteUse(ofVaultWrappedAt: opened.slot.wrappedAt)
-            }
+            // lost its stamp.
+            await noteUse(of: file, wrappedAt: opened.slot.wrappedAt, openedIn: .password)
             let store = EncryptedVaultStore(
                 file: file,
                 slot: opened.slot,
@@ -213,6 +237,7 @@ extension VaultUnlockService {
                 work: work,
                 wrapStamper: wrapStamper,
                 memoryCheck: writeMemoryCheck,
+                accessGuard: accessGuard(openedIn: .password),
             )
             // The session only switches if it hasn't locked since this attempt began, checked on the session itself,
             // so a lock can't slip in between the check and the switch.
@@ -398,28 +423,47 @@ extension VaultUnlockService {
     /// Device authentication, which the app lock asks for first, is all it takes. With no password to guess there's
     /// no attempt to count and no deadline to hold to.
     ///
-    /// - Throws: `VaultUnlockError.noDeviceKey`, or `.deviceKeyOpensNoVault` if no slot opens with it.
+    /// - Throws: `VaultUnlockError.noDeviceKey`, or `.deviceKeyOpensNoVault` if no slot opens with it. In an app
+    ///   extension, `.deviceKeyNotInUse` if the vault isn't stored with the device key now.
     public func unlockWithDeviceKey() async throws {
+        try await unlockWithDeviceKey(toChange: true)
+    }
+
+    /// Opens the vault the device key wraps only to show it, as a widget or the app's QuickType sync does: reading the
+    /// file without its lock, and leaving nothing behind, not even a wrap stamp. Writes throw
+    /// `VaultStoreSessionError.locked`.
+    ///
+    /// - Throws: As `unlockWithDeviceKey()`.
+    func openWithDeviceKeyToShow() async throws {
+        try await unlockWithDeviceKey(toChange: false)
+    }
+
+    /// - Parameter toChange: Whether the vault is opened to change it too, rather than only to show it.
+    private func unlockWithDeviceKey(toChange: Bool) async throws {
         guard !isUnlocking else { throw VaultUnlockError.attemptUnderway }
         isUnlocking = true
         defer { isUnlocking = false }
         guard await session.isLocked else { throw VaultUnlockError.notLocked }
         guard try await !deadlineStore.isErasing() else { throw VaultUnlockError.erasing }
+        // In an extension, nothing is read unless the vault is stored with the device key, and the vault is checked
+        // again on every call once it's open.
+        let accessGuard = accessGuard(openedIn: .deviceKey, allowsWrites: toChange)
+        guard accessGuard?.isStillOpen ?? true else { throw VaultUnlockError.deviceKeyNotInUse }
         let lockEpoch = await session.lockEpoch
 
         guard let key = try deviceKeyStore.deviceKey() else { throw VaultUnlockError.noDeviceKey }
         var deviceKeyFile = file
         deviceKeyFile.protection = EncryptedVaultFile.protection(for: .deviceKey)
-        guard let contents = try await deviceKeyFile.open() else { throw VaultUnlockError.noEncryptedVault }
+        let read = toChange ? try await deviceKeyFile.open() : try deviceKeyFile.readWithoutTheLock()
+        guard let contents = read else { throw VaultUnlockError.noEncryptedVault }
         let opened = VaultSlotFile.slotIndices.compactMap { try? contents.openSlot($0, with: .device(key)) }
         guard let chosen = opened.max(by: { $0.wrappedAt < $1.wrappedAt }) else {
             throw VaultUnlockError.deviceKeyOpensNoVault
         }
         let state = try EncryptedVaultPayload.decode(slot: chosen, in: contents)
-        // Moves the wrap stamp on, as a password unlock does. Best effort: the stamp is readable only while the device
-        // is unlocked, and the widgets open the vault while it's locked.
-        try? await deviceKeyFile.withLock { [wrapStamper] _ in
-            try wrapStamper.noteUse(ofVaultWrappedAt: chosen.wrappedAt)
+        if toChange {
+            // As a password unlock does. The stamp is readable only while the device is unlocked, which it may not be.
+            await noteUse(of: deviceKeyFile, wrappedAt: chosen.wrappedAt, openedIn: .deviceKey)
         }
         let store = EncryptedVaultStore(
             file: deviceKeyFile,
@@ -427,6 +471,14 @@ extension VaultUnlockService {
             state: state,
             work: work,
             wrapStamper: wrapStamper,
+            memoryCheck: writeMemoryCheck,
+            accessGuard: toChange
+                ? accessGuard
+                : VaultAccessGuard(
+                    openedIn: .deviceKey,
+                    currentMode: currentAccessMode ?? { .deviceKey },
+                    allowsWrites: false,
+                ),
         )
         guard await session.switchTo(.unlocked(store), unlessLockedSince: lockEpoch) else {
             throw CancellationError()

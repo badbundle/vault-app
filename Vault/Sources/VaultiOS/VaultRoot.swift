@@ -205,49 +205,47 @@ public enum VaultRoot {
     public static let searchPassphraseKeyStore: some SearchPassphraseKeyStore<KeyData<32>> =
         SearchPassphraseKeyStoreImpl(secureStorage: secureStorage)
 
-    /// Whether the vault is in the plain store right now, with no change of
-    /// mode underway. Unlike `storageMode`, which is how it was at launch,
-    /// this follows the password being turned on while the app runs.
-    public nonisolated static var isVaultPlain: Bool {
-        VaultStorageState.isPlain(inDirectory: VaultSharedStorage.directory())
+    /// How the vault can be opened right now: plain, with the device key, or
+    /// only with the App Lock Password. Unlike `storageMode`, which is how it
+    /// was at launch, this follows the password being turned on or off while
+    /// the app runs, and it's what the extensions go by.
+    public nonisolated static var vaultAccessMode: VaultAccessMode {
+        VaultAccessMode.current(inDirectory: VaultSharedStorage.directory())
     }
 
-    /// QuickType's identity store, which is kept empty while the vault is
-    /// encrypted: it holds codes' issuers and account names outside the app.
-    public static let vaultOtpAutofillStore: some VaultOTPAutofillStore = PlainVaultOnlyOTPAutofillStore(
+    /// QuickType's identity store, which is kept empty while only the App
+    /// Lock Password opens the vault: it holds codes' issuers and account
+    /// names outside the app.
+    public static let vaultOtpAutofillStore: some VaultOTPAutofillStore = PasswordlessOTPAutofillStore(
         base: VaultOTPAutofillStoreImpl(store: RealCredentialIdentityStore()),
-        isVaultPlain: { isVaultPlain },
+        opensWithoutPassword: { vaultAccessMode.opensWithoutPassword },
     )
 
-    /// How the vault is stored as an AutoFill request finds it, read afresh
-    /// for every request: the extension's process can outlive one, and the
-    /// app can turn encryption on meanwhile.
-    public nonisolated static var autofillVaultMode: AutofillVaultMode {
-        AutofillVaultMode(state: VaultStorageState.current(inDirectory: VaultSharedStorage.directory()))
-    }
-
-    /// What the AutoFill extension unlocks an encrypted vault with, in its own
+    /// What the AutoFill extension opens an encrypted vault with, in its own
     /// process: the App Lock Password, counted against the same attempts as
-    /// the app. Made the first time a request finds the vault encrypted, and
-    /// kept for the rest of the process.
+    /// the app, or the device key while the password is off. Made the first
+    /// time a request finds the vault encrypted, and kept for the rest of the
+    /// process.
     @MainActor
-    public static func autofillPasswordService() -> AutofillVaultPasswordService {
-        if let service = cachedAutofillPasswordService {
+    public static func autofillVaultService() -> AutofillVaultService {
+        if let service = existingAutofillVaultService {
             return service
         }
-        let service = AutofillVaultPasswordService(
+        let service = AutofillVaultService(
             directory: vaultStorageDirectory,
             session: vaultStore,
             purgeVaultContents: { @MainActor in
                 await vaultDataModel.purgeVaultContents()
             },
         )
-        cachedAutofillPasswordService = service
+        existingAutofillVaultService = service
         return service
     }
 
+    /// The AutoFill extension's vault service, if an earlier request made
+    /// one: a later request locks whatever it opened, whatever the mode now.
     @MainActor
-    private static var cachedAutofillPasswordService: AutofillVaultPasswordService?
+    public private(set) static var existingAutofillVaultService: AutofillVaultService?
 
     @MainActor
     static let killphraseRehashService: KillphraseRehashService = makeKillphraseRehashService()
@@ -582,18 +580,69 @@ public enum VaultRoot {
             Task {
                 try? await deviceBackupSettings.delete()
             }
-            let otpAutofillStore = vaultOtpAutofillStore
-            let directory = vaultStorageDirectory
-            Task {
-                // A clear that fails leaves the journal, so the next launch tries again.
-                try? await VaultStorageRecovery(directory: directory).finishClearingSystemSurfaces {
-                    try await otpAutofillStore.removeAll()
-                    await reloadWidgetTimelines()
-                }
-                // And it's emptied at every launch anyway: nothing should be in it while the vault is encrypted.
-                try? await otpAutofillStore.removeAll()
-            }
         }
+        // Bring the widgets and QuickType up to date with a change of mode the app was stopped in the middle of:
+        // encryption, or the password turned on, empties QuickType; the password turned off fills it again. A step
+        // that fails leaves the journal, so the next launch tries again.
+        switch storageMode {
+        case .password:
+            let recovery = VaultStorageRecovery(directory: vaultStorageDirectory)
+            Task {
+                try? await recovery.finishClearingSystemSurfaces(emptySystemSurfaces)
+                // And it's emptied at every launch anyway: nothing should be in it while the password is on.
+                try? await vaultOtpAutofillStore.removeAll()
+            }
+        case .deviceKey:
+            let recovery = VaultStorageRecovery(directory: vaultStorageDirectory)
+            Task {
+                try? await recovery.finishSyncingSystemSurfaces(refillSystemSurfaces)
+            }
+        case .plain, .erasing:
+            break
+        }
+    }
+
+    /// Reloads the widgets, which show codes again now the password is off, and fills the QuickType identity store
+    /// again from the vault the device key opens. Launch recovery runs it, and turning the password off does too
+    /// (`VaultPasswordChangeService.Hooks.passwordDidTurnOff`).
+    ///
+    /// The widgets are reloaded whatever happens to QuickType. If a fill fails, it throws, so the journal keeps the
+    /// step for the next launch.
+    @MainActor
+    static func refillSystemSurfaces() async throws {
+        defer { reloadWidgetTimelines() }
+        try await fillQuickTypeWithDeviceKey()
+    }
+
+    /// Fills the QuickType identity store from the vault the device key opens, opened only to read it.
+    ///
+    /// Only while Vault's turned on as an AutoFill provider: otherwise the system refuses changes to the store, which
+    /// holds nothing of Vault's, and turning Vault on fills it (`prepareInterfaceForExtensionConfiguration()`).
+    @MainActor
+    public static func fillQuickTypeWithDeviceKey() async throws {
+        guard await vaultOtpAutofillStore.getState().isEnabled else { return }
+        let items = try await retrieveItemsWithDeviceKey().items
+        try await vaultOtpAutofillStore.syncAll(items: items)
+    }
+
+    /// The vault's items, from the vault the device key opens only to read them, locked again straight after: for
+    /// QuickType, while the password is off.
+    ///
+    /// - Throws: `VaultUnlockError.deviceKeyNotInUse` unless the vault's stored with the device key now, or an error
+    ///   opening it, such as while the device is locked after starting up.
+    public nonisolated static func retrieveItemsWithDeviceKey() async throws -> VaultRetrievalResult<VaultItem> {
+        try await VaultStoreSession.retrieveAndLock {
+            try await VaultStoreSession.openedToShowWithDeviceKey(directory: VaultSharedStorage.directory())
+        }
+    }
+
+    /// Empties the QuickType identity store, now only the password opens the vault, and reloads the widgets, which
+    /// show it locked. Launch recovery runs it, and turning the password on does too
+    /// (`VaultPasswordChangeService.Hooks.passwordDidTurnOn`).
+    @MainActor
+    static func emptySystemSurfaces() async throws {
+        try await vaultOtpAutofillStore.removeAll()
+        reloadWidgetTimelines()
     }
 
     @MainActor
@@ -601,33 +650,5 @@ public enum VaultRoot {
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
-    }
-}
-
-/// How the vault is stored, as the AutoFill extension finds it for a request.
-public enum AutofillVaultMode: Equatable, Sendable {
-    /// In the plain store: device authentication unlocks it, if the app lock is on.
-    case plain
-    /// Encrypted: the App Lock Password unlocks it, after device authentication.
-    case encrypted
-    /// Anything else, which the extension can't open: being converted, rekeyed or erased, the password turned off
-    /// (until VAULT-50), or a state that can't be read.
-    case unavailable
-
-    /// - Parameter state: The storage state, or `nil` if it can't be read.
-    init(state: VaultStorageState?) {
-        guard let state else {
-            self = .unavailable
-            return
-        }
-        self = switch (state.mode, state.transition) {
-        case (.plain, nil):
-            .plain
-        // Once a conversion has committed, the vault opens with the password, whatever the app still has to tidy up.
-        case (.password, nil), (.password, .deletingPlainStore?), (.password, .clearingSystemSurfaces?):
-            .encrypted
-        default:
-            .unavailable
-        }
     }
 }
