@@ -173,6 +173,22 @@ extension OpenVaultBackupSettings: BackupPasswordStore {
         }
     }
 
+    public func removePassword() async throws {
+        switch open?.vault {
+        case let .plain(opening):
+            let passwordStore = device.passwordStore
+            try await whileOpen(.plain(opening)) {
+                try await passwordStore.removePassword()
+            }.value
+        case let .encrypted(store):
+            let update: @Sendable (inout VaultBackupSettings) -> Void = { $0.backupPassword = nil }
+            try await save(update, to: .encrypted(store)).value
+            apply(update, to: .encrypted(store))
+        case .locked, nil:
+            throw VaultStoreSessionError.locked
+        }
+    }
+
     public func fetchPasswordMetadata() async throws -> BackupPasswordMetadata? {
         switch open?.vault {
         case .plain:
