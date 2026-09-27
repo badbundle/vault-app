@@ -27,6 +27,12 @@ public final class DeviceAuthenticationService {
         policy.canAuthenticate
     }
 
+    /// How a page behind authentication starts out: waiting to authenticate, or unavailable if there's nothing to
+    /// authenticate with.
+    public var lockedPermissionState: PermissionState {
+        canAuthenticate ? .undetermined : .unavailable
+    }
+
     /// Throws only for internal errors, not for authentication failures.
     public func authenticate(reason: String) async throws -> Result<Success, DeviceAuthenticationFailure> {
         guard canAuthenticate else {

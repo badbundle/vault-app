@@ -71,6 +71,19 @@ struct BackupViewSnapshotTests {
         assertSnapshot(of: sut, as: .image)
     }
 
+    /// With no passcode there's nothing to authenticate deleting with, so the button is off and the footer says why.
+    @Test
+    func backupHome_vaultSetAside_withoutPasscode() {
+        let sut = makeBackupHomeSUT(
+            dataModel: anyVaultDataModel(backupPasswordStore: unknownStatusPasswordStore()),
+            vaultStoreArchives: setAsideVaults(count: 1),
+            policy: .cannotAuthenticate,
+            height: 1300,
+        )
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
     @Test
     func backupHome_vaultsSetAside_dark() {
         let sut = makeBackupHomeSUT(
@@ -182,6 +195,27 @@ struct BackupViewSnapshotTests {
         assertSnapshot(of: sut, as: .image)
     }
 
+    /// With no passcode there's nothing to authenticate with, so the page says a passcode is needed.
+    @Test
+    func backupRestore_passcodeRequired() async {
+        let sut = makeBackupRestoreSUT(
+            dataModel: await restoreDataModel(hasItems: false),
+            viewModel: restoreViewModel(policy: .cannotAuthenticate),
+        )
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
+    func backupRestore_passcodeRequired_dark() async {
+        let sut = makeBackupRestoreSUT(
+            dataModel: await restoreDataModel(hasItems: false),
+            viewModel: restoreViewModel(policy: .cannotAuthenticate),
+        )
+
+        assertSnapshot(of: sut, colorScheme: .dark)
+    }
+
     @Test
     func backupRestore_unlockedEmptyVault() async {
         let viewModel = restoreViewModel(policy: .alwaysAllow)
@@ -218,13 +252,14 @@ extension BackupViewSnapshotTests {
     private func makeBackupHomeSUT(
         dataModel: VaultDataModel,
         vaultStoreArchives: any VaultStoreArchiving = NoVaultStoreArchives(),
+        policy: some DeviceAuthenticationPolicy = .alwaysAllow,
         height: CGFloat = 1000,
     ) -> some View {
         NavigationStack {
             BackupHomeView()
         }
         .environment(dataModel)
-        .environment(DeviceAuthenticationService(policy: .alwaysAllow))
+        .environment(DeviceAuthenticationService(policy: policy))
         .environment(anyVaultInjector(vaultStoreArchives: vaultStoreArchives))
         .framedForTest(height: height)
     }

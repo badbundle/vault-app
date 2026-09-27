@@ -84,6 +84,26 @@ struct SetAsideVaultsViewModelTests {
         #expect(sut.deleteError != nil)
     }
 
+    /// With no passcode there's nothing to authenticate deleting with, so it isn't offered.
+    @Test
+    func deleteAll_withoutAPasscode_deletesNothingWithoutAsking() async {
+        let archives = VaultStoreArchivingMock()
+        archives.archivesHandler = { [anyArchive()] }
+        let policy = DeviceAuthenticationPolicyMock(
+            canAuthenicateWithPasscode: false,
+            canAuthenticateWithBiometrics: false,
+        )
+        let sut = makeSUT(archives: archives, policy: policy)
+
+        await sut.deleteAll()
+
+        #expect(sut.needsPasscode)
+        #expect(archives.deleteAllCallCount == 0)
+        #expect(policy.authenticateWithBiometricsCallCount == 0)
+        #expect(policy.authenticateWithPasscodeCallCount == 0)
+        #expect(sut.archives == [anyArchive()])
+    }
+
     @Test
     func deleteAll_showsErrorIfDeletingFails() async {
         let archives = VaultStoreArchivingMock()

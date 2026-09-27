@@ -27,6 +27,14 @@ final class BackupKeyChangeViewSnapshotTests {
         }
     }
 
+    /// With no passcode there's nothing to authenticate with, so the sheet says a passcode is needed.
+    @Test
+    func layoutPasscodeRequired() async {
+        await snapshotScenarios(deviceAuthenticationPolicy: .cannotAuthenticate) {
+            BackupKeyChangeView(viewModel: makeViewModel(policy: .cannotAuthenticate))
+        }
+    }
+
     /// With a password already set, the screen says so and offers to change it rather than set it.
     @Test
     func layoutAuthenticatedPasswordSet() async {
@@ -112,10 +120,13 @@ final class BackupKeyChangeViewSnapshotTests {
 // MARK: - Helpers
 
 extension BackupKeyChangeViewSnapshotTests {
-    private func makeViewModel(dataModel: VaultDataModel = anyVaultDataModel()) -> BackupKeyChangeViewModel {
+    private func makeViewModel(
+        dataModel: VaultDataModel = anyVaultDataModel(),
+        policy: some DeviceAuthenticationPolicy = DeviceAuthenticationPolicyAlwaysAllow(),
+    ) -> BackupKeyChangeViewModel {
         BackupKeyChangeViewModel(
             dataModel: dataModel,
-            authenticationService: DeviceAuthenticationService(policy: DeviceAuthenticationPolicyAlwaysAllow()),
+            authenticationService: DeviceAuthenticationService(policy: policy),
             deriverFactory: VaultKeyDeriverFactoryImpl(),
         )
     }

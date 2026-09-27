@@ -25,7 +25,7 @@ struct SetAsideVaultsSection: View {
                 } label: {
                     Text(isPlural ? "Delete Set-Aside Vaults" : "Delete Set-Aside Vault")
                 }
-                .disabled(viewModel.isDeleting)
+                .disabled(viewModel.isDeleting || viewModel.needsPasscode)
                 .confirmationDialog(
                     isPlural ? "Delete the set-aside vaults?" : "Delete the set-aside vault?",
                     isPresented: $isConfirmingDelete,
@@ -42,7 +42,10 @@ struct SetAsideVaultsSection: View {
                     Text(
                         "The set-aside files stay on this device, unencrypted, and the app can't open them. Restore your items from a backup, then delete them.",
                     )
-                    if let error = viewModel.deleteError {
+                    if viewModel.needsPasscode {
+                        Text("Set up a passcode on this device to delete them.")
+                            .foregroundStyle(.red)
+                    } else if let error = viewModel.deleteError {
                         Text(error.userDescription ?? error.userTitle)
                             .foregroundStyle(.red)
                     }

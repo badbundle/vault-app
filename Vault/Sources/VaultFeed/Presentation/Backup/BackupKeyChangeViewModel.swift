@@ -24,7 +24,7 @@ public final class BackupKeyChangeViewModel {
 
     public var newlyEnteredPassword = ""
     public var newlyEnteredPasswordConfirm = ""
-    public internal(set) var permissionState: PermissionState = .undetermined
+    public internal(set) var permissionState: PermissionState
     public private(set) var newPassword: NewPasswordState = .initial
     /// Whether the password saved by `saveEnteredPassword()` replaced an existing one, so the
     /// confirmation can point out that older backups still need the old password.
@@ -41,6 +41,7 @@ public final class BackupKeyChangeViewModel {
         self.authenticationService = authenticationService
         self.dataModel = dataModel
         encryptionKeyDeriver = deriverFactory.makeVaultBackupKeyDeriver()
+        permissionState = authenticationService.lockedPermissionState
     }
 
     public var passwordConfirmMatches: Bool {
@@ -60,7 +61,13 @@ public final class BackupKeyChangeViewModel {
         dataModel.backupPasswordStatus
     }
 
+    /// Asks the user to authenticate, and unlocks the sheet if they do. On a device with no passcode there's nothing
+    /// to authenticate with, so it stays locked and says a passcode is needed, as Restore and the Danger Zone do.
     public func onAppear() async {
+        guard authenticationService.canAuthenticate else {
+            permissionState = .unavailable
+            return
+        }
         do {
             try await authenticationService
                 .validateAuthentication(reason: "Authenticate to change the backup password.")
@@ -72,7 +79,7 @@ public final class BackupKeyChangeViewModel {
     }
 
     public func didDisappear() {
-        permissionState = .undetermined
+        permissionState = authenticationService.lockedPermissionState
         // Don't retain the plaintext password beyond the lifetime of the
         // screen that collected it.
         newlyEnteredPassword = ""

@@ -103,6 +103,24 @@ struct SettingsDangerViewModelTests {
         #expect(sut.state.failure?.userTitle == "Nothing was deleted")
     }
 
+    /// With no passcode there's nothing to authenticate deleting with, so it isn't offered.
+    @Test
+    func askToConfirm_withoutAPasscode_staysOnOverview() {
+        let sut = makeSUT(policy: DeviceAuthenticationPolicyCannotAuthenticate())
+
+        sut.askToConfirm()
+
+        #expect(sut.needsPasscode)
+        #expect(sut.state == .overview)
+    }
+
+    @Test
+    func needsPasscode_falseWhenTheDeviceCanAuthenticate() {
+        let sut = makeSUT()
+
+        #expect(!sut.needsPasscode)
+    }
+
     @Test
     func deleteEntireVault_afterFailure_canTryAgain() async {
         let deleter = VaultStoreDeleterMock()

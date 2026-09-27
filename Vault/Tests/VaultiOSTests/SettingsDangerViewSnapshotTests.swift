@@ -18,6 +18,14 @@ struct SettingsDangerViewSnapshotTests {
         }
     }
 
+    /// With no passcode there's nothing to authenticate deleting with, so a notice stands in for the button.
+    @Test(arguments: [ColorScheme.light, .dark])
+    func passcodeRequired(colorScheme: ColorScheme) {
+        let viewModel = makeViewModel(policy: DeviceAuthenticationPolicyCannotAuthenticate())
+
+        assertSnapshot(of: makeSUT(viewModel: viewModel), colorScheme: colorScheme, named: "\(colorScheme)")
+    }
+
     @Test(arguments: [ColorScheme.light, .dark])
     func confirming(colorScheme: ColorScheme) {
         let viewModel = makeViewModel()
