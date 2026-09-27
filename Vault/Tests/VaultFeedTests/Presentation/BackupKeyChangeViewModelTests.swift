@@ -45,6 +45,30 @@ struct BackupKeyChangeViewModelTests {
         #expect(sut.permissionState == .denied)
     }
 
+    /// With no passcode there's nothing to authenticate with, so the sheet says a passcode is needed instead of
+    /// asking for authentication that can only fail.
+    @Test
+    func onAppear_withoutAPasscode_isUnavailableWithoutAsking() async {
+        let policy = DeviceAuthenticationPolicyMock(
+            canAuthenicateWithPasscode: false,
+            canAuthenticateWithBiometrics: false,
+        )
+        let sut = makeSUT(authenticationService: DeviceAuthenticationService(policy: policy))
+
+        await sut.onAppear()
+
+        #expect(sut.permissionState == .unavailable)
+        #expect(policy.authenticateWithBiometricsCallCount == 0)
+        #expect(policy.authenticateWithPasscodeCallCount == 0)
+    }
+
+    @Test
+    func init_withoutAPasscode_isUnavailable() {
+        let sut = makeSUT(authenticationService: DeviceAuthenticationService(policy: .cannotAuthenticate))
+
+        #expect(sut.permissionState == .unavailable)
+    }
+
     @Test
     func onAppear_allowedLoadsCurrentPasswordStatus() async {
         let store = BackupPasswordStoreMock()

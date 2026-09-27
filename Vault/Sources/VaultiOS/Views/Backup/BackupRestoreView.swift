@@ -35,6 +35,8 @@ struct BackupRestoreView: View {
                 authenticateSection(isError: false)
             case .denied:
                 authenticateSection(isError: true)
+            case .unavailable:
+                PasscodeRequiredSection(message: "Set up a passcode on this device to restore a backup.")
             case .allowed:
                 if dataModel.hasAnyItems {
                     mergeImportSection

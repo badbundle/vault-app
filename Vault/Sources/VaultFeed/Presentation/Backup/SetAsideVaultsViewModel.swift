@@ -40,9 +40,15 @@ public final class SetAsideVaultsViewModel {
         archives = store.archives()
     }
 
+    /// Whether the device has no passcode, so there's nothing to authenticate deleting with. Deleting isn't offered
+    /// until one is set up.
+    public var needsPasscode: Bool {
+        !authenticationService.canAuthenticate
+    }
+
     /// Deletes every set-aside vault, once the user has authenticated.
     public func deleteAll() async {
-        guard isDeleting == false, archives.isNotEmpty else { return }
+        guard isDeleting == false, archives.isNotEmpty, !needsPasscode else { return }
         isDeleting = true
         defer { isDeleting = false }
         deleteError = nil

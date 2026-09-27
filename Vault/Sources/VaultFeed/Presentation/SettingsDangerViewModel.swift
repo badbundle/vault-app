@@ -34,6 +34,12 @@ public final class SettingsDangerViewModel {
         state == .deleting
     }
 
+    /// Whether the device has no passcode, so there's nothing to authenticate deleting with. Deleting isn't offered
+    /// until one is set up, as Restore and the Backup Password sheet stay locked.
+    public var needsPasscode: Bool {
+        !authenticationService.canAuthenticate
+    }
+
     /// Whether the "Delete everything?" step is showing, including while deleting and after a failure.
     public var isShowingConfirmation: Bool {
         switch state {
@@ -43,7 +49,7 @@ public final class SettingsDangerViewModel {
     }
 
     public func askToConfirm() {
-        guard state == .overview else { return }
+        guard state == .overview, !needsPasscode else { return }
         state = .confirming
     }
 

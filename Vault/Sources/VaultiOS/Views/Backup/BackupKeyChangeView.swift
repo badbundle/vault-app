@@ -58,6 +58,8 @@ struct BackupKeyChangeView: View {
                 }
             case .denied:
                 authenticateSection(isError: true)
+            case .unavailable:
+                PasscodeRequiredSection(message: "Set up a passcode on this device to set a backup password.")
             }
         }
         .animation(.snappy, value: viewModel.newlyEnteredPassword.isNotEmpty)

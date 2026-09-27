@@ -116,18 +116,27 @@ struct SettingsDangerView: View {
                 )
             }
 
-            Button {
-                viewModel.askToConfirm()
-            } label: {
-                OptionCardLabel(
-                    title: "Delete All Data",
-                    subtitle: "You'll be asked to confirm.",
-                    systemImage: "trash.fill",
-                    color: .red,
+            if viewModel.needsPasscode {
+                // Nothing to authenticate deleting with, so it isn't offered.
+                DeletionNoticeLabel(
+                    title: "Passcode Required",
+                    message: "Set up a passcode on this device to delete your data.",
+                    systemImage: "lock.trianglebadge.exclamationmark.fill",
                 )
-                .optionCardBackground()
+            } else {
+                Button {
+                    viewModel.askToConfirm()
+                } label: {
+                    OptionCardLabel(
+                        title: "Delete All Data",
+                        subtitle: "You'll be asked to confirm.",
+                        systemImage: "trash.fill",
+                        color: .red,
+                    )
+                    .optionCardBackground()
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -141,7 +150,7 @@ struct SettingsDangerView: View {
             )
 
             if case let .failed(error) = viewModel.state {
-                DeletionErrorLabel(error: error)
+                DeletionNoticeLabel(title: error.userTitle, message: error.userDescription)
                     .transition(.opacity)
             }
 
@@ -184,22 +193,24 @@ private struct DeletionOutcomeList: View {
     }
 }
 
-/// Why deleting didn't happen, above the buttons so trying again is right there.
-private struct DeletionErrorLabel: View {
-    var error: PresentationError
+/// Why deleting didn't happen, above the buttons so trying again is right there, or why it can't be offered at all.
+private struct DeletionNoticeLabel: View {
+    var title: String
+    var message: String?
+    var systemImage = "exclamationmark.triangle.fill"
 
     var body: some View {
         Label {
             VStack(alignment: .leading, spacing: 2) {
-                Text(error.userTitle)
+                Text(title)
                     .fontWeight(.semibold)
-                if let description = error.userDescription {
-                    Text(description)
+                if let message {
+                    Text(message)
                 }
             }
             .fixedSize(horizontal: false, vertical: true)
         } icon: {
-            Image(systemName: "exclamationmark.triangle.fill")
+            Image(systemName: systemImage)
         }
         .font(.subheadline)
         .foregroundStyle(.red)
