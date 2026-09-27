@@ -74,6 +74,58 @@ struct VaultBackupEncryptorTests {
         """)
     }
 
+    // MARK: - Fixed size (VAULT-75)
+
+    /// A backup's size doesn't show how much its vault holds: small ones all come out just under the minimum.
+    @Test(arguments: [0, 1, 40])
+    func encryptBackupPayload_toFixedSize_fillsTheMinimum(itemCount: Int) throws {
+        let sut = makeSUT(key: anyKey(), paddingMode: .toFixedSize(minimum: 32 * 1024))
+
+        let encryptedVault = try sut.encryptBackupPayload(
+            items: (0 ..< itemCount).map { _ in anyBackupItem(contentLength: 200) },
+            tags: [],
+            userDescription: "hello world",
+        )
+
+        #expect(fixedSizeWindow(32 * 1024).contains(encryptedVault.data.count))
+    }
+
+    /// One that doesn't fit the minimum fills the next power of two, so it shows only roughly how large it is.
+    @Test
+    func encryptBackupPayload_toFixedSize_largerThanTheMinimum_fillsTheNextPowerOfTwo() throws {
+        let sut = makeSUT(key: anyKey(), paddingMode: .toFixedSize(minimum: 32 * 1024))
+
+        let encryptedVault = try sut.encryptBackupPayload(
+            items: (0 ..< 40).map { _ in anyBackupItem(contentLength: 1000) },
+            tags: [],
+            userDescription: "hello world",
+        )
+
+        #expect(fixedSizeWindow(64 * 1024).contains(encryptedVault.data.count))
+    }
+
+    /// The padding is inside what's encrypted, in the payload's existing field, so the backup restores as any other.
+    @Test
+    func encryptBackupPayload_toFixedSize_decryptsToTheSameItems() throws {
+        let key = KeyData<32>.random()
+        let sut = makeSUT(key: VaultKey(key: key, iv: .random()), paddingMode: .toFixedSize(minimum: 32 * 1024))
+        let items = (0 ..< 5).map { _ in anyBackupItem(contentLength: 100) }
+
+        let encryptedVault = try sut.encryptBackupPayload(items: items, tags: [], userDescription: "hello world")
+        let backup = try VaultBackupDecryptor(key: key).decryptBackupPayload(from: encryptedVault)
+
+        #expect(backup.items == items)
+        #expect(backup.userDescription == "hello world")
+    }
+
+    @Test
+    func fixedSize_isTheMinimumOrTheFirstPowerOfTwoTimesItThatHoldsTheLength() {
+        #expect(VaultBackupEncryptor.fixedSize(fitting: 1, minimum: 1024) == 1024)
+        #expect(VaultBackupEncryptor.fixedSize(fitting: 1024, minimum: 1024) == 1024)
+        #expect(VaultBackupEncryptor.fixedSize(fitting: 1025, minimum: 1024) == 2048)
+        #expect(VaultBackupEncryptor.fixedSize(fitting: 5000, minimum: 1024) == 8192)
+    }
+
     @Test
     func encryptBackupPayload_includesKeySaltUnmodifiedInPayload() throws {
         let salt = Data.random(count: 34)
@@ -111,4 +163,37 @@ private func anyClock() -> some EpochClock {
 
 private func anyKey() -> VaultKey {
     .init(key: .random(), iv: .random())
+}
+
+/// The sizes a backup padded to `size` can be.
+private func fixedSizeWindow(_ size: Int) -> ClosedRange<Int> {
+    (size - VaultBackupEncryptor.fixedSizeTolerance) ... size
+}
+
+/// An item whose contents are random bytes, which compression can't shrink.
+private func anyBackupItem(contentLength: Int) -> VaultBackupItem {
+    VaultBackupItem(
+        id: UUID(),
+        createdDate: Date(timeIntervalSince1970: 12345),
+        updatedDate: Date(timeIntervalSince1970: 19345),
+        relativeOrder: 1000,
+        userDescription: "",
+        tags: [],
+        visibility: .always,
+        searchableLevel: .full,
+        searchPassphraseSalt: nil,
+        searchPassphraseDigest: nil,
+        killphraseSalt: nil,
+        killphraseDigest: nil,
+        lockState: .notLocked,
+        item: .encrypted(data: .init(
+            version: "1.0.0",
+            title: "title",
+            data: Data.random(count: contentLength),
+            authentication: Data.random(count: 16),
+            encryptionIV: Data.random(count: 32),
+            keygenSalt: Data.random(count: 32),
+            keygenSignature: "sig",
+        )),
+    )
 }

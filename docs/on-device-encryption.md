@@ -220,7 +220,8 @@ involved.
   - It uses lzma: 105 ms at 1,000 typical items, 546 ms with heavy notes.
   - It uses CryptoSwift's AES-GCM: about 30 ms per MiB, against about 0.1 ms for CryptoKit.
   - It derives the key directly from the password. There's no data key to rewrap.
-  - It pads by a random amount rather than to a fixed size.
+  - It padded by a random amount rather than to a fixed size. Saved backups now pad to one (VAULT-75, see
+    [Backups, killphrases and everything else](#backups-killphrases-and-everything-else)).
 - **SQLCipher.** A C dependency that SwiftData can't sit on (Core Data would need an `NSIncrementalStore` shim).
   It still leaks page counts and WAL activity, and gives nothing for duress.
 - **A device-bound secret** (a keychain `ThisDeviceOnly` pepper, a Secure Enclave key, or a keychain item with
@@ -1168,6 +1169,14 @@ configuration, which the app can't edit. Turning on the password should tell use
   Auto-backup is only ever triggered by changes in the running app, and no background
   task exists (no `BGTaskScheduler`), so nothing needs the vault while it's locked. The backup format keeps its
   own KDF and container.
+- **Backup sizes (VAULT-75).** A saved backup, a PDF or an auto-backup, is padded to just under a fixed size: 32 KiB
+  of ciphertext, about 130 typical items, or the first power of two times that it fits. So a backup doesn't show
+  how much its vault holds, and one found next to a duress vault with few items can't show that a bigger vault
+  exists. The padding is random bytes in the payload's `obfuscationPadding`, inside the encryption: padding in the
+  outer container would leave the real length readable without the password. The format is unchanged, so older
+  builds restore it. A device transfer, which saves nothing and shows each QR code for two seconds, keeps a random
+  amount. A backup the duress vault's backup password can't open is still a bigger tell than its size, which is
+  guidance for the user (the FAQ's duress page), not something the app can hide.
 - **Killphrases.** Matching and deletion happen in memory, then the file is replaced. The deleted item is gone
   from the live file at once, as it is from the SQLite store's files since VAULT-55 scrubs them after the
   delete.
