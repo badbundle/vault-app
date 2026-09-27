@@ -9,6 +9,22 @@ import VaultCore
 struct AutoBackupServiceImplTests {
     // MARK: - Init
 
+    /// Every saved backup is padded to a fixed size, so an auto-backup doesn't show how much its vault holds
+    /// (VAULT-75). The tests below choose random padding only to be quick.
+    @Test
+    func init_padsBackupsToAFixedSizeByDefault() throws {
+        let defaults = try Defaults(userDefaults: testUserDefaults())
+        let sut = AutoBackupServiceImpl(
+            dataModel: anyVaultDataModel(),
+            backupEventLogger: BackupEventLoggerMock(),
+            clock: EpochClockMock(currentTime: 100),
+            defaults: defaults,
+            providers: [],
+        )
+
+        #expect(sut.padding == .toFixedSize)
+    }
+
     @Test @LeakTracked
     func init_defaultsToDisabledStatus() throws {
         let sut = try makeSUT()
@@ -1169,6 +1185,8 @@ extension AutoBackupServiceImplTests {
             clock: clock,
             defaults: Defaults(userDefaults: userDefaults),
             providers: providers,
+            // Filling a fixed size is slow in tests, and these aren't about the padding.
+            padding: .random,
         ))
     }
 
@@ -1192,6 +1210,7 @@ extension AutoBackupServiceImplTests {
             clock: clock,
             configurationStorage: storage,
             providers: providers,
+            padding: .random,
         ))
     }
 

@@ -148,6 +148,8 @@ extension PerVaultAutoBackupTests {
                 clock: clock,
                 configurationStorage: settings,
                 providers: [provider],
+                // Filling a fixed size is slow in tests, and these aren't about the padding.
+                padding: .random,
             )
             await followTheOpenVault()
             await dataModel.loadBackupPassword()

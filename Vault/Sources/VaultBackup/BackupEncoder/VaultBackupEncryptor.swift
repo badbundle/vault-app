@@ -77,8 +77,9 @@ public final class VaultBackupEncryptor {
     /// Encodes `payload` with as much random padding as brings the compressed encoding, which is what's encrypted, to
     /// within `fixedSizeTolerance` bytes under the smallest fixed size it fits (`fixedSize(fitting:minimum:)`).
     ///
-    /// Compression can't shrink random bytes, so each byte of padding adds about a byte. It starts from that estimate
-    /// and closes in on the size, keeping the largest encoding that fits in case it doesn't get within the tolerance.
+    /// Compression can't shrink random bytes, so each byte of padding adds about a byte. It aims for the middle of the
+    /// tolerance from that estimate and corrects by how far each try missed, which usually lands within two tries. It
+    /// keeps the largest encoding that fits, in case it doesn't get within the tolerance.
     static func encodeFillingFixedSize(
         _ payload: VaultBackupPayload,
         minimum: Int,
@@ -88,8 +89,9 @@ public final class VaultBackupEncryptor {
         payload.obfuscationPadding = Data()
         let unpadded = try encoder.encode(vaultBackup: payload)
         let size = fixedSize(fitting: unpadded.data.count, minimum: minimum)
+        let aim = size - fixedSizeTolerance / 2
         var best = unpadded
-        var paddingLength = size - unpadded.data.count
+        var paddingLength = aim - unpadded.data.count
         for _ in 0 ..< 16 {
             guard size - best.data.count > fixedSizeTolerance, paddingLength > 0 else { break }
             payload.obfuscationPadding = Data.random(count: paddingLength)
@@ -97,7 +99,7 @@ public final class VaultBackupEncryptor {
             if padded.data.count <= size, padded.data.count > best.data.count {
                 best = padded
             }
-            paddingLength += size - padded.data.count
+            paddingLength += aim - padded.data.count
         }
         return best
     }

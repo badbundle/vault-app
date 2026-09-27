@@ -6,7 +6,7 @@ import VaultKeygen
 /// From an application-level vault, create the encrypted vault.
 public final class EncryptedVaultEncoder {
     /// How much the vault is padded before it's encrypted.
-    public enum Padding: Sendable {
+    public enum Padding: Equatable, Sendable {
         /// Up to a fixed size, `minimumFixedSize` bytes or the next power of two times it (VAULT-75): for any backup
         /// that's saved, a PDF or an auto-backup. Then a backup doesn't show how much its vault holds, so one found
         /// alongside a duress vault can't show that a bigger vault exists.
