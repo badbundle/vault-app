@@ -97,6 +97,87 @@ struct AppLockPasswordFormViewModelTests {
         #expect(sut.canSubmit == false)
     }
 
+    /// Copies of the vault set aside aren't encrypted, so setting the password deletes them: only once the user
+    /// agrees, asked after they submit and before anything is authenticated or set.
+    @Test
+    func submit_set_withSetAsideVaults_asksFirstAndSetsOnlyOnceAgreed() async throws {
+        let service = FakeAppLockPasswordService()
+        service.setAsideVaultCount = 2
+        let (sut, appLock) = try makeSetSUT(service: service)
+        sut.newPassword = Self.password
+        sut.confirmation = Self.password
+        await sut.onAppear()
+        #expect(sut.setAsideVaultCount == 2)
+
+        await sut.submit()
+
+        #expect(sut.isConfirmingSetAsideDeletion)
+        #expect(sut.state == .editing)
+        #expect(!appLock.isPasswordSet)
+
+        await sut.confirmSetAsideDeletion()
+
+        #expect(!sut.isConfirmingSetAsideDeletion)
+        #expect(sut.state == .done)
+        #expect(appLock.isPasswordSet)
+        #expect(service.setAsideVaultCount == 0)
+    }
+
+    @Test
+    func submit_set_withSetAsideVaults_notAgreed_changesNothing() async throws {
+        let service = FakeAppLockPasswordService()
+        service.setAsideVaultCount = 1
+        let (sut, appLock) = try makeSetSUT(service: service)
+        sut.newPassword = Self.password
+        sut.confirmation = Self.password
+
+        await sut.submit()
+        sut.isConfirmingSetAsideDeletion = false
+
+        #expect(sut.state == .editing)
+        #expect(!appLock.isPasswordSet)
+        #expect(service.setAsideVaultCount == 1)
+        #expect(sut.newPassword == Self.password)
+    }
+
+    /// Only setting a password deletes copies set aside, so no other form asks.
+    @Test
+    func setAsideVaultCount_isOnlyForSettingThePassword() async throws {
+        let (sut, service, _) = try await makeSUT(purpose: .change)
+        service.setAsideVaultCount = 2
+
+        await sut.onAppear()
+
+        #expect(sut.setAsideVaultCount == 0)
+    }
+
+    private nonisolated static let setFailures: [(VaultEncryptionError, AppLockPasswordFormViewModel.SetFailure?)] = [
+        (.pendingRehashes, .updatingPhrases),
+        (.archivesNeedDeleting, .setAsideVaults),
+        (.vaultTooLarge, .vaultTooLarge),
+        (.plainStoreDidNotOpen, .vaultDidNotOpen),
+        (.alreadyEncrypted, nil),
+    ]
+
+    /// Why the vault couldn't be encrypted, where the user can do something about it, so the screen can say what.
+    @Test(arguments: setFailures)
+    func submit_set_vaultCantBeEncrypted_saysWhy(
+        error: VaultEncryptionError,
+        failure: AppLockPasswordFormViewModel.SetFailure?,
+    ) async throws {
+        let service = FakeAppLockPasswordService()
+        service.failure = error
+        let (sut, appLock) = try makeSetSUT(service: service)
+        sut.newPassword = Self.password
+        sut.confirmation = Self.password
+
+        await sut.submit()
+
+        #expect(sut.state == .failed)
+        #expect(sut.setFailure == failure)
+        #expect(!appLock.isPasswordSet)
+    }
+
     // MARK: - Changing
 
     @Test
@@ -160,6 +241,24 @@ struct AppLockPasswordFormViewModelTests {
         #expect(sut.newPassword == Self.newPassword)
         #expect(sut.retryAt == nil)
         #expect(try await service.unlock(password: Self.password) == .accepted)
+    }
+
+    /// "Wrong password" is about the password that was typed: it goes once the current password is edited, and stays
+    /// while the other fields are.
+    @Test
+    func change_editingTheCurrentPasswordAfterAWrongOne_clearsTheError() async throws {
+        let (sut, _, _) = try await makeSUT(purpose: .change)
+        sut.currentPassword = "wrong"
+        sut.newPassword = Self.newPassword
+        sut.confirmation = Self.newPassword
+        await sut.submit()
+        #expect(sut.isCurrentPasswordWrong)
+
+        sut.newPassword = "something else"
+        #expect(sut.isCurrentPasswordWrong)
+        sut.currentPassword = "c"
+
+        #expect(!sut.isCurrentPasswordWrong)
     }
 
     @Test

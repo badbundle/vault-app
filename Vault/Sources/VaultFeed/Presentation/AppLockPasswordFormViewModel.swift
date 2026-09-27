@@ -37,8 +37,29 @@ public final class AppLockPasswordFormViewModel {
         case failed
     }
 
+    /// Why setting the password failed, where the user can do something about it.
+    public enum SetFailure: Equatable, Sendable {
+        /// Phrases from an older version of the app are still being updated, and they aren't encrypted yet.
+        case updatingPhrases
+        /// Copies of the vault set aside because they couldn't be opened are still there, and the user hasn't agreed
+        /// to delete them.
+        case setAsideVaults
+        /// The vault is too large to encrypt.
+        case vaultTooLarge
+        /// The vault couldn't be opened when Vault started, and was set aside: the store it has now doesn't hold it.
+        case vaultDidNotOpen
+    }
+
     public let purpose: Purpose
-    public var currentPassword = ""
+    public var currentPassword = "" {
+        didSet {
+            // Once it's edited, the wrong one it replaces isn't what's there any more.
+            if currentPassword != oldValue, currentPassword.isNotEmpty {
+                isCurrentPasswordWrong = false
+            }
+        }
+    }
+
     public var newPassword = "" {
         didSet {
             // What was refused has gone.
@@ -63,6 +84,10 @@ public final class AppLockPasswordFormViewModel {
     /// threshold's wrong one in a row, which Settings never tries, erasing on or off (VAULT-34). The screen says to
     /// lock Vault, and never why.
     public private(set) var isOnlyAtTheLockScreen = false
+    /// Why setting the password failed, if it's something the user can act on. `nil` for anything else.
+    public private(set) var setFailure: SetFailure?
+    /// Whether it's asking the user to agree to delete the copies of the vault set aside, before setting the password.
+    public var isConfirmingSetAsideDeletion = false
 
     private let appLock: AppLockService
 
@@ -70,6 +95,10 @@ public final class AppLockPasswordFormViewModel {
         self.purpose = purpose
         self.appLock = appLock
     }
+
+    /// How many copies of the vault were set aside because they couldn't be opened, as of when the form appeared.
+    /// They aren't encrypted, so setting the password deletes them, once the user agrees.
+    public private(set) var setAsideVaultCount = 0
 
     /// Whether the form asks for the current password: to change it or turn it off, or to turn erasing on or off.
     public var needsCurrentPassword: Bool {
@@ -114,20 +143,46 @@ public final class AppLockPasswordFormViewModel {
         return true
     }
 
-    /// Finds out whether the current password has to wait before it can be tried.
+    /// Finds out whether copies of the vault were set aside, for setting the password, and whether the current password
+    /// has to wait before it can be tried.
     public func onAppear() async {
+        if purpose == .set {
+            setAsideVaultCount = appLock.setAsideVaultCount
+        }
         guard needsCurrentPassword else { return }
         retryAt = await appLock.passwordRetryTime()
     }
 
+    /// Sets, changes or turns off the password, or sets the duress password. Setting it where copies of the vault were
+    /// set aside asks the user to agree to delete them first (`confirmSetAsideDeletion()`).
     public func submit() async {
         guard canSubmit else { return }
+        // Read again: one could have been set aside since the form appeared.
+        if purpose == .set {
+            setAsideVaultCount = appLock.setAsideVaultCount
+        }
+        if setAsideVaultCount > 0 {
+            isConfirmingSetAsideDeletion = true
+            return
+        }
+        await save(deletingSetAsideVaults: false)
+    }
+
+    /// Sets the password, once the user has agreed to delete the copies of the vault set aside.
+    public func confirmSetAsideDeletion() async {
+        isConfirmingSetAsideDeletion = false
+        guard canSubmit else { return }
+        await save(deletingSetAsideVaults: true)
+    }
+
+    private func save(deletingSetAsideVaults: Bool) async {
         state = .saving
         isCurrentPasswordWrong = false
+        setFailure = nil
         do {
             switch purpose {
             case .set:
-                if try await appLock.setPassword(newPassword) {
+                if try await appLock.setPassword(newPassword, deletingSetAsideVaults: deletingSetAsideVaults) {
                     finish()
                 } else {
                     // The user didn't authenticate: nothing changed, and they can try again.
@@ -153,9 +208,23 @@ public final class AppLockPasswordFormViewModel {
             isNewPasswordRefused = true
             refusedPasswordCount += 1
             state = .editing
+        } catch let error as VaultEncryptionError {
+            setFailure = Self.setFailure(for: error)
+            clearPasswords()
+            state = .failed
         } catch {
             clearPasswords()
             state = .failed
+        }
+    }
+
+    private static func setFailure(for error: VaultEncryptionError) -> SetFailure? {
+        switch error {
+        case .pendingRehashes: .updatingPhrases
+        case .archivesNeedDeleting: .setAsideVaults
+        case .vaultTooLarge: .vaultTooLarge
+        case .plainStoreDidNotOpen: .vaultDidNotOpen
+        case .alreadyEncrypted: nil
         }
     }
 

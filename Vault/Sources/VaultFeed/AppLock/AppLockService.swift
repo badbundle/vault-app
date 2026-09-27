@@ -60,6 +60,12 @@ public final class AppLockService {
     @ObservationIgnored private var actionsAwaitingUnlock = [@MainActor () -> Void]()
     /// The unlock started when the app became active, kept so tests can wait for it.
     @ObservationIgnored private(set) var automaticUnlock: Task<Void, Never>?
+    /// Locking the vault as the app last locked, which unlocking waits for, so it can't open the vault only for this
+    /// to lock it again.
+    @ObservationIgnored private(set) var vaultLock: Task<Void, Never>?
+    /// Opening the vault without the app having locked (`openVaultIfUnlocked()`), which actions waiting for the app to
+    /// be unlocked wait for too.
+    @ObservationIgnored private(set) var vaultOpening: Task<Void, Never>?
 
     /// - Parameters:
     ///   - passwordService: The App Lock Password's storage, or `nil` where the password isn't offered.
@@ -125,6 +131,12 @@ public final class AppLockService {
         passwordService != nil
     }
 
+    /// How many copies of the vault were set aside because they couldn't be opened, which setting the password
+    /// deletes once the user agrees.
+    public var setAsideVaultCount: Int {
+        passwordService?.setAsideVaultCount ?? 0
+    }
+
     // MARK: - Lifecycle
 
     /// Tell the lock where the app is in its lifecycle. Locks the app when it goes to the background (or when it
@@ -188,6 +200,26 @@ public final class AppLockService {
         state = .locked(AppLockedState(step: unlockSteps[0], isInProgress: isAuthenticationUnderway))
         startsUnlockWhenActive = true
         purgeSensitiveData()
+        lockVault()
+    }
+
+    /// Locks the vault, once any lock of it already underway has finished. It's safe to repeat: locking a locked vault
+    /// does nothing.
+    private func lockVault() {
+        guard let passwordService else { return }
+        let previous = vaultLock
+        vaultLock = Task {
+            await previous?.value
+            await passwordService.lockVault()
+        }
+    }
+
+    /// Locks the app, and the vault with it, as the device locks, whatever the delay, while the App Lock Password is
+    /// set: its keys don't stay in memory while the device is locked. The app asks for device authentication and the
+    /// password when it next comes back. Without the password, the delay stands.
+    public func deviceWillLock() {
+        guard isPasswordSet else { return }
+        lock()
     }
 
     private func startAutomaticUnlockIfNeeded() {
@@ -201,14 +233,23 @@ public final class AppLockService {
     // MARK: - Unlocking
 
     /// Try device authentication, such as asking for Face ID. Unlocks the app if it's the last step.
+    ///
+    /// When it is, and the vault is encrypted with no password asked for (the password turned off after being on),
+    /// it opens the vault too.
     public func unlock() async {
         guard case let .locked(locked) = state, locked.step == .deviceAuthentication else { return }
         await take(locked.step) {
             if let failure = await self.authenticate(reason: "Unlock Vault") {
-                .failed(failure)
-            } else {
-                .passed
+                return .failed(failure)
             }
+            if self.nextStep(after: .deviceAuthentication) == nil, let passwordService = self.passwordService {
+                do {
+                    try await passwordService.openVaultWithoutPassword()
+                } catch {
+                    return .failed(.failed)
+                }
+            }
+            return .passed
         }
     }
 
@@ -231,6 +272,8 @@ public final class AppLockService {
                 return .failed(.failed)
             }
         }
+        // Unlocking can find the password was turned off, if the app stopped before it could record that.
+        passwordDidChange(in: passwordService)
     }
 
     private enum StepOutcome {
@@ -249,6 +292,7 @@ public final class AppLockService {
         let generation = lockGeneration
         state = .locked(AppLockedState(step: step, isInProgress: true))
         isAuthenticationUnderway = true
+        await vaultLock?.value
         let outcome = await attempt()
         // Whether the password has to wait, found out before the step after device authentication shows, or a wrong
         // password's message does, so neither shows the field ready and then takes it away.
@@ -271,6 +315,9 @@ public final class AppLockService {
                 state =
                     .locked(AppLockedState(step: unlockSteps.contains(current.step) ? current.step : unlockSteps[0]))
             }
+            // The attempt may have opened the vault after the lock locked it, if the lock got there first. Lock it
+            // again, after that.
+            lockVault()
             startAutomaticUnlockIfNeeded()
             return
         }
@@ -291,8 +338,9 @@ public final class AppLockService {
 
     /// Catches up with an erase, even one that finished after the app locked again: there's no password now, and
     /// erasing after failed passwords is off. Nothing waiting to open an item runs: the item was in a vault that's
-    /// gone.
-    private func vaultWasErased() {
+    /// gone. The app calls it after an erase that didn't start here, such as erasing and starting again when the
+    /// vault's data was missing.
+    public func vaultWasErased() {
         actionsAwaitingUnlock.removeAll()
         guard let passwordService else { return }
         isPasswordSet = passwordService.isPasswordSet
@@ -332,11 +380,30 @@ public final class AppLockService {
     /// Runs `action` now if the app is unlocked, or once the user unlocks it if it isn't.
     ///
     /// For anything that would reveal the vault, such as opening an item from a widget's link.
+    ///
+    /// While the vault is being opened without the app having locked (`openVaultIfUnlocked()`), it waits for that, so
+    /// the action finds the vault open.
     public func performWhenUnlocked(_ action: @escaping @MainActor () -> Void) {
         if isLocked {
             actionsAwaitingUnlock.append(action)
+        } else if let vaultOpening {
+            Task {
+                await vaultOpening.value
+                action()
+            }
         } else {
             action()
+        }
+    }
+
+    /// Opens the vault if the app isn't locked: at launch with the lock off, while the password is off after being on.
+    /// The vault is encrypted with a key on this device then, and nothing else asks the user to unlock, so it opens
+    /// as the plain store always has. Does nothing while the vault is plain.
+    public func openVaultIfUnlocked() {
+        guard !isLocked, let passwordService else { return }
+        vaultOpening = Task {
+            try? await passwordService.openVaultWithoutPassword()
+            vaultOpening = nil
         }
     }
 
@@ -378,16 +445,29 @@ public final class AppLockService {
     /// user out of their own vault with a password they don't know. The caller has checked the password against
     /// `AppLockPasswordRules` and its confirmation.
     ///
+    /// - Parameter deletingSetAsideVaults: Whether the user has agreed to delete the copies of the vault set aside
+    ///   (`setAsideVaultCount`), which aren't encrypted.
     /// - Returns: `false` if the user didn't authenticate, and nothing changed.
-    /// - Throws: If the password couldn't be set. Nothing changed then either.
-    public func setPassword(_ password: String) async throws -> Bool {
+    /// - Throws: If the password couldn't be set: `VaultEncryptionError` if the vault can't be encrypted as it is.
+    ///   Nothing changed then either.
+    public func setPassword(_ password: String, deletingSetAsideVaults: Bool = false) async throws -> Bool {
         let passwordService = try passwordServiceForSettings()
         guard !isPasswordSet else { throw AppLockPasswordUnavailableError() }
         guard await authenticateToChangeSettings(reason: "Set App Lock Password") else { return false }
         isChangingSettings = true
-        defer { isChangingSettings = false }
-        try await passwordService.setPassword(password)
-        passwordDidChange(in: passwordService)
+        let generation = lockGeneration
+        defer {
+            isChangingSettings = false
+            // Even if it threw: it can have changed how the vault is stored before it did.
+            passwordDidChange(in: passwordService)
+            // The app locked while the vault was converted. The lock found the plain store, which it doesn't lock, and
+            // the conversion then opened the encrypted vault, perhaps after the user had authenticated again: lock the
+            // app and the vault now, so the password is asked for.
+            if generation != lockGeneration {
+                lock()
+            }
+        }
+        try await passwordService.setPassword(password, deletingSetAsideVaults: deletingSetAsideVaults)
         return true
     }
 
@@ -405,10 +485,12 @@ public final class AppLockService {
     public func turnOffPassword(current: String) async throws -> AppLockPasswordResult {
         let passwordService = try passwordServiceForSettings()
         isChangingSettings = true
-        defer { isChangingSettings = false }
-        let result = try await passwordService.turnOffPassword(current: current)
-        passwordDidChange(in: passwordService)
-        return result
+        defer {
+            isChangingSettings = false
+            // Even if it threw: it can have changed how the vault is stored before it did.
+            passwordDidChange(in: passwordService)
+        }
+        return try await passwordService.turnOffPassword(current: current)
     }
 
     /// Sets a duress password, once the user has authenticated: it makes a new, empty duress vault, which the

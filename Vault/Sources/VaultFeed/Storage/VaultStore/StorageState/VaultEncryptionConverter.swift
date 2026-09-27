@@ -178,19 +178,29 @@ extension VaultEncryptionConverter {
     ///   be read to confirm the conversion didn't commit: then the session stays locked, and the next launch decides.
     public func encrypt(password: String, deletingArchives: Bool) async throws {
         // Checked before the first suspension, so two conversions can't overlap.
-        guard !isConverting, let plainStore else { throw VaultEncryptionError.alreadyEncrypted }
+        guard !isConverting, plainStore != nil else { throw VaultEncryptionError.alreadyEncrypted }
         isConverting = true
         defer { isConverting = false }
         try await backgroundTime.whileRunning {
-            try await encrypt(plainStore, password: password, deletingArchives: deletingArchives)
+            let committed = try await commit(password: password, deletingArchives: deletingArchives)
+            // Nothing here holds the plain store any more, so letting go of it closes its database before its files
+            // are deleted.
+            await finish(committed)
         }
     }
 
-    private func encrypt(
-        _ plainStore: PersistedLocalVaultStore,
-        password: String,
-        deletingArchives: Bool,
-    ) async throws {
+    /// What a committed conversion leaves to finish.
+    private struct Committed: Sendable {
+        var file: EncryptedVaultFile
+        var converted: Converted
+        var archiveNames: [String]
+        var lockEpoch: Int
+    }
+
+    /// Converts the plain store and commits the encrypted vault, or undoes it all and throws. It holds the plain store
+    /// only until then.
+    private func commit(password: String, deletingArchives: Bool) async throws -> Committed {
+        guard let plainStore else { throw VaultEncryptionError.alreadyEncrypted }
         let stateFile = VaultStorageStateFile(directory: directory, fileSystem: fileSystem)
         guard try stateFile.read() == .plain else { throw VaultEncryptionError.alreadyEncrypted }
         guard plainStoreOpenedNormally else { throw VaultEncryptionError.plainStoreDidNotOpen }
@@ -244,8 +254,14 @@ extension VaultEncryptionConverter {
             throw error
         }
         held.release()
-
         self.plainStore = nil
+        return Committed(file: file, converted: converted, archiveNames: archiveNames, lockEpoch: lockEpoch)
+    }
+
+    /// Lets go of the plain store and deletes it, clears the system surfaces, then switches the session to the vault.
+    private func finish(_ committed: Committed) async {
+        let (file, converted, archiveNames) = (committed.file, committed.converted, committed.archiveNames)
+        let stateFile = VaultStorageStateFile(directory: directory, fileSystem: fileSystem)
         await hooks.releasePlainStore()
         var deletedPlainStore = false
         do {
@@ -277,7 +293,7 @@ extension VaultEncryptionConverter {
             state: converted.state,
             wrapStamper: wrapStamper,
         )
-        _ = await session.switchTo(.unlocked(store), unlessLockedSince: lockEpoch)
+        _ = await session.switchTo(.unlocked(store), unlessLockedSince: committed.lockEpoch)
     }
 
     private struct Converted: Sendable {

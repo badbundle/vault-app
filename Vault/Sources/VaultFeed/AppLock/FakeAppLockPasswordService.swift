@@ -16,6 +16,14 @@ import Foundation
 public final class FakeAppLockPasswordService: AppLockPasswordService {
     /// Thrown by every call while it's set, as when the vault can't be read.
     public var failure: (any Error)?
+    /// Copies of the vault set aside, which setting the password needs the user's agreement to delete.
+    public var setAsideVaultCount = 0
+    /// Whether the vault is open, as far as locking and unlocking without a password go.
+    public private(set) var isVaultOpen = true
+    /// Runs as each password starts being tried, as when the app locks meanwhile.
+    public var whileUnlocking: (@MainActor () -> Void)?
+    /// Runs as the password starts being set, before its deadline, as when the app locks meanwhile.
+    public var whileSettingPassword: (@MainActor () -> Void)?
 
     /// A vault, as far as its password goes.
     private struct Vault {
@@ -66,6 +74,7 @@ public final class FakeAppLockPasswordService: AppLockPasswordService {
     }
 
     public func unlock(password: String) async throws -> AppLockPasswordResult {
+        whileUnlocking?()
         try failIfNeeded()
         // An erase that's due comes before anything's tried, whatever was entered.
         if erasesAfterFailedPasswords, attempts >= AppLockPasswordAttemptCounter.eraseThreshold {
@@ -75,6 +84,7 @@ public final class FakeAppLockPasswordService: AppLockPasswordService {
         // The most recently made vault it opens, as the real storage does.
         let result = try await check(opens: vaults.lastIndex { $0.password == password }) { vault in
             openVault = vault
+            isVaultOpen = true
         }
         guard result == .wrong, erasesAfterFailedPasswords, attempts >= AppLockPasswordAttemptCounter.eraseThreshold
         else {
@@ -84,9 +94,14 @@ public final class FakeAppLockPasswordService: AppLockPasswordService {
         return .erased
     }
 
-    public func setPassword(_ password: String) async throws {
+    public func setPassword(_ password: String, deletingSetAsideVaults: Bool) async throws {
         try failIfNeeded()
+        guard setAsideVaultCount == 0 || deletingSetAsideVaults else {
+            throw VaultEncryptionError.archivesNeedDeleting
+        }
+        whileSettingPassword?()
         try await Task.sleep(for: deadline)
+        setAsideVaultCount = 0
         vaults = [Vault(password: password)]
         openVault = 0
         erasesAfterFailedPasswords = false
@@ -123,6 +138,15 @@ public final class FakeAppLockPasswordService: AppLockPasswordService {
         try await checkInSettings(current) { _ in
             erasesAfterFailedPasswords = erases
         }
+    }
+
+    public func openVaultWithoutPassword() async throws {
+        try failIfNeeded()
+        isVaultOpen = true
+    }
+
+    public func lockVault() async {
+        isVaultOpen = false
     }
 
     /// Every vault goes, and erasing after failed passwords with them.

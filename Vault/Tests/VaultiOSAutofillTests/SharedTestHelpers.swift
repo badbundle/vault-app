@@ -148,8 +148,16 @@ final class FakeAutofillVaultService: AutofillVaultUnlocking {
         try await base.unlock(password: password)
     }
 
-    func setPassword(_ password: String) async throws {
-        try await base.setPassword(password)
+    var setAsideVaultCount: Int {
+        base.setAsideVaultCount
+    }
+
+    func setPassword(_ password: String, deletingSetAsideVaults: Bool) async throws {
+        try await base.setPassword(password, deletingSetAsideVaults: deletingSetAsideVaults)
+    }
+
+    func openVaultWithoutPassword() async throws {
+        try await base.openVaultWithoutPassword()
     }
 
     func changePassword(current: String, new: String) async throws -> AppLockPasswordResult {
