@@ -13,7 +13,8 @@ import LocalAuthentication
 /// with `unlock()`. When the App Lock Password is set, the password comes next, with `unlock(password:)`.
 ///
 /// The App Lock Password is only offered with a `passwordService`, which the app doesn't have until the encrypted
-/// vault's storage is in. It's set, changed and turned off here too, so the lock always knows whether to ask for it.
+/// vault's storage is in. It's set, changed and turned off here too, so the lock always knows whether to ask for it,
+/// and a duress password is set here as well.
 ///
 /// Anything that would reveal the vault while it's locked, such as opening an item from a widget, waits in
 /// `performWhenUnlocked(_:)` until the user has unlocked the app.
@@ -371,6 +372,27 @@ public final class AppLockService {
         let result = try await passwordService.turnOffPassword(current: current)
         passwordDidChange(in: passwordService)
         return result
+    }
+
+    /// Sets a duress password, once the user has authenticated: it makes a new, empty duress vault, which the
+    /// password opens at the lock screen instead of the open vault. Doing it again replaces that vault.
+    ///
+    /// Authenticating first, as for setting the password, means someone else can't open the unlocked app and set one
+    /// up. It never decides which vault opens: the password does (MANIFESTO.md C4). This works the same way in every
+    /// vault, whether or not a duress vault was made before, and changes nothing the lock knows about. The caller has
+    /// checked the password against `AppLockPasswordRules` and its confirmation.
+    ///
+    /// - Returns: `false` if the user didn't authenticate, and nothing changed.
+    /// - Throws: `VaultDuressVaultError.matchesAppLockPassword` if it's the open vault's own App Lock Password, or
+    ///   another error if the vault couldn't be made. Nothing changed then either.
+    public func makeDuressVault(password: String) async throws -> Bool {
+        let passwordService = try passwordServiceForSettings()
+        guard isPasswordSet else { throw AppLockPasswordUnavailableError() }
+        guard await authenticateToChangeSettings(reason: "Set Duress Password") else { return false }
+        isChangingSettings = true
+        defer { isChangingSettings = false }
+        try await passwordService.makeDuressVault(password: password)
+        return true
     }
 
     private func passwordServiceForSettings() throws -> any AppLockPasswordService {

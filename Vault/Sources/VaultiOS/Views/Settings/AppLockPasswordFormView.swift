@@ -2,11 +2,14 @@ import Foundation
 import SwiftUI
 import VaultFeed
 
-/// Sets, changes or turns off the App Lock Password.
+/// Sets, changes or turns off the App Lock Password, or sets a duress password.
 ///
 /// Setting it says plainly what forgetting it means, and when the vault was last backed up. Changing it and turning it
 /// off ask for the current password, which waits after wrong ones just as the lock screen does, and never says how
 /// many attempts are left.
+///
+/// Setting a duress password shows the same screens every time, in every vault, whether or not one was set before: it
+/// never says "create" or "replace", and nothing on it depends on what exists (MANIFESTO.md C2, C9).
 struct AppLockPasswordFormView: View {
     @State private var viewModel: AppLockPasswordFormViewModel
     /// For setting it: the vault's last backup, the way back if the password is forgotten.
@@ -52,6 +55,9 @@ struct AppLockPasswordFormView: View {
                 focusedField = .current
             }
         }
+        .onChange(of: viewModel.refusedPasswordCount) {
+            AccessibilityNotification.Announcement(Self.refusedPasswordMessage).post()
+        }
         .onDisappear {
             viewModel.didDisappear()
         }
@@ -65,6 +71,9 @@ struct AppLockPasswordFormView: View {
                 headerSection
                 if viewModel.purpose == .set {
                     forgettingSection
+                }
+                if viewModel.purpose == .setDuress {
+                    duressSection
                 }
                 if viewModel.needsCurrentPassword {
                     currentPasswordSection(passwordWait: passwordWait)
@@ -99,6 +108,7 @@ struct AppLockPasswordFormView: View {
         case .set: "App Lock Password"
         case .change: "Change Password"
         case .turnOff: "Turn Off Password"
+        case .setDuress: "Duress Password"
         }
     }
 
@@ -131,9 +141,20 @@ struct AppLockPasswordFormView: View {
                     color: .red,
                     iconSize: 56,
                 )
+            case .setDuress:
+                BackupHeroHeader(
+                    title: "Set a Duress Password",
+                    subtitle: "Enter it instead of your App Lock Password when Vault unlocks, and a separate, empty vault opens.",
+                    systemImage: Self.duressSystemImage,
+                    color: .accentColor,
+                    iconSize: 56,
+                )
             }
         }
     }
+
+    /// The symbol for the duress password, here and on the row that opens it.
+    static let duressSystemImage = "lock.rectangle.stack.fill"
 
     /// There's no way to reset a forgotten password, so this says so before it's set, with the way back.
     private var forgettingSection: some View {
@@ -159,6 +180,24 @@ struct AppLockPasswordFormView: View {
                     color: .red,
                 )
             }
+        }
+    }
+
+    /// How the duress vault is filled and replaced. The same words every time, whatever exists already.
+    private var duressSection: some View {
+        Section {
+            note(
+                title: "Adding items to it",
+                detail: "Unlock with the duress password, then add them there.",
+                systemImage: "tray.and.arrow.down.fill",
+                color: .secondary,
+            )
+            note(
+                title: "Setting it again",
+                detail: "Replaces the last duress vault with a new, empty one.",
+                systemImage: "arrow.triangle.2.circlepath",
+                color: .secondary,
+            )
         }
     }
 
@@ -207,7 +246,7 @@ struct AppLockPasswordFormView: View {
     private var newPasswordSection: some View {
         Section {
             LabeledTextField(
-                "New Password",
+                viewModel.purpose == .setDuress ? "Duress Password" : "New Password",
                 text: $viewModel.newPassword,
                 kind: .secure(),
                 status: newPasswordStatus,
@@ -219,9 +258,10 @@ struct AppLockPasswordFormView: View {
                 focusedField = .confirmation
             }
             .disabled(viewModel.state == .saving)
+            .wrongPasswordFeedback(trigger: viewModel.refusedPasswordCount)
 
             LabeledTextField(
-                "Confirm New Password",
+                viewModel.purpose == .setDuress ? "Confirm Duress Password" : "Confirm New Password",
                 text: $viewModel.confirmation,
                 kind: .secure(),
                 status: viewModel.confirmation.isEmpty
@@ -242,6 +282,10 @@ struct AppLockPasswordFormView: View {
 
     /// Says what's wrong with the new password once the user has moved on from it, not while they're typing it.
     private var newPasswordStatus: LabeledTextField.Status {
+        // Until something else is typed: the field is empty, and may be focused again, once it's refused.
+        if viewModel.isNewPasswordRefused {
+            return .error(message: Self.refusedPasswordMessage)
+        }
         guard focusedField != .new else { return .none }
         if viewModel.isNewPasswordSameAsCurrent {
             return .error(message: "Choose a password that's different from the current one.")
@@ -255,6 +299,9 @@ struct AppLockPasswordFormView: View {
             return .none
         }
     }
+
+    /// Why the password service refused a duress password. Only the open vault's own App Lock Password is refused.
+    private static let refusedPasswordMessage = "Must be different from your App Lock Password."
 
     // MARK: - Action
 
@@ -285,6 +332,7 @@ struct AppLockPasswordFormView: View {
         switch viewModel.purpose {
         case .set: "Encrypting your vault with the password."
         case .change, .turnOff: "Checking the password."
+        case .setDuress: "Setting the duress password."
         }
     }
 
@@ -299,12 +347,13 @@ struct AppLockPasswordFormView: View {
         case .set: "Set App Lock Password"
         case .change: "Change Password"
         case .turnOff: "Turn Off Password"
+        case .setDuress: "Set Duress Password"
         }
     }
 
     private var actionSystemImage: String {
         switch viewModel.purpose {
-        case .set, .change: "checkmark.shield.fill"
+        case .set, .change, .setDuress: "checkmark.shield.fill"
         case .turnOff: "lock.open.fill"
         }
     }
@@ -318,6 +367,7 @@ struct AppLockPasswordFormView: View {
         case .set: "Something went wrong. The App Lock Password wasn't set."
         case .change: "Something went wrong. The App Lock Password wasn't changed."
         case .turnOff: "Something went wrong. The App Lock Password is still on."
+        case .setDuress: "Something went wrong. The duress password wasn't set."
         }
     }
 
@@ -351,10 +401,19 @@ struct AppLockPasswordFormView: View {
                     color: .green,
                     bouncesOnAppear: true,
                 )
+            case .setDuress:
+                // The same every time: it never says whether it replaced anything.
+                BackupHeroHeader(
+                    title: "Duress Password Set",
+                    subtitle: "To open its vault, enter it instead of your App Lock Password when Vault unlocks.",
+                    systemImage: "checkmark.shield.fill",
+                    color: .green,
+                    bouncesOnAppear: true,
+                )
             }
         }
 
-        if viewModel.purpose != .turnOff {
+        if viewModel.purpose == .set || viewModel.purpose == .change {
             Section {
                 note(
                     title: "Keep it somewhere safe",
@@ -380,6 +439,15 @@ struct AppLockPasswordFormView: View {
     NavigationStack {
         AppLockPasswordFormView(
             viewModel: .init(purpose: .change, appLock: .preview(password: "correct horse")),
+            close: {},
+        )
+    }
+}
+
+#Preview("Duress password") {
+    NavigationStack {
+        AppLockPasswordFormView(
+            viewModel: .init(purpose: .setDuress, appLock: .preview(password: "correct horse")),
             close: {},
         )
     }

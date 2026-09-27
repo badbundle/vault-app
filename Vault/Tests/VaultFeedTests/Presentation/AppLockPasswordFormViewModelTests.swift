@@ -249,6 +249,213 @@ struct AppLockPasswordFormViewModelTests {
         #expect(service.isPasswordSet)
     }
 
+    // MARK: - Setting a duress password
+
+    private static let duressPassword = "plausible decoy"
+
+    @Test
+    func setDuress_asksForANewPasswordOnly() async throws {
+        let (sut, _, _) = try await makeSUT(purpose: .setDuress)
+
+        #expect(!sut.needsCurrentPassword)
+        #expect(sut.needsNewPassword)
+    }
+
+    @Test(arguments: weakPasswords)
+    func setDuress_weakPassword_cannotBeSubmitted(
+        password: String,
+        problem: AppLockPasswordRules.Problem,
+    ) async throws {
+        let (sut, _, _) = try await makeSUT(purpose: .setDuress)
+
+        sut.newPassword = password
+        sut.confirmation = password
+
+        #expect(sut.newPasswordProblem == problem)
+        #expect(!sut.canSubmit)
+    }
+
+    @Test
+    func setDuress_confirmationDoesNotMatch_cannotBeSubmitted() async throws {
+        let (sut, _, _) = try await makeSUT(purpose: .setDuress)
+
+        sut.newPassword = Self.duressPassword
+        sut.confirmation = Self.duressPassword + "!"
+
+        #expect(sut.newPasswordProblem == nil)
+        #expect(!sut.confirmationMatches)
+        #expect(!sut.canSubmit)
+    }
+
+    /// The form leaves comparing it with the App Lock Password to the password service, so it can be submitted.
+    @Test
+    func setDuress_appLockPassword_canBeSubmitted() async throws {
+        let (sut, _, _) = try await makeSUT(purpose: .setDuress)
+
+        sut.newPassword = Self.password
+        sut.confirmation = Self.password
+
+        #expect(!sut.isNewPasswordSameAsCurrent)
+        #expect(sut.canSubmit)
+    }
+
+    @Test
+    func submit_setDuress_makesAVaultThePasswordOpens() async throws {
+        let (sut, service, _) = try await makeSUT(purpose: .setDuress)
+        sut.newPassword = Self.duressPassword
+        sut.confirmation = Self.duressPassword
+
+        await sut.submit()
+
+        #expect(sut.state == .done)
+        #expect(sut.newPassword.isEmpty)
+        #expect(sut.confirmation.isEmpty)
+        #expect(try await service.unlock(password: Self.duressPassword) == .accepted)
+        #expect(try await service.unlock(password: Self.password) == .accepted)
+    }
+
+    @Test
+    func submit_setDuress_again_replacesTheLastVault() async throws {
+        let (first, service, appLock) = try await makeSUT(purpose: .setDuress)
+        await submitDuressPassword("first decoy", with: first)
+        let second = AppLockPasswordFormViewModel(purpose: .setDuress, appLock: appLock)
+
+        await submitDuressPassword("second decoy", with: second)
+
+        #expect(second.state == .done)
+        #expect(try await service.unlock(password: "first decoy") == .wrong)
+        #expect(try await service.unlock(password: "second decoy") == .accepted)
+    }
+
+    @Test
+    func submit_setDuress_appLockPassword_isRefusedAndForgotten() async throws {
+        let (sut, service, _) = try await makeSUT(purpose: .setDuress)
+        sut.newPassword = Self.password
+        sut.confirmation = Self.password
+
+        await sut.submit()
+
+        #expect(sut.state == .editing)
+        #expect(sut.isNewPasswordRefused)
+        #expect(sut.refusedPasswordCount == 1)
+        #expect(sut.newPassword.isEmpty)
+        #expect(sut.confirmation.isEmpty)
+        #expect(!sut.canSubmit)
+        #expect(try await service.unlock(password: Self.password) == .accepted)
+    }
+
+    @Test
+    func setDuress_refused_isForgottenOnceAnotherIsTyped() async throws {
+        let (sut, _, _) = try await makeSUT(purpose: .setDuress)
+        await submitDuressPassword(Self.password, with: sut)
+
+        sut.newPassword = "p"
+
+        #expect(!sut.isNewPasswordRefused)
+        #expect(sut.refusedPasswordCount == 1)
+    }
+
+    @Test
+    func submit_setDuress_refused_isNotAWrongAttempt() async throws {
+        let clock = FakeAppLockClock()
+        let (sut, _, appLock) = try await makeSUT(purpose: .setDuress, clock: clock)
+
+        for _ in 1 ... 6 {
+            await submitDuressPassword(Self.password, with: sut)
+        }
+
+        #expect(sut.refusedPasswordCount == 6)
+        #expect(sut.wrongPasswordCount == 0)
+        #expect(!sut.isCurrentPasswordWrong)
+        #expect(await appLock.passwordRetryTime() == nil)
+    }
+
+    @Test
+    func submit_setDuress_notAuthenticated_keepsEditingAndMakesNothing() async throws {
+        let service = FakeAppLockPasswordService(password: Self.password)
+        let policy = DeviceAuthenticationPolicyMock(
+            canAuthenicateWithPasscode: true,
+            canAuthenticateWithBiometrics: true,
+        )
+        // Unlocks the app, then isn't passed for the duress password.
+        policy.authenticateWithBiometricsHandler = { reason in reason == "Unlock Vault" }
+        let appLock = try makeAppLock(policy: policy, service: service, clock: FakeAppLockClock())
+        await appLock.unlock()
+        await appLock.unlock(password: Self.password)
+        let sut = AppLockPasswordFormViewModel(purpose: .setDuress, appLock: appLock)
+
+        await submitDuressPassword(Self.duressPassword, with: sut)
+
+        #expect(sut.state == .editing)
+        #expect(!sut.isNewPasswordRefused)
+        #expect(sut.newPassword == Self.duressPassword)
+        #expect(try await service.unlock(password: Self.duressPassword) == .wrong)
+    }
+
+    @Test
+    func submit_setDuress_fails_saysSoAndForgetsWhatWasTyped() async throws {
+        let (sut, service, _) = try await makeSUT(purpose: .setDuress)
+        service.failure = TestError()
+
+        await submitDuressPassword(Self.duressPassword, with: sut)
+
+        #expect(sut.state == .failed)
+        #expect(!sut.isNewPasswordRefused)
+        #expect(sut.newPassword.isEmpty)
+        #expect(sut.confirmation.isEmpty)
+    }
+
+    // MARK: - Setting a duress password: no sign one exists
+
+    /// Nothing on the screen, before or after, depends on whether a duress vault was made before.
+    @Test
+    func setDuress_looksTheSameWhetherOrNotOneWasMade() async throws {
+        let (fresh, _, _) = try await makeSUT(purpose: .setDuress)
+        let (replacing, service, _) = try await makeSUT(purpose: .setDuress)
+        try await service.makeDuressVault(password: "earlier decoy")
+
+        #expect(Screen(fresh) == Screen(replacing))
+
+        await submitDuressPassword(Self.duressPassword, with: fresh)
+        await submitDuressPassword(Self.duressPassword, with: replacing)
+
+        #expect(fresh.state == .done)
+        #expect(Screen(fresh) == Screen(replacing))
+    }
+
+    /// Inside a duress vault, it's the same screen, and it refuses and accepts by the same rule: only the open
+    /// vault's own password is refused.
+    @Test
+    func setDuress_looksTheSameInADuressVault() async throws {
+        let (real, _, _) = try await makeSUT(purpose: .setDuress)
+        let (inDuress, _, _) = try await makeSUTInADuressVault(purpose: .setDuress)
+
+        #expect(Screen(real) == Screen(inDuress))
+
+        await submitDuressPassword(Self.password, with: real)
+        await submitDuressPassword(Self.duressPassword, with: inDuress)
+
+        #expect(real.isNewPasswordRefused)
+        #expect(Screen(real) == Screen(inDuress))
+
+        await submitDuressPassword("nested decoy", with: real)
+        await submitDuressPassword("nested decoy", with: inDuress)
+
+        #expect(real.state == .done)
+        #expect(Screen(real) == Screen(inDuress))
+    }
+
+    /// Refusing a password that opens another vault would say that vault exists.
+    @Test
+    func submit_setDuress_inADuressVault_realPasswordIsAcceptedWithoutAWord() async throws {
+        let (sut, _, _) = try await makeSUTInADuressVault(purpose: .setDuress)
+
+        await submitDuressPassword(Self.password, with: sut)
+
+        #expect(sut.state == .done)
+        #expect(!sut.isNewPasswordRefused)
+    }
+
     // MARK: - Leaving
 
     @Test
@@ -289,6 +496,55 @@ extension AppLockPasswordFormViewModelTests {
         await appLock.unlock(password: Self.password)
         #expect(appLock.state == .unlocked)
         return (AppLockPasswordFormViewModel(purpose: purpose, appLock: appLock), service, appLock)
+    }
+
+    /// A form in a duress vault: unlocked with the duress password, as Settings would be.
+    private func makeSUTInADuressVault(
+        purpose: AppLockPasswordFormViewModel.Purpose,
+    ) async throws -> (AppLockPasswordFormViewModel, FakeAppLockPasswordService, AppLockService) {
+        let service = FakeAppLockPasswordService(password: Self.password)
+        try await service.makeDuressVault(password: Self.duressPassword)
+        let appLock = try makeAppLock(policy: .alwaysAllow, service: service, clock: FakeAppLockClock())
+        await appLock.unlock()
+        await appLock.unlock(password: Self.duressPassword)
+        #expect(appLock.state == .unlocked)
+        return (AppLockPasswordFormViewModel(purpose: purpose, appLock: appLock), service, appLock)
+    }
+
+    private func submitDuressPassword(_ password: String, with viewModel: AppLockPasswordFormViewModel) async {
+        viewModel.newPassword = password
+        viewModel.confirmation = password
+        await viewModel.submit()
+    }
+
+    /// Everything the form shows.
+    private struct Screen: Equatable {
+        var state: AppLockPasswordFormViewModel.State
+        var needsCurrentPassword: Bool
+        var needsNewPassword: Bool
+        var newPasswordProblem: AppLockPasswordRules.Problem?
+        var confirmationMatches: Bool
+        var canSubmit: Bool
+        var isNewPasswordRefused: Bool
+        var refusedPasswordCount: Int
+        var isCurrentPasswordWrong: Bool
+        var wrongPasswordCount: Int
+        var isWaiting: Bool
+
+        @MainActor
+        init(_ viewModel: AppLockPasswordFormViewModel) {
+            state = viewModel.state
+            needsCurrentPassword = viewModel.needsCurrentPassword
+            needsNewPassword = viewModel.needsNewPassword
+            newPasswordProblem = viewModel.newPasswordProblem
+            confirmationMatches = viewModel.confirmationMatches
+            canSubmit = viewModel.canSubmit
+            isNewPasswordRefused = viewModel.isNewPasswordRefused
+            refusedPasswordCount = viewModel.refusedPasswordCount
+            isCurrentPasswordWrong = viewModel.isCurrentPasswordWrong
+            wrongPasswordCount = viewModel.wrongPasswordCount
+            isWaiting = viewModel.retryAt != nil
+        }
     }
 
     private func makeAppLock(

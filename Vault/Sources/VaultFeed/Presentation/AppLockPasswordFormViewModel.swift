@@ -1,11 +1,14 @@
 import Foundation
 import FoundationExtensions
 
-/// Sets, changes or turns off the App Lock Password, for its screens in Settings.
+/// Sets, changes or turns off the App Lock Password, or sets a duress password, for their screens in Settings.
 ///
 /// Changing it and turning it off need the current password. A wrong one counts as a wrong attempt and waits, just as
 /// at the lock screen, and the screen says only that it was wrong and how long to wait: never how many attempts are
 /// left.
+///
+/// Setting a duress password looks and behaves the same whether or not one was set before, and in a duress vault as in
+/// the real one: nothing here knows (MANIFESTO.md C2, C9).
 @MainActor
 @Observable
 public final class AppLockPasswordFormViewModel {
@@ -16,6 +19,8 @@ public final class AppLockPasswordFormViewModel {
         case change
         /// Turn the password off, which needs the current one.
         case turnOff
+        /// Set a duress password, which makes a new, empty duress vault that it opens. It replaces the last one.
+        case setDuress
     }
 
     public enum State: Equatable, Sendable {
@@ -29,13 +34,24 @@ public final class AppLockPasswordFormViewModel {
 
     public let purpose: Purpose
     public var currentPassword = ""
-    public var newPassword = ""
+    public var newPassword = "" {
+        didSet {
+            // What was refused has gone.
+            isNewPasswordRefused = false
+        }
+    }
+
     public var confirmation = ""
     public private(set) var state = State.editing
     /// Whether the current password was wrong last time.
     public private(set) var isCurrentPasswordWrong = false
     /// Counts wrong current passwords, so the screen can react to each one.
     public private(set) var wrongPasswordCount = 0
+    /// Whether the last new password was refused for being the App Lock Password, until another is typed. Only a
+    /// duress password is refused this way, by the password service: the form doesn't compare it with anything.
+    public private(set) var isNewPasswordRefused = false
+    /// Counts refused new passwords, so the screen can react to each one.
+    public private(set) var refusedPasswordCount = 0
     /// When the current password can be tried again, if the user has to wait after wrong ones. By `AppLockClock`.
     public private(set) var retryAt: ContinuousClock.Instant?
 
@@ -46,9 +62,9 @@ public final class AppLockPasswordFormViewModel {
         self.appLock = appLock
     }
 
-    /// Whether the form asks for the current password.
+    /// Whether the form asks for the current password: only to change it or turn it off.
     public var needsCurrentPassword: Bool {
-        purpose != .set
+        purpose == .change || purpose == .turnOff
     }
 
     /// Whether the form asks for a new password, and its confirmation.
@@ -106,7 +122,18 @@ public final class AppLockPasswordFormViewModel {
                 try await handle(appLock.changePassword(current: currentPassword, new: newPassword))
             case .turnOff:
                 try await handle(appLock.turnOffPassword(current: currentPassword))
+            case .setDuress:
+                if try await appLock.makeDuressVault(password: newPassword) {
+                    finish()
+                } else {
+                    state = .editing
+                }
             }
+        } catch VaultDuressVaultError.matchesAppLockPassword {
+            clearPasswords()
+            isNewPasswordRefused = true
+            refusedPasswordCount += 1
+            state = .editing
         } catch {
             clearPasswords()
             state = .failed

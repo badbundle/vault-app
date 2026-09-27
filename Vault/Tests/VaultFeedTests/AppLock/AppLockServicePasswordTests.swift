@@ -313,6 +313,120 @@ struct AppLockServicePasswordTests {
         #expect(result == .delayed(.seconds(60)))
         #expect(sut.isPasswordSet)
     }
+
+    // MARK: - Setting a duress password
+
+    @Test
+    func makeDuressVault_authenticated_makesOneAndChangesNothingTheLockKnows() async throws {
+        let didChangeSettings = Counter()
+        let service = FakeAppLockPasswordService(password: Self.password)
+        let sut = try await makeUnlockedSUT(passwordService: service, didChangeSettings: didChangeSettings)
+
+        let didMake = try await sut.makeDuressVault(password: "plausible decoy")
+
+        #expect(didMake)
+        #expect(sut.isPasswordSet)
+        #expect(!sut.isChangingSettings)
+        #expect(didChangeSettings.count == .zero)
+        #expect(try await service.unlock(password: "plausible decoy") == .accepted)
+    }
+
+    @Test
+    func makeDuressVault_notAuthenticated_makesNothing() async throws {
+        let policy = DeviceAuthenticationPolicyMock(
+            canAuthenicateWithPasscode: true,
+            canAuthenticateWithBiometrics: true,
+        )
+        // Unlocks the app, then isn't passed for the duress password.
+        policy.authenticateWithBiometricsHandler = { reason in reason == "Unlock Vault" }
+        let service = FakeAppLockPasswordService(password: Self.password)
+        let sut = try makeSUT(policy: policy, passwordService: service)
+        await sut.unlock()
+        await sut.unlock(password: Self.password)
+
+        let didMake = try await sut.makeDuressVault(password: "plausible decoy")
+
+        #expect(!didMake)
+        #expect(policy.authenticateWithBiometricsCallCount == 2)
+        #expect(try await service.unlock(password: "plausible decoy") == .wrong)
+    }
+
+    @Test
+    func makeDuressVault_theAppLockPassword_isRefused() async throws {
+        let sut = try await makeUnlockedSUT(passwordService: FakeAppLockPasswordService(password: Self.password))
+
+        await #expect(throws: VaultDuressVaultError.matchesAppLockPassword) {
+            try await sut.makeDuressVault(password: Self.password)
+        }
+        #expect(!sut.isChangingSettings)
+    }
+
+    /// It isn't an attempt at the password, so it neither counts nor waits.
+    @Test
+    func makeDuressVault_whileWaitingAfterWrongPasswords_isNotCountedOrDelayed() async throws {
+        let clock = FakeAppLockClock()
+        let service = FakeAppLockPasswordService(password: Self.password, clock: clock)
+        let sut = try await makeUnlockedSUT(passwordService: service, clock: clock)
+        for _ in 1 ... 5 {
+            _ = try await sut.changePassword(current: "wrong", new: "battery staple")
+        }
+        let retryAt = await sut.passwordRetryTime()
+
+        let didMake = try await sut.makeDuressVault(password: "plausible decoy")
+
+        #expect(didMake)
+        #expect(await sut.passwordRetryTime() == retryAt)
+    }
+
+    @Test
+    func makeDuressVault_fails_throwsAndMakesNothing() async throws {
+        let service = FakeAppLockPasswordService(password: Self.password)
+        let sut = try await makeUnlockedSUT(passwordService: service)
+        service.failure = TestError()
+
+        await #expect(throws: TestError.self) {
+            try await sut.makeDuressVault(password: "plausible decoy")
+        }
+        #expect(!sut.isChangingSettings)
+        service.failure = nil
+        #expect(try await service.unlock(password: "plausible decoy") == .wrong)
+    }
+
+    @Test
+    func makeDuressVault_noPasswordSet_throws() async throws {
+        let sut = try makeSUT(isEnabled: false, passwordService: FakeAppLockPasswordService())
+
+        await #expect(throws: AppLockPasswordUnavailableError.self) {
+            try await sut.makeDuressVault(password: "plausible decoy")
+        }
+    }
+
+    @Test
+    func makeDuressVault_whileLocked_throws() async throws {
+        let sut = try makeSUT(passwordService: FakeAppLockPasswordService(password: Self.password))
+
+        await #expect(throws: AppLockPasswordUnavailableError.self) {
+            try await sut.makeDuressVault(password: "plausible decoy")
+        }
+    }
+
+    /// In a duress vault, only the duress vault's own password is refused: the real one is accepted like any other.
+    @Test
+    func makeDuressVault_inADuressVault_refusesOnlyItsOwnPassword() async throws {
+        let service = FakeAppLockPasswordService(password: Self.password)
+        try await service.makeDuressVault(password: "plausible decoy")
+        let sut = try makeSUT(passwordService: service)
+        await sut.unlock()
+        await sut.unlock(password: "plausible decoy")
+        #expect(sut.state == .unlocked)
+
+        await #expect(throws: VaultDuressVaultError.matchesAppLockPassword) {
+            try await sut.makeDuressVault(password: "plausible decoy")
+        }
+        let didMake = try await sut.makeDuressVault(password: Self.password)
+
+        #expect(didMake)
+    }
 }
 
 // MARK: - Helpers

@@ -33,9 +33,11 @@ struct AppLockPasswordSheet: View {
     }
 }
 
-/// The App Lock Password while it's set: what it does, and the ways to change it or turn it off.
+/// The App Lock Password while it's set: what it does, the ways to change it or turn it off, and setting a duress
+/// password.
 ///
-/// VAULT-23's duress action will be one more row with these.
+/// It looks the same whether or not a duress password was set, and in a duress vault as in the real one. There's no
+/// way to see, change or remove a duress password, only to set one again (MANIFESTO.md C2, C5, C9).
 struct AppLockPasswordManageView: View {
     var close: () -> Void
 
@@ -77,8 +79,22 @@ struct AppLockPasswordManageView: View {
                         Text("Turn Off Password")
                     }
                 }
+
+                NavigationLink {
+                    AppLockPasswordFormView(
+                        viewModel: AppLockPasswordFormViewModel(purpose: .setDuress, appLock: appLock),
+                        close: close,
+                    )
+                } label: {
+                    FormRow(
+                        image: Image(systemName: AppLockPasswordFormView.duressSystemImage),
+                        color: SettingsIconColor.security,
+                    ) {
+                        Text("Set Duress Password")
+                    }
+                }
             } footer: {
-                Text("Both need the current App Lock Password.")
+                Text("Changing the password or turning it off needs the current one.")
             }
         }
         .navigationTitle("App Lock Password")
