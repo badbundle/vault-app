@@ -2,14 +2,27 @@ import Foundation
 
 /// Stands in for the App Lock Password's storage in previews and tests, until the real one is wired in.
 ///
-/// It keeps the password in memory, and treats wrong passwords as the real one does: each is counted before it's
-/// checked, the same delays follow, and every check takes `deadline`, right or wrong.
+/// It keeps its vaults' passwords in memory, and treats wrong passwords as the real one does: each is counted before
+/// it's checked, the same delays follow, and every check takes `deadline`, right or wrong. Duress vaults behave as the
+/// real ones do: each vault replaces the one it made last, a password opens the most recently made vault it matches,
+/// and changing the password only changes the open vault's.
 @MainActor
 public final class FakeAppLockPasswordService: AppLockPasswordService {
     /// Thrown by every call while it's set, as when the vault can't be read.
     public var failure: (any Error)?
 
-    private var password: String?
+    /// A vault, as far as its password goes.
+    private struct Vault {
+        /// `nil` once a newer duress vault has replaced it, so no password opens it.
+        var password: String?
+        /// The duress vault it made last, which the next one it makes replaces.
+        var duressVault: Int?
+    }
+
+    /// The real vault first, then every duress vault in the order they were made. Empty while no password is set.
+    private var vaults: [Vault]
+    /// Which of `vaults` is open: the last one a password opened, and the real one at first.
+    private var openVault = 0
     private var attempts: Int
     private var latestAttemptAt: ContinuousClock.Instant
     private let deadline: Duration
@@ -18,14 +31,14 @@ public final class FakeAppLockPasswordService: AppLockPasswordService {
     /// - Parameters:
     ///   - password: The App Lock Password, or `nil` if none is set.
     ///   - wrongAttempts: Wrong attempts in a row already made, just now.
-    ///   - deadline: How long every check of a password takes.
+    ///   - deadline: How long every check of a password, and making a duress vault, takes.
     public init(
         password: String? = nil,
         wrongAttempts: Int = 0,
         deadline: Duration = .zero,
         clock: any AppLockClock = ContinuousClock(),
     ) {
-        self.password = password
+        vaults = password.map { [Vault(password: $0)] } ?? []
         attempts = wrongAttempts
         latestAttemptAt = clock.now
         self.deadline = deadline
@@ -33,7 +46,7 @@ public final class FakeAppLockPasswordService: AppLockPasswordService {
     }
 
     public var isPasswordSet: Bool {
-        password != nil
+        !vaults.isEmpty
     }
 
     public func remainingDelay() async throws -> Duration {
@@ -43,38 +56,61 @@ public final class FakeAppLockPasswordService: AppLockPasswordService {
     }
 
     public func unlock(password: String) async throws -> AppLockPasswordResult {
-        try await check(password) {}
+        // The most recently made vault it opens, as the real storage does.
+        try await check(opens: vaults.lastIndex { $0.password == password }) { vault in
+            openVault = vault
+        }
     }
 
     public func setPassword(_ password: String) async throws {
         try failIfNeeded()
         try await Task.sleep(for: deadline)
-        self.password = password
+        vaults = [Vault(password: password)]
+        openVault = 0
         attempts = 0
     }
 
     public func changePassword(current: String, new: String) async throws -> AppLockPasswordResult {
-        try await check(current) {
-            password = new
+        try await check(opens: openVault(ifItsPassword: current)) { vault in
+            vaults[vault].password = new
         }
     }
 
     public func turnOffPassword(current: String) async throws -> AppLockPasswordResult {
-        try await check(current) {
-            password = nil
+        try await check(opens: openVault(ifItsPassword: current)) { _ in
+            vaults.removeAll()
+            openVault = 0
         }
     }
 
-    /// Counts the attempt, waits out the deadline, then does `accept` if the password is right.
-    private func check(_ entered: String, accept: () -> Void) async throws -> AppLockPasswordResult {
+    public func makeDuressVault(password: String) async throws {
+        try failIfNeeded()
+        try await Task.sleep(for: deadline)
+        guard vaults.indices.contains(openVault) else { throw VaultDuressVaultError.notEncrypted }
+        guard vaults[openVault].password != password else { throw VaultDuressVaultError.matchesAppLockPassword }
+        if let replaced = vaults[openVault].duressVault {
+            vaults[replaced].password = nil
+        }
+        vaults.append(Vault(password: password))
+        vaults[openVault].duressVault = vaults.count - 1
+    }
+
+    /// The open vault, if `password` is its password.
+    private func openVault(ifItsPassword password: String) -> Int? {
+        vaults.indices.contains(openVault) && vaults[openVault].password == password ? openVault : nil
+    }
+
+    /// Counts the attempt, waits out the deadline, then does `accept` with `vault`: the vault the password opens, if
+    /// any.
+    private func check(opens vault: Int?, accept: (Int) -> Void) async throws -> AppLockPasswordResult {
         let remaining = try await remainingDelay()
         guard remaining == .zero else { return .delayed(remaining) }
         attempts += 1
         latestAttemptAt = clock.now
         try await Task.sleep(for: deadline)
-        guard let password, entered == password else { return .wrong }
+        guard let vault else { return .wrong }
         attempts = 0
-        accept()
+        accept(vault)
         return .accepted
     }
 

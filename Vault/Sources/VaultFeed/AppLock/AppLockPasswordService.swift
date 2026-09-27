@@ -34,6 +34,19 @@ public protocol AppLockPasswordService {
 
     /// Turns the password off for the vault that's open, once `current` is shown to be its password.
     func turnOffPassword(current: String) async throws -> AppLockPasswordResult
+
+    /// Makes a duress vault from the vault that's open: a separate, empty vault that `password` opens at the lock
+    /// screen. Making one again from the same vault replaces the last one with a new, empty vault.
+    ///
+    /// It works the same way from the real vault and from a duress vault, whether or not one was made before, and
+    /// nothing records that it was made (MANIFESTO.md C2, C6). It isn't an attempt at the App Lock Password, so it
+    /// isn't counted and doesn't wait. The caller has checked `password` against `AppLockPasswordRules` and its
+    /// confirmation, and nothing else.
+    ///
+    /// - Throws: `VaultDuressVaultError.matchesAppLockPassword` if `password` is the open vault's own App Lock
+    ///   Password. That's the only password it refuses: one that happens to open another vault is accepted without a
+    ///   word, or trying passwords here would say which other vaults exist.
+    func makeDuressVault(password: String) async throws
 }
 
 /// What happened to an attempt at the App Lock Password.
