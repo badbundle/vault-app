@@ -67,6 +67,11 @@ public enum VaultRoot {
     @MainActor
     public private(set) static var vaultStoreLoadFailureMessage: String?
 
+    /// Why the vault couldn't be opened, when `vaultStoreLoadFailureMessage`
+    /// is set, so the failure screen can say what to do.
+    @MainActor
+    private(set) static var vaultStoreLoadFailureReason: VaultStoreFailureView.Reason = .storeUnreadable
+
     /// Whether this is an app extension (AutoFill), rather than the app.
     static let isAppExtension = Bundle.main.bundleURL.pathExtension == "appex"
 
@@ -96,6 +101,14 @@ public enum VaultRoot {
         } catch {
             // Open no store at all: the scene shows the failure screen.
             vaultStoreLoadFailureMessage = error.localizedDescription
+            switch error as? VaultStorageRecovery.Failure {
+            case .deviceKeyMissing:
+                vaultStoreLoadFailureReason = .deviceKeyMissing
+            case .vaultMissing:
+                vaultStoreLoadFailureReason = .vaultMissing
+            default:
+                break
+            }
             return .password
         }
     }()
@@ -390,6 +403,20 @@ public enum VaultRoot {
         plainVaultStore = try await vaultEraser.erase()
     }
 
+    /// Erases and starts again, if the vault's data is missing and nothing
+    /// showed an erase was meant: the failure screen offers it, and it runs
+    /// only once the user confirms. Then the app starts on the fresh store, as
+    /// it would have at launch. `nil` otherwise.
+    @MainActor
+    static let missingVault: MissingVaultViewModel? = {
+        _ = storageMode
+        guard vaultStoreLoadFailureReason == .vaultMissing else { return nil }
+        return MissingVaultViewModel(erase: {
+            try await eraseVault()
+            setup()
+        })
+    }()
+
     /// Finishes an erase the app was stopped in the middle of, if there's one.
     /// `setup()` starts it, and the vault's views wait for it.
     @MainActor
@@ -470,7 +497,7 @@ public enum VaultRoot {
         }
         // Finish a conversion to an encrypted vault that the app was stopped in the middle of: QuickType mustn't
         // keep the vault's issuers and accounts, nor the widgets its codes.
-        if storageMode == .password {
+        if storageMode != .plain {
             let otpAutofillStore = vaultOtpAutofillStore
             let directory = vaultStorageDirectory
             Task {

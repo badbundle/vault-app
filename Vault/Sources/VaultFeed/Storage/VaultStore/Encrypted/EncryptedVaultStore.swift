@@ -25,7 +25,7 @@ public final class EncryptedVaultStore: Sendable {
     let persistence: SlotFilePersistence
     /// Derives a new password's key and tries it on a slot, as unlocking does.
     private let work: any VaultUnlockWork
-    /// Stamps the key wrap of a duress vault made from this one.
+    /// Stamps the key wrap of a duress vault made from this one, and of this vault when it's rekeyed.
     private let wrapStamper: any VaultWrapStamping
 
     /// The vault in `slot`, whose payload has already been read.
@@ -36,7 +36,8 @@ public final class EncryptedVaultStore: Sendable {
     ///   - state: The vault the slot's payload holds.
     ///   - work: What derives a password's key and tries it on a slot, when making a duress vault: the unlock
     ///     service's, so both derive the same way.
-    ///   - wrapStamper: What stamps the key wrap of a duress vault made from this one.
+    ///   - wrapStamper: What stamps the key wrap of a duress vault made from this one, and of this vault when it's
+    ///     rekeyed.
     init(
         file: EncryptedVaultFile,
         slot: VaultSlotFile.OpenedSlot,
@@ -56,6 +57,24 @@ public final class EncryptedVaultStore: Sendable {
         )
         self.work = work
         self.wrapStamper = wrapStamper
+    }
+
+    /// The slot the vault is in.
+    var slotIndex: Int {
+        get async {
+            await persistence.slot.index
+        }
+    }
+
+    /// Moves the vault to another root key, with a new data key, and gives the file `protection` from now on: for
+    /// a password change, or turning the password off or on. Only this vault's slot changes. Its wrap time is
+    /// stamped by `VaultWrapStamping`, later than every wrap this device has made and than its own.
+    ///
+    /// It waits for any change underway to be saved first, and nothing is changed while it runs.
+    func rekey(to rootKey: VaultSlotRootKey, protection: SlotFileProtection) async throws {
+        try await records.whileChanging { [persistence, wrapStamper] state in
+            try await persistence.rekey(state, to: rootKey, protection: protection, wrapStamper: wrapStamper)
+        }
     }
 
     /// Reads the vault in `slot`.

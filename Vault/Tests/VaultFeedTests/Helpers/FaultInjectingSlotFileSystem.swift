@@ -5,6 +5,7 @@ import FoundationExtensions
 /// Wraps a file system, logs everything done through it, and can make a step go wrong.
 ///
 /// Every operation but `unlock(_:)` is a step. Steps are numbered from 1, counting from when the fault was injected.
+/// Other test doubles can take steps too (`step(_:)`), such as the keychain's (`FaultInjectingDeviceKeyStore`).
 final class FaultInjectingSlotFileSystem: SlotFileSystem {
     enum Fault: Equatable, Sendable {
         /// Those steps throw, and everything else works.
@@ -16,6 +17,9 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         case corruptReadBack
         /// One step fails, and then the process "crashes" at a later one, as `crash(atStep:)` does.
         case failThenCrash(failAtStep: Int, crashAtStep: Int)
+        /// Every step with this name, from that step on, throws: a write that keeps failing, however often it's
+        /// tried.
+        case failEvery(stepNamed: String, fromStep: Int)
 
         /// That step throws, and everything else works.
         static func fail(atStep step: Int) -> Fault {
@@ -79,6 +83,11 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         return try base.prefix(of: url, length: length)
     }
 
+    func fileSize(of url: URL) throws -> Int? {
+        try step("size of \(Self.name(url))")
+        return try base.fileSize(of: url)
+    }
+
     func createFile(at url: URL, contents: Data, protection: SlotFileProtection) throws {
         try step("create \(Self.name(url))")
         try base.createFile(at: url, contents: contents, protection: protection)
@@ -132,6 +141,8 @@ final class FaultInjectingSlotFileSystem: SlotFileSystem {
         case let .crash(atStep) where number >= atStep:
             throw InjectedFault()
         case let .failThenCrash(failAtStep, crashAtStep) where number == failAtStep || number >= crashAtStep:
+            throw InjectedFault()
+        case let .failEvery(stepName, fromStep) where name == stepName && number >= fromStep:
             throw InjectedFault()
         default:
             break

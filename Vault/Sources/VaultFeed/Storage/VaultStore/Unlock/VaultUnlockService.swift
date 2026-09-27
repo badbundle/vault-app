@@ -60,6 +60,7 @@ public actor VaultUnlockService {
     private let session: VaultStoreSession
     private let attemptCounter: AppLockPasswordAttemptCounter
     private let deadlineStore: any VaultUnlockDeadlineStoring
+    private let deviceKeyStore: any VaultDeviceKeyStoring
     private let purgeVaultContents: @Sendable () async -> Void
     private let clock: any VaultUnlockClock
     private let work: any VaultUnlockWork
@@ -79,6 +80,7 @@ public actor VaultUnlockService {
         session: VaultStoreSession,
         attemptCounter: AppLockPasswordAttemptCounter,
         deadlineStore: any VaultUnlockDeadlineStoring,
+        deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore(),
         purgeVaultContents: @escaping @Sendable () async -> Void,
     ) {
         self.init(
@@ -86,6 +88,7 @@ public actor VaultUnlockService {
             session: session,
             attemptCounter: attemptCounter,
             deadlineStore: deadlineStore,
+            deviceKeyStore: deviceKeyStore,
             purgeVaultContents: purgeVaultContents,
             wrapStamper: VaultDeviceWrapStamper(),
         )
@@ -97,6 +100,7 @@ public actor VaultUnlockService {
         session: VaultStoreSession,
         attemptCounter: AppLockPasswordAttemptCounter,
         deadlineStore: any VaultUnlockDeadlineStoring,
+        deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore(),
         purgeVaultContents: @escaping @Sendable () async -> Void,
         clock: any VaultUnlockClock = ContinuousClock(),
         work: any VaultUnlockWork = LiveVaultUnlockWork(),
@@ -107,6 +111,7 @@ public actor VaultUnlockService {
         self.session = session
         self.attemptCounter = attemptCounter
         self.deadlineStore = deadlineStore
+        self.deviceKeyStore = deviceKeyStore
         self.purgeVaultContents = purgeVaultContents
         self.clock = clock
         self.work = work
@@ -129,6 +134,15 @@ public enum VaultUnlockResult: Equatable, Sendable {
     case mustWait(Duration)
 }
 
+/// Whether a password is the open vault's (`VaultUnlockService.checkPassword(_:opensSlot:)`).
+enum VaultPasswordCheck: Equatable, Sendable {
+    case right
+    /// As `VaultUnlockResult.wrongPassword(reachesEraseThreshold:)`: a wrong check counts towards an erase too.
+    case wrong(reachesEraseThreshold: Bool)
+    /// The user has to wait this long after their last wrong attempts. Nothing was tried.
+    case mustWait(Duration)
+}
+
 public enum VaultUnlockError: Error, Equatable, Sendable {
     /// There's no encrypted vault file to unlock.
     case noEncryptedVault
@@ -139,6 +153,17 @@ public enum VaultUnlockError: Error, Equatable, Sendable {
     /// An erase is underway (`VaultEraser`), so no vault may open, even with the right password. Finish the erase
     /// instead.
     case erasing
+    /// There's no device key, so the password can't be off.
+    case noDeviceKey
+    /// No slot opens with the device key.
+    case deviceKeyOpensNoVault
+    /// The password is off, so device authentication opens the vault (`unlockWithDeviceKey()`), and no password
+    /// does. Nothing was tried or counted.
+    case passwordIsOff
+    /// The password was being turned off or back on, how that ended hasn't been recorded yet, and the device key
+    /// still wraps the vault, so a right password could look wrong. Nothing was tried or counted. Settling it
+    /// (`VaultPasswordChangeService.settleInterruptedChange()`, or the next launch) lets unlocking go ahead.
+    case passwordChangeUnsettled
 }
 
 // MARK: - Unlocking
@@ -156,39 +181,16 @@ extension VaultUnlockService {
         isUnlocking = true
         defer { isUnlocking = false }
         guard await session.isLocked else { throw VaultUnlockError.notLocked }
-        // Nothing is counted: the attempt is refused whatever the password.
-        guard try await !deadlineStore.isErasing() else { throw VaultUnlockError.erasing }
         let lockEpoch = await session.lockEpoch
 
-        let deadline = try await min(deadlineStore.unlockDeadline(), Self.maximumDeadline)
-        guard let contents = try await file.open() else { throw VaultUnlockError.noEncryptedVault }
-        let reachesEraseThreshold: Bool
-        switch try await attemptCounter.countAttempt() {
-        case let .delayed(remaining):
-            return .mustWait(remaining)
-        case let .counted(reaches):
-            reachesEraseThreshold = reaches
+        let attempt: Attempt
+        switch try await attemptPassword(password, opensBody: true, lockEpoch: lockEpoch) {
+        case let .mustWait(remaining): return .mustWait(remaining)
+        case let .finished(finished): attempt = finished
         }
-        let start = clock.now
-        let attempt = await Task.detached(priority: .userInitiated) { [work] in
-            Self.attempt(password: password, contents: contents, work: work)
-        }.value
-
-        let raisedDeadline = attempt.workDuration.map { min($0 * Self.deadlineMultiplier, Self.maximumDeadline) }
-        var heldUntil = deadline
-        if let raisedDeadline, raisedDeadline > deadline, await isStillWanted(since: lockEpoch) {
-            heldUntil = raisedDeadline
-            // Raised before the wait, so the time it takes is inside the deadline. If saving it failed, the next slow
-            // attempt raises it again.
-            try? await deadlineStore.raiseUnlockDeadline(to: raisedDeadline)
-        }
-        // Cancelling cuts the wait short, and then the result is thrown away, so ending early reveals nothing.
-        try? await clock.sleep(until: start.advanced(by: heldUntil))
-        guard await isStillWanted(since: lockEpoch) else { throw CancellationError() }
-
         switch attempt.outcome {
         case .success(nil):
-            return .wrongPassword(reachesEraseThreshold: reachesEraseThreshold)
+            return .wrongPassword(reachesEraseThreshold: attempt.reachesEraseThreshold)
         case let .success(opened?):
             try await attemptCounter.reset()
             // Moves the stamp on to now, as every unlock does, so it shows when the device was last used rather than
@@ -216,6 +218,93 @@ extension VaultUnlockService {
         }
     }
 
+    /// Checks the password against the open vault, to change it or turn it off (`VaultPasswordChangeService`).
+    ///
+    /// It's an attempt like unlocking, finishing at the same deadline: counted first, the same derivation and a trial
+    /// of every slot, and the count reset if it's right. It opens no body. Right means it opens `index`, the open
+    /// vault's slot: a password that opens another vault is as wrong as any other, so this never shows that another
+    /// vault exists.
+    ///
+    /// - Throws: As `unlock(password:)` does, and `CancellationError` if the vault locked meanwhile.
+    func checkPassword(_ password: String, opensSlot index: Int) async throws -> VaultPasswordCheck {
+        guard !isUnlocking else { throw VaultUnlockError.attemptUnderway }
+        isUnlocking = true
+        defer { isUnlocking = false }
+        let lockEpoch = await session.lockEpoch
+
+        switch try await attemptPassword(password, opensBody: false, lockEpoch: lockEpoch) {
+        case let .mustWait(remaining):
+            return .mustWait(remaining)
+        case let .finished(attempt):
+            if case let .failure(error) = attempt.outcome {
+                throw error
+            }
+            guard attempt.openedSlots.contains(index) else {
+                return .wrong(reachesEraseThreshold: attempt.reachesEraseThreshold)
+            }
+            try await attemptCounter.reset()
+            return .right
+        }
+    }
+
+    private enum AttemptResult {
+        case mustWait(Duration)
+        case finished(Attempt)
+    }
+
+    /// Counts an attempt, runs it off the actor, and holds it to the deadline, raising the deadline if the attempt's
+    /// work called for it. Throws `CancellationError` if the vault locked, or the task was cancelled, meanwhile.
+    private func attemptPassword(_ password: String, opensBody: Bool, lockEpoch: Int) async throws -> AttemptResult {
+        // Before anything is counted. While an erase is underway the attempt is refused whatever the password, and a
+        // right password could look wrong while the vault's key is wrapped with the device key: a wrong attempt
+        // counts towards an erase.
+        guard try await !deadlineStore.isErasing() else { throw VaultUnlockError.erasing }
+        let state = try VaultStorageStateFile(directory: file.directory, fileSystem: file.fileSystem).read()
+        if state.mode == .deviceKey, !state.isTurningThePasswordOffOrOn {
+            throw VaultUnlockError.passwordIsOff
+        }
+        let deadline = try await min(deadlineStore.unlockDeadline(), Self.maximumDeadline)
+        guard let contents = try await file.open() else { throw VaultUnlockError.noEncryptedVault }
+        // A turn off or on that couldn't record how it ended. If the device key opens no slot, the vault is in the
+        // password form, whatever the state says, so the attempt goes ahead: a full disk mustn't stop the password
+        // unlocking once it's back on. If it opens one, a right password could look wrong, so it's refused.
+        if state.isTurningThePasswordOffOrOn, try deviceKeyOpensASlot(of: contents) {
+            throw VaultUnlockError.passwordChangeUnsettled
+        }
+        let reachesEraseThreshold: Bool
+        switch try await attemptCounter.countAttempt() {
+        case let .delayed(remaining):
+            return .mustWait(remaining)
+        case let .counted(reaches):
+            reachesEraseThreshold = reaches
+        }
+        let start = clock.now
+        var attempt = await Task.detached(priority: .userInitiated) { [work] in
+            Self.attempt(password: password, contents: contents, work: work, opensBody: opensBody)
+        }.value
+        attempt.reachesEraseThreshold = reachesEraseThreshold
+
+        let raisedDeadline = attempt.workDuration.map { min($0 * Self.deadlineMultiplier, Self.maximumDeadline) }
+        var heldUntil = deadline
+        if let raisedDeadline, raisedDeadline > deadline, await isStillWanted(since: lockEpoch) {
+            heldUntil = raisedDeadline
+            // Raised before the wait, so the time it takes is inside the deadline. If saving it failed, the next slow
+            // attempt raises it again.
+            try? await deadlineStore.raiseUnlockDeadline(to: raisedDeadline)
+        }
+        // Cancelling cuts the wait short, and then the result is thrown away, so ending early reveals nothing.
+        try? await clock.sleep(until: start.advanced(by: heldUntil))
+        guard await isStillWanted(since: lockEpoch) else { throw CancellationError() }
+        return .finished(attempt)
+    }
+
+    /// Whether the device key opens any slot of the file. Only while a turn off or on is unsettled: it doesn't depend
+    /// on the password.
+    private func deviceKeyOpensASlot(of contents: VaultSlotFile) throws -> Bool {
+        guard let key = try deviceKeyStore.deviceKey() else { return false }
+        return VaultSlotFile.slotIndices.contains { (try? contents.openSlot($0, with: .device(key))) != nil }
+    }
+
     private func isStillWanted(since lockEpoch: Int) async -> Bool {
         await session.lockEpoch == lockEpoch && !Task.isCancelled
     }
@@ -224,7 +313,13 @@ extension VaultUnlockService {
         /// The thread CPU time deriving the key and trying the slots took, or `nil` if the key couldn't be derived.
         /// It's the same whatever the password.
         var workDuration: Duration?
-        /// The slot that opened and the vault in it, `nil` if no slot opened, or why the attempt failed.
+        /// Every slot the password opened.
+        var openedSlots: [Int] = []
+        /// Whether, if the password was wrong, it made `AppLockPasswordAttemptCounter.eraseThreshold` or more wrong
+        /// attempts in a row.
+        var reachesEraseThreshold = false
+        /// The slot that opened and the vault in it, `nil` if no slot opened (or no body was opened), or why the
+        /// attempt failed.
         var outcome: Result<Opened?, any Error>
     }
 
@@ -233,8 +328,13 @@ extension VaultUnlockService {
         var state: VaultRecordState
     }
 
-    /// Derives the key, tries every slot, and opens one body. Runs off the actor, all on one thread.
-    private static func attempt(password: String, contents: VaultSlotFile, work: any VaultUnlockWork) -> Attempt {
+    /// Derives the key, tries every slot, and, if `opensBody`, opens one body. Runs off the actor, all on one thread.
+    private static func attempt(
+        password: String,
+        contents: VaultSlotFile,
+        work: any VaultUnlockWork,
+        opensBody: Bool,
+    ) -> Attempt {
         let start = work.threadCPUTime()
         let opened: [VaultSlotFile.OpenedSlot]
         do {
@@ -245,6 +345,10 @@ extension VaultUnlockService {
             return Attempt(workDuration: nil, outcome: .failure(error))
         }
         let workDuration = work.threadCPUTime() - start
+        let openedSlots = opened.map(\.index)
+        guard opensBody else {
+            return Attempt(workDuration: workDuration, openedSlots: openedSlots, outcome: .success(nil))
+        }
 
         // The same password opening more than one slot means the newer vault was made with a password that happened
         // to open an older one too. The newer one is the one the user just made (see "Same passwords"). Wrap times
@@ -254,12 +358,12 @@ extension VaultUnlockService {
             // A wrong password opens a body too, so every attempt does the same work. The throwaway key fails to
             // authenticate it.
             _ = try? work.openBody(of: decoySlot(in: contents), in: contents)
-            return Attempt(workDuration: workDuration, outcome: .success(nil))
+            return Attempt(workDuration: workDuration, openedSlots: openedSlots, outcome: .success(nil))
         }
         let outcome = Result<Opened?, any Error> {
             try Opened(slot: chosen, state: work.openBody(of: chosen, in: contents))
         }
-        return Attempt(workDuration: workDuration, outcome: outcome)
+        return Attempt(workDuration: workDuration, openedSlots: openedSlots, outcome: outcome)
     }
 
     /// A random slot, as if opened with a throwaway key: opening its body does the work of opening a real one, and
@@ -275,6 +379,51 @@ extension VaultUnlockService {
             dataKey: SymmetricKey(size: .bits256),
             bodyLength: file.header.slotSize - VaultSlotFile.bodyOffset,
         )
+    }
+}
+
+// MARK: - The device key
+
+extension VaultUnlockService {
+    /// Opens the vault the device key wraps, while the App Lock Password is off (the `deviceKey` mode), and switches
+    /// the store session to it.
+    ///
+    /// Device authentication, which the app lock asks for first, is all it takes. With no password to guess there's
+    /// no attempt to count and no deadline to hold to.
+    ///
+    /// - Throws: `VaultUnlockError.noDeviceKey`, or `.deviceKeyOpensNoVault` if no slot opens with it.
+    public func unlockWithDeviceKey() async throws {
+        guard !isUnlocking else { throw VaultUnlockError.attemptUnderway }
+        isUnlocking = true
+        defer { isUnlocking = false }
+        guard await session.isLocked else { throw VaultUnlockError.notLocked }
+        guard try await !deadlineStore.isErasing() else { throw VaultUnlockError.erasing }
+        let lockEpoch = await session.lockEpoch
+
+        guard let key = try deviceKeyStore.deviceKey() else { throw VaultUnlockError.noDeviceKey }
+        var deviceKeyFile = file
+        deviceKeyFile.protection = EncryptedVaultFile.protection(for: .deviceKey)
+        guard let contents = try await deviceKeyFile.open() else { throw VaultUnlockError.noEncryptedVault }
+        let opened = VaultSlotFile.slotIndices.compactMap { try? contents.openSlot($0, with: .device(key)) }
+        guard let chosen = opened.max(by: { $0.wrappedAt < $1.wrappedAt }) else {
+            throw VaultUnlockError.deviceKeyOpensNoVault
+        }
+        let state = try EncryptedVaultPayload.decode(slot: chosen, in: contents)
+        // Moves the wrap stamp on, as a password unlock does. Best effort: the stamp is readable only while the device
+        // is unlocked, and the widgets open the vault while it's locked.
+        try? await deviceKeyFile.withLock { [wrapStamper] _ in
+            try wrapStamper.noteUse(ofVaultWrappedAt: chosen.wrappedAt)
+        }
+        let store = EncryptedVaultStore(
+            file: deviceKeyFile,
+            slot: chosen,
+            state: state,
+            work: work,
+            wrapStamper: wrapStamper,
+        )
+        guard await session.switchTo(.unlocked(store), unlessLockedSince: lockEpoch) else {
+            throw CancellationError()
+        }
     }
 }
 

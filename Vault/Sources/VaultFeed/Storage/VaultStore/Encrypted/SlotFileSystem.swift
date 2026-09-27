@@ -6,8 +6,13 @@ import Foundation
 /// Each one is a step `EncryptedVaultFile`, `VaultStorageStateFile` and `VaultEncryptionConverter` can fail at.
 /// Tests inject file systems that fail or stop at any step, to check that no failure loses data.
 protocol SlotFileSystem: Sendable {
-    /// Takes an exclusive lock on the file at `url`, creating the file if it isn't there, or returns `nil` straight
-    /// away if anyone else, in this process or another, holds it.
+    /// Takes an exclusive lock on the file at `url`, or returns `nil` straight away if anyone else, in this process
+    /// or another, holds it.
+    ///
+    /// The lock file is created if it isn't there, readable once the device has been unlocked after starting up
+    /// (`completeUntilFirstUserAuthentication`), and one created with a stricter class is moved to that class. With
+    /// the password off, the widgets and the app have to take the lock while the device is locked, and a file with
+    /// complete protection can't even be opened then.
     func tryLock(_ url: URL) throws -> SlotFileLock?
     /// Releases a lock. It can't fail: closing the file releases the lock, as a crash would.
     func unlock(_ lock: SlotFileLock)
@@ -16,6 +21,9 @@ protocol SlotFileSystem: Sendable {
     /// The file's first `length` bytes, or all of it if it's shorter, and its size, or `nil` if there's no file.
     /// Reads no more of it.
     func prefix(of url: URL, length: Int) throws -> (bytes: Data, fileSize: Int)?
+    /// The file's size, or `nil` if there's no file. Reads none of it, so it works while the device is locked, even
+    /// for a file that's readable only while it's unlocked.
+    func fileSize(of url: URL) throws -> Int?
     /// Creates a file with these contents and file protection. Fails if the file exists.
     func createFile(at url: URL, contents: Data, protection: SlotFileProtection) throws
     /// Flushes the file to permanent storage, including the drive's own cache (`F_FULLFSYNC`).
@@ -64,6 +72,7 @@ struct SlotFileLock: Sendable {
 /// The device's file system.
 struct LiveSlotFileSystem: SlotFileSystem {
     func tryLock(_ url: URL) throws -> SlotFileLock? {
+        try Self.prepareLockFile(at: url)
         let descriptor = try Self.open(url, flags: O_RDWR | O_CREAT)
         while flock(descriptor, LOCK_EX | LOCK_NB) != 0 {
             let error = errno
@@ -104,6 +113,18 @@ struct LiveSlotFileSystem: SlotFileSystem {
         return (bytes, Int(fileSize))
     }
 
+    func fileSize(of url: URL) throws -> Int? {
+        var info = stat()
+        guard stat(url.path, &info) == 0 else {
+            let error = errno
+            if error == ENOENT {
+                return nil
+            }
+            throw POSIXError(Self.code(error))
+        }
+        return Int(info.st_size)
+    }
+
     func createFile(at url: URL, contents: Data, protection: SlotFileProtection) throws {
         try contents.write(to: url, options: [.withoutOverwriting, protection.writingOption])
     }
@@ -135,6 +156,28 @@ struct LiveSlotFileSystem: SlotFileSystem {
     func contentsOfDirectory(at url: URL) throws -> [URL] {
         try FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
     }
+
+    /// Creates the lock file readable after the first unlock, rather than letting `open` create it with the app's
+    /// default class, which is complete protection. A lock file made with a stricter class, by an earlier version, is
+    /// moved to that class, which it can be while the device is unlocked.
+    private static func prepareLockFile(at url: URL) throws {
+        do {
+            try Data().write(to: url, options: [.withoutOverwriting, lockFileProtection.writingOption])
+            return
+        } catch let error as CocoaError where error.code == .fileWriteFileExists {
+            // It's there already.
+        }
+        let path = url.path(percentEncoded: false)
+        let protection = try? FileManager.default.attributesOfItem(atPath: path)[.protectionKey] as? FileProtectionType
+        guard let protection, protection == .complete || protection == .completeUnlessOpen else { return }
+        try? FileManager.default.setAttributes(
+            [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication],
+            ofItemAtPath: path,
+        )
+    }
+
+    /// The lock file's protection.
+    static let lockFileProtection = SlotFileProtection.completeUntilFirstUserAuthentication
 
     /// `F_FULLFSYNC`, which flushes the drive's own cache too: on Darwin, plain `fsync` doesn't. Some file systems
     /// can't do it. APFS can, but fall back to `fsync` as SQLite does.

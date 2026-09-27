@@ -30,8 +30,13 @@ public struct VaultMainScene: Scene {
 
     public var body: some Scene {
         WindowGroup {
-            if let failureMessage = VaultRoot.vaultStoreLoadFailureMessage {
-                VaultStoreFailureView(message: failureMessage)
+            // Once a missing vault is erased, the app starts on the fresh store.
+            if let failureMessage = VaultRoot.vaultStoreLoadFailureMessage, VaultRoot.missingVault?.state != .erased {
+                VaultStoreFailureView(
+                    reason: VaultRoot.vaultStoreLoadFailureReason,
+                    message: failureMessage,
+                    missingVault: VaultRoot.missingVault,
+                )
             } else {
                 AppLockContainer(appLock: appLockService, localSettings: localSettings) {
                     if let interruptedErase, interruptedErase.state != .erased {

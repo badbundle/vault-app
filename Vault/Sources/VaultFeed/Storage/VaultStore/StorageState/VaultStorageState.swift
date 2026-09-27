@@ -12,6 +12,9 @@ public struct VaultStorageState: Codable, Equatable, Sendable {
         case plain
         /// The encrypted vault file, whose vaults the App Lock Password opens.
         case password
+        /// The encrypted vault file, with the open vault's key wrapped by the device key rather than a password: the
+        /// password has been turned off. Device authentication alone opens it (`VaultDeviceKeyStoring`).
+        case deviceKey
     }
 
     /// A change of mode that's underway: the journal that lets launch recovery finish or undo it.
@@ -29,6 +32,12 @@ public struct VaultStorageState: Codable, Equatable, Sendable {
         /// Erasing every vault, back to a fresh plain store (`VaultEraser`), whatever the mode says. Nothing may open
         /// a store until the erase has finished: the app finishes it at launch.
         case erasing
+        /// Turning the password off: the open vault's slot is being rekeyed to the device key. Recovery tries the
+        /// device key on every slot: if one opens, the rekey happened.
+        case turningOff
+        /// Turning the password back on: the vault's slot is being rekeyed to a new password. Recovery tries the
+        /// device key on every slot: if none opens, the rekey happened.
+        case turningOn
     }
 
     public var mode: Mode
@@ -50,6 +59,11 @@ public struct VaultStorageState: Codable, Equatable, Sendable {
     /// open it.
     public var isPlain: Bool {
         mode == .plain && transition == nil
+    }
+
+    /// Whether the journal shows the password being turned off or back on.
+    var isTurningThePasswordOffOrOn: Bool {
+        transition == .turningOff || transition == .turningOn
     }
 }
 
@@ -107,6 +121,50 @@ struct VaultStorageStateFile: Sendable {
         try? fileSystem.synchronizeDirectory(at: directory)
     }
 
+    /// Reads the state, changes it, and writes it back if it changed, with no other `update(_:)` in between, in this
+    /// process or another. Anything that changes one part of the state while something else might change another
+    /// goes through this, so neither undoes the other: the app ending a transition or changing the mode, and an
+    /// unlock attempt raising the deadline, in the app or in the AutoFill extension.
+    ///
+    /// It holds `vault-slots.lock` meanwhile, as writers of the encrypted file do, so no rekey changes the file
+    /// while `change` looks at it either. Don't call it holding the lock.
+    ///
+    /// - Returns: The state as it is now, and what `change` returned.
+    @discardableResult
+    func update<Result>(
+        _ change: (inout VaultStorageState) throws -> Result,
+    ) async throws -> (state: VaultStorageState, result: Result) {
+        try await lockFile.withLock { _ in
+            try applying(change)
+        }
+    }
+
+    /// As `update(_:)`, but waits for the lock blocking the thread: for launch recovery, which runs synchronously.
+    @discardableResult
+    func updateBlockingTheThread<Result>(
+        _ change: (inout VaultStorageState) throws -> Result,
+    ) throws -> (state: VaultStorageState, result: Result) {
+        try lockFile.withLockBlockingTheThread { _ in
+            try applying(change)
+        }
+    }
+
+    private var lockFile: EncryptedVaultFile {
+        EncryptedVaultFile(directory: directory, fileSystem: fileSystem)
+    }
+
+    private func applying<Result>(
+        _ change: (inout VaultStorageState) throws -> Result,
+    ) throws -> (state: VaultStorageState, result: Result) {
+        var state = try read()
+        let old = state
+        let result = try change(&state)
+        if state != old {
+            try write(state)
+        }
+        return (state, result)
+    }
+
     /// Removes temp files a crash left behind while writing the state.
     func removeStrayTemporaryFiles() throws {
         for url in try fileSystem.contentsOfDirectory(at: directory)
@@ -128,10 +186,10 @@ extension VaultStorageStateFile: VaultUnlockDeadlineStoring {
     }
 
     func raiseUnlockDeadline(to deadline: Duration) async throws {
-        var state = try read()
-        guard let current = state.unlockDeadline, deadline > current else { return }
-        state.unlockDeadline = deadline
-        try write(state)
+        try await update { state in
+            guard let current = state.unlockDeadline, deadline > current else { return }
+            state.unlockDeadline = deadline
+        }
     }
 
     func isErasing() async throws -> Bool {
