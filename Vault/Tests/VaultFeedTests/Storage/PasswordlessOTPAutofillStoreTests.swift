@@ -71,6 +71,44 @@ struct PasswordlessOTPAutofillStoreTests {
 
         #expect(identityStore.saveCredentialIdentitiesCallCount == 1)
     }
+
+    /// The password came on while a write was underway, after the app had emptied the store for it: what was written
+    /// doesn't stay.
+    @Test
+    func sync_passwordTurnedOnWhileWriting_emptiesTheStoreAgain() async throws {
+        let (sut, identityStore, opensWithoutPassword) = makeSUT(opensWithoutPassword: true)
+        identityStore.saveCredentialIdentitiesHandler = { _ in
+            opensWithoutPassword.modify { $0 = false }
+        }
+
+        try await syncOne(with: sut)
+
+        #expect(identityStore.saveCredentialIdentitiesCallCount == 1)
+        #expect(identityStore.removeAllCredentialIdentitiesCallCount == 1)
+    }
+
+    @Test
+    func syncAll_passwordTurnedOnWhileWriting_emptiesTheStoreAgain() async throws {
+        let (sut, identityStore, opensWithoutPassword) = makeSUT(opensWithoutPassword: true)
+        identityStore.saveCredentialIdentitiesHandler = { _ in
+            opensWithoutPassword.modify { $0 = false }
+        }
+
+        try await sut.syncAll(items: [uniqueVaultItem()])
+
+        // Once to replace what was there, and once more since the password came on.
+        #expect(identityStore.removeAllCredentialIdentitiesCallCount == 2)
+    }
+
+    @Test
+    func sync_passwordStillOff_leavesWhatItWrote() async throws {
+        let (sut, identityStore, _) = makeSUT(opensWithoutPassword: true)
+
+        try await syncOne(with: sut)
+        try await sut.syncAll(items: [uniqueVaultItem()])
+
+        #expect(identityStore.removeAllCredentialIdentitiesCallCount == 1)
+    }
 }
 
 // MARK: - Helpers

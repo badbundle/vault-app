@@ -55,18 +55,18 @@ struct WidgetVaultLoaderCodeActionTests {
         #expect(await store.incrementedIDs == [])
     }
 
-    /// With the password off, the increment goes through the store the device key opened, and so through the
-    /// encrypted file's lock and generation check. It reads and writes through the one store.
+    /// With the password off, the widget only reads the vault the device key opens: it hasn't the memory to save the
+    /// whole file. The app advances the counter instead, through a link, so this does nothing, as for a link left from
+    /// before.
     @Test
-    func incrementAndRenderHOTPCode_passwordOff_incrementsThroughTheDeviceKeyStore() async throws {
+    func incrementAndRenderHOTPCode_passwordOff_leavesItToTheApp() async throws {
         let item = makeHOTPVaultItem(counter: 4)
         let store = IncrementingFakeStore(items: [item])
         let opens = SharedMutex(0)
         let loader = try WidgetVaultLoader(
             appLockSettings: AppLockSettingsStore(userDefaults: .nonPersistent()),
             accessMode: { .deviceKey },
-            makeStore: { mode in
-                #expect(mode == .deviceKey)
+            makeStore: { _ in
                 opens.modify { $0 += 1 }
                 return store
             },
@@ -74,9 +74,42 @@ struct WidgetVaultLoaderCodeActionTests {
 
         let code = try await loader.incrementAndRenderHOTPCode(id: item.id.rawValue)
 
-        #expect(code != nil)
-        #expect(await store.incrementedIDs == [item.id])
-        #expect(opens.value == 1)
+        #expect(code == nil)
+        #expect(await store.incrementedIDs.isEmpty)
+        #expect(opens.value == 0)
+        #expect(loader.advancesHOTPInTheApp)
+    }
+
+    @Test(arguments: [VaultAccessMode.plain, .password, .unavailable])
+    func advancesHOTPInTheApp_onlyWithTheDeviceKey(mode: VaultAccessMode) throws {
+        let loader = try WidgetVaultLoader(
+            appLockSettings: AppLockSettingsStore(userDefaults: .nonPersistent()),
+            accessMode: { mode },
+            makeStore: { _ in IncrementingFakeStore(items: []) },
+        )
+
+        #expect(!loader.advancesHOTPInTheApp)
+    }
+
+    /// The small widget's HOTP entry links to the app with the password off, and advances the counter itself
+    /// otherwise.
+    @Test(arguments: [VaultAccessMode.deviceKey, .plain])
+    func providerTimeline_hotp_advancesInTheAppOnlyWithTheDeviceKey(mode: VaultAccessMode) async throws {
+        let item = makeHOTPVaultItem(counter: 4)
+        let loader = try WidgetVaultLoader(
+            appLockSettings: AppLockSettingsStore(userDefaults: .nonPersistent()),
+            accessMode: { mode },
+            makeStore: { _ in IncrementingFakeStore(items: [item]) },
+        )
+        let entity = OTPWidgetItemEntity(id: item.id.rawValue, issuer: "issuer", accountName: "account")
+
+        let timeline = await OTPWidgetProvider(loader: loader).makeTimeline(for: .init(item: entity))
+
+        guard case let .hotp(hotp) = timeline.entries.first?.snapshot else {
+            Issue.record("Expected a HOTP entry, got \(String(describing: timeline.entries.first?.snapshot))")
+            return
+        }
+        #expect(hotp.advancesInTheApp == (mode == .deviceKey))
     }
 
     @Test

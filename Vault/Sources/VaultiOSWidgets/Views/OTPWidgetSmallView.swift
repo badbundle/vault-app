@@ -90,6 +90,12 @@ struct OTPWidgetSmallView: View {
                 content
             }
             .buttonStyle(.plain)
+        case let .hotp(state) where state.advancesInTheApp:
+            // The widget only reads the vault the device key opens, so the app gets the next code, as from the
+            // lock-screen widgets.
+            Link(destination: WidgetDeepLink.hotpIncrement(itemID: state.itemID)) {
+                content
+            }
         case let .hotp(state):
             Button(intent: IncrementAndCopyHOTPCodeIntent(itemID: state.itemID)) {
                 content

@@ -19,11 +19,19 @@ actor SlotFilePersistence: VaultRecordPersistence {
     private(set) var slot: VaultSlotFile.OpenedSlot
     /// Checked before each save in the AutoFill extension. `nil` in the app.
     private let memoryCheck: VaultWriteMemoryCheck?
+    /// Checked holding the file's lock before each save, in an app extension. `nil` in the app.
+    private let accessGuard: VaultAccessGuard?
 
-    init(file: EncryptedVaultFile, slot: VaultSlotFile.OpenedSlot, memoryCheck: VaultWriteMemoryCheck? = nil) {
+    init(
+        file: EncryptedVaultFile,
+        slot: VaultSlotFile.OpenedSlot,
+        memoryCheck: VaultWriteMemoryCheck? = nil,
+        accessGuard: VaultAccessGuard? = nil,
+    ) {
         self.file = file
         self.slot = slot
         self.memoryCheck = memoryCheck
+        self.accessGuard = accessGuard
     }
 
     func save(_ state: VaultRecordState) async throws -> VaultRecordSaveOutcome {
@@ -37,7 +45,9 @@ actor SlotFilePersistence: VaultRecordPersistence {
             }
         }
         let slot = slot
-        let (saved, outcome) = try await file.withLock { [payload] file in
+        let (saved, outcome) = try await file.withLock { [payload, accessGuard] file in
+            // A rekey or an erase holds the lock while it changes the vault, and changes the storage state first.
+            try accessGuard?.checkWrite()
             guard var contents = try file.read() else { throw EncryptedVaultStoreError.fileMissing }
             let sealed: VaultSlotFile.OpenedSlot
             do {

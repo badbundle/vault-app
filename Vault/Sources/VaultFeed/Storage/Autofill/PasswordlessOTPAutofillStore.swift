@@ -11,6 +11,9 @@ import Foundation
 /// Removing identities is always allowed. While the vault opens without the password, plain or with the device key,
 /// everything goes through to `base`, so QuickType works as it always has.
 ///
+/// The password can come on while a write is underway, after the app has emptied the store for it. So each write
+/// checks again once it's done, and empties the store if the password's on by then.
+///
 /// See "Widgets, AutoFill and QuickType" in `docs/on-device-encryption.md`.
 public final class PasswordlessOTPAutofillStore: VaultOTPAutofillStore {
     private let base: any VaultOTPAutofillStore
@@ -39,14 +42,23 @@ public final class PasswordlessOTPAutofillStore: VaultOTPAutofillStore {
             searchableLevel: searchableLevel,
             showInQuickType: showInQuickType,
         )
+        try await emptyIfThePasswordCameOn()
     }
 
     public func syncAll(items: [VaultItem]) async throws {
         if opensWithoutPassword() {
             try await base.syncAll(items: items)
+            try await emptyIfThePasswordCameOn()
         } else {
             try await base.removeAll()
         }
+    }
+
+    /// Empties the store if the password came on while a write was underway. The mode changes before the app empties
+    /// the store for it, so a write that landed after that empty is always seen here.
+    private func emptyIfThePasswordCameOn() async throws {
+        guard !opensWithoutPassword() else { return }
+        try await base.removeAll()
     }
 
     public func remove(id: UUID, code: OTPAuthCode?) async throws {

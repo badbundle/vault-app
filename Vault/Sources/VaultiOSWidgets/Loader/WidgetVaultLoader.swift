@@ -10,6 +10,10 @@ public import VaultFeed
 /// the vault itself, as the App Group container holds it now (`VaultAccessMode`): the plain store, or the encrypted
 /// file with the device key while the App Lock Password is off. While only the password opens it, the widget shows
 /// it locked.
+///
+/// With the device key, the vault is opened only to show it (`VaultStoreSession.openedToShowWithDeviceKey`): a widget
+/// hasn't the memory to save the whole file, so it sends a HOTP increment to the app instead
+/// (`advancesHOTPInTheApp`).
 public actor WidgetVaultLoader {
     /// The capabilities the widget process needs: reads, plus advancing an
     /// HOTP counter. Deliberately narrower than `VaultStore` — the extension
@@ -57,6 +61,12 @@ public actor WidgetVaultLoader {
         self.accessMode = accessMode
     }
 
+    /// Whether a HOTP code's next value is got in the app, through a link, rather than by the widget: while the
+    /// device key opens the vault, which the widget only reads.
+    public nonisolated var advancesHOTPInTheApp: Bool {
+        accessMode() == .deviceKey
+    }
+
     /// Whether the widget shows the vault as locked: while the app lock is on, and while only the App Lock Password
     /// opens the vault, or it's being converted, rekeyed or erased. The loader hands out no items then either, so the
     /// widget's actions can't copy or advance a code, and its configuration can't list the vault's items.
@@ -95,12 +105,13 @@ public actor WidgetVaultLoader {
 
     /// Advances an eligible HOTP item and returns the freshly generated code.
     ///
-    /// This is the only write the widget process performs, read and written through the same store. The plain store
-    /// is still opened `.openOnly` so a transient open failure can never trigger the recovery path from an extension
-    /// (see #526). With the device key, the write goes through the encrypted file's lock and generation check, and
-    /// only if the widget has the memory for it.
+    /// This is the only write the widget process performs, read and written through the same store, and only to the
+    /// plain store. The plain store is still opened `.openOnly` so a transient open failure can never trigger the
+    /// recovery path from an extension (see #526). With the device key, the widget links to the app instead
+    /// (`advancesHOTPInTheApp`), so this does nothing, as for a link left from before the password came off.
     public func incrementAndRenderHOTPCode(id: UUID) async throws -> String? {
-        guard let store = try await openStore(),
+        guard !advancesHOTPInTheApp,
+              let store = try await openStore(),
               let item = try await eligibleItem(id: id, in: store),
               case let .otpCode(otp) = item.item,
               case let .hotp(counter) = otp.type
@@ -115,11 +126,11 @@ public actor WidgetVaultLoader {
     }
 
     /// The plain store, guarded, so a HOTP increment can't land in it after the app has started converting it to an
-    /// encrypted vault. Or the encrypted file, opened with the device key, while the password is off.
+    /// encrypted vault. Or the encrypted file, opened with the device key only to show it, while the password is off.
     private static func makeSharedStore(_ mode: VaultAccessMode) async throws -> any WidgetStore {
         let directory = VaultSharedStorage.directory()
         if mode == .deviceKey {
-            return try await VaultStoreSession.openedWithDeviceKey(directory: directory)
+            return try await VaultStoreSession.openedToShowWithDeviceKey(directory: directory)
         }
         let store = try PersistedLocalVaultStoreFactory(storageDirectory: directory, recoveryMode: .openOnly)
             .makeVaultStoreOrThrow()

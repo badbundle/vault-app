@@ -15,8 +15,10 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
         // change how the vault's stored while the extension's process lives
         // on. With the password on, the sheet unlocks the vault with it after
         // device authentication, never device authentication alone
-        // (MANIFESTO C4). With it off, the device key opens the vault, and
-        // device authentication is all it takes, as for a plain vault.
+        // (MANIFESTO C4). With it off, the device key opens the vault once
+        // device authentication is done, as for a plain vault. The sheet
+        // checks the mode again before it shows anything, and every call to
+        // the open vault does too.
         let storage = AutofillVaultStorage(VaultRoot.vaultAccessMode)
         let vaultService: AutofillVaultService? = switch storage {
         case .deviceKey, .password: VaultRoot.autofillVaultService()
@@ -26,6 +28,7 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
             localSettings: VaultRoot.localSettings,
             storage: storage,
             vaultService: vaultService,
+            currentAccessMode: { VaultRoot.vaultAccessMode },
             appLockSettings: VaultRoot.appLockSettingsStore,
             authenticationService: VaultRoot.deviceAuthenticationService,
             purgeVaultContents: {
@@ -103,9 +106,14 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
         super.prepareInterfaceForExtensionConfiguration()
 
         // Populate the credential identity store with all OTP identities from the vault
-        // so that iOS knows our extension can provide OTP codes
+        // so that iOS knows our extension can provide OTP codes. With the password
+        // off, nothing's open here, so the device key opens the vault just to read it.
         Task {
-            try? await VaultRoot.vaultDataModel.syncAllToOTPAutofillStore()
+            if VaultRoot.vaultAccessMode == .deviceKey {
+                try? await VaultRoot.fillQuickTypeWithDeviceKey()
+            } else {
+                try? await VaultRoot.vaultDataModel.syncAllToOTPAutofillStore()
+            }
         }
 
         vaultAutofillViewModel.show(feature: .setupConfiguration)
@@ -157,7 +165,7 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
     }
 
     /// The vault's items for a QuickType request, which has no sheet. With the password off, the device key opens the
-    /// vault just for this, and it's locked again straight after.
+    /// vault only to read it, in a session of its own, locked again straight after.
     @MainActor
     private static func retrieveItemsForQuickType(
         _ accessMode: VaultAccessMode,
@@ -165,17 +173,7 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
         guard accessMode == .deviceKey else {
             return try await VaultRoot.vaultStore.retrieve(query: .init())
         }
-        let service = VaultRoot.autofillVaultService()
-        await service.lockVault()
-        do {
-            try await service.openWithDeviceKey()
-            let items = try await VaultRoot.vaultStore.retrieve(query: .init())
-            await service.lockVault()
-            return items
-        } catch {
-            await service.lockVault()
-            throw error
-        }
+        return try await VaultRoot.retrieveItemsWithDeviceKey()
     }
 
     /**

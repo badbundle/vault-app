@@ -33,27 +33,55 @@ struct VaultAccessModeTests {
         #expect(sut.opensWithoutPassword)
     }
 
-    /// Mid-conversion the plain store may already be out of date, and there's no encrypted vault to open yet.
-    @Test
-    func vaultBeingConverted_isUnavailable() {
-        #expect(VaultAccessMode(state: VaultStorageState(mode: .plain, transition: .encrypting)) == .unavailable)
+    /// Every mode with every transition. Mid-conversion the plain store may already be out of date, and there's no
+    /// encrypted vault to open yet; nothing may open while an erase or a rekey is underway, even with the right
+    /// password or the device key; and anything the app never writes opens nothing.
+    @Test(arguments: [VaultStorageState.Mode.plain, .password, .deviceKey], Self.everyTransition)
+    func everyModeAndTransition(mode: VaultStorageState.Mode, transition: VaultStorageState.Transition?) {
+        let expected: VaultAccessMode = switch (mode, transition) {
+        case (.plain, nil): .plain
+        case (.password, nil), (.password, .deletingPlainStore?), (.password, .clearingSystemSurfaces?): .password
+        case (.deviceKey, nil), (.deviceKey, .syncingSystemSurfaces?): .deviceKey
+        default: .unavailable
+        }
+
+        #expect(VaultAccessMode(state: VaultStorageState(mode: mode, transition: transition)) == expected)
     }
 
-    /// Nothing may open while an erase or a rekey is underway, even with the right password or the device key.
-    @Test(arguments: [
-        VaultStorageState.Mode.password,
-        .deviceKey,
-    ], [
-        VaultStorageState.Transition.erasing,
+    /// The same table, spelled out for the changes that are underway, so it isn't only the test's own switch that
+    /// says so.
+    @Test(arguments: [VaultStorageState.Mode.plain, .password, .deviceKey], [
+        VaultStorageState.Transition.encrypting,
+        .erasing,
         .turningOff,
         .turningOn,
     ])
-    func vaultBeingErasedOrRekeyed_isUnavailable(
-        mode: VaultStorageState.Mode,
-        transition: VaultStorageState.Transition,
-    ) {
+    func changeUnderway_isUnavailable(mode: VaultStorageState.Mode, transition: VaultStorageState.Transition) {
         #expect(VaultAccessMode(state: VaultStorageState(mode: mode, transition: transition)) == .unavailable)
     }
+
+    /// Surface steps the app never journals for that mode.
+    @Test
+    func surfaceStepForTheOtherMode_isUnavailable() {
+        #expect(VaultAccessMode(state: VaultStorageState(mode: .deviceKey, transition: .clearingSystemSurfaces))
+            == .unavailable)
+        #expect(VaultAccessMode(state: VaultStorageState(mode: .password, transition: .syncingSystemSurfaces))
+            == .unavailable)
+        #expect(VaultAccessMode(state: VaultStorageState(mode: .plain, transition: .syncingSystemSurfaces))
+            == .unavailable)
+    }
+
+    private static let everyTransition: [VaultStorageState.Transition?] = [
+        nil,
+        .encrypting,
+        .deletingPlainStore(archives: []),
+        .deletingPlainStore(archives: ["archive"]),
+        .clearingSystemSurfaces,
+        .syncingSystemSurfaces,
+        .erasing,
+        .turningOff,
+        .turningOn,
+    ]
 
     @Test
     func unreadableState_isUnavailable() {

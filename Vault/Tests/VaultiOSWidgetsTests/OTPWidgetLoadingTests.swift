@@ -281,14 +281,47 @@ struct OTPWidgetLoadingTests {
         #expect(opens.value == 2)
     }
 
-    /// With the password off and the app lock on, the widget shows the vault locked, as for a plain vault.
+    /// With the password off and the app lock on, the widget shows the vault locked, as for a plain vault: it opens
+    /// nothing, lists nothing, and its timeline is the locked one.
     @Test
-    func passwordOff_appLockOn_isLocked() throws {
+    func passwordOff_appLockOn_isLockedAndOpensNothing() async throws {
+        let item = makeOTPVaultItem(accountName: "account", issuer: "issuer")
+        let opens = SharedMutex(0)
         let loader = try WidgetVaultLoader(appLockSettings: appLockOn(), accessMode: { .deviceKey }) { _ in
-            throw WidgetTestError.open
+            opens.modify { $0 += 1 }
+            return FakeVaultStoreReader(results: [.success(.init(items: [item]))])
         }
+        let entity = OTPWidgetItemEntity(id: item.id.rawValue, issuer: "issuer", accountName: "account")
+
+        let timeline = await OTPWidgetProvider(loader: loader).makeTimeline(for: .init(item: entity))
 
         #expect(loader.isLocked)
+        #expect(timeline.entries.map(\.snapshot) == [.locked])
+        #expect(try await loader.eligibleItems().isEmpty)
+        #expect(try await loader.eligibleItem(id: item.id.rawValue) == nil)
+        #expect(try await loader.currentTOTPCode(id: item.id.rawValue) == nil)
+        #expect(opens.value == 0)
+    }
+
+    /// Mid-change, or with a state that can't be read, the widget shows the vault locked, and opens nothing.
+    @Test
+    func vaultUnavailable_isLockedAndOpensNothing() async throws {
+        let item = makeOTPVaultItem(accountName: "account", issuer: "issuer")
+        let opens = SharedMutex(0)
+        let loader = try WidgetVaultLoader(appLockSettings: appLockOff(), accessMode: { .unavailable }) { _ in
+            opens.modify { $0 += 1 }
+            return FakeVaultStoreReader(results: [.success(.init(items: [item]))])
+        }
+        let entity = OTPWidgetItemEntity(id: item.id.rawValue, issuer: "issuer", accountName: "account")
+
+        let timeline = await OTPWidgetProvider(loader: loader).makeTimeline(for: .init(item: entity))
+        let entities = try await OTPWidgetItemEntityQuery(loader: loader).suggestedEntities()
+
+        #expect(loader.isLocked)
+        #expect(timeline.entries.map(\.snapshot) == [.locked])
+        #expect(entities.isEmpty)
+        #expect(try await loader.eligibleItems().isEmpty)
+        #expect(opens.value == 0)
     }
 
     @Test

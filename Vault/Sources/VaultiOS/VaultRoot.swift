@@ -602,15 +602,38 @@ public enum VaultRoot {
         }
     }
 
-    /// Fills the QuickType identity store from the vault the device key opens, now the password is off, and reloads
-    /// the widgets, which show codes again. Launch recovery runs it, and turning the password off does too
+    /// Reloads the widgets, which show codes again now the password is off, and fills the QuickType identity store
+    /// again from the vault the device key opens. Launch recovery runs it, and turning the password off does too
     /// (`VaultPasswordChangeService.Hooks.passwordDidTurnOff`).
+    ///
+    /// The widgets are reloaded whatever happens to QuickType. If a fill fails, it throws, so the journal keeps the
+    /// step for the next launch.
     @MainActor
     static func refillSystemSurfaces() async throws {
-        let vault = try await VaultStoreSession.openedWithDeviceKey(directory: vaultStorageDirectory)
-        let items = try await vault.retrieve(query: .init()).items
+        defer { reloadWidgetTimelines() }
+        try await fillQuickTypeWithDeviceKey()
+    }
+
+    /// Fills the QuickType identity store from the vault the device key opens, opened only to read it.
+    ///
+    /// Only while Vault's turned on as an AutoFill provider: otherwise the system refuses changes to the store, which
+    /// holds nothing of Vault's, and turning Vault on fills it (`prepareInterfaceForExtensionConfiguration()`).
+    @MainActor
+    public static func fillQuickTypeWithDeviceKey() async throws {
+        guard await vaultOtpAutofillStore.getState().isEnabled else { return }
+        let items = try await retrieveItemsWithDeviceKey().items
         try await vaultOtpAutofillStore.syncAll(items: items)
-        reloadWidgetTimelines()
+    }
+
+    /// The vault's items, from the vault the device key opens only to read them, locked again straight after: for
+    /// QuickType, while the password is off.
+    ///
+    /// - Throws: `VaultUnlockError.deviceKeyNotInUse` unless the vault's stored with the device key now, or an error
+    ///   opening it, such as while the device is locked after starting up.
+    public nonisolated static func retrieveItemsWithDeviceKey() async throws -> VaultRetrievalResult<VaultItem> {
+        try await VaultStoreSession.retrieveAndLock {
+            try await VaultStoreSession.openedToShowWithDeviceKey(directory: VaultSharedStorage.directory())
+        }
     }
 
     /// Empties the QuickType identity store, now only the password opens the vault, and reloads the widgets, which

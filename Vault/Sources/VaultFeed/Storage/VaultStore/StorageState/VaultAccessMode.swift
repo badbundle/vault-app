@@ -16,25 +16,25 @@ public enum VaultAccessMode: Equatable, Sendable {
     /// It can't be opened now: being converted, rekeyed or erased, or the state can't be read.
     case unavailable
 
-    /// - Parameter state: The storage state, or `nil` if it can't be read.
+    /// - Parameter state: The storage state, or `nil` if it can't be read. Anything the app doesn't write, such as
+    ///   the device key's mode with QuickType still to empty, is `unavailable`.
     public init(state: VaultStorageState?) {
         guard let state else {
             self = .unavailable
             return
         }
-        switch state.mode {
-        case .plain:
-            self = state.transition == nil ? .plain : .unavailable
-        case .password:
-            // Once a conversion has committed, the vault opens with the password, whatever the app still has to tidy
-            // up.
-            if case .deletingPlainStore = state.transition {
-                self = .password
-            } else {
-                self = state.isSettled ? .password : .unavailable
-            }
-        case .deviceKey:
-            self = state.isSettled ? .deviceKey : .unavailable
+        self = switch (state.mode, state.transition) {
+        case (.plain, nil):
+            .plain
+        // Once a conversion has committed, the vault opens with the password, whatever the app still has to tidy up.
+        // After the password's turned back on, only QuickType and the widgets can be left to catch up.
+        case (.password, nil), (.password, .deletingPlainStore?), (.password, .clearingSystemSurfaces?):
+            .password
+        // After the password's turned off, only QuickType and the widgets can be left to catch up.
+        case (.deviceKey, nil), (.deviceKey, .syncingSystemSurfaces?):
+            .deviceKey
+        default:
+            .unavailable
         }
     }
 

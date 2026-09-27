@@ -160,6 +160,123 @@ struct AutofillVaultServiceTests {
         #expect(try await sut.file.open()?.bytes == fileBefore)
     }
 
+    // MARK: - The vault as it's stored now
+
+    /// The app turned the password back on, or started an erase: the device key opens nothing, even if it's still
+    /// there.
+    @Test(arguments: [VaultAccessMode.password, .unavailable, .plain])
+    func openWithDeviceKey_notInUseNow_opensNothing(mode: VaultAccessMode) async throws {
+        let sut = try makeSUT(items: [uniqueVaultItem()], wrappedWithTheDeviceKey: true, accessMode: SharedMutex(mode))
+
+        await #expect(throws: VaultUnlockError.deviceKeyNotInUse) {
+            try await sut.service.openWithDeviceKey()
+        }
+
+        #expect(await sut.session.isLocked)
+    }
+
+    /// An AutoFill sheet left open in another app while the user turns the password on in Vault: the vault it opened
+    /// reads nothing, and takes no change, from then on.
+    @Test(arguments: [VaultAccessMode.password, .unavailable])
+    func openWithDeviceKey_modeChangesWhileOpen_readsAndWritesNothing(mode: VaultAccessMode) async throws {
+        let accessMode = SharedMutex(VaultAccessMode.deviceKey)
+        let sut = try makeSUT(items: [uniqueVaultItem()], wrappedWithTheDeviceKey: true, accessMode: accessMode)
+        try await sut.service.openWithDeviceKey()
+        let fileBefore = try await sut.file.open()?.bytes
+
+        accessMode.modify { $0 = mode }
+
+        #expect(try await sut.session.retrieve(query: .init()).items.isEmpty)
+        #expect(try await sut.session.hasAnyItems == false)
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await sut.session.insert(item: uniqueVaultItem().makeWritable())
+        }
+        #expect(try await sut.file.open()?.bytes == fileBefore)
+    }
+
+    /// A rekey or an erase changes the storage state before it changes the file, holding the file's lock. So a save
+    /// checks again once it has the lock, and a change of mode just as it starts is caught.
+    @Test
+    func openWithDeviceKey_modeChangesAsASaveStarts_writesNothing() async throws {
+        let accessMode = SharedMutex(VaultAccessMode.deviceKey)
+        let sut = try makeSUT(wrappedWithTheDeviceKey: true, accessMode: accessMode)
+        try await sut.service.openWithDeviceKey()
+        let fileBefore = try await sut.file.open()?.bytes
+
+        sut.whenAskedForMemory.modify { $0 = { accessMode.modify { $0 = .password } } }
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await sut.session.insert(item: uniqueVaultItem().makeWritable())
+        }
+
+        #expect(try await sut.file.open()?.bytes == fileBefore)
+    }
+
+    /// Likewise for a vault the password opened: once the password's off, or an erase has started, it reads nothing.
+    @Test
+    func unlock_modeChangesWhileOpen_readsNothing() async throws {
+        let accessMode = SharedMutex(VaultAccessMode.password)
+        let sut = try makeSUT(items: [uniqueVaultItem()], accessMode: accessMode)
+        #expect(try await sut.service.unlock(password: Self.password) == .accepted)
+        #expect(try await sut.session.retrieve(query: .init()).items.count == 1)
+
+        accessMode.modify { $0 = .unavailable }
+
+        #expect(try await sut.session.retrieve(query: .init()).items.isEmpty)
+    }
+
+    // MARK: - Showing with the device key
+
+    /// For the widgets and QuickType: the vault is read without the file's lock, and nothing is left behind, not even
+    /// a lock file, which an erase has to remove.
+    @Test
+    func openedToShowWithDeviceKey_readsTheVaultLeavingNothingBehind() async throws {
+        let item = uniqueVaultItem()
+        let sut = try makeSUT(items: [item], wrappedWithTheDeviceKey: true)
+        let before = try sut.fileNames()
+
+        let session = try await openToShow(sut, mode: .deviceKey)
+
+        #expect(try await session.retrieve(query: .init()).items == [item])
+        #expect(try sut.fileNames() == before)
+    }
+
+    @Test
+    func openedToShowWithDeviceKey_refusesWrites() async throws {
+        let sut = try makeSUT(items: [uniqueVaultItem()], wrappedWithTheDeviceKey: true)
+        let session = try await openToShow(sut, mode: .deviceKey)
+        let fileBefore = try await sut.file.open()?.bytes
+
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await session.insert(item: uniqueVaultItem().makeWritable())
+        }
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await session.incrementCounter(id: .init())
+        }
+        #expect(try await sut.file.open()?.bytes == fileBefore)
+    }
+
+    @Test(arguments: [VaultAccessMode.password, .unavailable, .plain])
+    func openedToShowWithDeviceKey_notInUseNow_opensNothing(mode: VaultAccessMode) async throws {
+        let sut = try makeSUT(items: [uniqueVaultItem()], wrappedWithTheDeviceKey: true)
+        let before = try sut.fileNames()
+
+        await #expect(throws: VaultUnlockError.deviceKeyNotInUse) {
+            try await openToShow(sut, mode: mode)
+        }
+        #expect(try sut.fileNames() == before)
+    }
+
+    @Test
+    func retrieveAndLock_locksTheSessionAfterReading() async throws {
+        let item = uniqueVaultItem()
+        let session = VaultStoreSession(target: .plain(GatedVaultStore(items: [item])))
+
+        let result = try await VaultStoreSession.retrieveAndLock { session }
+
+        #expect(result.items == [item])
+        #expect(await session.isLocked)
+    }
+
     // MARK: - Locking
 
     @Test
@@ -264,14 +381,29 @@ extension AutofillVaultServiceTests {
         let service: AutofillVaultService
         let session: VaultStoreSession
         let file: EncryptedVaultFile
+        let fileSystem: InMemorySlotFileSystem
+        let deviceKeyStore: InMemoryDeviceKeyStore
         let availableMemory: SharedMutex<Int?>
+        /// Runs whenever the memory left is asked for, as a save does just before it takes the file's lock.
+        let whenAskedForMemory: SharedMutex<(@Sendable () -> Void)?>
         let log: SharedMutex<[String]>
+
+        var directory: URL {
+            EncryptedVaultFixture.inMemoryDirectory
+        }
+
+        func fileNames() throws -> Set<String> {
+            try Set(fileSystem.contentsOfDirectory(at: directory).map(\.lastPathComponent))
+        }
     }
 
+    /// - Parameter accessMode: How the vault can be opened now, which the service checks as the extension's does, or
+    ///   `nil` for no check.
     private func makeSUT(
         items: [VaultItem] = [],
         wrappedWithTheDeviceKey: Bool = false,
         availableMemory: Int? = nil,
+        accessMode: SharedMutex<VaultAccessMode>? = nil,
         purges: SharedMutex<Int> = SharedMutex(0),
     ) throws -> SUT {
         var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
@@ -288,10 +420,25 @@ extension AutofillVaultServiceTests {
         let file = EncryptedVaultFile(directory: EncryptedVaultFixture.inMemoryDirectory, fileSystem: fileSystem)
         try fileSystem.createFile(at: file.url, contents: contents.bytes)
 
+        try VaultStorageStateFile(directory: file.directory, fileSystem: fileSystem).write(VaultStorageState(
+            mode: wrappedWithTheDeviceKey ? .deviceKey : .password,
+            unlockDeadline: .seconds(1),
+        ))
+
         let session = VaultStoreSession(target: .locked)
         let log = SharedMutex([String]())
         let clock = ManualUnlockClock()
         let memory = SharedMutex(availableMemory)
+        let whenAskedForMemory = SharedMutex<(@Sendable () -> Void)?>(nil)
+        let deviceKeyStore = InMemoryDeviceKeyStore(key: wrappedWithTheDeviceKey ? deviceKey : nil)
+        let askForMemory: @Sendable () -> Int? = {
+            whenAskedForMemory.value?()
+            return memory.value
+        }
+        var currentAccessMode: (@Sendable () -> VaultAccessMode)?
+        if let accessMode {
+            currentAccessMode = { accessMode.value }
+        }
         let service = AutofillVaultService(
             file: file,
             session: session,
@@ -300,15 +447,34 @@ extension AutofillVaultServiceTests {
                 clock: FakeAppLockClock(),
             ),
             deadlineStore: FakeUnlockDeadlineStore(deadline: .seconds(1)),
-            deviceKeyStore: InMemoryDeviceKeyStore(key: wrappedWithTheDeviceKey ? deviceKey : nil),
+            deviceKeyStore: deviceKeyStore,
             purgeVaultContents: { purges.modify { $0 += 1 } },
             needsPassword: { !wrappedWithTheDeviceKey },
             clock: clock,
             work: SpyUnlockWork(log: log, clock: clock),
-            availableMemory: { memory.value },
+            availableMemory: askForMemory,
             wrapStamper: .inMemory(),
+            currentAccessMode: currentAccessMode,
         )
-        return SUT(service: service, session: session, file: file, availableMemory: memory, log: log)
+        return SUT(
+            service: service,
+            session: session,
+            file: file,
+            fileSystem: fileSystem,
+            deviceKeyStore: deviceKeyStore,
+            availableMemory: memory,
+            whenAskedForMemory: whenAskedForMemory,
+            log: log,
+        )
+    }
+
+    private func openToShow(_ sut: SUT, mode: VaultAccessMode) async throws -> VaultStoreSession {
+        try await VaultStoreSession.openedToShowWithDeviceKey(
+            file: EncryptedVaultFile(directory: sut.directory, fileSystem: sut.fileSystem),
+            stateFile: VaultStorageStateFile(directory: sut.directory, fileSystem: sut.fileSystem),
+            deviceKeyStore: sut.deviceKeyStore,
+            currentAccessMode: { mode },
+        )
     }
 
     private func makeTemporaryDirectory() throws -> URL {

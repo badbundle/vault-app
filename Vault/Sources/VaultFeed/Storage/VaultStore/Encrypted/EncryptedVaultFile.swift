@@ -71,6 +71,14 @@ struct EncryptedVaultFile: Sendable {
         }
     }
 
+    /// Reads the file without the lock, or leaving anything behind: to show a vault, as a widget does. Every write
+    /// replaces the file with one rename, so this reads either the file from before it or the one after.
+    ///
+    /// - Returns: The file, or `nil` if there isn't one.
+    func readWithoutTheLock() throws -> VaultSlotFile? {
+        try fileSystem.contents(of: url).map { try VaultSlotFile(bytes: $0) }
+    }
+
     /// Reads only the file's header, and its size, without the lock: the header's salt and Argon2id parameters are
     /// fixed for the life of the file.
     ///

@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import FoundationExtensions
+import SwiftUI
 import TestHelpers
 import Testing
 import VaultFeed
@@ -179,19 +180,25 @@ extension VaultAutofillViewModelTests {
     // MARK: - Password off
 
     /// With the password off, the device key opens the vault, and device authentication is all it takes: no password
-    /// step, as for a plain vault.
+    /// step, as for a plain vault. It's opened only once that's done.
     @Test
-    func passwordOff_opensWithTheDeviceKeyAndAsksForNoPassword() async throws {
+    func passwordOff_opensWithTheDeviceKeyOnlyAfterDeviceAuthentication() async throws {
         let service = FakeAutofillVaultService()
         let sut = try makeSUT(storage: .deviceKey, vaultService: service, isAppLockEnabled: true)
 
         await sut.prepareToUnlock()
+        #expect(sut.unlockAvailability == .available)
+        #expect(service.deviceKeyOpenCount == 0)
+        await sut.getVaultReadyToShow()
+        #expect(service.deviceKeyOpenCount == 0, "Nothing's shown before the sheet's lock is unlocked")
+
         await sut.appLock.unlock()
+        #expect(sut.appLock.state == .unlocked)
+        #expect(!sut.appLock.isPasswordSet)
+        await sut.getVaultReadyToShow()
 
         #expect(service.log == ["lock", "open with the device key"])
-        #expect(sut.unlockAvailability == .available)
-        #expect(!sut.appLock.isPasswordSet)
-        #expect(sut.appLock.state == .unlocked)
+        #expect(sut.isVaultReady)
     }
 
     @Test
@@ -210,29 +217,145 @@ extension VaultAutofillViewModelTests {
     func passwordOff_deviceKeyCannotOpenIt_needsTheApp() async throws {
         let service = FakeAutofillVaultService()
         service.failsToOpenWithDeviceKey = true
-        let sut = try makeSUT(storage: .deviceKey, vaultService: service)
+        let purges = Counter()
+        let sut = try makeSUT(storage: .deviceKey, vaultService: service, purges: purges)
+        await sut.prepareToUnlock()
 
+        await sut.getVaultReadyToShow()
+
+        #expect(sut.unlockAvailability == .needsTheApp(.unavailable))
+        #expect(!sut.isVaultReady)
+        #expect(purges.count == 1)
+    }
+
+    /// The app turned the password on, or started an erase, since the request began: the sheet sends the user to
+    /// Vault, and opens nothing.
+    @Test(arguments: [VaultAccessMode.password, .unavailable, .plain])
+    func passwordOff_modeChangesBeforePreparing_needsTheAppAndOpensNothing(mode: VaultAccessMode) async throws {
+        let service = FakeAutofillVaultService()
+        let accessMode = SharedMutex(VaultAccessMode.deviceKey)
+        let purges = Counter()
+        let sut = try makeSUT(storage: .deviceKey, vaultService: service, accessMode: accessMode, purges: purges)
+        await sut.prepareToUnlock()
+        #expect(sut.unlockAvailability == .available)
+
+        accessMode.modify { $0 = mode }
         await sut.prepareToUnlock()
 
         #expect(sut.unlockAvailability == .needsTheApp(.unavailable))
+        #expect(service.deviceKeyOpenCount == 0)
+        #expect(purges.count == 1)
     }
 
-    /// When the sheet's lock locks, the vault locks straight away, and it's opened again, once it has, before device
-    /// authentication is asked for again.
+    /// The sheet was left open in another app while the user turned the password on in Vault. Coming back, device
+    /// authentication alone mustn't show the vault (MANIFESTO C4).
+    @Test(arguments: [VaultAccessMode.password, .unavailable])
+    func passwordOff_modeChangesBetweenDeviceAuthenticationAndShowing_opensNothing(mode: VaultAccessMode) async throws {
+        let service = FakeAutofillVaultService()
+        let accessMode = SharedMutex(VaultAccessMode.deviceKey)
+        let sut = try makeSUT(
+            storage: .deviceKey,
+            vaultService: service,
+            isAppLockEnabled: true,
+            accessMode: accessMode,
+        )
+        await sut.prepareToUnlock()
+        await sut.appLock.unlock()
+
+        accessMode.modify { $0 = mode }
+        await sut.getVaultReadyToShow()
+
+        #expect(sut.unlockAvailability == .needsTheApp(.unavailable))
+        #expect(!sut.isVaultReady)
+        #expect(service.deviceKeyOpenCount == 0)
+    }
+
+    /// The app turned the password on while the vault was being opened: it's locked again straight away, and nothing
+    /// shows.
     @Test
-    func passwordOff_sheetLocks_getsTheVaultReadyAgain() async throws {
+    func passwordOff_modeChangesWhileOpening_locksItAgain() async throws {
+        let service = FakeAutofillVaultService()
+        let accessMode = SharedMutex(VaultAccessMode.deviceKey)
+        service.whileOpening = { accessMode.modify { $0 = .password } }
+        let sut = try makeSUT(storage: .deviceKey, vaultService: service, accessMode: accessMode)
+        await sut.prepareToUnlock()
+
+        await sut.getVaultReadyToShow()
+
+        #expect(service.log == ["lock", "open with the device key", "lock"])
+        #expect(sut.unlockAvailability == .needsTheApp(.unavailable))
+        #expect(!sut.isVaultReady)
+    }
+
+    /// When the sheet's lock locks, the vault locks, and the codes hide until it's opened again, after device
+    /// authentication.
+    @Test
+    func passwordOff_sheetLocks_locksAndOpensAgainOnlyOnceUnlocked() async throws {
         let service = FakeAutofillVaultService()
         let sut = try makeSUT(storage: .deviceKey, vaultService: service, isAppLockEnabled: true)
         await sut.prepareToUnlock()
         await sut.appLock.unlock()
-        let preparation = sut.preparation
+        await sut.getVaultReadyToShow()
+        let lockCount = sut.lockCount
 
         sut.appLock.scenePhaseDidChange(to: .background)
 
-        #expect(sut.unlockAvailability == .checking)
-        #expect(sut.preparation == preparation + 1)
+        #expect(!sut.isVaultReady)
+        #expect(sut.lockCount == lockCount + 1)
+        await sut.endRequest()
+        #expect(service.log == ["lock", "open with the device key", "lock", "lock"])
+        await sut.getVaultReadyToShow()
+        #expect(service.deviceKeyOpenCount == 1, "Not before device authentication")
+
+        await sut.appLock.unlock()
+        await sut.getVaultReadyToShow()
+        #expect(service.deviceKeyOpenCount == 2)
+        #expect(sut.isVaultReady)
+    }
+
+    /// With the app lock off, nothing asks for device authentication, so going to another app, which could be Vault,
+    /// locks the vault anyway. It's checked, and opened again, only once the sheet is back.
+    @Test
+    func passwordOff_appLockOff_leavingTheSheet_locksItAndChecksAgainOnReturn() async throws {
+        let service = FakeAutofillVaultService()
+        let accessMode = SharedMutex(VaultAccessMode.deviceKey)
+        let sut = try makeSUT(storage: .deviceKey, vaultService: service, accessMode: accessMode)
         await sut.prepareToUnlock()
-        #expect(service.log == ["lock", "open with the device key", "lock", "lock", "open with the device key"])
+        await sut.getVaultReadyToShow()
+        #expect(sut.isVaultReady)
+
+        sut.scenePhaseDidChange(to: .background)
+        await sut.getVaultReadyToShow()
+        #expect(!sut.isVaultReady)
+        #expect(service.deviceKeyOpenCount == 1, "Not while the sheet's away")
+
+        accessMode.modify { $0 = .password }
+        sut.scenePhaseDidChange(to: .active)
+        await sut.getVaultReadyToShow()
+
+        #expect(sut.unlockAvailability == .needsTheApp(.unavailable))
+        #expect(!sut.isVaultReady)
+        #expect(service.deviceKeyOpenCount == 1)
+    }
+
+    /// A check the sheet no longer wants, as its view went, doesn't overrule the next one.
+    @Test
+    func prepareToUnlock_cancelled_leavesTheSheetForTheNextCheck() async throws {
+        let service = FakeAutofillVaultService(headroom: .answersWhenTold)
+        let sut = try makeSUT(storage: .password, vaultService: service)
+        let cancelled = Task { await sut.prepareToUnlock() }
+        try await service.waitForHeadroomCheck()
+
+        cancelled.cancel()
+        service.answerHeadroomChecks(false)
+        await cancelled.value
+        #expect(sut.unlockAvailability == .checking)
+
+        let next = Task { await sut.prepareToUnlock() }
+        try await service.waitForHeadroomCheck()
+        service.answerHeadroomChecks(true)
+        await next.value
+        #expect(sut.unlockAvailability == .available)
     }
 
     // MARK: - Locking
@@ -258,15 +381,32 @@ extension VaultAutofillViewModelTests {
 
         #expect(sut.appLock.delay == .immediately)
     }
+
+    /// A plain vault the app encrypted since the request began isn't shown on device authentication alone either.
+    @Test
+    func plainVault_encryptedBeforeShowing_needsTheApp() async throws {
+        let accessMode = SharedMutex(VaultAccessMode.plain)
+        let sut = try makeSUT(storage: .plain, isAppLockEnabled: true, accessMode: accessMode)
+        await sut.prepareToUnlock()
+        await sut.appLock.unlock()
+
+        accessMode.modify { $0 = .password }
+        await sut.getVaultReadyToShow()
+
+        #expect(sut.unlockAvailability == .needsTheApp(.unavailable))
+        #expect(!sut.isVaultReady)
+    }
 }
 
 // MARK: - Helpers
 
 extension VaultAutofillViewModelTests {
+    /// - Parameter accessMode: How the vault can be opened now. By default, as `storage` found it.
     private func makeSUT(
         storage: AutofillVaultStorage = .plain,
         vaultService: FakeAutofillVaultService? = nil,
         isAppLockEnabled: Bool = false,
+        accessMode: SharedMutex<VaultAccessMode>? = nil,
         appLockSettings: AppLockSettingsStore? = nil,
         purges: Counter = Counter(),
     ) throws -> VaultAutofillViewModel {
@@ -274,14 +414,25 @@ extension VaultAutofillViewModelTests {
         if isAppLockEnabled {
             settings.isEnabled = true
         }
+        let accessMode = accessMode ?? SharedMutex(Self.accessMode(for: storage))
         return try VaultAutofillViewModel(
             localSettings: LocalSettings(defaults: Defaults.nonPersistent()),
             storage: storage,
             vaultService: vaultService,
+            currentAccessMode: { accessMode.value },
             appLockSettings: settings,
             authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
             purgeVaultContents: { purges.increment() },
         )
+    }
+
+    private static func accessMode(for storage: AutofillVaultStorage) -> VaultAccessMode {
+        switch storage {
+        case .plain: .plain
+        case .deviceKey: .deviceKey
+        case .password: .password
+        case .unavailable: .unavailable
+        }
     }
 }
 

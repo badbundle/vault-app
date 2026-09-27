@@ -1,5 +1,6 @@
 import Foundation
 import FoundationExtensions
+import Testing
 import VaultFeed
 @testable import VaultiOSAutofill
 
@@ -57,6 +58,8 @@ final class FakeAutofillVaultService: AutofillVaultUnlocking {
         case notEnough
         /// The check never answers, as if it's still reading the file.
         case neverAnswers
+        /// Each check waits for `answerHeadroomChecks(_:)`.
+        case answersWhenTold
     }
 
     struct DeviceKeyFailure: Error {}
@@ -67,8 +70,11 @@ final class FakeAutofillVaultService: AutofillVaultUnlocking {
     /// Every lock and open, in order.
     private(set) var log = [String]()
     var failsToOpenWithDeviceKey = false
+    /// Runs while the vault's being opened with the device key, once it's open.
+    var whileOpening: (() -> Void)?
     private let base: FakeAppLockPasswordService
     private let headroom: Headroom
+    private var waitingHeadroomChecks = [CheckedContinuation<Bool, Never>]()
 
     init(password: String = "correct horse", headroom: Headroom = .enough) {
         base = FakeAppLockPasswordService(password: password)
@@ -88,6 +94,24 @@ final class FakeAutofillVaultService: AutofillVaultUnlocking {
         case .neverAnswers:
             try await Task.sleep(for: .seconds(60 * 60))
             return false
+        case .answersWhenTold:
+            return await withCheckedContinuation { waitingHeadroomChecks.append($0) }
+        }
+    }
+
+    /// Waits until a headroom check is waiting for an answer.
+    func waitForHeadroomCheck() async throws {
+        for _ in 0 ..< 1000 where waitingHeadroomChecks.isEmpty {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        try #require(!waitingHeadroomChecks.isEmpty)
+    }
+
+    func answerHeadroomChecks(_ answer: Bool) {
+        let waiting = waitingHeadroomChecks
+        waitingHeadroomChecks.removeAll()
+        for check in waiting {
+            check.resume(returning: answer)
         }
     }
 
@@ -99,6 +123,7 @@ final class FakeAutofillVaultService: AutofillVaultUnlocking {
         guard !failsToOpenWithDeviceKey else { throw DeviceKeyFailure() }
         deviceKeyOpenCount += 1
         log.append("open with the device key")
+        whileOpening?()
     }
 
     func lockVault() async {

@@ -19,6 +19,9 @@ import VaultCore
 /// It behaves exactly as `RecordVaultStore` does, which it's built on. Finding the slot a password opens, within the
 /// unlock deadline, is `VaultUnlockService`'s job. See "Reading and writing while unlocked" in
 /// `docs/on-device-encryption.md`.
+///
+/// In an app extension, every call first checks the vault is still stored the way it was when it opened
+/// (`VaultAccessGuard`): once it isn't, reads find nothing and writes throw `VaultStoreSessionError.locked`.
 public final class EncryptedVaultStore: Sendable {
     let records: RecordVaultStore
     /// Where the vault is saved: its slot of the file.
@@ -27,6 +30,8 @@ public final class EncryptedVaultStore: Sendable {
     private let work: any VaultUnlockWork
     /// Stamps the key wrap of a duress vault made from this one, and of this vault when it's rekeyed.
     private let wrapStamper: any VaultWrapStamping
+    /// Checked on every call, in an app extension. `nil` in the app.
+    private let accessGuard: VaultAccessGuard?
 
     /// The vault in `slot`, whose payload has already been read.
     ///
@@ -39,6 +44,8 @@ public final class EncryptedVaultStore: Sendable {
     ///   - wrapStamper: What stamps the key wrap of a duress vault made from this one, and of this vault when it's
     ///     rekeyed.
     ///   - memoryCheck: Checked before every save, in the AutoFill extension.
+    ///   - accessGuard: Checked on every call, and again under the file's lock before every save, in an app
+    ///     extension.
     init(
         file: EncryptedVaultFile,
         slot: VaultSlotFile.OpenedSlot,
@@ -48,8 +55,14 @@ public final class EncryptedVaultStore: Sendable {
         work: any VaultUnlockWork = LiveVaultUnlockWork(),
         wrapStamper: any VaultWrapStamping = VaultDeviceWrapStamper(),
         memoryCheck: VaultWriteMemoryCheck? = nil,
+        accessGuard: VaultAccessGuard? = nil,
     ) {
-        let persistence = SlotFilePersistence(file: file, slot: slot, memoryCheck: memoryCheck)
+        let persistence = SlotFilePersistence(
+            file: file,
+            slot: slot,
+            memoryCheck: memoryCheck,
+            accessGuard: accessGuard,
+        )
         self.persistence = persistence
         records = RecordVaultStore(
             state: state,
@@ -59,6 +72,17 @@ public final class EncryptedVaultStore: Sendable {
         )
         self.work = work
         self.wrapStamper = wrapStamper
+        self.accessGuard = accessGuard
+    }
+
+    /// Whether the vault may still be read: always in the app.
+    private var isReadable: Bool {
+        accessGuard?.isStillOpen ?? true
+    }
+
+    /// - Throws: `VaultStoreSessionError.locked` if the vault may not be written now.
+    private func checkWrite() throws {
+        try accessGuard?.checkWrite()
     }
 
     /// The slot the vault is in.
@@ -115,25 +139,29 @@ extension EncryptedVaultStore: VaultStoreReader {
         query: VaultStoreQuery,
         searchPassphraseMatcher: (any SearchPassphraseMatcher)?,
     ) async throws -> VaultRetrievalResult<VaultItem> {
-        try await records.retrieve(query: query, searchPassphraseMatcher: searchPassphraseMatcher)
+        guard isReadable else { return .empty() }
+        return try await records.retrieve(query: query, searchPassphraseMatcher: searchPassphraseMatcher)
     }
 
     public var hasAnyItems: Bool {
         get async {
-            await records.hasAnyItems
+            guard isReadable else { return false }
+            return await records.hasAnyItems
         }
     }
 }
 
 extension EncryptedVaultStore: VaultTagStoreReader {
     public func retrieveTags() async throws -> [VaultItemTag] {
-        try await records.retrieveTags()
+        guard isReadable else { return [] }
+        return try await records.retrieveTags()
     }
 }
 
 extension EncryptedVaultStore: VaultStoreExporter {
     public func exportVault(userDescription: String) async throws -> VaultApplicationPayload {
-        try await records.exportVault(userDescription: userDescription)
+        guard isReadable else { throw VaultStoreSessionError.locked }
+        return try await records.exportVault(userDescription: userDescription)
     }
 }
 
@@ -142,26 +170,31 @@ extension EncryptedVaultStore: VaultStoreExporter {
 extension EncryptedVaultStore: VaultStoreWriter {
     @discardableResult
     public func insert(item: VaultItem.Write) async throws -> Identifier<VaultItem> {
-        try await records.insert(item: item)
+        try checkWrite()
+        return try await records.insert(item: item)
     }
 
     public func update(id: Identifier<VaultItem>, item: VaultItem.Write) async throws {
+        try checkWrite()
         try await records.update(id: id, item: item)
     }
 
     public func delete(id: Identifier<VaultItem>) async throws {
+        try checkWrite()
         try await records.delete(id: id)
     }
 }
 
 extension EncryptedVaultStore: VaultStoreHOTPIncrementer {
     public func incrementCounter(id: Identifier<VaultItem>) async throws {
+        try checkWrite()
         try await records.incrementCounter(id: id)
     }
 }
 
 extension EncryptedVaultStore: VaultStoreReorderable {
     public func reorder(items: Set<Identifier<VaultItem>>, to position: VaultReorderingPosition) async throws {
+        try checkWrite()
         try await records.reorder(items: items, to: position)
     }
 }
@@ -169,24 +202,29 @@ extension EncryptedVaultStore: VaultStoreReorderable {
 extension EncryptedVaultStore: VaultTagStoreWriter {
     @discardableResult
     public func insertTag(item: VaultItemTag.Write) async throws -> Identifier<VaultItemTag> {
-        try await records.insertTag(item: item)
+        try checkWrite()
+        return try await records.insertTag(item: item)
     }
 
     public func updateTag(id: Identifier<VaultItemTag>, item: VaultItemTag.Write) async throws {
+        try checkWrite()
         try await records.updateTag(id: id, item: item)
     }
 
     public func deleteTag(id: Identifier<VaultItemTag>) async throws {
+        try checkWrite()
         try await records.deleteTag(id: id)
     }
 }
 
 extension EncryptedVaultStore: VaultStoreImporter {
     public func importAndMergeVault(payload: VaultApplicationPayload) async throws {
+        try checkWrite()
         try await records.importAndMergeVault(payload: payload)
     }
 
     public func importAndOverrideVault(payload: VaultApplicationPayload) async throws {
+        try checkWrite()
         try await records.importAndOverrideVault(payload: payload)
     }
 }
@@ -194,6 +232,7 @@ extension EncryptedVaultStore: VaultStoreImporter {
 extension EncryptedVaultStore: VaultStoreDeleter {
     /// Empties this vault. Its slot, and its password, stay.
     public func deleteVault() async throws {
+        try checkWrite()
         try await records.deleteVault()
     }
 }
@@ -201,7 +240,9 @@ extension EncryptedVaultStore: VaultStoreDeleter {
 extension EncryptedVaultStore: VaultStoreKillphraseDeleter {
     @discardableResult
     public func deleteItems(matchingKillphrase: String, using matcher: any KillphraseMatcher) async -> Bool {
-        await records.deleteItems(matchingKillphrase: matchingKillphrase, using: matcher)
+        // As for a phrase that matches nothing (MANIFESTO C2).
+        guard (try? checkWrite()) != nil else { return false }
+        return await records.deleteItems(matchingKillphrase: matchingKillphrase, using: matcher)
     }
 }
 
@@ -230,6 +271,7 @@ extension EncryptedVaultStore {
     ///   vault's duress slots aren't a valid list, or an error reading or replacing the file. The file is unchanged
     ///   when it throws.
     public func makeDuressVault(password: String) async throws {
+        try checkWrite()
         let slot = await persistence.slot
         let placement = try await VaultDuressSlots.placement(
             madeFromSlot: slot.index,
@@ -259,6 +301,7 @@ extension EncryptedVaultStore {
     ///
     /// Use `VaultStoreSession.whileOpen(_:_:)` around it, so it's only made while this vault is the open one.
     func updateBackupSettings(_ update: @escaping @Sendable (inout VaultBackupSettings) -> Void) async throws {
+        try checkWrite()
         try await records.change { state in
             update(&state.vault.settings)
         }

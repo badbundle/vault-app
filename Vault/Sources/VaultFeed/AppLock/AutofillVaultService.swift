@@ -12,6 +12,9 @@ import Foundation
 ///   `onNotEnoughMemory`, so the sheet can send the user to Vault, and nothing is counted, derived or written.
 /// - **Read-only storage state.** Only the app writes the storage state, so this never raises the unlock deadline,
 ///   however long an attempt takes.
+/// - **The vault as it's stored now.** The app can turn the password on or off, or erase the vault, while the sheet is
+///   open. The device key opens nothing unless the storage state says it's in use, and every call to an open vault
+///   checks the vault is still stored the way it was when it opened (`VaultAccessGuard`).
 ///
 /// Setting, changing and turning off the password, and making a duress vault, are only for the app's Settings, so here
 /// they throw.
@@ -51,6 +54,7 @@ public final class AutofillVaultService: AppLockPasswordService {
             deadlineStore: ReadOnlyUnlockDeadlineStore(stateFile: stateFile),
             purgeVaultContents: purgeVaultContents,
             needsPassword: { Self.needsPassword(stateFile: stateFile) },
+            currentAccessMode: VaultAccessMode.reader(directory: directory),
         )
     }
 
@@ -66,6 +70,7 @@ public final class AutofillVaultService: AppLockPasswordService {
         work: any VaultUnlockWork = LiveVaultUnlockWork(),
         availableMemory: @escaping @Sendable () -> Int? = VaultUnlockService.processAvailableMemory,
         wrapStamper: VaultDeviceWrapStamper = VaultDeviceWrapStamper(),
+        currentAccessMode: (@Sendable () -> VaultAccessMode)? = nil,
     ) {
         let memoryNotifier = MemoryNotifier()
         unlockService = VaultUnlockService(
@@ -84,6 +89,7 @@ public final class AutofillVaultService: AppLockPasswordService {
                     memoryNotifier.notify()
                 }
             },
+            currentAccessMode: currentAccessMode,
         )
         self.attemptCounter = attemptCounter
         self.needsPassword = needsPassword
@@ -121,7 +127,8 @@ public final class AutofillVaultService: AppLockPasswordService {
     /// Opens the vault with the device key, while the password is off, once there's the memory to read it. Nothing's
     /// counted: device authentication, which the sheet asks for first if the app lock is on, is all it takes.
     ///
-    /// - Throws: `NotEnoughMemoryError` if there isn't the memory, or as `VaultUnlockService.unlockWithDeviceKey()`.
+    /// - Throws: `NotEnoughMemoryError` if there isn't the memory, or as `VaultUnlockService.unlockWithDeviceKey()`,
+    ///   including `VaultUnlockError.deviceKeyNotInUse` once the password's on again.
     public func openWithDeviceKey() async throws {
         try await requireMemoryHeadroom()
         try await unlockService.unlockWithDeviceKey()
@@ -190,28 +197,59 @@ struct ReadOnlyUnlockDeadlineStore: VaultUnlockDeadlineStoring {
 }
 
 extension VaultStoreSession {
-    /// A session with the vault the device key opens, for the widget extension, while the App Lock Password is off.
+    /// A session with the vault the device key opens, only to show it, while the App Lock Password is off: for the
+    /// widgets, QuickType requests, and filling QuickType again.
     ///
-    /// As in AutoFill, it never writes the storage state, and each save that replaces the file checks there's the
-    /// memory for it first. A widget has less to spare than AutoFill, so an increment it can't afford throws
-    /// `EncryptedVaultStoreError.notEnoughMemory` rather than getting the extension stopped.
+    /// It reads the file without its lock, and leaves nothing behind: no lock file, no wrap stamp, and no change to
+    /// the storage state. Writes throw `VaultStoreSessionError.locked`. Every read checks the vault is still stored
+    /// with the device key, and finds nothing once it isn't. Lock the session once it's read.
     ///
-    /// - Throws: As `VaultUnlockService.unlockWithDeviceKey()`, such as while the device is locked after starting up.
-    public static func openedWithDeviceKey(directory: URL) async throws -> VaultStoreSession {
-        let session = VaultStoreSession(target: .locked)
-        let stateFile = VaultStorageStateFile(directory: directory)
-        let availableMemory = VaultUnlockService.processAvailableMemory
-        let unlockService = VaultUnlockService(
+    /// - Throws: As `VaultUnlockService.unlockWithDeviceKey()`: `VaultUnlockError.deviceKeyNotInUse` unless the
+    ///   vault's stored with the device key now, or an error such as while the device is locked after starting up.
+    public static func openedToShowWithDeviceKey(directory: URL) async throws -> VaultStoreSession {
+        try await openedToShowWithDeviceKey(
             file: EncryptedVaultFile(directory: directory),
+            stateFile: VaultStorageStateFile(directory: directory),
+            deviceKeyStore: VaultDeviceKeychainStore(),
+            currentAccessMode: VaultAccessMode.reader(directory: directory),
+        )
+    }
+
+    static func openedToShowWithDeviceKey(
+        file: EncryptedVaultFile,
+        stateFile: VaultStorageStateFile,
+        deviceKeyStore: any VaultDeviceKeyStoring,
+        currentAccessMode: @escaping @Sendable () -> VaultAccessMode,
+    ) async throws -> VaultStoreSession {
+        let session = VaultStoreSession(target: .locked)
+        let unlockService = VaultUnlockService(
+            file: file,
             session: session,
             attemptCounter: AppLockPasswordAttemptCounter(),
             deadlineStore: ReadOnlyUnlockDeadlineStore(stateFile: stateFile),
+            deviceKeyStore: deviceKeyStore,
             purgeVaultContents: {},
-            availableMemory: availableMemory,
             wrapStamper: VaultDeviceWrapStamper(),
-            writeMemoryCheck: VaultWriteMemoryCheck(availableMemory: availableMemory) {},
+            currentAccessMode: currentAccessMode,
         )
-        try await unlockService.unlockWithDeviceKey()
+        try await unlockService.openWithDeviceKeyToShow()
         return session
+    }
+
+    /// Reads everything in the session `open` opens, then locks it, whatever happens: for a vault opened only to read
+    /// it once (`openedToShowWithDeviceKey(directory:)`).
+    public static func retrieveAndLock(
+        query: VaultStoreQuery = .init(),
+        from open: @Sendable () async throws -> VaultStoreSession,
+    ) async throws -> VaultRetrievalResult<VaultItem> {
+        let session = try await open()
+        do {
+            let result = try await session.retrieve(query: query)
+            await session.lock()
+            return result
+        } catch {
+            await session.lock()
+            throw error
+        }
     }
 }
