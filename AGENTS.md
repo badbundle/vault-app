@@ -12,6 +12,10 @@ This root-level file only covers things that apply across the whole repo (the Sw
 
 Read [`MANIFESTO.md`](./MANIFESTO.md) before proposing or implementing any feature that touches killphrases, search passphrases, lock state, authentication, telemetry, backups, exports, or anything in the Danger Zone. The manifesto is normative — when a proposed change conflicts with it, the manifesto wins unless it is amended first via a dedicated `MANIFESTO:` PR.
 
+## Issues
+
+Issues are recorded in Trackslash, in the `VAULT` project owned by `badbundle`, through its MCP server. Look there for what's open and in progress, and record a bug, a follow-up or a planned change there rather than in a TODO comment, a file in the repo or a PR body alone. Refer to an issue by its ref, such as `VAULT-60`. See [Issues](./README.md#issues).
+
 ## Validation
 
 There is no hosted CI. Before a PR can merge into `main`, its latest commit needs the **Validate (local)** status check, which is posted by running `make validate` in `Vault/`, using the checks in [`local-check.config.ts`](./local-check.config.ts). See [Validation](./README.md#validation) in the README and the rules in [`Vault/AGENTS.md`](./Vault/AGENTS.md).

@@ -70,3 +70,9 @@ The checks are in [`local-check.config.ts`](./local-check.config.ts). local-chec
 If the commit is already on GitHub, the result is posted straight away. Otherwise it's stored, and the pre-push hook posts it when you push, so you can validate before or after pushing. Every new commit needs validating again. Logs are kept in `.git/local-check/logs/`.
 
 The check is self-attested: it records that the commit passed on the machine that posted it, rather than on independent CI.
+
+### Issues
+
+Issues are tracked in [Trackslash](https://trackslash.com/badbundle/projects/VAULT), in the `VAULT` project owned by `badbundle`. Along with the commit history, it's the source of truth for the project's issues and progress: what's open, what's in progress and what's done. A bug, a follow-up or a planned change goes there, not in a TODO comment or a file in the repo.
+
+The project is public: anyone can read it, and anyone signed in to Trackslash can open an issue. Agents can read and update it through Trackslash's MCP server. Issues are referred to by their ref, such as `VAULT-60`.
