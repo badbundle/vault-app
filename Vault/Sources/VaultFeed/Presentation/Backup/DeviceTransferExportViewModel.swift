@@ -143,7 +143,8 @@ public final class DeviceTransferExportViewModel {
     }
 
     private nonisolated func encryptPayload(payload: VaultApplicationPayload) async throws -> EncryptedVault {
-        let backupExporter = EncryptedVaultEncoder(clock: clock, backupPassword: backupPassword)
+        // Nothing is saved, so a random amount of padding is enough, and the transfer stays quick.
+        let backupExporter = EncryptedVaultEncoder(clock: clock, backupPassword: backupPassword, padding: .random)
         return try backupExporter.encryptAndEncode(payload: payload)
     }
 }

@@ -15,8 +15,18 @@ public final class VaultBackupEncryptor {
     public enum PaddingMode: Equatable {
         case none
         case fixed(data: Data)
+        /// A random amount, which blurs a backup's size without hiding it.
         case random
+        /// As much as brings what's encrypted to just under a fixed size: `minimum` bytes, or the first of twice that,
+        /// four times and so on that it fits (VAULT-75). Backups of small vaults and of larger ones up to `minimum` are
+        /// then the same size, and a larger backup shows only roughly how large it is. The random amount of padding
+        /// is inside the encryption, so nothing readable without the password shows how much of it there is.
+        case toFixedSize(minimum: Int)
     }
+
+    /// How close under its fixed size a backup padded with `PaddingMode.toFixedSize(minimum:)` ends up: the most
+    /// bytes it can fall short by.
+    static let fixedSizeTolerance = 16
 
     public init(
         clock: any EpochClock,
@@ -46,17 +56,62 @@ public final class VaultBackupEncryptor {
             items: items,
             obfuscationPadding: makePadding(itemsCount: items.count),
         )
-        let intermediateEncoding = try IntermediateEncodedVaultEncoder().encode(vaultBackup: payload)
+        let intermediateEncoding = switch paddingMode {
+        case let .toFixedSize(minimum):
+            try Self.encodeFillingFixedSize(payload, minimum: minimum)
+        case .none, .fixed, .random:
+            try IntermediateEncodedVaultEncoder().encode(vaultBackup: payload)
+        }
         let encryptor = VaultEncryptor(key: key, keygenSalt: keygenSalt, keygenSignature: keygenSignature)
         return try encryptor.encrypt(encodedVault: intermediateEncoding)
     }
 
     private func makePadding(itemsCount: Int) -> Data {
         switch paddingMode {
-        case .none: Data()
+        case .none, .toFixedSize: Data()
         case let .fixed(data): data
         case .random: Data.random(count: randomBytesToGenerate(itemsCount: itemsCount))
         }
+    }
+
+    /// Encodes `payload` with as much random padding as brings the compressed encoding, which is what's encrypted, to
+    /// within `fixedSizeTolerance` bytes under the smallest fixed size it fits (`fixedSize(fitting:minimum:)`).
+    ///
+    /// Compression can't shrink random bytes, so each byte of padding adds about a byte. It aims for the middle of the
+    /// tolerance from that estimate and corrects by how far each try missed, which usually lands within two tries. It
+    /// keeps the largest encoding that fits, in case it doesn't get within the tolerance.
+    static func encodeFillingFixedSize(
+        _ payload: VaultBackupPayload,
+        minimum: Int,
+    ) throws -> IntermediateEncodedVault {
+        let encoder = IntermediateEncodedVaultEncoder()
+        var payload = payload
+        payload.obfuscationPadding = Data()
+        let unpadded = try encoder.encode(vaultBackup: payload)
+        let size = fixedSize(fitting: unpadded.data.count, minimum: minimum)
+        let aim = size - fixedSizeTolerance / 2
+        var best = unpadded
+        var paddingLength = aim - unpadded.data.count
+        for _ in 0 ..< 16 {
+            guard size - best.data.count > fixedSizeTolerance, paddingLength > 0 else { break }
+            payload.obfuscationPadding = Data.random(count: paddingLength)
+            let padded = try encoder.encode(vaultBackup: payload)
+            if padded.data.count <= size, padded.data.count > best.data.count {
+                best = padded
+            }
+            paddingLength += aim - padded.data.count
+        }
+        return best
+    }
+
+    /// The fixed size a compressed encoding of `length` bytes is padded to: `minimum`, or the first of twice that,
+    /// four times and so on that holds it.
+    static func fixedSize(fitting length: Int, minimum: Int) -> Int {
+        var size = minimum
+        while size < length {
+            size *= 2
+        }
+        return size
     }
 
     private func randomBytesToGenerate(itemsCount: Int) -> Int {

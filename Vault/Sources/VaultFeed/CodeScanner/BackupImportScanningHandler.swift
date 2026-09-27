@@ -100,7 +100,8 @@ public final class BackupImportScanningHandlerSimulated: SimulatedCodeScanningHa
                 tags: [],
             )
             let derived = try VaultKeyDeriver.testing.createEncryptionKey(password: "hello")
-            let encoder = EncryptedVaultEncoder(clock: EpochClockImpl(), backupPassword: derived)
+            // Stands in for a transfer from another device, which is padded by a random amount.
+            let encoder = EncryptedVaultEncoder(clock: EpochClockImpl(), backupPassword: derived, padding: .random)
             return try encoder.encryptAndEncode(payload: application)
         } catch {
             return EncryptedVault(

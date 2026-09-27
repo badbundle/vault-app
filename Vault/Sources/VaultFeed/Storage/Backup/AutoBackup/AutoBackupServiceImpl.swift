@@ -57,6 +57,9 @@ public final class AutoBackupServiceImpl: AutoBackupService {
     private let clock: any EpochClock
     private let configurationStorage: any AutoBackupConfigurationStorage
     private let providers: [any BackupStorageProvider]
+    /// How each backup is padded: to a fixed size, as every saved backup is (VAULT-75). Only tests that aren't about
+    /// the padding choose otherwise, to be quick.
+    let padding: EncryptedVaultEncoder.Padding
     /// Goes up whenever the open vault changes. A backup, or a clean-up, that started for one vault stops before it
     /// changes anything once this has moved on.
     private var vaultGeneration = 0
@@ -84,12 +87,14 @@ public final class AutoBackupServiceImpl: AutoBackupService {
         clock: any EpochClock,
         configurationStorage: any AutoBackupConfigurationStorage,
         providers: [any BackupStorageProvider],
+        padding: EncryptedVaultEncoder.Padding = .toFixedSize,
     ) {
         self.dataModel = dataModel
         self.backupEventLogger = backupEventLogger
         self.clock = clock
         self.configurationStorage = configurationStorage
         self.providers = providers
+        self.padding = padding
         vaultToken = configurationStorage.vaultToken
         configuration = configurationStorage.autoBackupConfiguration() ?? AutoBackupConfiguration()
 
@@ -110,6 +115,7 @@ public final class AutoBackupServiceImpl: AutoBackupService {
         clock: any EpochClock,
         defaults: Defaults,
         providers: [any BackupStorageProvider],
+        padding: EncryptedVaultEncoder.Padding = .toFixedSize,
     ) {
         self.init(
             dataModel: dataModel,
@@ -117,6 +123,7 @@ public final class AutoBackupServiceImpl: AutoBackupService {
             clock: clock,
             configurationStorage: defaults,
             providers: providers,
+            padding: padding,
         )
     }
 
@@ -458,7 +465,7 @@ public final class AutoBackupServiceImpl: AutoBackupService {
 
         // Encrypt the payload
         progress.yield(.init(phase: .encrypting))
-        let encoder = EncryptedVaultEncoder(clock: clock, backupPassword: backupPassword)
+        let encoder = EncryptedVaultEncoder(clock: clock, backupPassword: backupPassword, padding: padding)
         let encryptedVault = try encoder.encryptAndEncode(payload: payload)
 
         // Create export payload
