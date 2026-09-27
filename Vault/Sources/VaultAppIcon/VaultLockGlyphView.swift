@@ -4,8 +4,8 @@ import SwiftUI
 ///
 /// One drawing serves both the app icon (wheel at rest, door shut) and every frame
 /// of the lock animation (wheel spinning, door swinging on its left-hand hinge).
-/// The door and wheel are the palette's two tones, each a flat, solid fill: no
-/// gradients, blur, shadow or material effects, so it renders the same on screen,
+/// The door and wheel each take their color from the palette as a flat, solid fill:
+/// no gradients, blur, shadow or material effects, so it renders the same on screen,
 /// in `ImageRenderer` and in snapshots.
 public struct VaultLockGlyphView: View {
     public var wheelRotation: Angle
