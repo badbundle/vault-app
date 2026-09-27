@@ -32,6 +32,12 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
                 switch viewModel.unlockAvailability {
                 case .checking:
                     ProgressView()
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Cancel", action: cancel)
+                                    .tint(.red)
+                            }
+                        }
                 case .available:
                     AppLockGate(appLock: viewModel.appLock, cancel: cancel) {
                         VaultAutofillCodeSelectorView(
@@ -42,12 +48,14 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
                             cancelSubject: viewModel.cancelRequestSubject,
                         )
                     }
-                case .needsTheApp:
-                    AppLockOpenVaultView(cancel: cancel)
+                case .needsTheApp(.notEnoughMemory):
+                    AppLockOpenVaultView(reason: .notEnoughMemory, cancel: cancel)
+                case .needsTheApp(.unavailable):
+                    AppLockOpenVaultView(reason: .unavailableHere, cancel: cancel)
                 }
             }
             .task {
-                await viewModel.checkUnlockAvailability()
+                await viewModel.prepareToUnlock()
             }
         case let .unimplemented(name):
             Text("Unimplemented \(name)")

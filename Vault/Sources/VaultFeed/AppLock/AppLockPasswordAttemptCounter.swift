@@ -42,9 +42,11 @@ public actor AppLockPasswordAttemptCounter {
     ///
     /// An attempt that's still underway counts as a wrong one, so ask once it's over.
     public func remainingDelay() throws -> Duration {
-        let now = clock.now
-        guard let record = try currentRecord(now: now) else { return .zero }
-        return Self.remainingDelay(after: record, now: now)
+        try storage.withExclusiveAccess {
+            let now = clock.now
+            guard let record = try currentRecord(now: now) else { return .zero }
+            return Self.remainingDelay(after: record, now: now)
+        }
     }
 
     /// Counts an attempt at the password. Call it before deriving the key, and try the password only if the attempt
@@ -54,15 +56,17 @@ public actor AppLockPasswordAttemptCounter {
     ///   last wrong attempt. A delayed attempt isn't counted, and the password mustn't be tried.
     /// - Throws: If the count can't be read or saved. The password mustn't be tried then either.
     public func countAttempt() throws -> AppLockPasswordAttempt {
-        let now = clock.now
-        let previous = try currentRecord(now: now)
-        if let previous {
-            let remaining = Self.remainingDelay(after: previous, now: now)
-            guard remaining == .zero else { return .delayed(remaining) }
+        try storage.withExclusiveAccess {
+            let now = clock.now
+            let previous = try currentRecord(now: now)
+            if let previous {
+                let remaining = Self.remainingDelay(after: previous, now: now)
+                guard remaining == .zero else { return .delayed(remaining) }
+            }
+            let count = (previous?.count ?? 0) + 1
+            try storage.save(AppLockPasswordAttemptRecord(count: count, latestAt: now))
+            return .counted(reachesEraseThreshold: count >= Self.eraseThreshold)
         }
-        let count = (previous?.count ?? 0) + 1
-        try storage.save(AppLockPasswordAttemptRecord(count: count, latestAt: now))
-        return .counted(reachesEraseThreshold: count >= Self.eraseThreshold)
     }
 
     /// Clears the count once a password has opened a vault, whichever vault it was.
@@ -70,7 +74,9 @@ public actor AppLockPasswordAttemptCounter {
     /// Clear it too when a password is set where there wasn't one, so that a count left in the keychain from before,
     /// which can outlive even deleting the app, doesn't carry over to the new password.
     public func reset() throws {
-        try storage.remove()
+        try storage.withExclusiveAccess {
+            try storage.remove()
+        }
     }
 
     // MARK: - Delay

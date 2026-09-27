@@ -248,6 +248,20 @@ struct AppLockPasswordAttemptCounterTests {
         #expect(attempts.allSatisfy { $0 == .counted(reachesEraseThreshold: false) })
     }
 
+    // MARK: - Other processes
+
+    /// The app and the AutoFill extension can count attempts at the same time, as on an iPad, so every read and write
+    /// of the record happens with no other process able to.
+    @Test
+    func everyChange_holdsExclusiveAccessToTheRecord() async throws {
+        let (sut, storage, clock) = makeSUT()
+
+        try await makeAttempts(6, with: sut, clock: clock)
+        try await sut.reset()
+
+        #expect(storage.accessesOutsideExclusiveAccess == 0)
+    }
+
     // MARK: - Storage failures
 
     @Test
@@ -321,9 +335,30 @@ private final class InMemoryAppLockPasswordAttemptStorage: AppLockPasswordAttemp
         var record: AppLockPasswordAttemptRecord?
         var failsToLoad = false
         var failsToSave = false
+        var isExclusive = false
+        var accessesOutsideExclusiveAccess = 0
     }
 
     private let state = Mutex(State())
+
+    /// Reads and writes of the record made without exclusive access, which another process could interleave with.
+    var accessesOutsideExclusiveAccess: Int {
+        state.withLock(\.accessesOutsideExclusiveAccess)
+    }
+
+    func withExclusiveAccess<T>(_ body: () throws -> T) throws -> T {
+        state.withLock { $0.isExclusive = true }
+        defer { state.withLock { $0.isExclusive = false } }
+        return try body()
+    }
+
+    private func noteAccess() {
+        state.withLock { state in
+            if !state.isExclusive {
+                state.accessesOutsideExclusiveAccess += 1
+            }
+        }
+    }
 
     var record: AppLockPasswordAttemptRecord? {
         state.withLock(\.record)
@@ -340,13 +375,15 @@ private final class InMemoryAppLockPasswordAttemptStorage: AppLockPasswordAttemp
     }
 
     func load() throws -> AppLockPasswordAttemptRecord? {
-        try state.withLock { state in
+        noteAccess()
+        return try state.withLock { state in
             guard !state.failsToLoad else { throw Failure() }
             return state.record
         }
     }
 
     func save(_ record: AppLockPasswordAttemptRecord) throws {
+        noteAccess()
         try state.withLock { state in
             guard !state.failsToSave else { throw Failure() }
             state.record = record
@@ -354,6 +391,7 @@ private final class InMemoryAppLockPasswordAttemptStorage: AppLockPasswordAttemp
     }
 
     func remove() {
+        noteAccess()
         state.withLock { $0.record = nil }
     }
 }

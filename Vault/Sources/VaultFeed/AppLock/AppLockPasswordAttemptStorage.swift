@@ -14,7 +14,8 @@ struct AppLockPasswordAttemptRecord: Codable, Equatable {
 /// Where `AppLockPasswordAttemptCounter` keeps its record.
 ///
 /// Synchronous, so that the counter reads, updates and writes the record without pausing in between: two attempts
-/// counted at once in the same process can't both see the same count.
+/// counted at once in the same process can't both see the same count. `withExclusiveAccess(_:)` does the same across
+/// processes, for the app and the AutoFill extension running side by side, as they can on an iPad.
 protocol AppLockPasswordAttemptStorage: Sendable {
     /// The record, or `nil` if there isn't one: no attempts since the password was last entered correctly.
     func load() throws -> AppLockPasswordAttemptRecord?
@@ -22,6 +23,15 @@ protocol AppLockPasswordAttemptStorage: Sendable {
     func save(_ record: AppLockPasswordAttemptRecord) throws
     /// Removes the record. Does nothing if there isn't one.
     func remove() throws
+    /// Runs `body`, which reads and writes the record, while no other process can.
+    func withExclusiveAccess<T>(_ body: () throws -> T) throws -> T
+}
+
+extension AppLockPasswordAttemptStorage {
+    /// Storage no other process shares needs no more than the counter's own isolation.
+    func withExclusiveAccess<T>(_ body: () throws -> T) throws -> T {
+        try body()
+    }
 }
 
 /// Keeps the password attempt record in the keychain, on this device only.
@@ -36,9 +46,29 @@ protocol AppLockPasswordAttemptStorage: Sendable {
 /// wrong attempt.
 struct AppLockPasswordAttemptKeychainStorage: AppLockPasswordAttemptStorage {
     let accessGroup: String?
+    /// The file whose lock the app and its extensions take around each change to the record.
+    private let lockFileURL: @Sendable () -> URL
 
-    init(accessGroup: String? = VaultSharedStorage.appGroupID) {
+    init(
+        accessGroup: String? = VaultSharedStorage.appGroupID,
+        lockFileURL: @escaping @Sendable () -> URL = {
+            VaultSharedStorage.directory().appending(path: "app-lock-password-attempts.lock")
+        },
+    ) {
         self.accessGroup = accessGroup
+        self.lockFileURL = lockFileURL
+    }
+
+    /// Holds an exclusive `flock` on the lock file for `body`, waiting for another process to let go of it first.
+    /// Every process takes it only for the moment it reads and writes the keychain item.
+    func withExclusiveAccess<T>(_ body: () throws -> T) throws -> T {
+        let descriptor = open(lockFileURL().path, O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+        guard descriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(descriptor) }
+        while flock(descriptor, LOCK_EX) != 0 {
+            guard errno == EINTR else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        }
+        return try body()
     }
 
     func load() throws -> AppLockPasswordAttemptRecord? {

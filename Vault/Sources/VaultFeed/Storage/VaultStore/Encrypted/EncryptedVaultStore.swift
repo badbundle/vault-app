@@ -38,6 +38,7 @@ public final class EncryptedVaultStore: Sendable {
     ///     service's, so both derive the same way.
     ///   - wrapStamper: What stamps the key wrap of a duress vault made from this one, and of this vault when it's
     ///     rekeyed.
+    ///   - memoryCheck: Checked before every save, in the AutoFill extension.
     init(
         file: EncryptedVaultFile,
         slot: VaultSlotFile.OpenedSlot,
@@ -46,8 +47,9 @@ public final class EncryptedVaultStore: Sendable {
         currentDate: @escaping @Sendable () -> Date = { Date() },
         work: any VaultUnlockWork = LiveVaultUnlockWork(),
         wrapStamper: any VaultWrapStamping = VaultDeviceWrapStamper(),
+        memoryCheck: VaultWriteMemoryCheck? = nil,
     ) {
-        let persistence = SlotFilePersistence(file: file, slot: slot)
+        let persistence = SlotFilePersistence(file: file, slot: slot, memoryCheck: memoryCheck)
         self.persistence = persistence
         records = RecordVaultStore(
             state: state,

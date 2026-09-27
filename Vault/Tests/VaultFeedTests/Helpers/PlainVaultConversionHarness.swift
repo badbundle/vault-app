@@ -33,7 +33,7 @@ struct PlainVaultConversionHarness {
         directory: URL,
         openedNormally: Bool = true,
         releasingPlainStore: @escaping @Sendable (VaultStoreSession) async -> Void = { _ in },
-        clearingCredentialIdentities: @escaping @Sendable () -> Void = {},
+        clearingCredentialIdentities: @escaping @Sendable () throws -> Void = {},
         backgroundTime: (FaultInjectingSlotFileSystem) -> VaultBackgroundTime = { _ in .none },
     ) throws {
         let store = try PersistedLocalVaultStoreFactory(storageDirectory: directory).makeVaultStoreOrThrow()
@@ -52,7 +52,7 @@ struct PlainVaultConversionHarness {
         store: PersistedLocalVaultStore,
         openedNormally: Bool = true,
         releasingPlainStore: @escaping @Sendable (VaultStoreSession) async -> Void = { _ in },
-        clearingCredentialIdentities: @escaping @Sendable () -> Void = {},
+        clearingCredentialIdentities: @escaping @Sendable () throws -> Void = {},
         backgroundTime: (FaultInjectingSlotFileSystem) -> VaultBackgroundTime = { _ in .none },
     ) throws {
         let session = VaultStoreSession(target: .plain(store))
@@ -83,7 +83,7 @@ struct PlainVaultConversionHarness {
                 },
                 clearCredentialIdentities: {
                     log.modify { $0.append("clear QuickType") }
-                    clearingCredentialIdentities()
+                    try clearingCredentialIdentities()
                 },
                 reloadWidgets: { log.modify { $0.append("reload widgets") } },
             ),

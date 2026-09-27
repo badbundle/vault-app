@@ -215,12 +215,20 @@ struct AppScreenCaptureCoverView: View {
     }
 }
 
-/// Sends the user to Vault, where the AutoFill extension can't unlock the vault itself: it hasn't the memory to
-/// derive the App Lock Password's key. The app always can.
+/// Sends the user to Vault, where the AutoFill extension can't open the vault itself. The app always can.
 public struct AppLockOpenVaultView: View {
+    public enum Reason: Equatable, Sendable {
+        /// The extension hasn't the memory to derive the App Lock Password's key, or to save a change.
+        case notEnoughMemory
+        /// The vault can't be opened in AutoFill right now, such as while the app is changing how it's stored.
+        case unavailableHere
+    }
+
+    var reason: Reason
     var cancel: () -> Void
 
-    public init(cancel: @escaping () -> Void) {
+    public init(reason: Reason, cancel: @escaping () -> Void) {
+        self.reason = reason
         self.cancel = cancel
     }
 
@@ -232,11 +240,9 @@ public struct AppLockOpenVaultView: View {
                         .font(.title2.bold())
                         .foregroundStyle(.primary)
                         .accessibilityAddTraits(.isHeader)
-                    Text(
-                        "AutoFill doesn't have enough memory to unlock your vault right now. Open Vault to copy your code instead.",
-                    )
-                    .font(.body)
-                    .foregroundStyle(.secondary)
+                    Text(message)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
                 }
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
@@ -249,6 +255,15 @@ public struct AppLockOpenVaultView: View {
                 Button("Cancel", action: cancel)
                     .tint(.red)
             }
+        }
+    }
+
+    private var message: String {
+        switch reason {
+        case .notEnoughMemory:
+            "AutoFill doesn't have enough memory to unlock your vault right now. Open Vault to copy your code instead."
+        case .unavailableHere:
+            "AutoFill can't open your vault right now. Open Vault to copy your code instead."
         }
     }
 }
@@ -325,6 +340,6 @@ public struct AppLockGate<Content: View>: View {
 
 #Preview("AutoFill, open Vault") {
     NavigationStack {
-        AppLockOpenVaultView {}
+        AppLockOpenVaultView(reason: .notEnoughMemory) {}
     }
 }

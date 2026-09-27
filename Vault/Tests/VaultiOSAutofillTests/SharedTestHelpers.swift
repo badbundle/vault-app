@@ -1,6 +1,7 @@
 import Foundation
 import FoundationExtensions
 import VaultFeed
+@testable import VaultiOSAutofill
 
 func anyVaultItemMetadata(
     lockState: VaultItemLockState = .notLocked,
@@ -44,5 +45,76 @@ struct StubKillphraseKeyStore: KillphraseKeyStore {
 struct StubSearchPassphraseKeyStore: SearchPassphraseKeyStore {
     func loadOrCreate() async throws -> KeyData<32> {
         .zero()
+    }
+}
+
+/// The AutoFill extension's App Lock Password, with the password kept in memory, that counts how often the vault is
+/// locked and can be told whether there's the memory to unlock.
+@MainActor
+final class FakeAutofillPasswordService: AutofillPasswordUnlocking {
+    enum Headroom {
+        case enough
+        case notEnough
+        /// The check never answers, as if it's still reading the file.
+        case neverAnswers
+    }
+
+    var onNotEnoughMemory: (@MainActor () -> Void)?
+    private(set) var lockCount = 0
+    private let base: FakeAppLockPasswordService
+    private let headroom: Headroom
+
+    init(password: String = "correct horse", headroom: Headroom = .enough) {
+        base = FakeAppLockPasswordService(password: password)
+        self.headroom = headroom
+    }
+
+    var isPasswordSet: Bool {
+        base.isPasswordSet
+    }
+
+    func hasMemoryHeadroomToUnlock() async throws -> Bool {
+        switch headroom {
+        case .enough:
+            return true
+        case .notEnough:
+            return false
+        case .neverAnswers:
+            try await Task.sleep(for: .seconds(60 * 60))
+            return false
+        }
+    }
+
+    func lockVault() async {
+        lockCount += 1
+    }
+
+    /// Finds, as an unlock or a save would, that there isn't the memory.
+    func runOutOfMemory() {
+        onNotEnoughMemory?()
+    }
+
+    func remainingDelay() async throws -> Duration {
+        try await base.remainingDelay()
+    }
+
+    func unlock(password: String) async throws -> AppLockPasswordResult {
+        try await base.unlock(password: password)
+    }
+
+    func setPassword(_ password: String) async throws {
+        try await base.setPassword(password)
+    }
+
+    func changePassword(current: String, new: String) async throws -> AppLockPasswordResult {
+        try await base.changePassword(current: current, new: new)
+    }
+
+    func turnOffPassword(current: String) async throws -> AppLockPasswordResult {
+        try await base.turnOffPassword(current: current)
+    }
+
+    func makeDuressVault(password: String) async throws {
+        try await base.makeDuressVault(password: password)
     }
 }

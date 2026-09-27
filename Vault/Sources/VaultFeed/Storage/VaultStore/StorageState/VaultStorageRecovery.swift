@@ -268,10 +268,12 @@ public struct VaultStorageRecovery: Sendable {
 
     /// Clears the QuickType identity store and reloads the widgets, if a committed conversion hadn't yet, then clears
     /// the journal. Call it once at launch, after `recoverAtLaunch()`. It's safe to repeat.
-    public func finishClearingSystemSurfaces(_ clear: @Sendable () async -> Void) async throws {
+    ///
+    /// If `clear` throws, the journal stays, so the next launch tries again.
+    public func finishClearingSystemSurfaces(_ clear: @Sendable () async throws -> Void) async throws {
         let stateFile = VaultStorageStateFile(directory: directory, fileSystem: fileSystem)
         guard try stateFile.read().transition == .clearingSystemSurfaces else { return }
-        await clear()
+        try await clear()
         // Read again: an unlock may have raised the deadline while clearing.
         try await stateFile.update { state in
             if state.transition == .clearingSystemSurfaces {

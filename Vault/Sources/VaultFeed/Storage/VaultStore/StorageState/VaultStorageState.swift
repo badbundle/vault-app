@@ -204,6 +204,12 @@ extension VaultStorageState {
     /// AutoFill and widget extensions. Anything else, including a state file that can't be read, counts as no, so
     /// they never open a plain store that's being converted or is out of date.
     public static func isPlain(inDirectory directory: URL) -> Bool {
-        (try? VaultStorageStateFile(directory: directory).read().isPlain) ?? false
+        current(inDirectory: directory)?.isPlain ?? false
+    }
+
+    /// The state as it is now, for a process that mustn't recover from an interrupted change: the AutoFill and widget
+    /// extensions. `nil` if it can't be read.
+    public static func current(inDirectory directory: URL) -> VaultStorageState? {
+        try? VaultStorageStateFile(directory: directory).read()
     }
 }

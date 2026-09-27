@@ -49,6 +49,29 @@ struct AppLockPasswordAttemptKeychainStorageTests {
         #expect(try JSONDecoder().decode(AppLockPasswordAttemptRecord.self, from: data) == record)
     }
 
+    /// Another process opening the lock file can't take the lock while a change is underway, and can straight after.
+    @Test
+    func withExclusiveAccess_locksOutOtherProcessesMeanwhile() throws {
+        let lockFile = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString).lock")
+        defer { try? FileManager.default.removeItem(at: lockFile) }
+        let sut = AppLockPasswordAttemptKeychainStorage(accessGroup: nil, lockFileURL: { lockFile })
+
+        let lockedMeanwhile = try sut.withExclusiveAccess {
+            !Self.canLock(lockFile)
+        }
+
+        #expect(lockedMeanwhile)
+        #expect(Self.canLock(lockFile))
+    }
+
+    /// Whether a separate open of the file, as another process would make, can take its lock now.
+    private static func canLock(_ url: URL) -> Bool {
+        let descriptor = open(url.path, O_RDWR)
+        guard descriptor >= 0 else { return false }
+        defer { close(descriptor) }
+        return flock(descriptor, LOCK_EX | LOCK_NB) == 0
+    }
+
     private func anyRecord() -> AppLockPasswordAttemptRecord {
         AppLockPasswordAttemptRecord(count: 7, latestAt: .now)
     }

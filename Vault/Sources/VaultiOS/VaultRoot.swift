@@ -219,21 +219,35 @@ public enum VaultRoot {
         isVaultPlain: { isVaultPlain },
     )
 
+    /// How the vault is stored as an AutoFill request finds it, read afresh
+    /// for every request: the extension's process can outlive one, and the
+    /// app can turn encryption on meanwhile.
+    public nonisolated static var autofillVaultMode: AutofillVaultMode {
+        AutofillVaultMode(state: VaultStorageState.current(inDirectory: VaultSharedStorage.directory()))
+    }
+
     /// What the AutoFill extension unlocks an encrypted vault with, in its own
     /// process: the App Lock Password, counted against the same attempts as
-    /// the app. `nil` in the app, which gets its own with Settings, and while
-    /// the vault is plain.
+    /// the app. Made the first time a request finds the vault encrypted, and
+    /// kept for the rest of the process.
     @MainActor
-    public static let autofillPasswordService: EncryptedVaultPasswordService? = {
-        guard isAppExtension, storageMode == .password else { return nil }
-        return EncryptedVaultPasswordService(
+    public static func autofillPasswordService() -> AutofillVaultPasswordService {
+        if let service = cachedAutofillPasswordService {
+            return service
+        }
+        let service = AutofillVaultPasswordService(
             directory: vaultStorageDirectory,
             session: vaultStore,
             purgeVaultContents: { @MainActor in
                 await vaultDataModel.purgeVaultContents()
             },
         )
-    }()
+        cachedAutofillPasswordService = service
+        return service
+    }
+
+    @MainActor
+    private static var cachedAutofillPasswordService: AutofillVaultPasswordService?
 
     @MainActor
     static let killphraseRehashService: KillphraseRehashService = makeKillphraseRehashService()
@@ -571,10 +585,13 @@ public enum VaultRoot {
             let otpAutofillStore = vaultOtpAutofillStore
             let directory = vaultStorageDirectory
             Task {
+                // A clear that fails leaves the journal, so the next launch tries again.
                 try? await VaultStorageRecovery(directory: directory).finishClearingSystemSurfaces {
-                    try? await otpAutofillStore.removeAll()
+                    try await otpAutofillStore.removeAll()
                     await reloadWidgetTimelines()
                 }
+                // And it's emptied at every launch anyway: nothing should be in it while the vault is encrypted.
+                try? await otpAutofillStore.removeAll()
             }
         }
     }
@@ -584,5 +601,33 @@ public enum VaultRoot {
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
+    }
+}
+
+/// How the vault is stored, as the AutoFill extension finds it for a request.
+public enum AutofillVaultMode: Equatable, Sendable {
+    /// In the plain store: device authentication unlocks it, if the app lock is on.
+    case plain
+    /// Encrypted: the App Lock Password unlocks it, after device authentication.
+    case encrypted
+    /// Anything else, which the extension can't open: being converted, rekeyed or erased, the password turned off
+    /// (until VAULT-50), or a state that can't be read.
+    case unavailable
+
+    /// - Parameter state: The storage state, or `nil` if it can't be read.
+    init(state: VaultStorageState?) {
+        guard let state else {
+            self = .unavailable
+            return
+        }
+        self = switch (state.mode, state.transition) {
+        case (.plain, nil):
+            .plain
+        // Once a conversion has committed, the vault opens with the password, whatever the app still has to tidy up.
+        case (.password, nil), (.password, .deletingPlainStore?), (.password, .clearingSystemSurfaces?):
+            .encrypted
+        default:
+            .unavailable
+        }
     }
 }

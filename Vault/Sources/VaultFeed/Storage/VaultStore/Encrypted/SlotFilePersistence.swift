@@ -17,15 +17,25 @@ actor SlotFilePersistence: VaultRecordPersistence {
     private(set) var file: EncryptedVaultFile
     /// The vault's slot, as this vault last saved or read it.
     private(set) var slot: VaultSlotFile.OpenedSlot
+    /// Checked before each save in the AutoFill extension. `nil` in the app.
+    private let memoryCheck: VaultWriteMemoryCheck?
 
-    init(file: EncryptedVaultFile, slot: VaultSlotFile.OpenedSlot) {
+    init(file: EncryptedVaultFile, slot: VaultSlotFile.OpenedSlot, memoryCheck: VaultWriteMemoryCheck? = nil) {
         self.file = file
         self.slot = slot
+        self.memoryCheck = memoryCheck
     }
 
     func save(_ state: VaultRecordState) async throws -> VaultRecordSaveOutcome {
         var payload = try EncryptedVaultPayload.encode(state)
         defer { SlotRandom.wipe(&payload.data) }
+        if let memoryCheck {
+            // Before the file is read: from here on the save holds it twice, and the JSON four times over.
+            guard let (_, fileSize) = try file.readHeader() else { throw EncryptedVaultStoreError.fileMissing }
+            guard memoryCheck.allowsSave(fileSize: fileSize, jsonSize: payload.data.count) else {
+                throw EncryptedVaultStoreError.notEnoughMemory
+            }
+        }
         let slot = slot
         let (saved, outcome) = try await file.withLock { [payload] file in
             guard var contents = try file.read() else { throw EncryptedVaultStoreError.fileMissing }
