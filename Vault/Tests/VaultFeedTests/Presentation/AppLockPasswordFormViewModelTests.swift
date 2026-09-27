@@ -456,6 +456,148 @@ struct AppLockPasswordFormViewModelTests {
         #expect(!sut.isNewPasswordRefused)
     }
 
+    // MARK: - Erasing after failed passwords
+
+    @Test
+    func turnOnErasing_isOffByDefaultAndAsksForTheCurrentPasswordOnly() async throws {
+        let (sut, _, appLock) = try await makeSUT(purpose: .turnOnErasing)
+
+        #expect(!appLock.erasesAfterFailedPasswords)
+        #expect(sut.needsCurrentPassword)
+        #expect(!sut.needsNewPassword)
+        #expect(!sut.canSubmit)
+    }
+
+    @Test
+    func submit_turnOnErasing_right_turnsItOn() async throws {
+        let (sut, service, appLock) = try await makeSUT(purpose: .turnOnErasing)
+        sut.currentPassword = Self.password
+
+        await sut.submit()
+
+        #expect(sut.state == .done)
+        #expect(sut.currentPassword.isEmpty)
+        #expect(appLock.erasesAfterFailedPasswords)
+        #expect(service.erasesAfterFailedPasswords)
+    }
+
+    /// A wrong password counts as a wrong attempt, as on the lock screen, and changes nothing.
+    @Test
+    func submit_turnOnErasing_wrong_saysSoAndLeavesItOff() async throws {
+        let (sut, _, appLock) = try await makeSUT(purpose: .turnOnErasing)
+        sut.currentPassword = "wrong"
+
+        await sut.submit()
+
+        #expect(sut.state == .editing)
+        #expect(sut.isCurrentPasswordWrong)
+        #expect(sut.wrongPasswordCount == 1)
+        #expect(sut.currentPassword.isEmpty)
+        #expect(!appLock.erasesAfterFailedPasswords)
+    }
+
+    @Test
+    func submit_turnOnErasing_fifthWrong_waitsAMinute() async throws {
+        let clock = FakeAppLockClock()
+        let (sut, _, appLock) = try await makeSUT(purpose: .turnOnErasing, clock: clock)
+
+        for _ in 1 ... 5 {
+            sut.currentPassword = "wrong"
+            await sut.submit()
+        }
+
+        #expect(sut.wrongPasswordCount == 5)
+        #expect(sut.retryAt == clock.now.advanced(by: .seconds(60)))
+        #expect(!appLock.erasesAfterFailedPasswords)
+    }
+
+    @Test
+    func submit_turnOffErasing_right_turnsItOff() async throws {
+        let (sut, _, appLock) = try await makeSUT(purpose: .turnOffErasing, erasesAfterFailedPasswords: true)
+        #expect(appLock.erasesAfterFailedPasswords)
+        sut.currentPassword = Self.password
+
+        await sut.submit()
+
+        #expect(sut.state == .done)
+        #expect(!appLock.erasesAfterFailedPasswords)
+    }
+
+    @Test
+    func submit_turnOffErasing_wrong_leavesItOn() async throws {
+        let (sut, _, appLock) = try await makeSUT(purpose: .turnOffErasing, erasesAfterFailedPasswords: true)
+        sut.currentPassword = "wrong"
+
+        await sut.submit()
+
+        #expect(sut.isCurrentPasswordWrong)
+        #expect(appLock.erasesAfterFailedPasswords)
+    }
+
+    /// It's a setting of the device, so a duress vault turns it on with its own password, just as the real vault does,
+    /// and the real vault's password is as wrong there as it is for changing the password.
+    @Test
+    func submit_turnOnErasing_inADuressVault_takesThatVaultsPassword() async throws {
+        let (sut, service, appLock) = try await makeSUTInADuressVault(purpose: .turnOnErasing)
+        sut.currentPassword = Self.password
+        await sut.submit()
+        #expect(sut.isCurrentPasswordWrong)
+
+        sut.currentPassword = Self.duressPassword
+        await sut.submit()
+
+        #expect(sut.state == .done)
+        #expect(appLock.erasesAfterFailedPasswords)
+        #expect(service.erasesAfterFailedPasswords)
+    }
+
+    /// It's a setting of the device, so a duress vault's own password turns it off for every vault, as the real
+    /// vault's does. That's accepted: it only stops guessing on the device, and the escalating waits still apply (see
+    /// "Consequences to accept" in `docs/on-device-encryption.md`).
+    @Test
+    func submit_turnOffErasing_inADuressVault_turnsItOffForTheDevice() async throws {
+        let (sut, service, appLock) = try await makeSUTInADuressVault(
+            purpose: .turnOffErasing,
+            erasesAfterFailedPasswords: true,
+        )
+        #expect(appLock.erasesAfterFailedPasswords)
+        sut.currentPassword = Self.duressPassword
+
+        await sut.submit()
+
+        #expect(sut.state == .done)
+        #expect(!appLock.erasesAfterFailedPasswords)
+        #expect(!service.erasesAfterFailedPasswords)
+    }
+
+    /// The attempt that would make the erase threshold's wrong one in a row is only tried at the lock screen, erasing
+    /// on or off. Nothing's counted, and the form says to lock Vault.
+    @Test(arguments: [false, true])
+    func submit_tenthAttempt_isOnlyAtTheLockScreen(erases: Bool) async throws {
+        let clock = FakeAppLockClock()
+        let purpose: AppLockPasswordFormViewModel.Purpose = erases ? .turnOffErasing : .turnOnErasing
+        let (sut, service, appLock) = try await makeSUT(
+            purpose: purpose,
+            erasesAfterFailedPasswords: erases,
+            clock: clock,
+        )
+        for _ in 1 ..< AppLockPasswordAttemptCounter.eraseThreshold {
+            sut.currentPassword = "wrong"
+            await sut.submit()
+            clock.advance(by: .seconds(60 * 60))
+        }
+
+        sut.currentPassword = Self.password
+        await sut.submit()
+
+        #expect(sut.isOnlyAtTheLockScreen)
+        #expect(!sut.canSubmit)
+        #expect(sut.state == .editing)
+        #expect(sut.currentPassword.isEmpty)
+        #expect(appLock.erasesAfterFailedPasswords == erases)
+        #expect(service.erasesAfterFailedPasswords == erases)
+    }
+
     // MARK: - Leaving
 
     @Test
@@ -488,9 +630,14 @@ extension AppLockPasswordFormViewModelTests {
     /// A form for a password that's set, with the app unlocked, as it is in Settings.
     private func makeSUT(
         purpose: AppLockPasswordFormViewModel.Purpose,
+        erasesAfterFailedPasswords: Bool = false,
         clock: FakeAppLockClock = FakeAppLockClock(),
     ) async throws -> (AppLockPasswordFormViewModel, FakeAppLockPasswordService, AppLockService) {
-        let service = FakeAppLockPasswordService(password: Self.password, clock: clock)
+        let service = FakeAppLockPasswordService(
+            password: Self.password,
+            erasesAfterFailedPasswords: erasesAfterFailedPasswords,
+            clock: clock,
+        )
         let appLock = try makeAppLock(policy: .alwaysAllow, service: service, clock: clock)
         await appLock.unlock()
         await appLock.unlock(password: Self.password)
@@ -501,8 +648,12 @@ extension AppLockPasswordFormViewModelTests {
     /// A form in a duress vault: unlocked with the duress password, as Settings would be.
     private func makeSUTInADuressVault(
         purpose: AppLockPasswordFormViewModel.Purpose,
+        erasesAfterFailedPasswords: Bool = false,
     ) async throws -> (AppLockPasswordFormViewModel, FakeAppLockPasswordService, AppLockService) {
-        let service = FakeAppLockPasswordService(password: Self.password)
+        let service = FakeAppLockPasswordService(
+            password: Self.password,
+            erasesAfterFailedPasswords: erasesAfterFailedPasswords,
+        )
         try await service.makeDuressVault(password: Self.duressPassword)
         let appLock = try makeAppLock(policy: .alwaysAllow, service: service, clock: FakeAppLockClock())
         await appLock.unlock()

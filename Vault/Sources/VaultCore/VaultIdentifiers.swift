@@ -80,6 +80,8 @@ public enum VaultIdentifiers {
             public static let isEnabled = "vault.preferences.app-lock.is-enabled"
             /// Seconds, as an `AppLockDelay` raw value.
             public static let delay = "vault.preferences.app-lock.delay"
+            /// Whether too many wrong App Lock Passwords in a row erase every vault. Only ever stored while it's on.
+            public static let erasesAfterFailedPasswords = "vault.preferences.app-lock.erases-after-failed-passwords"
         }
     }
 

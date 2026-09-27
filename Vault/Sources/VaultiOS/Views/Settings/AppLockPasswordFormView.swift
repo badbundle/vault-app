@@ -2,17 +2,19 @@ import Foundation
 import SwiftUI
 import VaultFeed
 
-/// Sets, changes or turns off the App Lock Password, or sets a duress password.
+/// Sets, changes or turns off the App Lock Password, sets a duress password, or turns erasing after failed passwords
+/// on or off.
 ///
-/// Setting it says plainly what forgetting it means, and when the vault was last backed up. Changing it and turning it
-/// off ask for the current password, which waits after wrong ones just as the lock screen does, and never says how
-/// many attempts are left.
+/// Setting it says plainly what forgetting it means, and when the vault was last backed up, and so does turning on
+/// erasing. Changing it, turning it off, and turning erasing on or off ask for the current password, which waits after
+/// wrong ones just as the lock screen does, and never says how many attempts are left.
 ///
 /// Setting a duress password shows the same screens every time, in every vault, whether or not one was set before: it
 /// never says "create" or "replace", and nothing on it depends on what exists (MANIFESTO.md C2, C9).
 struct AppLockPasswordFormView: View {
     @State private var viewModel: AppLockPasswordFormViewModel
-    /// For setting it: the vault's last backup, the way back if the password is forgotten.
+    /// For setting it, or turning on erasing: the vault's last backup, the way back if the password is forgotten or the
+    /// vault erased.
     private var lastBackup: VaultBackupEvent?
     /// Closes the whole sheet, back to Settings.
     private var close: () -> Void
@@ -55,6 +57,13 @@ struct AppLockPasswordFormView: View {
                 focusedField = .current
             }
         }
+        .onChange(of: viewModel.isOnlyAtTheLockScreen) { _, isOnlyAtTheLockScreen in
+            if isOnlyAtTheLockScreen {
+                AccessibilityNotification.Announcement(
+                    "To try the password again, lock Vault and enter it on the lock screen.",
+                ).post()
+            }
+        }
         .onChange(of: viewModel.refusedPasswordCount) {
             AccessibilityNotification.Announcement(Self.refusedPasswordMessage).post()
         }
@@ -69,15 +78,20 @@ struct AppLockPasswordFormView: View {
                 doneSections
             } else {
                 headerSection
-                if viewModel.purpose == .set {
+                switch viewModel.purpose {
+                case .set:
                     forgettingSection
                     systemSurfacesSection
-                }
-                if viewModel.purpose == .setDuress {
+                case .setDuress:
                     duressSection
-                }
-                if viewModel.purpose == .turnOff {
+                case .turnOff:
                     restoringSection
+                case .turnOnErasing:
+                    Section {
+                        lastBackupNote
+                    }
+                case .change, .turnOffErasing:
+                    EmptyView()
                 }
                 if viewModel.needsCurrentPassword {
                     currentPasswordSection(passwordWait: passwordWait)
@@ -113,7 +127,14 @@ struct AppLockPasswordFormView: View {
         case .change: "Change Password"
         case .turnOff: "Turn Off Password"
         case .setDuress: "Duress Password"
+        case .turnOnErasing: "Turn On Erasing"
+        case .turnOffErasing: "Turn Off Erasing"
         }
+    }
+
+    /// How many wrong passwords in a row erase every vault.
+    private var eraseThreshold: Int {
+        AppLockPasswordAttemptCounter.eraseThreshold
     }
 
     // MARK: - Header
@@ -153,6 +174,22 @@ struct AppLockPasswordFormView: View {
                     color: .accentColor,
                     iconSize: 56,
                 )
+            case .turnOnErasing:
+                BackupHeroHeader(
+                    title: "Erase After \(eraseThreshold) Failed Passwords",
+                    subtitle: "If \(eraseThreshold) App Lock Passwords in a row are wrong, Vault erases every vault on this iPhone, including any duress vault. Only a backup can bring them back.",
+                    systemImage: "trash.fill",
+                    color: .red,
+                    iconSize: 56,
+                )
+            case .turnOffErasing:
+                BackupHeroHeader(
+                    title: "Turn Off Erasing",
+                    subtitle: "Wrong passwords will only make you wait longer between tries.",
+                    systemImage: "trash.slash.fill",
+                    color: .accentColor,
+                    iconSize: 56,
+                )
             }
         }
     }
@@ -169,21 +206,29 @@ struct AppLockPasswordFormView: View {
                 systemImage: "exclamationmark.triangle.fill",
                 color: .orange,
             )
-            if let lastBackup {
-                note(
-                    title: "Last backup \(lastBackup.backupDate.formatted(date: .abbreviated, time: .shortened))",
-                    detail: "If you've changed anything since, make a new backup first.",
-                    systemImage: "externaldrive.fill.badge.timemachine",
-                    color: .secondary,
-                )
-            } else {
-                note(
-                    title: "No backup on this device",
-                    detail: "Make a backup first, so you can get your vault back if you forget the password.",
-                    systemImage: "externaldrive.fill.badge.exclamationmark",
-                    color: .red,
-                )
-            }
+            lastBackupNote
+        }
+    }
+
+    /// When the vault was last backed up: the way back after a forgotten password, or an erase.
+    @ViewBuilder
+    private var lastBackupNote: some View {
+        if let lastBackup {
+            note(
+                title: "Last backup \(lastBackup.backupDate.formatted(date: .abbreviated, time: .shortened))",
+                detail: "If you've changed anything since, make a new backup first.",
+                systemImage: "externaldrive.fill.badge.timemachine",
+                color: .secondary,
+            )
+        } else {
+            note(
+                title: "No backup on this device",
+                detail: viewModel.purpose == .set
+                    ? "Make a backup first, so you can get your vault back if you forget the password."
+                    : "Make a backup first, so you can get your vault back if it's erased.",
+                systemImage: "externaldrive.fill.badge.exclamationmark",
+                color: .red,
+            )
         }
     }
 
@@ -270,10 +315,13 @@ struct AppLockPasswordFormView: View {
                     submit()
                 }
             }
-            .disabled(passwordWait != nil || viewModel.state == .saving)
+            .disabled(passwordWait != nil || viewModel.state == .saving || viewModel.isOnlyAtTheLockScreen)
             .wrongPasswordFeedback(trigger: viewModel.wrongPasswordCount)
         } footer: {
-            if let passwordWait {
+            if viewModel.isOnlyAtTheLockScreen {
+                // Never why: that would say how many attempts are left.
+                Text("To try the password again, lock Vault and enter it on the lock screen.")
+            } else if let passwordWait {
                 Text(AppLockPasswordWait.tryAgainMessage(after: passwordWait))
                     .foregroundStyle(.red)
             }
@@ -368,7 +416,7 @@ struct AppLockPasswordFormView: View {
     private var savingMessage: String {
         switch viewModel.purpose {
         case .set: "Encrypting your vault with the password."
-        case .change, .turnOff: "Checking the password."
+        case .change, .turnOff, .turnOnErasing, .turnOffErasing: "Checking the password."
         case .setDuress: "Setting the duress password."
         }
     }
@@ -385,6 +433,8 @@ struct AppLockPasswordFormView: View {
         case .change: "Change Password"
         case .turnOff: "Turn Off Password"
         case .setDuress: "Set Duress Password"
+        case .turnOnErasing: "Turn On Erasing"
+        case .turnOffErasing: "Turn Off Erasing"
         }
     }
 
@@ -392,11 +442,16 @@ struct AppLockPasswordFormView: View {
         switch viewModel.purpose {
         case .set, .change, .setDuress: "checkmark.shield.fill"
         case .turnOff: "lock.open.fill"
+        case .turnOnErasing: "trash.fill"
+        case .turnOffErasing: "trash.slash.fill"
         }
     }
 
     private var actionRole: ButtonRole? {
-        viewModel.purpose == .turnOff ? .destructive : nil
+        switch viewModel.purpose {
+        case .turnOff, .turnOnErasing: .destructive
+        case .set, .change, .setDuress, .turnOffErasing: nil
+        }
     }
 
     private var failureMessage: String {
@@ -405,6 +460,8 @@ struct AppLockPasswordFormView: View {
         case .change: "Something went wrong. The App Lock Password wasn't changed."
         case .turnOff: "Something went wrong. The App Lock Password is still on."
         case .setDuress: "Something went wrong. The duress password wasn't set."
+        case .turnOnErasing: "Something went wrong. Erasing is still off."
+        case .turnOffErasing: "Something went wrong. Erasing is still on."
         }
     }
 
@@ -443,6 +500,22 @@ struct AppLockPasswordFormView: View {
                 BackupHeroHeader(
                     title: "Duress Password Set",
                     subtitle: "To open its vault, enter it instead of your App Lock Password when Vault unlocks.",
+                    systemImage: "checkmark.shield.fill",
+                    color: .green,
+                    bouncesOnAppear: true,
+                )
+            case .turnOnErasing:
+                BackupHeroHeader(
+                    title: "Erasing Turned On",
+                    subtitle: "\(eraseThreshold) wrong App Lock Passwords in a row will erase every vault on this iPhone.",
+                    systemImage: "checkmark.shield.fill",
+                    color: .green,
+                    bouncesOnAppear: true,
+                )
+            case .turnOffErasing:
+                BackupHeroHeader(
+                    title: "Erasing Turned Off",
+                    subtitle: "Wrong passwords will only make you wait longer between tries.",
                     systemImage: "checkmark.shield.fill",
                     color: .green,
                     bouncesOnAppear: true,

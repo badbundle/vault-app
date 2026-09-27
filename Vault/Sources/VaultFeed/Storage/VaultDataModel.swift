@@ -273,6 +273,18 @@ public final class VaultDataModel {
         }
     }
 
+    /// Forgets everything held from the vaults an erase has just removed (`VaultEraser`): what `purgeVaultContents()`
+    /// forgets, the last backup event, and the killphrase and search passphrase digesters, whose keys the erase
+    /// deleted, which `purgeSensitiveData()` keeps. Then it sets up again with the fresh vault, and new keys.
+    public func resetAfterErase() async {
+        await purgeVaultContents()
+        killphraseDigester = nil
+        searchPassphraseDigester = nil
+        reloadLastBackupEvent()
+        await setup()
+        await reloadData()
+    }
+
     /// Reads the last backup event again, for when it's been cleared underneath the model, by an erase
     /// (`VaultEraser`).
     public func reloadLastBackupEvent() {

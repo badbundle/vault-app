@@ -15,6 +15,7 @@ struct VaultPasswordChangeServiceTests {
     private static let realSlot = 4
     private static let duressSlot = 11
     private static let deadline = Duration.seconds(1)
+    private static let lastAttempt = AppLockPasswordAttemptCounter.eraseThreshold - 1
     /// When both vaults were made.
     private static let longAgo = Date(timeIntervalSince1970: 1_700_000_000)
 
@@ -159,20 +160,21 @@ struct VaultPasswordChangeServiceTests {
         #expect(!sut.log.value.contains("reset the count"))
     }
 
-    /// A wrong current password counts towards the erase after too many, as a wrong unlock does, and says when it
-    /// reaches it, so the app can erase if the user has turned that on.
+    /// A wrong current password counts towards the erase after too many, as a wrong unlock does, but Settings never
+    /// tries the one that would reach it: that's only tried at the lock screen (VAULT-34).
     @Test
-    func changePassword_withAWrongPasswordThatReachesTheEraseThreshold_saysSo() async throws {
+    func changePassword_withWrongPasswordsUpToTheEraseThreshold_stopsBeforeIt() async throws {
         let sut = try await makeSUT()
-        sut.attemptStorage.setRecord(
-            count: AppLockPasswordAttemptCounter.eraseThreshold - 1,
-            latestAt: sut.attemptClock.now,
-        )
+        sut.attemptStorage.setRecord(count: Self.lastAttempt - 1, latestAt: sut.attemptClock.now)
         sut.attemptClock.advance(by: .seconds(30 * 86400))
 
-        let result = try await sut.service.changePassword(current: "wrong", new: "new")
+        let ninth = try await sut.service.changePassword(current: "wrong", new: "new")
+        sut.attemptClock.advance(by: .seconds(30 * 86400))
+        let tenth = try await sut.service.changePassword(current: "wrong", new: "new")
 
-        #expect(result == .wrongPassword(reachesEraseThreshold: true))
+        #expect(ninth == .wrongPassword(reachesEraseThreshold: false))
+        #expect(tenth == .onlyAtTheLockScreen)
+        #expect(try sut.attemptStorage.load()?.count == Self.lastAttempt)
     }
 
     @Test
@@ -493,6 +495,143 @@ extension VaultPasswordChangeServiceTests {
         try Self.expectOnlySlotChanged(Self.duressSlot, from: before, to: sut.contents())
         #expect(try sut.slots(openedBy: "real") == [Self.realSlot])
         #expect(try sut.slots(openedBy: "new") == [Self.duressSlot])
+    }
+}
+
+// MARK: - Erasing after failed passwords
+
+extension VaultPasswordChangeServiceTests {
+    /// A setting of the device, in its shared defaults: nothing in the vault's file changes.
+    @Test(arguments: [true, false])
+    func setErasesAfterFailedPasswords_withTheCurrentPassword_setsItAndChangesNoFile(erases: Bool) async throws {
+        let sut = try await makeSUT()
+        sut.settings.erasesAfterFailedPasswords = !erases
+        let before = try sut.bytes()
+        sut.log.modify { $0.removeAll() }
+
+        let result = try await sut.service.setErasesAfterFailedPasswords(erases, current: "real")
+
+        #expect(result == .changed)
+        #expect(sut.settings.erasesAfterFailedPasswords == erases)
+        #expect(try sut.bytes() == before)
+        // An attempt like any other: counted, then reset once it's right.
+        #expect(sut.log.value.first == "count the attempt")
+        #expect(sut.log.value.last == "reset the count")
+    }
+
+    /// Any vault's own password turns it on or off for every vault, a duress vault's included. That's accepted: see
+    /// "Consequences to accept" in `docs/on-device-encryption.md`.
+    @Test(arguments: [true, false])
+    func setErasesAfterFailedPasswords_fromADuressVault_setsItForTheDevice(erases: Bool) async throws {
+        let sut = try await makeSUT(openedWith: "duress")
+        sut.settings.erasesAfterFailedPasswords = !erases
+
+        let result = try await sut.service.setErasesAfterFailedPasswords(erases, current: "duress")
+
+        #expect(result == .changed)
+        #expect(sut.settings.erasesAfterFailedPasswords == erases)
+    }
+
+    /// Another vault's password is as wrong as any other, as for changing the password.
+    @Test(arguments: ["wrong", "duress"])
+    func setErasesAfterFailedPasswords_withAPasswordThatIsNotTheOpenVaults_isWrongAndChangesNothing(
+        password: String,
+    ) async throws {
+        let sut = try await makeSUT()
+        let before = try sut.bytes()
+
+        let result = try await sut.service.setErasesAfterFailedPasswords(true, current: password)
+
+        #expect(result == .wrongPassword(reachesEraseThreshold: false))
+        #expect(!sut.settings.erasesAfterFailedPasswords)
+        #expect(try sut.bytes() == before)
+    }
+
+    /// Settings never tries the attempt that would make the tenth in a row, erasing on or off, and whatever's
+    /// entered: it's only tried at the lock screen. Nothing's counted or changed.
+    @Test(arguments: [Self.lastAttempt, Self.lastAttempt + 1, Self.lastAttempt + 4], ["real", "wrong"])
+    func setErasesAfterFailedPasswords_atTheLastAttempt_isOnlyAtTheLockScreen(
+        counted: Int,
+        password: String,
+    ) async throws {
+        let sut = try await makeSUT()
+        sut.attemptStorage.setRecord(count: counted, latestAt: sut.attemptClock.now)
+        sut.attemptClock.advance(by: .seconds(60 * 60))
+        sut.log.modify { $0.removeAll() }
+        let before = try sut.bytes()
+
+        let result = try await sut.service.setErasesAfterFailedPasswords(true, current: password)
+
+        #expect(result == .onlyAtTheLockScreen)
+        #expect(!sut.settings.erasesAfterFailedPasswords)
+        #expect(try sut.bytes() == before)
+        #expect(sut.log.value.isEmpty)
+        #expect(await !sut.session.isLocked)
+    }
+
+    /// Changing the password and turning it off stop there too.
+    @Test
+    func changeAndTurnOff_atTheLastAttempt_areOnlyAtTheLockScreen() async throws {
+        let sut = try await makeSUT()
+        sut.attemptStorage.setRecord(count: Self.lastAttempt, latestAt: sut.attemptClock.now)
+        sut.attemptClock.advance(by: .seconds(60 * 60))
+
+        #expect(try await sut.service.changePassword(current: "real", new: "new") == .onlyAtTheLockScreen)
+        #expect(try await sut.service.turnOffPassword(current: "real") == .onlyAtTheLockScreen)
+        #expect(try sut.stateOnDisk().mode == .password)
+    }
+
+    @Test
+    func setErasesAfterFailedPasswords_whileTheUserMustWait_triesNothing() async throws {
+        let sut = try await makeSUT()
+        sut.attemptStorage.setRecord(count: 5, latestAt: sut.attemptClock.now)
+
+        let result = try await sut.service.setErasesAfterFailedPasswords(true, current: "real")
+
+        #expect(result == .mustWait(.seconds(60)))
+        #expect(!sut.settings.erasesAfterFailedPasswords)
+    }
+
+    @Test
+    func setErasesAfterFailedPasswords_withThePasswordOff_throws() async throws {
+        let sut = try await makeSUT(mode: .deviceKey)
+
+        await #expect(throws: VaultPasswordChangeError.passwordIsNotOn) {
+            try await sut.service.setErasesAfterFailedPasswords(true, current: "real")
+        }
+        #expect(!sut.settings.erasesAfterFailedPasswords)
+    }
+
+    /// Erasing after failed passwords means nothing without one, whichever vault turned it off.
+    @Test(arguments: ["real", "duress"])
+    func turnOffPassword_turnsErasingOff(vault: String) async throws {
+        let sut = try await makeSUT(openedWith: vault)
+        sut.settings.erasesAfterFailedPasswords = true
+
+        _ = try await sut.service.turnOffPassword(current: vault)
+
+        #expect(!sut.settings.erasesAfterFailedPasswords)
+    }
+
+    @Test
+    func turnOffPassword_wrong_leavesErasingOn() async throws {
+        let sut = try await makeSUT()
+        sut.settings.erasesAfterFailedPasswords = true
+
+        _ = try await sut.service.turnOffPassword(current: "wrong")
+
+        #expect(sut.settings.erasesAfterFailedPasswords)
+    }
+
+    /// A password turned back on starts with erasing off, as a new one does.
+    @Test
+    func turnOnPassword_startsWithErasingOff() async throws {
+        let sut = try await makeSUT(mode: .deviceKey)
+        sut.settings.erasesAfterFailedPasswords = true
+
+        try await sut.service.turnOnPassword("new")
+
+        #expect(!sut.settings.erasesAfterFailedPasswords)
     }
 }
 
@@ -1068,6 +1207,8 @@ extension VaultPasswordChangeServiceTests {
         let attemptClock: FakeAppLockClock
         /// What the attempt counter and the unlock work did, in order.
         let log: SharedMutex<[String]>
+        /// The app lock's settings, with erasing after failed passwords.
+        let settings: AppLockSettingsStore
         let realItem: VaultItem
         let realState: VaultRecordState
         let duressState: VaultRecordState
@@ -1193,6 +1334,7 @@ extension VaultPasswordChangeServiceTests {
         let attemptClock = FakeAppLockClock()
         let attemptCounter = AppLockPasswordAttemptCounter(storage: attemptStorage, clock: attemptClock)
         let work = SpyUnlockWork(log: log, clock: clock)
+        let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
         let unlockService = VaultUnlockService(
             file: EncryptedVaultFile(directory: directory, fileSystem: fileSystem),
             session: session,
@@ -1215,6 +1357,7 @@ extension VaultPasswordChangeServiceTests {
             unlockService: unlockService,
             attemptCounter: attemptCounter,
             deviceKeyStore: keychain,
+            settings: settings,
             backgroundTime: backgroundTime(fileSystem),
             hooks: VaultPasswordChangeService.Hooks(
                 passwordDidTurnOff: {
@@ -1247,6 +1390,7 @@ extension VaultPasswordChangeServiceTests {
             attemptStorage: attemptStorage,
             attemptClock: attemptClock,
             log: log,
+            settings: settings,
             realItem: realItem,
             realState: realState,
             duressState: duressState,

@@ -1,11 +1,12 @@
 import Foundation
 import FoundationExtensions
 
-/// Sets, changes or turns off the App Lock Password, or sets a duress password, for their screens in Settings.
+/// Sets, changes or turns off the App Lock Password, sets a duress password, or turns erasing after failed passwords
+/// on or off, for their screens in Settings.
 ///
-/// Changing it and turning it off need the current password. A wrong one counts as a wrong attempt and waits, just as
-/// at the lock screen, and the screen says only that it was wrong and how long to wait: never how many attempts are
-/// left.
+/// Changing it, turning it off, and turning erasing on or off need the current password. A wrong one counts as a wrong
+/// attempt and waits, just as at the lock screen, and the screen says only that it was wrong and how long to wait:
+/// never how many attempts are left.
 ///
 /// Setting a duress password looks and behaves the same whether or not one was set before, and in a duress vault as in
 /// the real one: nothing here knows (MANIFESTO.md C2, C9).
@@ -21,6 +22,10 @@ public final class AppLockPasswordFormViewModel {
         case turnOff
         /// Set a duress password, which makes a new, empty duress vault that it opens. It replaces the last one.
         case setDuress
+        /// Turn on erasing every vault after too many wrong passwords in a row, which needs the current one.
+        case turnOnErasing
+        /// Turn off erasing after too many wrong passwords, which needs the current one.
+        case turnOffErasing
     }
 
     public enum State: Equatable, Sendable {
@@ -54,6 +59,10 @@ public final class AppLockPasswordFormViewModel {
     public private(set) var refusedPasswordCount = 0
     /// When the current password can be tried again, if the user has to wait after wrong ones. By `AppLockClock`.
     public private(set) var retryAt: ContinuousClock.Instant?
+    /// Whether the current password can only be tried at the lock screen now: the next attempt would make the erase
+    /// threshold's wrong one in a row, which Settings never tries, erasing on or off (VAULT-34). The screen says to
+    /// lock Vault, and never why.
+    public private(set) var isOnlyAtTheLockScreen = false
 
     private let appLock: AppLockService
 
@@ -62,14 +71,20 @@ public final class AppLockPasswordFormViewModel {
         self.appLock = appLock
     }
 
-    /// Whether the form asks for the current password: only to change it or turn it off.
+    /// Whether the form asks for the current password: to change it or turn it off, or to turn erasing on or off.
     public var needsCurrentPassword: Bool {
-        purpose == .change || purpose == .turnOff
+        switch purpose {
+        case .change, .turnOff, .turnOnErasing, .turnOffErasing: true
+        case .set, .setDuress: false
+        }
     }
 
     /// Whether the form asks for a new password, and its confirmation.
     public var needsNewPassword: Bool {
-        purpose != .turnOff
+        switch purpose {
+        case .set, .change, .setDuress: true
+        case .turnOff, .turnOnErasing, .turnOffErasing: false
+        }
     }
 
     /// The rule the new password breaks, once something's been typed.
@@ -88,7 +103,7 @@ public final class AppLockPasswordFormViewModel {
     }
 
     public var canSubmit: Bool {
-        guard state != .saving else { return false }
+        guard state != .saving, !isOnlyAtTheLockScreen else { return false }
         if needsCurrentPassword, currentPassword.isEmpty {
             return false
         }
@@ -128,6 +143,10 @@ public final class AppLockPasswordFormViewModel {
                 } else {
                     state = .editing
                 }
+            case .turnOnErasing:
+                try await handle(appLock.setErasesAfterFailedPasswords(true, current: currentPassword))
+            case .turnOffErasing:
+                try await handle(appLock.setErasesAfterFailedPasswords(false, current: currentPassword))
             }
         } catch VaultDuressVaultError.matchesAppLockPassword {
             clearPasswords()
@@ -147,7 +166,8 @@ public final class AppLockPasswordFormViewModel {
 
     private func handle(_ result: AppLockPasswordResult) async {
         switch result {
-        case .accepted:
+        case .accepted, .erased:
+            // Only the lock screen erases, so a screen in Settings never gets `.erased`.
             finish()
         case .wrong:
             // Whether to wait is known before the screen shows the password was wrong, so it shows both at once.
@@ -159,6 +179,12 @@ public final class AppLockPasswordFormViewModel {
         case .delayed:
             retryAt = await appLock.passwordRetryTime()
             currentPassword = ""
+            state = .editing
+        case .onlyAtTheLockScreen:
+            // Nothing to wait for here any more: it's only tried at the lock screen.
+            retryAt = nil
+            currentPassword = ""
+            isOnlyAtTheLockScreen = true
             state = .editing
         }
     }

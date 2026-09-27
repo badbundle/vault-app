@@ -73,6 +73,15 @@ struct AppLockViewSnapshotTests {
         snapshotScenarios(view: AppLockView(state: .init(step: .password, failure: .failed)) {})
     }
 
+    /// In AutoFill, at the attempt that could erase every vault: never why, only where to go.
+    @Test
+    func passwordNeedsTheApp() {
+        snapshotScenarios(
+            view: AppLockView(state: .init(step: .password, failure: .needsTheApp)) {},
+            dynamicTypeSizes: [.medium],
+        )
+    }
+
     // MARK: - Covers
 
     @Test

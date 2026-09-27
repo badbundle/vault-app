@@ -1030,8 +1030,11 @@ and resets the counter.
   configuration, and the PDF backup's hint. They'd show a vault had been erased, and the auto-backup configuration
   says where its backups are: once a new backup password is set, auto-backup would write there, and its retention
   clean-up delete the erased vault's backups. The auto-backup service and the data model read them at launch, so a
-  hook makes them forget their copies too, and the providers their folders. It also removes the pending rehash
-  files and backup PDFs left in the temporary directory. The storage state goes last, when the journal is cleared.
+  hook makes them forget their copies too, and the providers their folders. It turns off erasing after failed
+  passwords, which only means anything with a password. It also removes the pending rehash files and backup PDFs
+  left in the temporary directory. The storage state goes last, when the journal is cleared.
+- **Step 4** tries the QuickType store a few times, and then carries on without it: while the password is on it's kept
+  empty already, and a store that's stuck mustn't leave the vaults half erased.
 - **Step 5** creates the store without the plain store's failed-open recovery, so it never sets a copy aside, then
   clears the journal, which removes the state file, and switches the session to the new store.
 - **Unlocking refuses while the journal says `erasing`** (`VaultUnlockError.erasing`), even with the right
@@ -1045,7 +1048,62 @@ and resets the counter.
   it.
 - **What the app holds in memory** from the vault itself is the caller's to reset after an erase while the app runs:
   the items, the backup password, and the killphrase and search passphrase digesters, which were made from the keys
-  step 2 deletes. `purgeSensitiveData()` keeps the digesters, so VAULT-34's wiring has to reset them.
+  step 2 deletes. `purgeSensitiveData()` keeps the digesters, so `VaultRoot.eraseVault()` resets all of them
+  afterwards (`VaultDataModel.resetAfterErase()`), and reloads the fresh store.
+
+**The setting** (VAULT-34) is "Erase Vault After 10 Failed Passwords", in the App Lock Password's Settings screen,
+next to Change, Turn Off and the duress password. It's off by default, as iOS's Erase Data is. Turning it on or off
+takes the current App Lock Password (`VaultPasswordChangeService.setErasesAfterFailedPasswords(_:current:)`), checked
+as changing the password checks it: counted and held to the deadline, but it never erases, as the vault is open.
+
+It's a setting of the device, not of a vault, like the attempt count (`AppLockSettingsStore.erasesAfterFailedPasswords`,
+in the shared defaults, stored only while it's on). Every vault's lock screen erases by it, every vault shows it the
+same, and each vault's own App Lock Password turns it on or off for all of them, a duress vault's included (see
+"Consequences to accept"). Turning the password off, or back on, turns it off. The erase removes it.
+
+**The lock screen** shows only how long to wait, never how many attempts are left. When the tenth wrong password in
+a row comes back and the device's setting is on, the app's password service (through `AppLockPasswordUnlocker`)
+erases before it answers, so the lock screen never shows the password was wrong, and answers `.erased`. The app then
+opens the fresh, empty plain vault with no password, as after a new install, with no message: a notice would be a
+record that an erase happened (C6). Anything that was waiting to open an item is dropped, even if the erase finishes
+after the app has locked again. The app lock stays on, asking for device authentication only: it's a choice the user
+made for the device, not something of the vaults the erase removed. Before the tenth, a right or duress password
+never erases, and resets the count. If the erase fails once it's journaled, no vault can open, and the next attempt,
+whatever the password, finishes it; so does the next launch.
+
+**A right attempt that's thrown away still resets the count.** If the app locks, or the task is cancelled, while an
+attempt is waiting out the deadline, its result is thrown away; but if the password opened a vault, the count is
+reset first, as it would have been, the same for a real and a duress password. Otherwise a right tenth attempt
+interrupted by a phone call would leave ten counted, and the next attempt would erase. Every attempt holds background
+time (`VaultBackgroundTime`) until it's finished, so the app isn't suspended in between. An attempt the app is
+stopped in the middle of, by force-quitting it, stays counted, as a wrong one would.
+
+**An erase that's due comes first.** Before it tries any password, the app reads the count
+(`hasReachedEraseThreshold()`), every time, erasing on or off, so an attempt takes the same time either way. If ten
+or more are counted and the setting is on, it erases instead, whatever was entered, the real and duress passwords
+included. The count gets there only through attempts that weren't found right: a wrong tenth attempt the app was
+stopped in the middle of, before it could erase. Settings and AutoFill never try the attempt that would make ten.
+
+**Settings never tries the tenth attempt.** Checking the current password, to change it, turn it off, or turn erasing
+on or off, counts like any other attempt, but the one that would make the tenth wrong in a row isn't tried or counted
+(`VaultPasswordChangeResult.onlyAtTheLockScreen`), erasing on or off. The screen says to lock Vault and enter the
+password on the lock screen, and never why. So the attempt that could erase always happens at the lock screen, where
+an erase is immediate and visible.
+
+**AutoFill never erases.** The extension counts its attempts with `stoppingBeforeEraseThreshold`: an attempt that
+would be the tenth in a row, or later, isn't tried or counted (`VaultUnlockError.stoppedBeforeEraseThreshold`), and
+the sheet says "Open Vault to enter your App Lock Password." That's safer than erasing in the extension:
+
+- An erase is a run of file and keychain steps. The system can stop an extension at any point, and it has little
+  memory, while the app, if it's running, would be finishing the same erase from its own launch recovery.
+- Refusing needs nothing but a read of the count, so there's no half-done state, and no free guess: the attempt
+  that could erase only ever happens in the app, where a wrong one erases before it's shown.
+- It refuses whether erasing is on or off. Refusing only when it's on would show that it's on, and that this is the
+  last attempt before an erase, which is the countdown the lock screen never shows. Refusing either way shows only
+  what the person guessing already knows: they've got it wrong nine times.
+
+The counter decides while it holds the count against every process (`withExclusiveAccess(_:)`), so an attempt the
+app counts at the same moment, with both on screen on an iPad, can't make the extension's the tenth.
 
 ## Widgets, AutoFill and QuickType
 
@@ -1089,6 +1147,7 @@ configuration, which the app can't edit. Turning on the password should tell use
 | Failed-open archives | Plaintext copies of the vault | Removed, with confirmation |
 | `UserDefaults` and keychain settings | Dates, a payload hash, auto-backup configuration, the PDF hint, the backup key | No backup settings: each vault's are in its payload (VAULT-70). App preferences stay. |
 | Wrap stamp (keychain, this device only) | Not there | When the device was last unlocked, or a key last wrapped: the same as the file's modification time |
+| Erasing after failed passwords (shared `UserDefaults`, VAULT-34) | Not there | Whether it's on, stored only while it is. Nothing about which vault turned it on or off. In device backups too. |
 | Keyboard learning from note editors | Words typed with autocorrection on | Same. Outside storage; separate ticket VAULT-54. |
 
 ## Residual limits
@@ -1221,6 +1280,14 @@ configuration, which the app can't edit. Turning on the password should tell use
    slower.
 9. No app downgrade after the password has been set.
 10. Users who never set a password are unaffected.
+11. Erasing after failed passwords (VAULT-34) is a setting of the device, and any vault's own App Lock Password turns
+    it off, a duress vault's included. So someone who has the duress password can turn it off, and guessing on the
+    device is then limited only by the escalating waits: about one guess an hour after the ninth wrong one. That's
+    accepted. Erasing only ever stopped guessing on the device: someone who can copy the file guesses offline
+    regardless, and that's what the key derivation and the password's strength are for. Letting only the vault that
+    turned it on turn it off for real was tried, and dropped: a vault showing it off while it stayed on would show
+    another vault had turned it on, and a vault that owned it could be replaced by making a new duress vault, leaving
+    no vault able to turn it off.
 
 ## Sub-issues
 

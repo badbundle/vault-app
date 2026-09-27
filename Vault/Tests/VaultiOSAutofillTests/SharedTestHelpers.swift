@@ -85,6 +85,10 @@ final class FakeAutofillVaultService: AutofillVaultUnlocking {
         base.isPasswordSet
     }
 
+    var erasesAfterFailedPasswords: Bool {
+        base.erasesAfterFailedPasswords
+    }
+
     func hasMemoryHeadroomToUnlock() async throws -> Bool {
         switch headroom {
         case .enough:
@@ -158,5 +162,9 @@ final class FakeAutofillVaultService: AutofillVaultUnlocking {
 
     func makeDuressVault(password: String) async throws {
         try await base.makeDuressVault(password: password)
+    }
+
+    func setErasesAfterFailedPasswords(_ erases: Bool, current: String) async throws -> AppLockPasswordResult {
+        try await base.setErasesAfterFailedPasswords(erases, current: current)
     }
 }

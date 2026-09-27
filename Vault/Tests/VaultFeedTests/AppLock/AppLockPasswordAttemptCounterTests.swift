@@ -262,6 +262,117 @@ struct AppLockPasswordAttemptCounterTests {
         #expect(storage.accessesOutsideExclusiveAccess == 0)
     }
 
+    // MARK: - An erase that's due
+
+    @Test
+    func hasReachedEraseThreshold_onceTenAreCounted() async throws {
+        let (sut, _, clock) = makeSUT()
+
+        var answers = try await [sut.hasReachedEraseThreshold()]
+        for _ in 0 ..< 11 {
+            try await makeAttempts(1, with: sut, clock: clock)
+            try await answers.append(sut.hasReachedEraseThreshold())
+        }
+
+        #expect(answers == Array(repeating: false, count: 10) + [true, true])
+    }
+
+    @Test
+    func hasReachedEraseThreshold_countsNothingAndHoldsExclusiveAccess() async throws {
+        let (sut, storage, clock) = makeSUT()
+        try await makeAttempts(10, with: sut, clock: clock)
+        let record = storage.record
+
+        _ = try await sut.hasReachedEraseThreshold()
+
+        #expect(storage.record == record)
+        #expect(storage.accessesOutsideExclusiveAccess == 0)
+    }
+
+    @Test
+    func hasReachedEraseThreshold_afterReset_isFalse() async throws {
+        let (sut, _, clock) = makeSUT()
+        try await makeAttempts(10, with: sut, clock: clock)
+
+        try await sut.reset()
+
+        #expect(try await !sut.hasReachedEraseThreshold())
+    }
+
+    // MARK: - Stopping before the erase threshold
+
+    /// As AutoFill counts: the first nine as usual, then it stops at the tenth, which could erase.
+    @Test
+    func countAttempt_stoppingBeforeEraseThreshold_countsNineThenStops() async throws {
+        let (sut, _, clock) = makeSUT()
+
+        var attempts = [AppLockPasswordAttempt]()
+        for _ in 0 ..< 10 {
+            clock.advance(by: .seconds(60 * 60))
+            try await attempts.append(sut.countAttempt(stoppingBeforeEraseThreshold: true))
+        }
+
+        #expect(attempts.dropLast().allSatisfy { $0 == .counted(reachesEraseThreshold: false) })
+        #expect(attempts.last == .stoppedBeforeEraseThreshold)
+    }
+
+    /// Nothing is counted and no delay starts, so the app's next attempt is still the tenth.
+    @Test
+    func countAttempt_stoppedBeforeEraseThreshold_countsNothing() async throws {
+        let (sut, storage, clock) = makeSUT()
+        try await makeAttempts(9, with: sut, clock: clock)
+        clock.advance(by: .seconds(60 * 60))
+        let record = storage.record
+
+        let attempt = try await sut.countAttempt(stoppingBeforeEraseThreshold: true)
+
+        #expect(attempt == .stoppedBeforeEraseThreshold)
+        #expect(storage.record == record)
+        #expect(try await sut.countAttempt() == .counted(reachesEraseThreshold: true))
+    }
+
+    /// That attempt will never be tried there, so it stops without saying how long to wait.
+    @Test
+    func countAttempt_stoppingBeforeEraseThreshold_whileWaiting_stops() async throws {
+        let (sut, _, clock) = makeSUT()
+        try await makeAttempts(9, with: sut, clock: clock)
+
+        #expect(try await sut.countAttempt(stoppingBeforeEraseThreshold: true) == .stoppedBeforeEraseThreshold)
+    }
+
+    /// Past it too: after a tenth attempt the app was stopped in the middle of, every wrong attempt can erase.
+    @Test
+    func countAttempt_stoppingBeforeEraseThreshold_pastIt_stops() async throws {
+        let (sut, _, clock) = makeSUT()
+        try await makeAttempts(10, with: sut, clock: clock)
+        clock.advance(by: .seconds(60 * 60))
+
+        #expect(try await sut.countAttempt(stoppingBeforeEraseThreshold: true) == .stoppedBeforeEraseThreshold)
+    }
+
+    @Test
+    func countAttempt_stoppingBeforeEraseThreshold_afterReset_counts() async throws {
+        let (sut, _, clock) = makeSUT()
+        try await makeAttempts(9, with: sut, clock: clock)
+
+        try await sut.reset()
+
+        let attempt = try await sut.countAttempt(stoppingBeforeEraseThreshold: true)
+        #expect(attempt == .counted(reachesEraseThreshold: false))
+    }
+
+    /// The count is read and the decision made while no other process can count, so an attempt the app counts at
+    /// the same moment can't make AutoFill's the tenth.
+    @Test
+    func countAttempt_stoppingBeforeEraseThreshold_holdsExclusiveAccess() async throws {
+        let (sut, storage, clock) = makeSUT()
+        try await makeAttempts(9, with: sut, clock: clock)
+
+        _ = try await sut.countAttempt(stoppingBeforeEraseThreshold: true)
+
+        #expect(storage.accessesOutsideExclusiveAccess == 0)
+    }
+
     // MARK: - Storage failures
 
     @Test
@@ -286,6 +397,12 @@ struct AppLockPasswordAttemptCounterTests {
         }
         await #expect(throws: InMemoryAppLockPasswordAttemptStorage.Failure.self) {
             try await sut.remainingDelay()
+        }
+        await #expect(throws: InMemoryAppLockPasswordAttemptStorage.Failure.self) {
+            try await sut.countAttempt(stoppingBeforeEraseThreshold: true)
+        }
+        await #expect(throws: InMemoryAppLockPasswordAttemptStorage.Failure.self) {
+            try await sut.hasReachedEraseThreshold()
         }
     }
 }

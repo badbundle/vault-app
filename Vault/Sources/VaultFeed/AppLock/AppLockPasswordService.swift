@@ -17,11 +17,20 @@ public protocol AppLockPasswordService {
     /// before any vault is open.
     var isPasswordSet: Bool { get }
 
+    /// Whether `AppLockPasswordAttemptCounter.eraseThreshold` wrong App Lock Passwords in a row at the lock screen
+    /// erase every vault on this device, including any duress vault (VAULT-34). Off unless the user turns it on, and a
+    /// setting of the device, not of a vault (`AppLockSettingsStore.erasesAfterFailedPasswords`).
+    var erasesAfterFailedPasswords: Bool { get }
+
     /// How long the user has to wait after wrong passwords before they can try again: zero if they can try now.
     func remainingDelay() async throws -> Duration
 
     /// Tries the password at the lock screen. If it opens a vault, the app now reads and writes that vault: the real
     /// one or a duress one, which this never says.
+    ///
+    /// If it's the threshold's wrong password in a row, and erasing after failed passwords is on, it erases every
+    /// vault (`VaultEraser`) before it answers, and answers `.erased`: the app now reads and writes a fresh, empty
+    /// plain vault. It never answers `.wrong` first (`AppLockPasswordUnlocker`).
     func unlock(password: String) async throws -> AppLockPasswordResult
 
     /// Sets the App Lock Password where there's none, which encrypts the vault with it.
@@ -32,7 +41,8 @@ public protocol AppLockPasswordService {
     /// Changes the password of the vault that's open, once `current` is shown to be its password.
     func changePassword(current: String, new: String) async throws -> AppLockPasswordResult
 
-    /// Turns the password off for the vault that's open, once `current` is shown to be its password.
+    /// Turns the password off for the vault that's open, once `current` is shown to be its password. Erasing after
+    /// failed passwords goes off with it.
     func turnOffPassword(current: String) async throws -> AppLockPasswordResult
 
     /// Makes a duress vault from the vault that's open: a separate, empty vault that `password` opens at the lock
@@ -47,6 +57,12 @@ public protocol AppLockPasswordService {
     ///   Password. That's the only password it refuses: one that happens to open another vault is accepted without a
     ///   word, or trying passwords here would say which other vaults exist.
     func makeDuressVault(password: String) async throws
+
+    /// Turns erasing after failed passwords on or off, once `current` is shown to be the password of the vault that's
+    /// open (`VaultPasswordChangeService.setErasesAfterFailedPasswords(_:current:)`). A wrong one counts and waits,
+    /// as it does for changing the password, but never erases: the vault is open. It's a setting of the device, so any
+    /// vault's own password turns it on or off for every vault, a duress vault's included.
+    func setErasesAfterFailedPasswords(_ erases: Bool, current: String) async throws -> AppLockPasswordResult
 }
 
 /// What happened to an attempt at the App Lock Password.
@@ -57,4 +73,11 @@ public enum AppLockPasswordResult: Equatable, Sendable {
     case wrong
     /// The user has to wait this long after their last wrong attempts. Nothing was tried or counted.
     case delayed(Duration)
+    /// The password was wrong, the threshold's in a row, and erasing after failed passwords was on: every vault on
+    /// this device is erased, and the app now reads and writes a fresh, empty plain vault with no password.
+    case erased
+    /// Only in the AutoFill extension and Settings: this attempt would make the threshold's in a row, which is only
+    /// ever tried at the app's lock screen, so nothing was tried or counted. It says so whether erasing after failed
+    /// passwords is on or off, so it doesn't show which.
+    case onlyAtTheLockScreen
 }

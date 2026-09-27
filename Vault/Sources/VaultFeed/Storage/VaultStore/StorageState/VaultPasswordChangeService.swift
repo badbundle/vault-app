@@ -10,6 +10,12 @@ import Foundation
 ///   after the first unlock, like the plain store, so the widgets can read it (VAULT-50).
 /// - **Turn back on** (`turnOnPassword(_:)`), from the `deviceKey` mode: journals `turningOn`, rekeys the slot to the
 ///   new password (same salt), settles the `password` mode, and deletes the device key.
+/// - **Erasing after failed passwords** (`setErasesAfterFailedPasswords(_:current:)`, VAULT-34): checks the current
+///   password, and turns it on or off. It's a setting of the device, not of a vault, so the open vault's own password
+///   changes it, a duress vault's included. Turning the password off, or back on, turns it off.
+///
+/// No check tries the attempt that would make the erase threshold's wrong password in a row
+/// (`.onlyAtTheLockScreen`): that one is only ever tried at the lock screen.
 ///
 /// Every rekey gives the vault a new data key and seals its payload again (`VaultSlotFile.rekey`), and changes only
 /// the open vault's slot: from a duress vault it behaves exactly the same, and never touches another. Its wrap time
@@ -56,11 +62,13 @@ public actor VaultPasswordChangeService {
     private let unlockService: VaultUnlockService
     private let attemptCounter: AppLockPasswordAttemptCounter
     private let deviceKeyStore: any VaultDeviceKeyStoring
+    private let settings: AppLockSettingsStore
     private let backgroundTime: VaultBackgroundTime
     private let hooks: Hooks
     private var isChanging = false
 
     /// - Parameters:
+    ///   - settings: The app lock's settings, with erasing after failed passwords.
     ///   - backgroundTime: Keeps the app running until a change has finished: `.application` in the app.
     ///   - hooks: Brings the widgets, QuickType and AutoFill up to date with the password turned off or on.
     public init(
@@ -69,6 +77,7 @@ public actor VaultPasswordChangeService {
         unlockService: VaultUnlockService,
         attemptCounter: AppLockPasswordAttemptCounter,
         deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore(),
+        settings: AppLockSettingsStore,
         backgroundTime: VaultBackgroundTime,
         hooks: Hooks,
     ) {
@@ -79,6 +88,7 @@ public actor VaultPasswordChangeService {
             unlockService: unlockService,
             attemptCounter: attemptCounter,
             deviceKeyStore: deviceKeyStore,
+            settings: settings,
             backgroundTime: backgroundTime,
             hooks: hooks,
         )
@@ -91,6 +101,7 @@ public actor VaultPasswordChangeService {
         unlockService: VaultUnlockService,
         attemptCounter: AppLockPasswordAttemptCounter,
         deviceKeyStore: any VaultDeviceKeyStoring,
+        settings: AppLockSettingsStore,
         backgroundTime: VaultBackgroundTime = .none,
         hooks: Hooks = Hooks(passwordDidTurnOff: {}, passwordDidTurnOn: {}),
     ) {
@@ -100,6 +111,7 @@ public actor VaultPasswordChangeService {
         self.unlockService = unlockService
         self.attemptCounter = attemptCounter
         self.deviceKeyStore = deviceKeyStore
+        self.settings = settings
         self.backgroundTime = backgroundTime
         self.hooks = hooks
     }
@@ -107,6 +119,7 @@ public actor VaultPasswordChangeService {
 
 /// How changing the password, or turning it off, turned out.
 public enum VaultPasswordChangeResult: Equatable, Sendable {
+    /// Done: the password is changed, off or back on, or erasing after failed passwords is on or off.
     case changed
     /// The current password wasn't the open vault's. It counted as a wrong attempt, and nothing changed.
     ///
@@ -115,6 +128,9 @@ public enum VaultPasswordChangeResult: Equatable, Sendable {
     case wrongPassword(reachesEraseThreshold: Bool)
     /// The user has to wait this long after their last wrong attempts. Nothing was tried or changed.
     case mustWait(Duration)
+    /// The check would have been the erase threshold's attempt in a row, which is only ever tried at the lock screen,
+    /// erasing on or off. Nothing was tried, counted or changed.
+    case onlyAtTheLockScreen
 }
 
 public enum VaultPasswordChangeError: Error, Equatable, Sendable {
@@ -160,6 +176,8 @@ extension VaultPasswordChangeService {
             try await rekey(vault, journaling: .turningOff, becoming: .deviceKey) {
                 try .device(deviceKeyStore.makeNewDeviceKey())
             }
+            // Erasing after failed passwords means nothing without one.
+            settings.erasesAfterFailedPasswords = false
             return .changed
         }
     }
@@ -177,6 +195,29 @@ extension VaultPasswordChangeService {
             let key = try await passwordKey(for: password)
             // Settling deletes the device key, once it's shown to open nothing.
             try await rekey(vault, journaling: .turningOn, becoming: .password) { key }
+            // A password turned back on starts with erasing off, as a new one does.
+            settings.erasesAfterFailedPasswords = false
+        }
+    }
+
+    /// Turns erasing after failed passwords on or off (VAULT-34), once `current` is shown to be the open vault's
+    /// password: the same counted check, held to the deadline, as changing the password. It's a setting of the device,
+    /// so it works the same from every vault, and a duress vault's own password turns it on or off for every vault
+    /// (MANIFESTO.md C2). See "Consequences to accept" in `docs/on-device-encryption.md`.
+    ///
+    /// A wrong password counts toward an erase like any other, but this never erases: the vault is open. Only the
+    /// lock screen erases (`AppLockPasswordUnlocker`).
+    public func setErasesAfterFailedPasswords(
+        _ erases: Bool,
+        current: String,
+    ) async throws -> VaultPasswordChangeResult {
+        try await whileChanging {
+            let vault = try await openVault(inMode: .password, orThrow: .passwordIsNotOn)
+            if let refused = try await check(current, opens: vault.store) {
+                return refused
+            }
+            settings.erasesAfterFailedPasswords = erases
+            return .changed
         }
     }
 
@@ -252,6 +293,7 @@ extension VaultPasswordChangeService {
         case .right: nil
         case let .wrong(reachesEraseThreshold): .wrongPassword(reachesEraseThreshold: reachesEraseThreshold)
         case let .mustWait(remaining): .mustWait(remaining)
+        case .stoppedBeforeEraseThreshold: .onlyAtTheLockScreen
         }
     }
 

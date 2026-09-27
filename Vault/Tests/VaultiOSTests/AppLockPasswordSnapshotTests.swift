@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Synchronization
 import TestHelpers
 import Testing
 @testable import VaultFeed
@@ -65,6 +66,7 @@ struct AppLockPasswordSnapshotTests {
                 let appLock = try await makeUnlockedAppLock()
                 let view = AppLockPasswordManageView(close: {})
                     .environment(appLock)
+                    .environment(anyVaultDataModel())
                 snapshot(view, colorScheme: colorScheme, dynamicTypeSize: dynamicTypeSize)
             }
         }
@@ -78,9 +80,79 @@ struct AppLockPasswordSnapshotTests {
                 for appLock in try await [makeUnlockedAppLockWithDuressVault(), makeAppLockInDuressVault()] {
                     let view = AppLockPasswordManageView(close: {})
                         .environment(appLock)
+                        .environment(anyVaultDataModel())
                     snapshot(view, colorScheme: colorScheme, dynamicTypeSize: dynamicTypeSize, testName: "manage()")
                 }
             }
+        }
+    }
+
+    // MARK: - Erasing after failed passwords
+
+    @Test
+    func manageErasingOn() async throws {
+        for colorScheme in [ColorScheme.light, .dark] {
+            let appLock = try await makeUnlockedAppLock(service: makeService(erasesAfterFailedPasswords: true))
+            let view = AppLockPasswordManageView(close: {})
+                .environment(appLock)
+                .environment(anyVaultDataModel())
+            snapshot(view, colorScheme: colorScheme, dynamicTypeSize: .medium)
+        }
+    }
+
+    /// Turning it on says what it does, and when the vault was last backed up, before it asks for the password.
+    @Test
+    func turnOnErasing() async throws {
+        try await snapshotScenarios(dynamicTypeSizes: [.medium, .xxLarge]) {
+            try await AppLockPasswordFormViewModel(purpose: .turnOnErasing, appLock: makeUnlockedAppLock())
+        }
+    }
+
+    @Test
+    func turnOnErasingDone() async throws {
+        try await snapshotScenarios {
+            let viewModel = try await AppLockPasswordFormViewModel(
+                purpose: .turnOnErasing,
+                appLock: makeUnlockedAppLock(),
+            )
+            viewModel.currentPassword = Self.password
+            await viewModel.submit()
+            return viewModel
+        }
+    }
+
+    /// Settings never tries the attempt that would make the tenth wrong password in a row. It says where to, and
+    /// never why.
+    @Test
+    func turnOnErasingOnlyAtTheLockScreen() async throws {
+        try await snapshotScenarios {
+            let clock = SteppingClock()
+            let viewModel = try await AppLockPasswordFormViewModel(
+                purpose: .turnOnErasing,
+                appLock: makeUnlockedAppLock(service: FakeAppLockPasswordService(
+                    password: Self.password,
+                    clock: clock,
+                )),
+            )
+            for _ in 1 ..< AppLockPasswordAttemptCounter.eraseThreshold {
+                viewModel.currentPassword = "wrong"
+                await viewModel.submit()
+                clock.advance(by: .seconds(60 * 60))
+            }
+            viewModel.currentPassword = Self.password
+            await viewModel.submit()
+            #expect(viewModel.isOnlyAtTheLockScreen)
+            return viewModel
+        }
+    }
+
+    @Test
+    func turnOffErasing() async throws {
+        try await snapshotScenarios {
+            try await AppLockPasswordFormViewModel(
+                purpose: .turnOffErasing,
+                appLock: makeUnlockedAppLock(service: makeService(erasesAfterFailedPasswords: true)),
+            )
         }
     }
 
@@ -257,6 +329,10 @@ extension AppLockPasswordSnapshotTests {
         return appLock
     }
 
+    private func makeService(erasesAfterFailedPasswords: Bool) -> FakeAppLockPasswordService {
+        FakeAppLockPasswordService(password: Self.password, erasesAfterFailedPasswords: erasesAfterFailedPasswords)
+    }
+
     /// Unlocked into the real vault, which has made a duress vault.
     private func makeUnlockedAppLockWithDuressVault() async throws -> AppLockService {
         let service = FakeAppLockPasswordService(password: Self.password)
@@ -324,5 +400,18 @@ extension AppLockPasswordSnapshotTests {
             named: "\(colorScheme)_\(dynamicTypeSize)",
             testName: testName,
         )
+    }
+}
+
+/// Time that moves only when the test says, so the waits after wrong passwords can be skipped.
+private final class SteppingClock: AppLockClock {
+    private let current = Mutex(ContinuousClock.now)
+
+    var now: ContinuousClock.Instant {
+        current.withLock(\.self)
+    }
+
+    func advance(by duration: Duration) {
+        current.withLock { $0 = $0.advanced(by: duration) }
     }
 }
