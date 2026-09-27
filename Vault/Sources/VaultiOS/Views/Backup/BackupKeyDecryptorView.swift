@@ -41,7 +41,8 @@ struct BackupKeyDecryptorView: View {
     private var informationSection: some View {
         Section {
             PlaceholderView(
-                systemIcon: "lock.document.fill",
+                // The backup password's shield, as on the screen that set it.
+                systemIcon: "lock.shield.fill",
                 title: viewModel.decryptionKeyState.title,
                 subtitle: viewModel.decryptionKeyState.description,
             )

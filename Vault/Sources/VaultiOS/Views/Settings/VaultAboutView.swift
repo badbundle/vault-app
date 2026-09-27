@@ -76,7 +76,7 @@ struct VaultAboutView: View {
                 SettingsDocumentView(title: viewModel.privacyPolicyTitle, content: PrivacyPolicyContent())
             } label: {
                 FormRow(
-                    image: Image(systemName: "lock.fill"),
+                    image: Image(systemName: "hand.raised.fill"),
                     color: .red,
                 ) {
                     Text(viewModel.privacyPolicyTitle)

@@ -51,8 +51,7 @@ struct AppLockPasswordManageView: View {
                 BackupHeroHeader(
                     title: "App Lock Password",
                     subtitle: "Vault asks for it every time it unlocks, after Face ID, Touch ID or your passcode. It's a different password from your backup password.",
-                    systemImage: "ellipsis.rectangle.fill",
-                    color: .accentColor,
+                    icon: .appLockPassword,
                     iconSize: 56,
                 ) {
                     statusLabel
@@ -66,7 +65,9 @@ struct AppLockPasswordManageView: View {
                         close: close,
                     )
                 } label: {
-                    FormRow(image: Image(systemName: "key.fill"), color: SettingsIconColor.security) {
+                    FormRow(color: SettingsIconColor.security) {
+                        AppLockPasswordMark.RowIcon()
+                    } content: {
                         Text("Change Password")
                     }
                 }

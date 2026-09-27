@@ -261,7 +261,7 @@ struct BackupKeyChangeView: View {
             successNote(
                 title: "Keep it somewhere safe",
                 detail: "You'll need it to restore a backup. It can't be recovered if you forget it.",
-                systemImage: "lock.doc.fill",
+                systemImage: "rectangle.and.pencil.and.ellipsis",
             )
 
             if viewModel.didReplaceExistingPassword {

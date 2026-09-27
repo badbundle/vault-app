@@ -20,8 +20,9 @@ struct InterruptedEraseView: View {
                     BackupHeroHeader(
                         title: "Erase Not Finished",
                         subtitle: "Vault was erasing its data when it stopped, and couldn't finish. Nothing can be opened until it does.",
-                        systemImage: "exclamationmark.triangle.fill",
-                        color: .orange,
+                        // The erase's own symbol, as in the settings that turn it on and the Danger Zone.
+                        systemImage: "trash.fill",
+                        color: .red,
                         iconSize: 56,
                     )
                 }

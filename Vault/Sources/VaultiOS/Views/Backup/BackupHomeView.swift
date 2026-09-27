@@ -132,7 +132,7 @@ struct BackupHomeView: View {
                 switch status {
                 case .unknown:
                     // Without a status row above it, the button names the feature itself.
-                    FormRow(image: Image(systemName: "key.horizontal.fill"), color: .accentColor) {
+                    FormRow(image: Image(systemName: "lock.shield.fill"), color: .accentColor) {
                         Text("Backup Password")
                     }
                 case .notSet:

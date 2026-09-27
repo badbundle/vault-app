@@ -165,16 +165,14 @@ struct AppLockPasswordFormView: View {
                 BackupHeroHeader(
                     title: "Set an App Lock Password",
                     subtitle: "Vault will ask for it every time it unlocks, after Face ID, Touch ID or your passcode. It's a different password from your backup password.",
-                    systemImage: "ellipsis.rectangle.fill",
-                    color: .accentColor,
+                    icon: .appLockPassword,
                     iconSize: 56,
                 )
             case .change:
                 BackupHeroHeader(
                     title: "Change App Lock Password",
                     subtitle: "Enter the current password, then choose a new one.",
-                    systemImage: "key.fill",
-                    color: .accentColor,
+                    icon: .appLockPassword,
                     iconSize: 56,
                 )
             case .turnOff:
@@ -491,7 +489,9 @@ struct AppLockPasswordFormView: View {
 
     private var actionSystemImage: String {
         switch viewModel.purpose {
-        case .set, .change, .setDuress: "checkmark.shield.fill"
+        // Not the backup password's shield: this locks the vault's door.
+        case .set, .change: "lock.fill"
+        case .setDuress: Self.duressSystemImage
         case .turnOff: "lock.open.fill"
         case .turnOnErasing: "trash.fill"
         case .turnOffErasing: "trash.slash.fill"
@@ -554,17 +554,13 @@ struct AppLockPasswordFormView: View {
                 BackupHeroHeader(
                     title: "App Lock Password Set",
                     subtitle: "Vault will ask for it every time it unlocks.",
-                    systemImage: "checkmark.shield.fill",
-                    color: .green,
-                    bouncesOnAppear: true,
+                    icon: .appLockPassword,
                 )
             case .change:
                 BackupHeroHeader(
                     title: "App Lock Password Changed",
                     subtitle: "Use the new password from now on.",
-                    systemImage: "checkmark.shield.fill",
-                    color: .green,
-                    bouncesOnAppear: true,
+                    icon: .appLockPassword,
                 )
             case .turnOff:
                 BackupHeroHeader(
@@ -579,7 +575,7 @@ struct AppLockPasswordFormView: View {
                 BackupHeroHeader(
                     title: "Duress Password Set",
                     subtitle: "To open its vault, enter it instead of your App Lock Password when Vault unlocks.",
-                    systemImage: "checkmark.shield.fill",
+                    systemImage: Self.duressSystemImage,
                     color: .green,
                     bouncesOnAppear: true,
                 )
@@ -587,7 +583,7 @@ struct AppLockPasswordFormView: View {
                 BackupHeroHeader(
                     title: "Erasing Turned On",
                     subtitle: "\(eraseThreshold) wrong App Lock Passwords in a row will erase every vault on this iPhone.",
-                    systemImage: "checkmark.shield.fill",
+                    systemImage: "trash.fill",
                     color: .green,
                     bouncesOnAppear: true,
                 )
@@ -595,7 +591,7 @@ struct AppLockPasswordFormView: View {
                 BackupHeroHeader(
                     title: "Erasing Turned Off",
                     subtitle: "Wrong passwords will only make you wait longer between tries.",
-                    systemImage: "checkmark.shield.fill",
+                    systemImage: "trash.slash.fill",
                     color: .green,
                     bouncesOnAppear: true,
                 )
@@ -607,7 +603,7 @@ struct AppLockPasswordFormView: View {
                 note(
                     title: "Keep it somewhere safe",
                     detail: "If you forget it, the only way back in is to erase the vault and restore a backup.",
-                    systemImage: "lock.doc.fill",
+                    systemImage: "rectangle.and.pencil.and.ellipsis",
                     color: .secondary,
                 )
             }
