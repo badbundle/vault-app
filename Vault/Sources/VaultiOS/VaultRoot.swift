@@ -101,8 +101,13 @@ public enum VaultRoot {
         } catch {
             // Open no store at all: the scene shows the failure screen.
             vaultStoreLoadFailureMessage = error.localizedDescription
-            if error as? VaultStorageRecovery.Failure == .deviceKeyMissing {
+            switch error as? VaultStorageRecovery.Failure {
+            case .deviceKeyMissing:
                 vaultStoreLoadFailureReason = .deviceKeyMissing
+            case .vaultMissing:
+                vaultStoreLoadFailureReason = .vaultMissing
+            default:
+                break
             }
             return .password
         }
@@ -397,6 +402,20 @@ public enum VaultRoot {
     static func eraseVault() async throws {
         plainVaultStore = try await vaultEraser.erase()
     }
+
+    /// Erases and starts again, if the vault's data is missing and nothing
+    /// showed an erase was meant: the failure screen offers it, and it runs
+    /// only once the user confirms. Then the app starts on the fresh store, as
+    /// it would have at launch. `nil` otherwise.
+    @MainActor
+    static let missingVault: MissingVaultViewModel? = {
+        _ = storageMode
+        guard vaultStoreLoadFailureReason == .vaultMissing else { return nil }
+        return MissingVaultViewModel(erase: {
+            try await eraseVault()
+            setup()
+        })
+    }()
 
     /// Finishes an erase the app was stopped in the middle of, if there's one.
     /// `setup()` starts it, and the vault's views wait for it.

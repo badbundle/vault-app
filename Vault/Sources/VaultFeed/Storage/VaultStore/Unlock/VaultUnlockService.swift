@@ -160,9 +160,9 @@ public enum VaultUnlockError: Error, Equatable, Sendable {
     /// The password is off, so device authentication opens the vault (`unlockWithDeviceKey()`), and no password
     /// does. Nothing was tried or counted.
     case passwordIsOff
-    /// The password was being turned off or back on, and how that ended hasn't been recorded yet, so a right password
-    /// could look wrong. Nothing was tried or counted. Settling it (`VaultPasswordChangeService
-    /// .settleInterruptedChange()`, or the next launch) lets unlocking go ahead.
+    /// The password was being turned off or back on, how that ended hasn't been recorded yet, and the device key
+    /// still wraps the vault, so a right password could look wrong. Nothing was tried or counted. Settling it
+    /// (`VaultPasswordChangeService.settleInterruptedChange()`, or the next launch) lets unlocking go ahead.
     case passwordChangeUnsettled
 }
 
@@ -260,14 +260,17 @@ extension VaultUnlockService {
         // counts towards an erase.
         guard try await !deadlineStore.isErasing() else { throw VaultUnlockError.erasing }
         let state = try VaultStorageStateFile(directory: file.directory, fileSystem: file.fileSystem).read()
-        if state.isTurningThePasswordOffOrOn {
-            throw VaultUnlockError.passwordChangeUnsettled
-        }
-        if state.mode == .deviceKey {
+        if state.mode == .deviceKey, !state.isTurningThePasswordOffOrOn {
             throw VaultUnlockError.passwordIsOff
         }
         let deadline = try await min(deadlineStore.unlockDeadline(), Self.maximumDeadline)
         guard let contents = try await file.open() else { throw VaultUnlockError.noEncryptedVault }
+        // A turn off or on that couldn't record how it ended. If the device key opens no slot, the vault is in the
+        // password form, whatever the state says, so the attempt goes ahead: a full disk mustn't stop the password
+        // unlocking once it's back on. If it opens one, a right password could look wrong, so it's refused.
+        if state.isTurningThePasswordOffOrOn, try deviceKeyOpensASlot(of: contents) {
+            throw VaultUnlockError.passwordChangeUnsettled
+        }
         let reachesEraseThreshold: Bool
         switch try await attemptCounter.countAttempt() {
         case let .delayed(remaining):
@@ -293,6 +296,13 @@ extension VaultUnlockService {
         try? await clock.sleep(until: start.advanced(by: heldUntil))
         guard await isStillWanted(since: lockEpoch) else { throw CancellationError() }
         return .finished(attempt)
+    }
+
+    /// Whether the device key opens any slot of the file. Only while a turn off or on is unsettled: it doesn't depend
+    /// on the password.
+    private func deviceKeyOpensASlot(of contents: VaultSlotFile) throws -> Bool {
+        guard let key = try deviceKeyStore.deviceKey() else { return false }
+        return VaultSlotFile.slotIndices.contains { (try? contents.openSlot($0, with: .device(key))) != nil }
     }
 
     private func isStillWanted(since lockEpoch: Int) async -> Bool {

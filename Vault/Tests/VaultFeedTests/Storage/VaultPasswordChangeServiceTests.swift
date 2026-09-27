@@ -753,10 +753,10 @@ extension VaultPasswordChangeServiceTests {
         #expect(try sut.stateOnDisk() == VaultStorageState(mode: .deviceKey, unlockDeadline: Self.deadline))
     }
 
-    /// Turning the password on can't save its mode either. Settling it deletes the device key, and the new password
-    /// unlocks.
+    /// Turning the password on can't save its mode either. The device key opens nothing now, so the new password
+    /// still unlocks, without waiting for the mode to be settled. Settling it later deletes the device key.
     @Test
-    func turnOnPassword_whoseModeCantBeSaved_unlocksWithTheNewPasswordOnceSettled() async throws {
+    func turnOnPassword_whoseModeCantBeSaved_stillUnlocksWithTheNewPassword() async throws {
         let rename = try await Self.stepNumber(of: "rename temp to vault-slots.v1", in: .turnOn)
         let sut = try await makeSUT(mode: .deviceKey)
         sut.fileSystem.inject(.failEvery(stepNamed: "create state temp", fromStep: rename))
@@ -765,13 +765,13 @@ extension VaultPasswordChangeServiceTests {
 
         #expect(try sut.stateOnDisk().transition == .turningOn)
         await sut.unlockService.lock()
-        await #expect(throws: VaultUnlockError.passwordChangeUnsettled) {
-            try await sut.unlockService.unlock(password: "new")
-        }
+        #expect(try await sut.unlockService.unlock(password: "new") == .unlocked)
+        #expect(try await sut.session.retrieve(query: .init()).items == [sut.realItem])
+
         sut.fileSystem.inject(nil)
         #expect(try await sut.service.settleInterruptedChange() == .password)
+        #expect(try sut.stateOnDisk() == VaultStorageState(mode: .password, unlockDeadline: Self.deadline))
         #expect(sut.deviceKeyStore.key == nil)
-        #expect(try await sut.unlockService.unlock(password: "new") == .unlocked)
     }
 
     /// The next change settles one that couldn't save its mode before it starts, so the vault isn't stuck until the

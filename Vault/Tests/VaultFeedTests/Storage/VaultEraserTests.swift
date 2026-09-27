@@ -288,7 +288,10 @@ extension VaultEraserTests {
                     #expect(outcome == .password, context)
                     #expect(try harness.encryptedFileBytes() == before, context)
                     for key in VaultIdentifiers.SecureStorageKey.allCases {
-                        #expect(await harness.isStored(key), "\(key), \(context.rawValue)")
+                        // In the password mode, the device key opens nothing: it's a leftover, which launch
+                        // recovery deletes. Everything else stays.
+                        let kept = key != .vaultDeviceKey
+                        #expect(await harness.isStored(key) == kept, "\(key), \(context.rawValue)")
                     }
                 }
             }
@@ -545,7 +548,12 @@ struct VaultEraseHarness {
     /// eraser, as `VaultRoot.setup()` does.
     func relaunch() async throws -> VaultStorageRecovery.Outcome {
         fileSystem.inject(nil)
-        let outcome = try VaultStorageRecovery(directory: directory).recoverAtLaunch()
+        let outcome = try VaultStorageRecovery(
+            directory: directory,
+            fileSystem: LiveSlotFileSystem(),
+            deviceKeyStore: deviceKeys,
+            attemptStorage: attemptStorage,
+        ).recoverAtLaunch()
         if outcome == .erasing {
             try await erase()
         }

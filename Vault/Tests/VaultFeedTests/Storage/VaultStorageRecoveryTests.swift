@@ -143,10 +143,10 @@ struct VaultStorageRecoveryTests {
         }
     }
 
-    /// An erase removed the vault but couldn't journal it. No password can open anything, so rather than report the
-    /// password mode, which would leave the device with no vault for good, recovery reports the erase to finish.
+    /// An erase removed the vault but couldn't journal it, as it can if the disk is full. The count of wrong attempts
+    /// shows it was meant, so recovery reports the erase to finish, rather than leave the device with no vault.
     @Test(arguments: [nil, VaultStorageState.Transition.clearingSystemSurfaces])
-    func recover_passwordModeWithNoVaultLeft_reportsAnEraseToFinish(
+    func recover_encryptedWithNoVaultLeftAndTheEraseThresholdReached_reportsAnEraseToFinish(
         transition: VaultStorageState.Transition?,
     ) async throws {
         try await withTemporaryDirectory { directory in
@@ -156,8 +156,47 @@ struct VaultStorageRecoveryTests {
             )
             try Data("encrypted".utf8)
                 .write(to: directory.appending(path: EncryptedVaultFile.temporaryFilePrefix + "a"))
+            let attempts = Self.attempts(count: AppLockPasswordAttemptCounter.eraseThreshold)
 
-            #expect(try VaultStorageRecovery(directory: directory).recoverAtLaunch() == .erasing)
+            #expect(try Self.recovery(in: directory, attempts: attempts).recoverAtLaunch() == .erasing)
+        }
+    }
+
+    /// The vault is gone, and nothing shows an erase was meant: a restore or a move to another iPhone may have brought
+    /// the state back without the file. Erasing would delete every keychain item, and the file too if it turned up
+    /// later, so recovery deletes nothing and leaves it to the user, whatever encrypted mode or change it finds.
+    @Test(arguments: [nil, AppLockPasswordAttemptCounter.eraseThreshold - 1])
+    func recover_encryptedWithNoVaultLeftAndNoSignOfAnErase_touchesNothing(count: Int?) async throws {
+        for state in [
+            VaultStorageState(mode: .password, unlockDeadline: .seconds(1)),
+            VaultStorageState(mode: .deviceKey, unlockDeadline: .seconds(1)),
+            VaultStorageState(mode: .password, transition: .turningOff, unlockDeadline: .seconds(1)),
+        ] {
+            try await withTemporaryDirectory { directory in
+                try Self.write(state, in: directory)
+                let attempts = Self.attempts(count: count)
+                let deviceKeys = InMemoryDeviceKeyStore(key: SymmetricKey(size: .bits256))
+                let before = try Self.fileNames(in: directory)
+
+                #expect(throws: VaultStorageRecovery.Failure.vaultMissing, "\(state)") {
+                    try Self.recovery(in: directory, attempts: attempts, deviceKeys: deviceKeys).recoverAtLaunch()
+                }
+
+                #expect(try Self.fileNames(in: directory) == before, "\(state)")
+                #expect(try Self.read(in: directory) == state)
+                #expect(deviceKeys.key != nil, "\(state)")
+                #expect(try attempts.load()?.count == count, "\(state)")
+            }
+        }
+    }
+
+    /// A journaled erase is finished even with no vault left and no wrong attempts: the journal shows it was meant.
+    @Test
+    func recover_journaledEraseWithNoVaultLeft_reportsItToFinish() async throws {
+        try await withTemporaryDirectory { directory in
+            try Self.write(VaultStorageState(mode: .password, transition: .erasing), in: directory)
+
+            #expect(try Self.recovery(in: directory, attempts: Self.attempts(count: nil)).recoverAtLaunch() == .erasing)
         }
     }
 
@@ -281,8 +320,9 @@ extension VaultStorageRecoveryTests {
         #expect(sut.deviceKeyStore.key == nil)
     }
 
-    /// No vault is left at all, as an erase that couldn't journal leaves it: the erase has to finish, whatever the
-    /// journal says was underway. Nothing else changes, and the device key stays for the erase to delete.
+    /// No vault is left at all, as an erase that couldn't journal leaves it, and the count of wrong attempts shows it
+    /// was meant: the erase has to finish, whatever the journal says was underway. Nothing else changes, and the device
+    /// key stays for the erase to delete.
     @Test(arguments: [VaultStorageState.Transition.turningOff, .turningOn, nil])
     func recover_encryptedWithNoVaultLeft_reportsAnEraseToFinish(transition: VaultStorageState.Transition?) throws {
         let sut = try TurningHarness(
@@ -291,6 +331,7 @@ extension VaultStorageRecoveryTests {
             transition: transition,
         )
         try sut.fileSystem.removeItem(at: sut.encryptedFileURL)
+        sut.attempts.setRecord(count: AppLockPasswordAttemptCounter.eraseThreshold, latestAt: .now)
         let before = try sut.stateFile.read()
 
         #expect(try sut.recovery.recoverAtLaunch() == .erasing)
@@ -428,6 +469,7 @@ extension VaultStorageRecoveryTests {
     private struct TurningHarness {
         let fileSystem = InMemorySlotFileSystem()
         let deviceKeyStore: InMemoryDeviceKeyStore
+        let attempts = LoggingAttemptStorage(log: SharedMutex([]))
         let directory = EncryptedVaultFixture.inMemoryDirectory
 
         /// - Parameter mode: The mode the state records. By default, the one the change started from, or with no
@@ -466,7 +508,12 @@ extension VaultStorageRecoveryTests {
         }
 
         var recovery: VaultStorageRecovery {
-            VaultStorageRecovery(directory: directory, fileSystem: fileSystem, deviceKeyStore: deviceKeyStore)
+            VaultStorageRecovery(
+                directory: directory,
+                fileSystem: fileSystem,
+                deviceKeyStore: deviceKeyStore,
+                attemptStorage: attempts,
+            )
         }
     }
 }
@@ -620,6 +667,29 @@ extension VaultStorageRecoveryTests {
             try Data("encrypted".utf8)
                 .write(to: directory.appending(path: EncryptedVaultFile.temporaryFilePrefix + "a"))
         }
+    }
+
+    /// Recovery for a directory on disk, with the count of wrong attempts and the device key in memory.
+    static func recovery(
+        in directory: URL,
+        attempts: LoggingAttemptStorage,
+        deviceKeys: InMemoryDeviceKeyStore = InMemoryDeviceKeyStore(),
+    ) -> VaultStorageRecovery {
+        VaultStorageRecovery(
+            directory: directory,
+            fileSystem: LiveSlotFileSystem(),
+            deviceKeyStore: deviceKeys,
+            attemptStorage: attempts,
+        )
+    }
+
+    /// A count of wrong attempts in a row, or none.
+    static func attempts(count: Int?) -> LoggingAttemptStorage {
+        let attempts = LoggingAttemptStorage(log: SharedMutex([]))
+        if let count {
+            attempts.setRecord(count: count, latestAt: .now)
+        }
+        return attempts
     }
 
     static func write(_ state: VaultStorageState, in directory: URL) throws {

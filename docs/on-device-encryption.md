@@ -521,7 +521,7 @@ error is thrown. `deleteItems(matchingKillphrase:using:)` returns `false` instea
 | Turning the password off or on | Old or new file; the journal says `turningOff` or `turningOn` | The device key is tried on every slot. See [Turning the password off](#turning-the-password-off-and-why-it-doesnt-convert-back) |
 | Slot growth | Old or new file; one rename covers every slot | None needed |
 | Enabling the password | See [Migration](#migration-plain-to-encrypted) | Journal |
-| An erase | The vault is as it was if the erase hadn't been journaled or removed anything yet; otherwise it's partly erased, and every vault is unreadable once the encrypted file is gone | Journal, or the password mode with no vault left: finished at the next launch, before any store opens (see [Erasing](#erasing-after-failed-attempts-vault-34)) |
+| An erase | The vault is as it was if the erase hadn't been journaled or removed anything yet; otherwise it's partly erased, and every vault is unreadable once the encrypted file is gone | Journal, or an encrypted mode with no vault left and the count of wrong attempts at the threshold: finished at the next launch, before any store opens. With no vault and neither of those, nothing is touched until the user confirms (see [Erasing](#erasing-after-failed-attempts-vault-34)) |
 | A torn write or storage fault (not expected on APFS) | A slot fails to authenticate | The file is **never** reset automatically. The failure screen offers restoring from a backup, or erasing. |
 
 The atomicity comes from one file, one `rename`, and `F_FULLFSYNC` before it. No path overwrites the only copy
@@ -649,9 +649,11 @@ unlock does, where it can: the stamp is readable only while the device is unlock
   `vault-slots.lock`, so what's recorded is what the file holds, whether the rekey worked or not. If a rekey fails,
   that leaves the mode as it was straight away, and a `D` made for it goes.
 - **A mode that can't be saved.** Settling is tried three times. If the state still can't be saved, the change is
-  made but the journal stays. Unlocking with a password is then refused before anything is counted
-  (`passwordChangeUnsettled`), so a right password is never counted as wrong while `D` wraps the vault, which with
-  the erase after failed attempts could destroy it. `D` still opens it meanwhile. The next change settles it first,
+  made but the journal stays. Unlocking with a password then tries `D` on every slot first, before anything is
+  counted. If `D` opens one, it's refused (`passwordChangeUnsettled`), so a right password is never counted as wrong
+  while `D` wraps the vault, which with the erase after failed attempts could destroy it; `D` still opens it
+  meanwhile. If `D` opens none, the vault is in the password form, and the attempt goes ahead, so a full disk doesn't
+  stop the password unlocking once it's back on. The next change settles it first,
   the app's password service settles it and tries again when an unlock is refused
   (`settleInterruptedChange()`), and so does the next launch.
 - **With the password off, unlocking with a password is refused** (`passwordIsOff`), again before anything is
@@ -918,8 +920,14 @@ and resets the counter.
 - **If the journal can't be written,** perhaps because the disk is full, it does step 1 first, which frees space,
   and tries again. It removes the plain store before the encrypted file then, so the app can't stop with the
   encrypted file gone and a plain store left, which recovery keeps as a possible only copy. If the journal still
-  can't be written, or the app stops first, the device is in the password mode with no vault at all, which recovery
-  also reports as an erase to finish.
+  can't be written, or the app stops first, the device is in an encrypted mode with no vault at all, and the count
+  of wrong attempts is still at the threshold: the keychain items aren't deleted until the journal is in place. That
+  count shows the erase was meant, so recovery reports an erase to finish.
+- **With no vault, no journal and a count below the threshold,** nothing shows an erase was meant. A restore or a
+  move to another iPhone can bring back the storage state without the file, and erasing then would delete every
+  keychain item, the backup password and `D` among them, and recovery would delete the file if it turned up later.
+  So recovery touches nothing and throws `vaultMissing`. The failure screen says how to restore the vault, and
+  offers to erase and start again, which runs only once the user confirms (`MissingVaultViewModel`).
 - **Step 1 removes every copy of a vault:** the encrypted file first, then its temp files, the plain store's files
   and its failed-open archives, which are plaintext copies, and last the lock file, so a writer can't take a new
   lock while the encrypted file is still there. It holds the file's lock while it does, if

@@ -14,9 +14,13 @@ import Foundation
 /// - **Clearing the system surfaces**: the app then clears QuickType and reloads the widgets
 ///   (`finishClearingSystemSurfaces(_:)`), once it can.
 /// - **Erasing**: it leaves the files alone and reports `.erasing`. The app opens no store, and finishes the erase
-///   with `VaultEraser`, which needs the keychain and the app's hooks as well as the files. It reports the same for
-///   an encrypted mode with no vault left at all, neither the encrypted file nor the plain store: an erase that
-///   removed the vault but couldn't journal it.
+///   with `VaultEraser`, which needs the keychain and the app's hooks as well as the files.
+/// - **An encrypted mode with no vault left**, neither the encrypted file nor the plain store, and no journal: an
+///   erase that removed the vault but couldn't journal it, if the count of wrong attempts has reached the erase
+///   threshold, so it reports `.erasing`. Otherwise nothing shows an erase was meant: a restore or a move to another
+///   iPhone may have brought back the state without the file. Erasing then would delete the keychain items, and
+///   recovery would later delete the file if it turned up, so it touches nothing and throws `.vaultMissing`. The
+///   failure screen says how to restore it, and offers to erase and start again only once the user confirms.
 /// - **Turning the password off, or back on** (`VaultPasswordChangeService`): it tries the device key on every slot.
 ///   If one opens, the vault's key is wrapped with the device key, so the password is off; if none does, it's on.
 ///   Either way the vault is intact: the rekey is a single rename. While the app runs, the change service and the
@@ -45,6 +49,10 @@ public struct VaultStorageRecovery: Sendable {
         /// The encrypted file can't be read until the device is unlocked, so a turn off or on the app was stopped in
         /// the middle of can't be settled yet. Nothing changed.
         case fileUnreadableWhileLocked
+        /// The state says the vault is encrypted, but neither the encrypted file nor the plain store is there, and
+        /// nothing shows an erase was meant: no journal, and fewer wrong attempts than the erase threshold. Nothing
+        /// was changed or deleted. Only the user can decide to erase and start again.
+        case vaultMissing
     }
 
     /// How the vault is stored, once recovery has finished or undone what it could.
@@ -63,19 +71,24 @@ public struct VaultStorageRecovery: Sendable {
     private let directory: URL
     private let fileSystem: any SlotFileSystem
     private let deviceKeyStore: any VaultDeviceKeyStoring
+    private let attemptStorage: any AppLockPasswordAttemptStorage
 
     public init(directory: URL, deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore()) {
         self.init(directory: directory, fileSystem: LiveSlotFileSystem(), deviceKeyStore: deviceKeyStore)
     }
 
+    /// - Parameter attemptStorage: Where the count of wrong attempts is, which shows whether an erase was meant when
+    ///   the vault is gone and no erase was journaled.
     init(
         directory: URL,
         fileSystem: any SlotFileSystem,
         deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore(),
+        attemptStorage: any AppLockPasswordAttemptStorage = AppLockPasswordAttemptKeychainStorage(),
     ) {
         self.directory = directory
         self.fileSystem = fileSystem
         self.deviceKeyStore = deviceKeyStore
+        self.attemptStorage = attemptStorage
     }
 
     private var stateFile: VaultStorageStateFile {
@@ -92,15 +105,17 @@ public struct VaultStorageRecovery: Sendable {
     ///
     /// - Returns: How the vault is stored now, or `.erasing` if an erase is still to finish.
     /// - Throws: If the state can't be read or a step fails, `Failure` if deleting would risk the only copy of the
-    ///   vault, or `.deviceKeyMissing` if the password is off and there's no device key. Nothing should open a store
-    ///   then.
+    ///   vault, `.deviceKeyMissing` if the password is off and there's no device key, or `.vaultMissing` if there's no
+    ///   vault and nothing shows an erase was meant. Nothing should open a store then.
     public func recoverAtLaunch() throws -> Outcome {
         let (state, step) = try stateFile.updateBlockingTheThread { state -> LaunchStep in
             try stateFile.removeStrayTemporaryFiles()
             guard state.transition != .erasing else { return .erasing }
             if state.mode != .plain, try !anyVaultIsLeft() {
-                // An erase removed the vault but couldn't journal that it had, as it can if the disk is full. Nothing
-                // is left to open, so the erase has to finish, or the device is stuck with no vault.
+                // An erase removed the vault but couldn't journal that it had, as it can if the disk is full: then the
+                // count of wrong attempts shows it was meant, and it has to finish. Anything else is left for the
+                // user to decide.
+                guard reachedTheEraseThreshold() else { throw Failure.vaultMissing }
                 return .erasing
             }
             if state.isTurningThePasswordOffOrOn {
@@ -150,6 +165,13 @@ public struct VaultStorageRecovery: Sendable {
         /// It settled a turn off or on, from what trying the device key found.
         case settled(DeviceKeyTrial)
         case erasing
+    }
+
+    /// Whether the count of wrong attempts in a row has reached the erase threshold. If it can't be read, as while
+    /// the device is locked, nothing shows it has.
+    private func reachedTheEraseThreshold() -> Bool {
+        guard let record = try? attemptStorage.load() else { return false }
+        return record.count >= AppLockPasswordAttemptCounter.eraseThreshold
     }
 
     /// Whether there's still a vault to open: the encrypted file, or the plain store.
