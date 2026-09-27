@@ -11,6 +11,9 @@ import Foundation
 /// 3. Replaces the file (`EncryptedVaultFile.Locked.write(_:verify:)`), verifying first that the file as read back
 ///    opens the slot at the new generation and decodes to exactly the state being saved.
 ///
+/// Deleting all data saves the same way, and fills every other slot with random bytes in the same write
+/// (`saveDestroyingOtherVaults(_:)`), so every other vault goes with it or none does.
+///
 /// `RecordVaultStore` makes one save at a time, so a save always starts from the slot the last one left.
 actor SlotFilePersistence: VaultRecordPersistence {
     /// The file, with the protection the storage mode gives it.
@@ -35,6 +38,17 @@ actor SlotFilePersistence: VaultRecordPersistence {
     }
 
     func save(_ state: VaultRecordState) async throws -> VaultRecordSaveOutcome {
+        try await save(state, destroyingOtherVaults: false)
+    }
+
+    /// Saves `state`, and fills every other slot with fresh random bytes in the same write (VAULT-74): the real vault
+    /// and any duress vaults are gone, whichever vault this is. Slots that held nothing change the same way, so the
+    /// file doesn't show whether any did.
+    func saveDestroyingOtherVaults(_ state: VaultRecordState) async throws -> VaultRecordSaveOutcome {
+        try await save(state, destroyingOtherVaults: true)
+    }
+
+    private func save(_ state: VaultRecordState, destroyingOtherVaults: Bool) async throws -> VaultRecordSaveOutcome {
         var payload = try EncryptedVaultPayload.encode(state)
         defer { SlotRandom.wipe(&payload.data) }
         if let memoryCheck {
@@ -56,6 +70,10 @@ actor SlotFilePersistence: VaultRecordPersistence {
                 let (current, saved) = try Self.reload(slot, from: contents)
                 return (current, VaultRecordSaveOutcome.conflict(saved: saved))
             }
+            if destroyingOtherVaults {
+                contents.randomizeSlots(except: sealed)
+            }
+            // The file is read back and checked byte for byte first, so every other slot is as written here.
             try file.write(contents) { written in
                 try Self.verify(written, holds: state, in: sealed)
             }

@@ -12,6 +12,7 @@ struct FileBackedContentTests {
             FAQBackupsSecurityFileContent(),
             FAQItemEncryptionFileContent(),
             FAQSyncDevicesFileContent(),
+            FAQDuressFileContent(),
             BackupPasswordFileContent(),
             BackupPasswordChangingFileContent(),
             PrivacyPolicyContent(),

@@ -49,6 +49,13 @@ public final class FAQSyncDevicesFileContent: FileBackedContent {
     public init() {}
 }
 
+public final class FAQDuressFileContent: FileBackedContent {
+    public let fileName: String = "FAQ-Duress"
+    public let fileExtension: String = "md"
+
+    public init() {}
+}
+
 public struct PrivacyPolicyContent: FileBackedContent {
     public let fileName: String = "PrivacyPolicy"
     public let fileExtension: String = "md"

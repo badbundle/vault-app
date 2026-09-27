@@ -230,7 +230,9 @@ extension EncryptedVaultStore: VaultStoreImporter {
 }
 
 extension EncryptedVaultStore: VaultStoreDeleter {
-    /// Empties this vault. Its slot, and its password, stay.
+    /// Empties this vault, and destroys every other vault in the file: the real vault and any duress vaults, whichever
+    /// this is (VAULT-74). Every other slot is filled with random bytes, whether or not it held a vault. This vault's
+    /// slot, and its password, stay.
     public func deleteVault() async throws {
         try checkWrite()
         try await records.deleteVault()
