@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import FoundationExtensions
+import TestHelpers
 import Testing
 @testable import VaultFeed
 
@@ -9,6 +10,7 @@ import Testing
 @MainActor
 struct AutofillVaultServiceTests {
     private static let password = "correct horse"
+    private static let lastAttempt = AppLockPasswordAttemptCounter.eraseThreshold - 1
 
     // MARK: - Unlocking
 
@@ -58,6 +60,9 @@ struct AutofillVaultServiceTests {
         }
         await #expect(throws: AppLockPasswordUnavailableError.self) {
             try await service.changePassword(current: Self.password, new: "battery staple")
+        }
+        await #expect(throws: AppLockPasswordUnavailableError.self) {
+            try await service.setErasesAfterFailedPasswords(true, current: Self.password)
         }
         await #expect(throws: AppLockPasswordUnavailableError.self) {
             try await service.turnOffPassword(current: Self.password)
@@ -330,9 +335,10 @@ struct AutofillVaultServiceTests {
             try VaultStorageStateFile(directory: directory).write(state)
         }
 
-        let sut = AutofillVaultService(
+        let sut = try AutofillVaultService(
             directory: directory,
             session: VaultStoreSession(target: .locked),
+            settings: AppLockSettingsStore(userDefaults: .nonPersistent()),
             purgeVaultContents: {},
         )
 
@@ -346,9 +352,10 @@ struct AutofillVaultServiceTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         let stateFile = VaultStorageStateFile(directory: directory)
         try stateFile.write(VaultStorageState(mode: .deviceKey))
-        let sut = AutofillVaultService(
+        let sut = try AutofillVaultService(
             directory: directory,
             session: VaultStoreSession(target: .locked),
+            settings: AppLockSettingsStore(userDefaults: .nonPersistent()),
             purgeVaultContents: {},
         )
         #expect(!sut.isPasswordSet)
@@ -364,13 +371,69 @@ struct AutofillVaultServiceTests {
         defer { try? FileManager.default.removeItem(at: directory) }
         try Data("not json".utf8).write(to: directory.appending(path: VaultStorageStateFile.fileName))
 
-        let sut = AutofillVaultService(
+        let sut = try AutofillVaultService(
             directory: directory,
             session: VaultStoreSession(target: .locked),
+            settings: AppLockSettingsStore(userDefaults: .nonPersistent()),
             purgeVaultContents: {},
         )
 
         #expect(sut.isPasswordSet)
+    }
+
+    // MARK: - Erasing after failed passwords
+
+    @Test(arguments: [false, true])
+    func erasesAfterFailedPasswords_isTheDevicesSetting(erases: Bool) throws {
+        #expect(try makeSUT(erasesAfterFailedPasswords: erases).service.erasesAfterFailedPasswords == erases)
+    }
+
+    /// AutoFill doesn't try the attempt that could erase, even with the right password, and says the same whether
+    /// erasing is on or off, so it doesn't show which. Only the app erases.
+    @Test(arguments: [false, true], [false, true])
+    func unlock_lastAttempt_isntTriedOrCounted(erases: Bool, isRight: Bool) async throws {
+        let sut = try makeSUT(erasesAfterFailedPasswords: erases, wrongAttempts: Self.lastAttempt)
+
+        let result = try await sut.service.unlock(password: isRight ? Self.password : "wrong")
+
+        #expect(result == .onlyAtTheLockScreen)
+        #expect(sut.log.value.isEmpty)
+        #expect(try sut.attemptStorage.load()?.count == Self.lastAttempt)
+        #expect(await sut.session.isLocked)
+    }
+
+    @Test
+    func unlock_beforeTheLastAttempt_triesThePassword() async throws {
+        let sut = try makeSUT(erasesAfterFailedPasswords: true, wrongAttempts: Self.lastAttempt - 1)
+
+        let result = try await sut.service.unlock(password: "wrong")
+
+        #expect(result == .wrong)
+        #expect(try sut.attemptStorage.load()?.count == Self.lastAttempt)
+    }
+
+    /// The app finishes an erase that's underway, at launch.
+    @Test
+    func unlock_whileErasing_sendsToTheApp() async throws {
+        let sut = try makeSUT()
+        sut.deadlineStore.startErasing()
+
+        let result = try await sut.service.unlock(password: Self.password)
+
+        #expect(result == .onlyAtTheLockScreen)
+        #expect(sut.log.value.isEmpty)
+    }
+
+    /// The sheet's lock asks the user to open Vault, and doesn't take the password again.
+    @Test
+    func appLock_lastAttempt_needsTheApp() async throws {
+        let sut = try makeSUT(wrongAttempts: Self.lastAttempt)
+        let appLock = try makeAppLock(passwordService: sut.service)
+        await appLock.unlock()
+
+        await appLock.unlock(password: Self.password)
+
+        #expect(appLock.state == .locked(AppLockedState(step: .password, failure: .needsTheApp)))
     }
 }
 
@@ -387,6 +450,8 @@ extension AutofillVaultServiceTests {
         /// Runs whenever the memory left is asked for, as a save does just before it takes the file's lock.
         let whenAskedForMemory: SharedMutex<(@Sendable () -> Void)?>
         let log: SharedMutex<[String]>
+        let attemptStorage: LoggingAttemptStorage
+        let deadlineStore: FakeUnlockDeadlineStore
 
         var directory: URL {
             EncryptedVaultFixture.inMemoryDirectory
@@ -397,14 +462,18 @@ extension AutofillVaultServiceTests {
         }
     }
 
-    /// - Parameter accessMode: How the vault can be opened now, which the service checks as the extension's does, or
-    ///   `nil` for no check.
+    /// - Parameters:
+    ///   - accessMode: How the vault can be opened now, which the service checks as the extension's does, or `nil` for
+    ///     no check.
+    ///   - wrongAttempts: Wrong passwords in a row tried already, with the delay after them over.
     private func makeSUT(
         items: [VaultItem] = [],
         wrappedWithTheDeviceKey: Bool = false,
         availableMemory: Int? = nil,
         accessMode: SharedMutex<VaultAccessMode>? = nil,
         purges: SharedMutex<Int> = SharedMutex(0),
+        erasesAfterFailedPasswords: Bool = false,
+        wrongAttempts: Int = 0,
     ) throws -> SUT {
         var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
         let deviceKey = SymmetricKey(size: .bits256)
@@ -439,15 +508,22 @@ extension AutofillVaultServiceTests {
         if let accessMode {
             currentAccessMode = { accessMode.value }
         }
+        let attemptStorage = LoggingAttemptStorage(log: log)
+        let counterClock = FakeAppLockClock()
+        if wrongAttempts > 0 {
+            attemptStorage.setRecord(count: wrongAttempts, latestAt: counterClock.now)
+            counterClock.advance(by: .seconds(60 * 60))
+        }
+        let deadlineStore = FakeUnlockDeadlineStore(deadline: .seconds(1))
+        let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
+        settings.erasesAfterFailedPasswords = erasesAfterFailedPasswords
         let service = AutofillVaultService(
             file: file,
             session: session,
-            attemptCounter: AppLockPasswordAttemptCounter(
-                storage: LoggingAttemptStorage(log: log),
-                clock: FakeAppLockClock(),
-            ),
-            deadlineStore: FakeUnlockDeadlineStore(deadline: .seconds(1)),
+            attemptCounter: AppLockPasswordAttemptCounter(storage: attemptStorage, clock: counterClock),
+            deadlineStore: deadlineStore,
             deviceKeyStore: deviceKeyStore,
+            settings: settings,
             purgeVaultContents: { purges.modify { $0 += 1 } },
             needsPassword: { !wrappedWithTheDeviceKey },
             clock: clock,
@@ -465,6 +541,20 @@ extension AutofillVaultServiceTests {
             availableMemory: memory,
             whenAskedForMemory: whenAskedForMemory,
             log: log,
+            attemptStorage: attemptStorage,
+            deadlineStore: deadlineStore,
+        )
+    }
+
+    /// The AutoFill sheet's lock, with the password on, unlocking with `passwordService`.
+    private func makeAppLock(passwordService: AutofillVaultService) throws -> AppLockService {
+        try AppLockService(
+            settings: AppLockSettingsStore(userDefaults: .nonPersistent()),
+            authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
+            passwordService: passwordService,
+            delay: .immediately,
+            clock: FakeAppLockClock(),
+            purgeSensitiveData: {},
         )
     }
 

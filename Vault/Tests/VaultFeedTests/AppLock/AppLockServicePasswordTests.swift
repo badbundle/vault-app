@@ -84,6 +84,226 @@ struct AppLockServicePasswordTests {
         #expect(sut.state == .locked(.init(step: .password, failure: .wrongPassword)))
     }
 
+    // MARK: - Erasing after failed passwords
+
+    @Test
+    func init_erasingAfterFailedPasswords_isOffByDefault() throws {
+        let sut = try makeSUT(passwordService: FakeAppLockPasswordService(password: Self.password))
+
+        #expect(!sut.erasesAfterFailedPasswords)
+    }
+
+    /// With erasing on, the tenth wrong password in a row erases every vault, and the lock screen simply opens the
+    /// fresh, empty one, like a new install. It never says the password was wrong, and drops what was waiting to open
+    /// an item from the vault that's gone.
+    @Test
+    func unlockWithPassword_tenthWrongWithErasingOn_erasesAndOpensTheFreshVault() async throws {
+        let clock = FakeAppLockClock()
+        let didChangeSettings = Counter()
+        let service = FakeAppLockPasswordService(
+            password: Self.password,
+            erasesAfterFailedPasswords: true,
+            wrongAttempts: AppLockPasswordAttemptCounter.eraseThreshold - 1,
+            clock: clock,
+        )
+        let sut = try makeSUT(clock: clock, passwordService: service, didChangeSettings: didChangeSettings)
+        clock.advance(by: .seconds(60 * 60))
+        var didRun = false
+        sut.performWhenUnlocked { didRun = true }
+        await sut.unlock()
+
+        await sut.unlock(password: "wrong")
+
+        #expect(sut.state == .unlocked)
+        #expect(!sut.isPasswordSet)
+        #expect(!sut.erasesAfterFailedPasswords)
+        #expect(!didRun)
+        #expect(didChangeSettings.count == 1)
+        #expect(!service.isPasswordSet)
+    }
+
+    @Test
+    func unlockWithPassword_tenthWrongWithErasingOff_isJustWrong() async throws {
+        let clock = FakeAppLockClock()
+        let service = FakeAppLockPasswordService(
+            password: Self.password,
+            wrongAttempts: AppLockPasswordAttemptCounter.eraseThreshold - 1,
+            clock: clock,
+        )
+        let sut = try makeSUT(clock: clock, passwordService: service)
+        clock.advance(by: .seconds(60 * 60))
+        await sut.unlock()
+
+        await sut.unlock(password: "wrong")
+
+        #expect(sut.state == .locked(.init(
+            step: .password,
+            failure: .wrongPassword,
+            passwordRetryAt: clock.now.advanced(by: .seconds(60 * 60)),
+        )))
+        #expect(sut.isPasswordSet)
+        #expect(service.isPasswordSet)
+    }
+
+    /// Any password that opens a vault, the real one or a duress one, unlocks and resets the count, however close it
+    /// was to erasing (MANIFESTO.md C2).
+    @Test
+    func unlockWithPassword_rightAtTheLastAttemptWithErasingOn_unlocksWithoutErasing() async throws {
+        let clock = FakeAppLockClock()
+        let service = FakeAppLockPasswordService(
+            password: Self.password,
+            erasesAfterFailedPasswords: true,
+            wrongAttempts: AppLockPasswordAttemptCounter.eraseThreshold - 1,
+            clock: clock,
+        )
+        let sut = try makeSUT(clock: clock, passwordService: service)
+        clock.advance(by: .seconds(60 * 60))
+        await sut.unlock()
+
+        await sut.unlock(password: Self.password)
+
+        #expect(sut.state == .unlocked)
+        #expect(sut.isPasswordSet)
+        #expect(sut.erasesAfterFailedPasswords)
+        #expect(try await service.remainingDelay() == .zero)
+    }
+
+    /// Ten wrong ones counted already, with erasing on, is an erase that's due: it erases before trying anything, so
+    /// even the right password doesn't escape it.
+    @Test
+    func unlockWithPassword_eraseDue_erasesWhateverIsEntered() async throws {
+        let clock = FakeAppLockClock()
+        let service = FakeAppLockPasswordService(
+            password: Self.password,
+            erasesAfterFailedPasswords: true,
+            wrongAttempts: AppLockPasswordAttemptCounter.eraseThreshold,
+            clock: clock,
+        )
+        let sut = try makeSUT(clock: clock, passwordService: service)
+        clock.advance(by: .seconds(60 * 60))
+        await sut.unlock()
+
+        await sut.unlock(password: Self.password)
+
+        #expect(sut.state == .unlocked)
+        #expect(!sut.isPasswordSet)
+        #expect(!service.isPasswordSet)
+    }
+
+    /// The app locks again while the erase is underway. It finishes all the same, and the lock asks for device
+    /// authentication only, as there's no password now. Nothing that was waiting to open an item runs.
+    @Test
+    func unlockWithPassword_eraseFinishingAfterTheAppLockedAgain_forgetsWhatWasWaiting() async throws {
+        let clock = FakeAppLockClock()
+        let service = FakeAppLockPasswordService(
+            password: Self.password,
+            erasesAfterFailedPasswords: true,
+            wrongAttempts: AppLockPasswordAttemptCounter.eraseThreshold - 1,
+            deadline: .seconds(1),
+            clock: clock,
+        )
+        let sut = try makeSUT(clock: clock, passwordService: service)
+        clock.advance(by: .seconds(60 * 60))
+        await sut.unlock()
+        var didRun = false
+        sut.performWhenUnlocked { didRun = true }
+        let attempt = Task { await sut.unlock(password: "wrong") }
+        while sut.state != .locked(AppLockedState(step: .password, isInProgress: true)) {
+            await Task.yield()
+        }
+
+        sut.scenePhaseDidChange(to: .background)
+        await attempt.value
+
+        #expect(sut.isLocked)
+        #expect(!sut.isPasswordSet)
+        #expect(!service.isPasswordSet)
+        await sut.unlock()
+        #expect(sut.state == .unlocked)
+        #expect(!didRun)
+    }
+
+    @Test
+    func setErasesAfterFailedPasswords_rightPassword_turnsItOnThenOff() async throws {
+        let service = FakeAppLockPasswordService(password: Self.password)
+        let sut = try await makeUnlockedSUT(passwordService: service)
+
+        #expect(try await sut.setErasesAfterFailedPasswords(true, current: Self.password) == .accepted)
+        #expect(sut.erasesAfterFailedPasswords)
+
+        #expect(try await sut.setErasesAfterFailedPasswords(false, current: Self.password) == .accepted)
+        #expect(!sut.erasesAfterFailedPasswords)
+    }
+
+    /// A wrong password counts and waits, as it does for changing the password, but never erases from Settings: the
+    /// vault is open.
+    @Test
+    func setErasesAfterFailedPasswords_wrongPasswords_countWaitAndNeverErase() async throws {
+        let clock = FakeAppLockClock()
+        let service = FakeAppLockPasswordService(
+            password: Self.password,
+            erasesAfterFailedPasswords: true,
+            clock: clock,
+        )
+        let sut = try await makeUnlockedSUT(passwordService: service, clock: clock)
+
+        for _ in 1 ..< AppLockPasswordAttemptCounter.eraseThreshold {
+            let result = try await sut.setErasesAfterFailedPasswords(false, current: "wrong")
+            #expect(result == .wrong)
+            clock.advance(by: .seconds(60 * 60))
+        }
+
+        #expect(sut.erasesAfterFailedPasswords)
+        #expect(sut.isPasswordSet)
+        #expect(sut.state == .unlocked)
+    }
+
+    /// Settings never tries the attempt that would make the tenth in a row, even to turn erasing on: that one is only
+    /// tried at the lock screen.
+    @Test
+    func setErasesAfterFailedPasswords_tenthAttempt_isOnlyAtTheLockScreen() async throws {
+        let clock = FakeAppLockClock()
+        let service = FakeAppLockPasswordService(password: Self.password, clock: clock)
+        let sut = try await makeUnlockedSUT(passwordService: service, clock: clock)
+        for _ in 1 ..< AppLockPasswordAttemptCounter.eraseThreshold {
+            _ = try await sut.setErasesAfterFailedPasswords(true, current: "wrong")
+            clock.advance(by: .seconds(60 * 60))
+        }
+
+        let result = try await sut.setErasesAfterFailedPasswords(true, current: Self.password)
+
+        #expect(result == .onlyAtTheLockScreen)
+        #expect(!sut.erasesAfterFailedPasswords)
+        #expect(sut.state == .unlocked)
+    }
+
+    @Test
+    func setErasesAfterFailedPasswords_whileWaiting_triesNothing() async throws {
+        let clock = FakeAppLockClock()
+        let service = FakeAppLockPasswordService(password: Self.password, clock: clock)
+        let sut = try await makeUnlockedSUT(passwordService: service, clock: clock)
+        for _ in 1 ... 5 {
+            _ = try await sut.setErasesAfterFailedPasswords(true, current: "wrong")
+        }
+
+        let result = try await sut.setErasesAfterFailedPasswords(true, current: Self.password)
+
+        #expect(result == .delayed(.seconds(60)))
+        #expect(!sut.erasesAfterFailedPasswords)
+    }
+
+    /// Turning the password off turns erasing off with it: it only means anything with a password.
+    @Test
+    func turnOffPassword_turnsErasingOffToo() async throws {
+        let service = FakeAppLockPasswordService(password: Self.password, erasesAfterFailedPasswords: true)
+        let sut = try await makeUnlockedSUT(passwordService: service)
+
+        _ = try await sut.turnOffPassword(current: Self.password)
+
+        #expect(!sut.erasesAfterFailedPasswords)
+        #expect(!service.erasesAfterFailedPasswords)
+    }
+
     @Test
     func unlockWithPassword_fifthWrongInARow_waitsAMinute() async throws {
         let clock = FakeAppLockClock()

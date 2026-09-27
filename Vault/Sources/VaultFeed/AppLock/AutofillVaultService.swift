@@ -6,6 +6,12 @@ import Foundation
 ///
 /// - **The same attempts as the app.** A password is counted with the same keychain counter as the app, so a guess in
 ///   AutoFill waits, and counts toward an erase, just as one on the lock screen does.
+/// - **It never erases** (VAULT-34). It doesn't try or count an attempt that would make
+///   `AppLockPasswordAttemptCounter.eraseThreshold` or more wrong ones in a row, whether erasing after failed
+///   passwords is on or off, and answers `.onlyAtTheLockScreen`, so the sheet sends the user to Vault. An erase is
+///   a run of file and keychain steps the system could stop an extension in the middle of, while the app finishes
+///   the same erase at launch, so only the app erases. The count is held against the app while it's decided, so an
+///   attempt the app makes at the same moment can't make this one the tenth.
 /// - **Memory.** An extension the system stops for using too much memory has still counted the attempt, as a wrong
 ///   one. So each unlock checks there's the memory to derive the key first, and each save that replaces the vault
 ///   file checks there's the memory for that (`VaultWriteMemoryCheck`). When there isn't, it calls
@@ -16,8 +22,8 @@ import Foundation
 ///   open. The device key opens nothing unless the storage state says it's in use, and every call to an open vault
 ///   checks the vault is still stored the way it was when it opened (`VaultAccessGuard`).
 ///
-/// Setting, changing and turning off the password, and making a duress vault, are only for the app's Settings, so here
-/// they throw.
+/// Setting, changing and turning off the password, making a duress vault, and turning erasing on or off, are only for
+/// the app's Settings, so here they throw.
 @MainActor
 public final class AutofillVaultService: AppLockPasswordService {
     /// Thrown by `unlock(password:)` and `openWithDeviceKey()` when there isn't the memory. Nothing was counted or
@@ -34,16 +40,19 @@ public final class AutofillVaultService: AppLockPasswordService {
 
     private let unlockService: VaultUnlockService
     private let attemptCounter: AppLockPasswordAttemptCounter
+    private let settings: AppLockSettingsStore
     private let memoryNotifier: MemoryNotifier
     private let needsPassword: @Sendable () -> Bool
 
     /// - Parameters:
     ///   - directory: The vault's storage directory, with the encrypted file and the storage state in it.
     ///   - session: The store session the extension reads and writes the vault through.
+    ///   - settings: The app lock's settings, with erasing after failed passwords.
     ///   - purgeVaultContents: Forgets everything the extension read from the vault. Called every time it locks.
     public convenience init(
         directory: URL,
         session: VaultStoreSession,
+        settings: AppLockSettingsStore,
         purgeVaultContents: @escaping @Sendable () async -> Void,
     ) {
         let stateFile = VaultStorageStateFile(directory: directory)
@@ -52,6 +61,7 @@ public final class AutofillVaultService: AppLockPasswordService {
             session: session,
             attemptCounter: AppLockPasswordAttemptCounter(),
             deadlineStore: ReadOnlyUnlockDeadlineStore(stateFile: stateFile),
+            settings: settings,
             purgeVaultContents: purgeVaultContents,
             needsPassword: { Self.needsPassword(stateFile: stateFile) },
             currentAccessMode: VaultAccessMode.reader(directory: directory),
@@ -64,6 +74,7 @@ public final class AutofillVaultService: AppLockPasswordService {
         attemptCounter: AppLockPasswordAttemptCounter,
         deadlineStore: any VaultUnlockDeadlineStoring,
         deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore(),
+        settings: AppLockSettingsStore,
         purgeVaultContents: @escaping @Sendable () async -> Void,
         needsPassword: @escaping @Sendable () -> Bool,
         clock: any VaultUnlockClock = ContinuousClock(),
@@ -92,6 +103,7 @@ public final class AutofillVaultService: AppLockPasswordService {
             currentAccessMode: currentAccessMode,
         )
         self.attemptCounter = attemptCounter
+        self.settings = settings
         self.needsPassword = needsPassword
         self.memoryNotifier = memoryNotifier
     }
@@ -108,16 +120,28 @@ public final class AutofillVaultService: AppLockPasswordService {
         !VaultAccessMode(state: try? stateFile.read()).opensWithoutPassword
     }
 
+    public var erasesAfterFailedPasswords: Bool {
+        settings.erasesAfterFailedPasswords
+    }
+
     public func remainingDelay() async throws -> Duration {
         try await attemptCounter.remainingDelay()
     }
 
-    /// Tries the password, once there's the memory to derive its key.
+    /// Tries the password, once there's the memory to derive its key, unless it's the attempt that could erase.
     ///
+    /// - Returns: `.onlyAtTheLockScreen`, without trying or counting it, for an attempt that would make the erase
+    ///   threshold's wrong password in a row, or while an erase is underway, which the app finishes.
     /// - Throws: `NotEnoughMemoryError` without counting the attempt, if there isn't the memory.
     public func unlock(password: String) async throws -> AppLockPasswordResult {
         try await requireMemoryHeadroom()
-        return switch try await unlockService.unlock(password: password) {
+        let result: VaultUnlockResult
+        do {
+            result = try await unlockService.unlock(password: password, stoppingBeforeEraseThreshold: true)
+        } catch VaultUnlockError.stoppedBeforeEraseThreshold, VaultUnlockError.erasing {
+            return .onlyAtTheLockScreen
+        }
+        return switch result {
         case .unlocked: .accepted
         case .wrongPassword: .wrong
         case let .mustWait(remaining): .delayed(remaining)
@@ -147,6 +171,10 @@ public final class AutofillVaultService: AppLockPasswordService {
     }
 
     public func makeDuressVault(password _: String) async throws {
+        throw AppLockPasswordUnavailableError()
+    }
+
+    public func setErasesAfterFailedPasswords(_: Bool, current _: String) async throws -> AppLockPasswordResult {
         throw AppLockPasswordUnavailableError()
     }
 

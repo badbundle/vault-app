@@ -234,6 +234,7 @@ public enum VaultRoot {
         let service = AutofillVaultService(
             directory: vaultStorageDirectory,
             session: vaultStore,
+            settings: appLockSettingsStore,
             purgeVaultContents: { @MainActor in
                 await vaultDataModel.purgeVaultContents()
             },
@@ -440,6 +441,7 @@ public enum VaultRoot {
         session: vaultStore,
         secureStorage: secureStorage,
         attemptCounter: AppLockPasswordAttemptCounter(),
+        appLockSettings: appLockSettingsStore,
         defaults: defaults,
         temporaryDirectory: fileManager.temporaryDirectory,
         hooks: .init(
@@ -447,7 +449,7 @@ public enum VaultRoot {
                 await releasePlainVaultStore()
             },
             clearCredentialIdentities: {
-                try? await vaultOtpAutofillStore.removeAll()
+                try await vaultOtpAutofillStore.removeAll()
             },
             reloadWidgets: {
                 await reloadWidgetTimelines()
@@ -462,10 +464,14 @@ public enum VaultRoot {
     )
 
     /// Erases every vault (`VaultEraser`), then reads and writes the fresh
-    /// plain store it leaves, which the rehash services find here.
+    /// plain store it leaves, which the rehash services find here, and
+    /// forgets everything held in memory from the erased vaults: their items,
+    /// the backup password, and the digesters made from the keys the erase
+    /// deleted.
     @MainActor
     static func eraseVault() async throws {
         plainVaultStore = try await vaultEraser.erase()
+        await vaultDataModel.resetAfterErase()
     }
 
     /// Erases and starts again, if the vault's data is missing and nothing

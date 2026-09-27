@@ -30,10 +30,12 @@ import VaultCore
 ///    password is off.
 /// 5. Clears the vault's settings still kept on the device: the last backup event, the auto-backup configuration,
 ///    which says where the backups are, and the PDF backup's hint. Then whatever holds them in memory forgets them
-///    too (a hook).
+///    too (a hook). It turns off erasing after failed passwords too, which only means anything with a password.
 /// 6. Removes the plain store's pending rehash files, which hold phrases in plaintext, and backup PDFs left in the
 ///    app's temporary directory.
-/// 7. Clears the QuickType identity store and reloads the widgets' timelines.
+/// 7. Clears the QuickType identity store, trying a few times, and reloads the widgets' timelines. If QuickType still
+///    can't be cleared, the erase carries on: while the password is on, the store is kept empty already, and a store
+///    that's stuck mustn't leave the vaults half erased.
 /// 8. Checks, holding the lock, that no writer that had stalled has put the encrypted file back.
 /// 9. Creates a fresh, empty plain store, clears the journal, which removes the storage state, and switches the store
 ///    session to the new store.
@@ -54,8 +56,9 @@ public actor VaultEraser {
         /// Lets go of the plain store, if one is open, so its database closes before its files are deleted. The
         /// store session has already locked.
         public var releasePlainStore: @Sendable () async -> Void
-        /// Empties the QuickType identity store, which holds every visible code's issuer and account name.
-        public var clearCredentialIdentities: @Sendable () async -> Void
+        /// Empties the QuickType identity store, which holds every visible code's issuer and account name. If it
+        /// throws, it's tried again a few times (`credentialIdentityAttempts`), and then the erase carries on.
+        public var clearCredentialIdentities: @Sendable () async throws -> Void
         /// Reloads the widgets' timelines, so none keeps showing a code.
         public var reloadWidgets: @Sendable () async -> Void
         /// Makes whatever holds the vault's settings in memory forget them, once they're cleared from the defaults:
@@ -66,7 +69,7 @@ public actor VaultEraser {
 
         public init(
             releasePlainStore: @escaping @Sendable () async -> Void,
-            clearCredentialIdentities: @escaping @Sendable () async -> Void,
+            clearCredentialIdentities: @escaping @Sendable () async throws -> Void,
             reloadWidgets: @escaping @Sendable () async -> Void,
             forgetVaultSettings: @escaping @Sendable () async -> Void,
         ) {
@@ -84,6 +87,7 @@ public actor VaultEraser {
     private let attemptCounter: AppLockPasswordAttemptCounter
     private let wrapStamps: any VaultWrapStampStorage
     private let deviceKeyStore: any VaultDeviceKeyStoring
+    private let appLockSettings: AppLockSettingsStore
     private let defaults: Defaults
     private let temporaryDirectory: URL
     private let hooks: Hooks
@@ -96,6 +100,7 @@ public actor VaultEraser {
     ///   - session: The store session the app reads and writes the vault through.
     ///   - secureStorage: The keychain the HMAC keys and the backup password are in.
     ///   - attemptCounter: The count of attempts at the App Lock Password.
+    ///   - appLockSettings: The app lock's settings, with erasing after failed passwords.
     ///   - defaults: The app's defaults, where the last backup event, the auto-backup configuration and the PDF
     ///     backup's hint are.
     ///   - temporaryDirectory: The app's temporary directory, where a PDF backup is written while the share sheet has
@@ -105,6 +110,7 @@ public actor VaultEraser {
         session: VaultStoreSession,
         secureStorage: any SecureStorage,
         attemptCounter: AppLockPasswordAttemptCounter,
+        appLockSettings: AppLockSettingsStore,
         defaults: Defaults,
         temporaryDirectory: URL,
         hooks: Hooks,
@@ -117,6 +123,7 @@ public actor VaultEraser {
             attemptCounter: attemptCounter,
             wrapStamps: VaultWrapStampKeychainStorage(),
             deviceKeyStore: VaultDeviceKeychainStore(),
+            appLockSettings: appLockSettings,
             defaults: defaults,
             temporaryDirectory: temporaryDirectory,
             hooks: hooks,
@@ -136,6 +143,7 @@ public actor VaultEraser {
         attemptCounter: AppLockPasswordAttemptCounter,
         wrapStamps: any VaultWrapStampStorage,
         deviceKeyStore: any VaultDeviceKeyStoring,
+        appLockSettings: AppLockSettingsStore,
         defaults: Defaults,
         temporaryDirectory: URL,
         hooks: Hooks,
@@ -148,6 +156,7 @@ public actor VaultEraser {
         self.attemptCounter = attemptCounter
         self.wrapStamps = wrapStamps
         self.deviceKeyStore = deviceKeyStore
+        self.appLockSettings = appLockSettings
         self.defaults = defaults
         self.temporaryDirectory = temporaryDirectory
         self.hooks = hooks
@@ -193,9 +202,10 @@ extension VaultEraser {
         try await removeEveryVault()
         try await deleteKeychainItems()
         await Self.clearVaultSettings(in: defaults)
+        appLockSettings.erasesAfterFailedPasswords = false
         await hooks.forgetVaultSettings()
         try removeFilesLeftBehind(stateFile: stateFile)
-        await hooks.clearCredentialIdentities()
+        await clearCredentialIdentities()
         await hooks.reloadWidgets()
         try await removeEveryVault(includingThePlainStore: false)
 
@@ -299,6 +309,18 @@ extension VaultEraser {
             // It opens the vault while the password is off. With the file gone it opens nothing, but it shows the
             // password was turned off.
             try deviceKeyStore.removeDeviceKey()
+        }
+    }
+
+    /// How many times the QuickType identity store is tried before an erase carries on without it.
+    static let credentialIdentityAttempts = 3
+
+    /// Empties the QuickType identity store, trying up to `credentialIdentityAttempts` times. It never stops the
+    /// erase: while the password is on, the store is kept empty already.
+    private func clearCredentialIdentities() async {
+        var attempts = 0
+        while attempts < Self.credentialIdentityAttempts, (try? await hooks.clearCredentialIdentities()) == nil {
+            attempts += 1
         }
     }
 

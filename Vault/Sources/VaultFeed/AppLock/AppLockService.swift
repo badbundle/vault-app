@@ -16,6 +16,13 @@ import LocalAuthentication
 /// vault's storage is in. It's set, changed and turned off here too, so the lock always knows whether to ask for it,
 /// and a duress password is set here as well.
 ///
+/// With erasing after failed passwords on (VAULT-34), the password service erases every vault at the threshold's wrong
+/// password in a row. The lock screen then simply opens the fresh, empty vault, like a new install: it never says the
+/// password was wrong first, and never how many attempts were left. Nothing waiting to open an item runs after an
+/// erase, whenever it finishes. The lock itself stays on, asking for device authentication only: it's a choice the
+/// user made for the device, not something of the vaults the erase removed, and whatever's added to the fresh vault
+/// stays behind it.
+///
 /// Anything that would reveal the vault while it's locked, such as opening an item from a widget, waits in
 /// `performWhenUnlocked(_:)` until the user has unlocked the app.
 @MainActor
@@ -30,6 +37,8 @@ public final class AppLockService {
     public private(set) var isChangingSettings = false
     /// Whether the App Lock Password is set, so unlocking asks for it after device authentication.
     public private(set) var isPasswordSet: Bool
+    /// Whether too many wrong App Lock Passwords in a row erase every vault. Off unless the user turns it on.
+    public private(set) var erasesAfterFailedPasswords: Bool
 
     private let settings: AppLockSettingsStore
     private let authenticationService: DeviceAuthenticationService
@@ -77,6 +86,7 @@ public final class AppLockService {
         self.didChangeSettings = didChangeSettings
         let isPasswordSet = passwordService?.isPasswordSet ?? false
         self.isPasswordSet = isPasswordSet
+        erasesAfterFailedPasswords = passwordService?.erasesAfterFailedPasswords ?? false
         // A vault with a password can only be opened with it, so the lock is on whatever the setting says.
         let isEnabled = settings.isEnabled || isPasswordSet
         self.isEnabled = isEnabled
@@ -214,6 +224,8 @@ public final class AppLockService {
                 case .accepted: .passed
                 case .wrong: .failed(.wrongPassword)
                 case let .delayed(remaining): .delayed(remaining)
+                case .erased: .erased
+                case .onlyAtTheLockScreen: .failed(.needsTheApp)
                 }
             } catch {
                 return .failed(.failed)
@@ -226,6 +238,8 @@ public final class AppLockService {
         case failed(AppUnlockFailure)
         /// The password can't be tried yet.
         case delayed(Duration)
+        /// Every vault was erased, after too many wrong passwords.
+        case erased
     }
 
     /// Takes a step of unlocking with `attempt`, and moves on to the next step if it's passed.
@@ -242,15 +256,20 @@ public final class AppLockService {
         case .passed where nextStep(after: step) == .password: await passwordRetryTime()
         case .failed(.wrongPassword): await passwordRetryTime()
         case let .delayed(remaining): clock.now.advanced(by: remaining)
-        case .passed, .failed: nil
+        case .passed, .failed, .erased: nil
         }
         isAuthenticationUnderway = false
+        if case .erased = outcome {
+            vaultWasErased()
+        }
 
         guard generation == lockGeneration else {
             // The app locked again while this was underway, so the result is stale whatever it is. The new lock
-            // stands; start on it if the app's already back in the foreground.
+            // stands; start on it if the app's already back in the foreground. After an erase there's no password
+            // step any more.
             if case let .locked(current) = state {
-                state = .locked(AppLockedState(step: current.step))
+                state =
+                    .locked(AppLockedState(step: unlockSteps.contains(current.step) ? current.step : unlockSteps[0]))
             }
             startAutomaticUnlockIfNeeded()
             return
@@ -263,7 +282,22 @@ public final class AppLockService {
             state = .locked(AppLockedState(step: step, failure: failure, passwordRetryAt: passwordRetryAt))
         case .delayed:
             state = .locked(AppLockedState(step: step, passwordRetryAt: passwordRetryAt))
+        case .erased:
+            // Device authentication is passed, and there's no password any more: the fresh vault opens, like a new
+            // install.
+            state = .unlocked
         }
+    }
+
+    /// Catches up with an erase, even one that finished after the app locked again: there's no password now, and
+    /// erasing after failed passwords is off. Nothing waiting to open an item runs: the item was in a vault that's
+    /// gone.
+    private func vaultWasErased() {
+        actionsAwaitingUnlock.removeAll()
+        guard let passwordService else { return }
+        isPasswordSet = passwordService.isPasswordSet
+        erasesAfterFailedPasswords = passwordService.erasesAfterFailedPasswords
+        didChangeSettings()
     }
 
     private func nextStep(after step: AppUnlockStep) -> AppUnlockStep? {
@@ -398,12 +432,27 @@ public final class AppLockService {
         return true
     }
 
+    /// Turns erasing after failed passwords on or off, if `current` is the password. A wrong one counts as a wrong
+    /// attempt and waits, just as it does on the lock screen, but never erases: the vault is open.
+    public func setErasesAfterFailedPasswords(
+        _ erases: Bool,
+        current: String,
+    ) async throws -> AppLockPasswordResult {
+        let passwordService = try passwordServiceForSettings()
+        isChangingSettings = true
+        defer { isChangingSettings = false }
+        let result = try await passwordService.setErasesAfterFailedPasswords(erases, current: current)
+        erasesAfterFailedPasswords = passwordService.erasesAfterFailedPasswords
+        return result
+    }
+
     private func passwordServiceForSettings() throws -> any AppLockPasswordService {
         guard let passwordService, !isLocked, !isChangingSettings else { throw AppLockPasswordUnavailableError() }
         return passwordService
     }
 
     private func passwordDidChange(in passwordService: any AppLockPasswordService) {
+        erasesAfterFailedPasswords = passwordService.erasesAfterFailedPasswords
         guard passwordService.isPasswordSet != isPasswordSet else { return }
         isPasswordSet = passwordService.isPasswordSet
         if isPasswordSet, !isEnabled {

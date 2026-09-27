@@ -29,6 +29,25 @@ public struct AppLockSettingsStore: @unchecked Sendable { // swiftlint:disable:t
         }
     }
 
+    /// Whether `AppLockPasswordAttemptCounter.eraseThreshold` wrong App Lock Passwords in a row erase every vault on
+    /// this device (VAULT-34). Off unless the user turns it on.
+    ///
+    /// It's a setting of the device, not of a vault, like the attempt count, so every vault shares it. It's stored
+    /// only while it's on, and it's deleted with the app, so a reinstall never finds it on for a new password. An
+    /// erase clears it (`VaultEraser`).
+    public var erasesAfterFailedPasswords: Bool {
+        get {
+            userDefaults.bool(forKey: VaultIdentifiers.Preferences.AppLock.erasesAfterFailedPasswords)
+        }
+        nonmutating set {
+            if newValue {
+                userDefaults.set(true, forKey: VaultIdentifiers.Preferences.AppLock.erasesAfterFailedPasswords)
+            } else {
+                userDefaults.removeObject(forKey: VaultIdentifiers.Preferences.AppLock.erasesAfterFailedPasswords)
+            }
+        }
+    }
+
     /// How long the app can be in the background before it locks. Immediately unless the user has chosen otherwise,
     /// and immediately for any value this version doesn't know.
     public var delay: AppLockDelay {

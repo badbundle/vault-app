@@ -56,6 +56,8 @@ struct AppLockView: View {
         .onChange(of: state.failure) { _, failure in
             if failure == .wrongPassword {
                 wrongPasswordCount += 1
+            }
+            if failure == .wrongPassword || failure == .needsTheApp {
                 // Focus stays in the field, so VoiceOver wouldn't hear the message change otherwise.
                 AccessibilityNotification.Announcement(message(passwordWait: passwordWait)).post()
             }
@@ -113,7 +115,7 @@ struct AppLockView: View {
             .frame(minHeight: 52)
             .glassEffect(.regular.interactive(), in: .capsule)
             .glassSnapshotBackdrop(in: .capsule)
-            .disabled(isWaiting || isBusy)
+            .disabled(isWaiting || isBusy || needsTheApp)
             .wrongPasswordFeedback(trigger: wrongPasswordCount)
             // The lock screen is in a window of its own, which has to be key for the field to take the keyboard.
             .makesWindowKey(!isOpening)
@@ -131,7 +133,7 @@ struct AppLockView: View {
         }
         .prominentActionButton()
         .buttonBorderShape(.capsule)
-        .disabled(state.step == .password && !isBusy && (password.isEmpty || isWaiting))
+        .disabled(state.step == .password && !isBusy && (password.isEmpty || isWaiting || needsTheApp))
         // Stays in its colors while busy, for the spinner to show up on: `unlock` ignores a second tap anyway.
         .allowsHitTesting(!isBusy)
         .accessibilityLabel(state.isInProgress ? "Unlocking" : "Unlock")
@@ -148,6 +150,11 @@ struct AppLockView: View {
 
     private var isBusy: Bool {
         state.isInProgress || isOpening
+    }
+
+    /// Whether the password can only be tried in the app. Trying it here again would get the same answer.
+    private var needsTheApp: Bool {
+        state.failure == .needsTheApp
     }
 
     /// How long the password has to wait, if it does.
@@ -172,13 +179,16 @@ struct AppLockView: View {
             return "Set up a passcode on this device to unlock Vault."
         case .wrongPassword:
             return "Wrong password. " + (tryAgainLater ?? "Try again.")
+        case .needsTheApp:
+            // Only AutoFill says this. It says nothing about why, which would show whether erasing is on.
+            return "Open Vault to enter your App Lock Password."
         }
     }
 
     private var isShowingProblem: Bool {
         switch state.failure {
         case .failed, .unavailable, .wrongPassword: true
-        case .none, .cancelled: false
+        case .none, .cancelled, .needsTheApp: false
         }
     }
 }

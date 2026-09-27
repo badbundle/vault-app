@@ -52,21 +52,40 @@ public actor AppLockPasswordAttemptCounter {
     /// Counts an attempt at the password. Call it before deriving the key, and try the password only if the attempt
     /// was counted.
     ///
-    /// - Returns: `.counted` once the attempt is in storage, or `.delayed` if the user still has to wait after their
-    ///   last wrong attempt. A delayed attempt isn't counted, and the password mustn't be tried.
+    /// - Parameter stoppingBeforeEraseThreshold: Whether to leave an attempt that would make `eraseThreshold` or more
+    ///   in a row uncounted. The AutoFill extension does, and sends the user to the app, where a wrong one can erase
+    ///   (VAULT-34). It's decided with the count held against every process, so an attempt the app counts at the same
+    ///   moment can't slip in between.
+    /// - Returns: `.counted` once the attempt is in storage, `.stoppedBeforeEraseThreshold` if it was asked to stop
+    ///   there, or `.delayed` if the user still has to wait after their last wrong attempt. An attempt that isn't
+    ///   counted mustn't be tried.
     /// - Throws: If the count can't be read or saved. The password mustn't be tried then either.
-    public func countAttempt() async throws -> AppLockPasswordAttempt {
+    public func countAttempt(stoppingBeforeEraseThreshold: Bool = false) async throws -> AppLockPasswordAttempt {
         let access = try await storage.acquireExclusiveAccess()
         defer { access.release() }
         let now = clock.now
         let previous = try currentRecord(now: now)
+        let count = (previous?.count ?? 0) + 1
+        if stoppingBeforeEraseThreshold, count >= Self.eraseThreshold {
+            return .stoppedBeforeEraseThreshold
+        }
         if let previous {
             let remaining = Self.remainingDelay(after: previous, now: now)
             guard remaining == .zero else { return .delayed(remaining) }
         }
-        let count = (previous?.count ?? 0) + 1
         try storage.save(AppLockPasswordAttemptRecord(count: count, latestAt: now))
         return .counted(reachesEraseThreshold: count >= Self.eraseThreshold)
+    }
+
+    /// Whether `eraseThreshold` or more wrong attempts in a row are counted already. Counts nothing.
+    ///
+    /// With erasing on, that's an erase that's due: the app asks before it tries any password
+    /// (`AppLockPasswordUnlocker`), and erases instead, so a tenth wrong attempt that was counted but never acted on,
+    /// because the app stopped first, still erases, whatever's entered next. Only wrong attempts get the count there.
+    public func hasReachedEraseThreshold() async throws -> Bool {
+        let access = try await storage.acquireExclusiveAccess()
+        defer { access.release() }
+        return try (currentRecord(now: clock.now)?.count ?? 0) >= Self.eraseThreshold
     }
 
     /// Clears the count once a password has opened a vault, whichever vault it was.
@@ -139,4 +158,7 @@ public enum AppLockPasswordAttempt: Equatable, Sendable {
     /// The user still has to wait this long after their last wrong attempt. The attempt isn't counted, and the
     /// password mustn't be tried.
     case delayed(Duration)
+    /// Only when asked to stop there: this attempt would make `AppLockPasswordAttemptCounter.eraseThreshold` or more
+    /// in a row. It isn't counted, and the password mustn't be tried.
+    case stoppedBeforeEraseThreshold
 }

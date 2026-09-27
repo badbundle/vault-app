@@ -1,5 +1,6 @@
 import Foundation
 import FoundationExtensions
+import TestHelpers
 import Testing
 import VaultCore
 @testable import VaultFeed
@@ -223,6 +224,7 @@ extension VaultEraserTests {
                 "remove the backup password from the keychain",
                 "reset the attempt count",
                 "remove the wrap stamp",
+                "clear QuickType",
                 "create the plain store",
             ] {
                 #expect(names.contains(step))
@@ -258,6 +260,25 @@ extension VaultEraserTests {
                 try await harness.erase()
                 try await harness.expectErased(context)
             }
+        }
+    }
+
+    /// A QuickType store that fails once is tried again, and one that's stuck doesn't stop the erase: while the
+    /// password is on, it's kept empty already.
+    @Test(arguments: [1, VaultEraser.credentialIdentityAttempts])
+    func erase_quickTypeFailing_triesAgainThenCarriesOn(failures: Int) async throws {
+        let steps = try await Self.stepsOfAnErase()
+        let clearing = try #require(steps.names.firstIndex(of: "clear QuickType")) + 1
+        try await withTemporaryDirectory { directory in
+            let harness = try await VaultEraseHarness.encryptedDevice(in: directory)
+            harness.fileSystem.inject(.fail(atSteps: Set(clearing ..< clearing + failures)))
+
+            try await harness.erase()
+
+            let attempts = min(failures + 1, VaultEraser.credentialIdentityAttempts)
+            #expect(harness.fileSystem.log.count { $0 == "clear QuickType" } == attempts)
+            #expect(try harness.stepsInOrder(["clear QuickType", "reload widgets"]))
+            try await harness.expectErased()
         }
     }
 
@@ -342,7 +363,6 @@ extension VaultEraserTests {
 struct VaultEraseHarness {
     static let hookEntries: Set = [
         "release the plain store",
-        "clear QuickType",
         "reload widgets",
         "forget the vault's settings",
     ]
@@ -373,6 +393,7 @@ struct VaultEraseHarness {
     let deviceKeys: InMemoryDeviceKeyStore
     let userDefaults: UserDefaults
     let defaults: Defaults
+    let appLockSettings: AppLockSettingsStore
     let session: VaultStoreSession
 
     init(
@@ -389,6 +410,7 @@ struct VaultEraseHarness {
         self.deviceKeys = deviceKeys
         userDefaults = try testUserDefaults()
         defaults = Defaults(userDefaults: userDefaults)
+        appLockSettings = try AppLockSettingsStore(userDefaults: .nonPersistent())
         self.session = session
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
     }
@@ -504,6 +526,7 @@ struct VaultEraseHarness {
         )
         try defaults.set("My old hint", for: Key<String>(VaultIdentifiers.Preferences.PDF.userHint))
         try defaults.set("kept", for: Self.unrelatedSetting)
+        appLockSettings.erasesAfterFailedPasswords = true
         _ = try BackupPDFTemporaryFiles(fileManager: .default, directory: temporaryDirectory).write(anyGeneratedPDF())
     }
 
@@ -521,11 +544,13 @@ struct VaultEraseHarness {
             attemptCounter: AppLockPasswordAttemptCounter(storage: attemptStorage, clock: FakeAppLockClock()),
             wrapStamps: wrapStamps,
             deviceKeyStore: FaultInjectingDeviceKeyStore(wrapping: deviceKeys, steps: fileSystem),
+            appLockSettings: appLockSettings,
             defaults: defaults,
             temporaryDirectory: temporaryDirectory,
             hooks: VaultEraser.Hooks(
                 releasePlainStore: { fileSystem.record("release the plain store") },
-                clearCredentialIdentities: { fileSystem.record("clear QuickType") },
+                // A step, so failing and crashing there are covered too.
+                clearCredentialIdentities: { try fileSystem.step("clear QuickType") },
                 reloadWidgets: {
                     fileSystem.record("reload widgets")
                     whileReloadingWidgets()
@@ -572,7 +597,7 @@ struct VaultEraseHarness {
 
     // MARK: - What happened
 
-    /// The steps taken so far, without the hooks, which aren't steps.
+    /// The steps taken so far, without the hooks that aren't steps. Clearing QuickType is one: it can fail.
     func steps() -> [String] {
         fileSystem.log.filter { $0 != "unlock" && !Self.hookEntries.contains($0) }
     }
@@ -651,6 +676,7 @@ struct VaultEraseHarness {
             sourceLocation: sourceLocation,
         )
         #expect(defaults.get(for: Self.unrelatedSetting) == "kept", context, sourceLocation: sourceLocation)
+        #expect(!appLockSettings.erasesAfterFailedPasswords, context, sourceLocation: sourceLocation)
         let temporaryFiles = try FileManager.default.contentsOfDirectory(
             atPath: temporaryDirectory.path(percentEncoded: false),
         )

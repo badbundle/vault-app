@@ -72,6 +72,9 @@ public actor VaultUnlockService {
     /// How the vault can be opened now, which an app extension checks before it opens the vault, and on every call to
     /// it once it has (`VaultAccessGuard`). `nil` in the app.
     private let currentAccessMode: (@Sendable () -> VaultAccessMode)?
+    /// Keeps the app running until an attempt has finished, so it isn't suspended with the attempt counted and the
+    /// count not yet reset for a right password.
+    private let backgroundTime: VaultBackgroundTime
 
     private var isUnlocking = false
 
@@ -80,6 +83,7 @@ public actor VaultUnlockService {
     ///   - session: The store session the app reads and writes the vault through.
     ///   - attemptCounter: Counts every attempt before it's tried, and is reset when one opens a vault.
     ///   - purgeVaultContents: Forgets everything the app read from the vault. Called every time it locks.
+    ///   - backgroundTime: Keeps the app running until an attempt has finished: `.application` in the app.
     public init(
         directory: URL,
         session: VaultStoreSession,
@@ -87,6 +91,7 @@ public actor VaultUnlockService {
         deadlineStore: any VaultUnlockDeadlineStoring,
         deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore(),
         purgeVaultContents: @escaping @Sendable () async -> Void,
+        backgroundTime: VaultBackgroundTime = .none,
     ) {
         self.init(
             file: EncryptedVaultFile(directory: directory),
@@ -96,6 +101,7 @@ public actor VaultUnlockService {
             deviceKeyStore: deviceKeyStore,
             purgeVaultContents: purgeVaultContents,
             wrapStamper: VaultDeviceWrapStamper(),
+            backgroundTime: backgroundTime,
         )
     }
 
@@ -117,6 +123,7 @@ public actor VaultUnlockService {
         wrapStamper: VaultDeviceWrapStamper,
         writeMemoryCheck: VaultWriteMemoryCheck? = nil,
         currentAccessMode: (@Sendable () -> VaultAccessMode)? = nil,
+        backgroundTime: VaultBackgroundTime = .none,
     ) {
         self.file = file
         self.session = session
@@ -130,6 +137,7 @@ public actor VaultUnlockService {
         self.wrapStamper = wrapStamper
         self.writeMemoryCheck = writeMemoryCheck
         self.currentAccessMode = currentAccessMode
+        self.backgroundTime = backgroundTime
     }
 
     /// What a vault this opens checks on every call, in an app extension.
@@ -171,6 +179,9 @@ enum VaultPasswordCheck: Equatable, Sendable {
     case wrong(reachesEraseThreshold: Bool)
     /// The user has to wait this long after their last wrong attempts. Nothing was tried.
     case mustWait(Duration)
+    /// The check would have been the erase threshold's attempt in a row, which only the lock screen tries. Nothing
+    /// was tried or counted.
+    case stoppedBeforeEraseThreshold
 }
 
 public enum VaultUnlockError: Error, Equatable, Sendable {
@@ -197,6 +208,10 @@ public enum VaultUnlockError: Error, Equatable, Sendable {
     /// still wraps the vault, so a right password could look wrong. Nothing was tried or counted. Settling it
     /// (`VaultPasswordChangeService.settleInterruptedChange()`, or the next launch) lets unlocking go ahead.
     case passwordChangeUnsettled
+    /// The attempt would have made `AppLockPasswordAttemptCounter.eraseThreshold` or more wrong attempts in a row, and
+    /// the caller asked to stop before that: the AutoFill extension, which leaves the attempt that could erase to the
+    /// app (VAULT-34). Nothing was tried or counted.
+    case stoppedBeforeEraseThreshold
 }
 
 // MARK: - Unlocking
@@ -207,18 +222,47 @@ extension VaultUnlockService {
     /// Once the attempt is counted, it returns at the device's unlock deadline whatever happens, and throws only
     /// then: for example if the password opened a vault that can't be read.
     ///
+    /// - Parameter stoppingBeforeEraseThreshold: Whether to refuse, without counting it, an attempt that would make
+    ///   `AppLockPasswordAttemptCounter.eraseThreshold` or more wrong ones in a row
+    ///   (`VaultUnlockError.stoppedBeforeEraseThreshold`). The AutoFill extension does.
     /// - Throws: `VaultUnlockError`, an error counting the attempt or reading the file, or `CancellationError` if the
-    ///   vault locked, or the task was cancelled, while the attempt was underway. Its result is thrown away then.
-    public func unlock(password: String) async throws -> VaultUnlockResult {
+    ///   vault locked, or the task was cancelled, while the attempt was underway. Its result is thrown away then, but
+    ///   if the password opened a vault, the count is still reset first.
+    public func unlock(
+        password: String,
+        stoppingBeforeEraseThreshold: Bool = false,
+    ) async throws -> VaultUnlockResult {
         guard !isUnlocking else { throw VaultUnlockError.attemptUnderway }
         isUnlocking = true
         defer { isUnlocking = false }
         guard await session.isLocked else { throw VaultUnlockError.notLocked }
+        return try await backgroundTime.whileRunning {
+            try await unlockWhileRunning(password: password, stoppingBeforeEraseThreshold: stoppingBeforeEraseThreshold)
+        }
+    }
+
+    private func unlockWhileRunning(
+        password: String,
+        stoppingBeforeEraseThreshold: Bool,
+    ) async throws -> VaultUnlockResult {
         let lockEpoch = await session.lockEpoch
 
         let attempt: Attempt
-        switch try await attemptPassword(password, opensBody: true, lockEpoch: lockEpoch) {
+        switch try await attemptPassword(
+            password,
+            opensBody: true,
+            stoppingBeforeEraseThreshold: stoppingBeforeEraseThreshold,
+            lockEpoch: lockEpoch,
+            isRight: { attempt in
+                if case .success(.some) = attempt.outcome {
+                    true
+                } else {
+                    false
+                }
+            },
+        ) {
         case let .mustWait(remaining): return .mustWait(remaining)
+        case .stoppedBeforeEraseThreshold: throw VaultUnlockError.stoppedBeforeEraseThreshold
         case let .finished(finished): attempt = finished
         }
         switch attempt.outcome {
@@ -257,16 +301,42 @@ extension VaultUnlockService {
     /// vault's slot: a password that opens another vault is as wrong as any other, so this never shows that another
     /// vault exists.
     ///
+    /// It never tries an attempt that would make `AppLockPasswordAttemptCounter.eraseThreshold` or more wrong ones in
+    /// a row, erasing on or off (`.stoppedBeforeEraseThreshold`). That one is only ever tried at the lock screen, where
+    /// a wrong one erases there and then, if erasing is on (VAULT-34).
+    ///
     /// - Throws: As `unlock(password:)` does, and `CancellationError` if the vault locked meanwhile.
     func checkPassword(_ password: String, opensSlot index: Int) async throws -> VaultPasswordCheck {
         guard !isUnlocking else { throw VaultUnlockError.attemptUnderway }
         isUnlocking = true
         defer { isUnlocking = false }
+        return try await backgroundTime.whileRunning {
+            try await checkPasswordWhileRunning(password, opensSlot: index)
+        }
+    }
+
+    private func checkPasswordWhileRunning(
+        _ password: String,
+        opensSlot index: Int,
+    ) async throws -> VaultPasswordCheck {
         let lockEpoch = await session.lockEpoch
 
-        switch try await attemptPassword(password, opensBody: false, lockEpoch: lockEpoch) {
+        switch try await attemptPassword(
+            password,
+            opensBody: false,
+            stoppingBeforeEraseThreshold: true,
+            lockEpoch: lockEpoch,
+            isRight: { attempt in
+                if case .failure = attempt.outcome {
+                    return false
+                }
+                return attempt.openedSlots.contains(index)
+            },
+        ) {
         case let .mustWait(remaining):
             return .mustWait(remaining)
+        case .stoppedBeforeEraseThreshold:
+            return .stoppedBeforeEraseThreshold
         case let .finished(attempt):
             if case let .failure(error) = attempt.outcome {
                 throw error
@@ -281,12 +351,24 @@ extension VaultUnlockService {
 
     private enum AttemptResult {
         case mustWait(Duration)
+        case stoppedBeforeEraseThreshold
         case finished(Attempt)
     }
 
     /// Counts an attempt, runs it off the actor, and holds it to the deadline, raising the deadline if the attempt's
-    /// work called for it. Throws `CancellationError` if the vault locked, or the task was cancelled, meanwhile.
-    private func attemptPassword(_ password: String, opensBody: Bool, lockEpoch: Int) async throws -> AttemptResult {
+    /// work called for it.
+    ///
+    /// Throws `CancellationError` if the vault locked, or the task was cancelled, meanwhile. If the attempt `isRight`,
+    /// the count is reset first, as it would be if the attempt had been wanted: left counted, a right tenth attempt
+    /// would make the next one erase every vault (VAULT-34). That shows nothing an attempt that was wanted wouldn't,
+    /// and it's the same for a real password and a duress one.
+    private func attemptPassword(
+        _ password: String,
+        opensBody: Bool,
+        stoppingBeforeEraseThreshold: Bool,
+        lockEpoch: Int,
+        isRight: (Attempt) -> Bool,
+    ) async throws -> AttemptResult {
         // Before anything is counted. While an erase is underway the attempt is refused whatever the password, and a
         // right password could look wrong while the vault's key is wrapped with the device key: a wrong attempt
         // counts towards an erase.
@@ -304,9 +386,11 @@ extension VaultUnlockService {
             throw VaultUnlockError.passwordChangeUnsettled
         }
         let reachesEraseThreshold: Bool
-        switch try await attemptCounter.countAttempt() {
+        switch try await attemptCounter.countAttempt(stoppingBeforeEraseThreshold: stoppingBeforeEraseThreshold) {
         case let .delayed(remaining):
             return .mustWait(remaining)
+        case .stoppedBeforeEraseThreshold:
+            return .stoppedBeforeEraseThreshold
         case let .counted(reaches):
             reachesEraseThreshold = reaches
         }
@@ -326,7 +410,12 @@ extension VaultUnlockService {
         }
         // Cancelling cuts the wait short, and then the result is thrown away, so ending early reveals nothing.
         try? await clock.sleep(until: start.advanced(by: heldUntil))
-        guard await isStillWanted(since: lockEpoch) else { throw CancellationError() }
+        guard await isStillWanted(since: lockEpoch) else {
+            if isRight(attempt) {
+                try await attemptCounter.reset()
+            }
+            throw CancellationError()
+        }
         return .finished(attempt)
     }
 

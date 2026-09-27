@@ -477,11 +477,16 @@ extension VaultUnlockServiceTests {
         #expect(try await sut.session.retrieve(query: .init()).items == [])
     }
 
-    @Test
-    func unlock_cancelledWhileWaitingForTheDeadline_throwsTheAttemptAway() async throws {
-        let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])])
+    /// A right password's attempt that's thrown away still resets the count, as it would if it had been wanted: left
+    /// counted, a right tenth attempt would make the next one erase every vault. A wrong one stays counted.
+    @Test(arguments: [("real", true), ("duress", true), ("wrong", false)])
+    func unlock_cancelledWhileWaitingForTheDeadline_throwsTheAttemptAway(password: String, resets: Bool) async throws {
+        let sut = try makeSUT(vaults: [
+            .init(password: "real", slot: realSlot, items: []),
+            .init(password: "duress", slot: duressSlot, items: []),
+        ])
         sut.clock.hold()
-        let attempt = Task { try await sut.service.unlock(password: "real") }
+        let attempt = Task { try await sut.service.unlock(password: password) }
         await sut.clock.waitUntilHolding()
 
         attempt.cancel()
@@ -491,7 +496,8 @@ extension VaultUnlockServiceTests {
             try await attempt.value
         }
         #expect(await sut.session.isLocked)
-        #expect(!sut.log.value.contains("reset the count"))
+        #expect(sut.log.value.contains("reset the count") == resets)
+        #expect(try sut.attemptStorage.load() == nil ? resets : !resets)
     }
 
     @Test
@@ -507,11 +513,12 @@ extension VaultUnlockServiceTests {
         #expect(sut.log.value.count == steps)
     }
 
-    @Test
-    func lock_duringAnAttempt_throwsTheAttemptAway() async throws {
+    /// As when a call comes in during an attempt: the vault stays locked, and a right password still resets the count.
+    @Test(arguments: [("real", true), ("wrong", false)])
+    func lock_duringAnAttempt_throwsTheAttemptAway(password: String, resets: Bool) async throws {
         let sut = try makeSUT(vaults: [.init(password: "real", slot: realSlot, items: [])])
         sut.clock.hold()
-        let attempt = Task { try await sut.service.unlock(password: "real") }
+        let attempt = Task { try await sut.service.unlock(password: password) }
         await sut.clock.waitUntilHolding()
 
         await sut.service.lock()
@@ -521,7 +528,28 @@ extension VaultUnlockServiceTests {
             try await attempt.value
         }
         #expect(await sut.session.isLocked)
-        #expect(!sut.log.value.contains("reset the count"))
+        #expect(sut.log.value.contains("reset the count") == resets)
+    }
+
+    /// The system could suspend the app mid-attempt, with the attempt counted and a right password's reset still to
+    /// come, so every attempt holds background time until it's finished.
+    @Test
+    func unlock_holdsBackgroundTimeUntilTheAttemptHasFinished() async throws {
+        let events = SharedMutex([String]())
+        let sut = try makeSUT(
+            vaults: [.init(password: "real", slot: realSlot, items: [])],
+            backgroundTime: VaultBackgroundTime {
+                events.modify { $0.append("begin") }
+                return { events.modify { $0.append("end") } }
+            },
+            attemptLog: events,
+        )
+
+        _ = try await sut.service.unlock(password: "real")
+
+        #expect(events.value.first == "begin")
+        #expect(events.value.last == "end")
+        #expect(events.value.contains("reset the count"))
     }
 }
 
@@ -846,6 +874,8 @@ extension VaultUnlockServiceTests {
         availableMemory: Int? = nil,
         wrapStamp: UInt64? = nil,
         purge: @escaping @Sendable (VaultStoreSession) async -> Void = { _ in },
+        backgroundTime: VaultBackgroundTime = .none,
+        attemptLog: SharedMutex<[String]> = SharedMutex([String]()),
     ) throws -> SUT {
         var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
         for vault in vaults {
@@ -863,7 +893,7 @@ extension VaultUnlockServiceTests {
 
         let session = VaultStoreSession(target: .locked)
         let clock = ManualUnlockClock()
-        let log = SharedMutex([String]())
+        let log = attemptLog
         let attemptStorage = LoggingAttemptStorage(log: log)
         let attemptClock = FakeAppLockClock()
         let deadlineStore = FakeUnlockDeadlineStore(deadline: deadline)
@@ -881,6 +911,7 @@ extension VaultUnlockServiceTests {
             work: work,
             availableMemory: { availableMemory },
             wrapStamper: wrapStamper,
+            backgroundTime: backgroundTime,
         )
         return SUT(
             service: service,

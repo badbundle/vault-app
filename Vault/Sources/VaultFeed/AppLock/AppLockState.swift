@@ -61,6 +61,9 @@ public enum AppUnlockFailure: Equatable, Sendable {
     case unavailable
     /// The App Lock Password was wrong.
     case wrongPassword
+    /// The App Lock Password can't be tried here, only in the app: the AutoFill extension doesn't try an attempt that
+    /// could erase every vault (`AppLockPasswordResult.onlyAtTheLockScreen`).
+    case needsTheApp
 }
 
 /// Where a scene of the app is in its lifecycle: SwiftUI's `ScenePhase`, which this module can't use.

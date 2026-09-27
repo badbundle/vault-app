@@ -61,4 +61,28 @@ struct AppLockSettingsStoreTests {
 
         #expect(userDefaults.bool(forKey: "vault.preferences.app-lock.is-enabled"))
     }
+
+    @Test
+    func erasesAfterFailedPasswords_isOffByDefault() throws {
+        let sut = try AppLockSettingsStore(userDefaults: .nonPersistent())
+
+        #expect(!sut.erasesAfterFailedPasswords)
+    }
+
+    @Test
+    func erasesAfterFailedPasswords_isOnlyStoredWhileItsOn() throws {
+        let key = "vault.preferences.app-lock.erases-after-failed-passwords"
+        let userDefaults = try UserDefaults.nonPersistent()
+        let sut = AppLockSettingsStore(userDefaults: userDefaults)
+
+        sut.erasesAfterFailedPasswords = true
+
+        #expect(AppLockSettingsStore(userDefaults: userDefaults).erasesAfterFailedPasswords)
+        #expect(userDefaults.bool(forKey: key))
+
+        sut.erasesAfterFailedPasswords = false
+
+        #expect(!AppLockSettingsStore(userDefaults: userDefaults).erasesAfterFailedPasswords)
+        #expect(userDefaults.object(forKey: key) == nil)
+    }
 }
