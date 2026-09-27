@@ -1028,6 +1028,130 @@ final class VaultDataModelTests {
         #expect(sut.backupPassword == .notFetched)
     }
 
+    // MARK: - Open vault
+
+    @Test
+    func openVaultDidChange_forgetsThePasswordAndReadsTheOpenVaultsStatusAndLastBackup() async throws {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordHandler = { anyBackupPassword() }
+        store.fetchPasswordMetadataHandler = { nil }
+        let logger = BackupEventLoggerMock()
+        logger.lastBackupEventHandler = { nil }
+        let vaultStore = VaultStoreStub()
+        vaultStore.exportVaultHandler = { _ in VaultApplicationPayload(userDescription: "", items: [], tags: []) }
+        let sut = makeSUT(vaultStore: vaultStore, backupPasswordStore: store, backupEventLogger: logger)
+        await sut.setup()
+        await sut.loadBackupPassword()
+        let previousHash = try #require(sut.currentPayloadHash)
+        let metadata = BackupPasswordMetadata(lastSetDate: Date(timeIntervalSince1970: 1_700_000_000))
+        let event = anyVaultBackupSettings().lastBackupEvent
+        store.fetchPasswordMetadataHandler = { metadata }
+        logger.lastBackupEventHandler = { event }
+        vaultStore.exportVaultHandler = { _ in
+            VaultApplicationPayload(userDescription: "", items: [uniqueVaultItem()], tags: [])
+        }
+
+        await sut.openVaultDidChange()
+
+        #expect(sut.backupPassword == .notFetched)
+        #expect(sut.backupPasswordStatus == .set(metadata))
+        #expect(sut.lastBackupEvent == event)
+        #expect(sut.currentPayloadHash != nil)
+        #expect(sut.currentPayloadHash != previousHash)
+    }
+
+    /// While the vault is locked there's no backup password, and no last backup.
+    @Test
+    func openVaultDidChange_toNoVault_hasNoPasswordStatusOrLastBackup() async {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordMetadataHandler = { BackupPasswordMetadata(lastSetDate: nil) }
+        let logger = BackupEventLoggerMock()
+        logger.lastBackupEventHandler = { anyVaultBackupSettings().lastBackupEvent }
+        let sut = makeSUT(backupPasswordStore: store, backupEventLogger: logger)
+        await sut.loadBackupPasswordStatus()
+        store.fetchPasswordMetadataHandler = { throw VaultStoreSessionError.locked }
+        logger.lastBackupEventHandler = { nil }
+
+        await sut.openVaultDidChange()
+
+        #expect(sut.backupPasswordStatus == .unknown)
+        #expect(sut.lastBackupEvent == nil)
+    }
+
+    /// The payload hash computed for the vault that was open is dropped once another opens, so auto-backup doesn't
+    /// compare the next vault's backups against it.
+    @Test
+    func setup_whenAnotherVaultOpensWhileTheHashIsComputed_keepsTheNextVaultsHash() async throws {
+        let first = GatedVaultStore(items: [uniqueVaultItem()])
+        let second = GatedVaultStore(items: [uniqueVaultItem(), uniqueVaultItem()])
+        let session = VaultStoreSession(target: .plain(first))
+        let sut = makeSUT(vaultStore: session)
+        await first.hold()
+        let setup = Task { await sut.setup() }
+        await first.waitUntilHolding()
+
+        let firstOpen = await session.openVault
+        let switching = Task { await session.switchTo(.plain(second)) }
+        // Without reading a store: the first one holds every call until it's released.
+        while await session.openVault.isSame(as: firstOpen) {
+            await Task.yield()
+        }
+        await sut.openVaultDidChange()
+        await first.release()
+        await setup.value
+        await switching.value
+
+        let secondsHash = try await Digest<VaultApplicationPayload>.SHA256
+            .makeHash(second.exportVault(userDescription: ""))
+        #expect(sut.currentPayloadHash == secondsHash)
+    }
+
+    /// The password loaded is the previous vault's, so it's dropped.
+    @Test
+    func loadBackupPassword_whenAnotherVaultOpensMeanwhile_keepsNothing() async throws {
+        let store = BackupPasswordStoreMock()
+        let started = Pending<Void>.signal()
+        let release = Pending<Void>.signal()
+        store.fetchPasswordHandler = {
+            await started.fulfill()
+            try await release.wait()
+            return anyBackupPassword()
+        }
+        store.fetchPasswordMetadataHandler = { nil }
+        let sut = makeSUT(backupPasswordStore: store)
+        let loading = Task { await sut.loadBackupPassword() }
+        try await started.wait()
+
+        await sut.openVaultDidChange()
+        await release.fulfill()
+        await loading.value
+
+        #expect(sut.backupPassword == .notFetched)
+        #expect(sut.backupPasswordStatus == .notSet)
+    }
+
+    @Test
+    func storeBackupPassword_whenAnotherVaultOpensMeanwhile_keepsNothing() async throws {
+        let store = BackupPasswordStoreMock()
+        let started = Pending<Void>.signal()
+        let release = Pending<Void>.signal()
+        store.setHandler = { _ in
+            await started.fulfill()
+            try await release.wait()
+        }
+        store.fetchPasswordMetadataHandler = { nil }
+        let sut = makeSUT(backupPasswordStore: store)
+        let storing = Task { try await sut.store(backupPassword: anyBackupPassword()) }
+        try await started.wait()
+
+        await sut.openVaultDidChange()
+        await release.fulfill()
+        try await storing.value
+
+        #expect(sut.backupPassword == .notFetched)
+        #expect(sut.backupPasswordStatus == .notSet)
+    }
+
     @Test
     func deleteVault_removesAllDataFromVault() async throws {
         let deleter = VaultStoreDeleterMock()

@@ -64,11 +64,82 @@ extension VaultEncryptionConverterTests {
             try await harness.encrypt()
 
             #expect(harness.log.value == [
+                "read the backup password",
                 "reset the count",
+                "read the backup settings",
                 "release the plain store",
+                "delete the backup settings",
                 "clear QuickType",
                 "reload widgets",
             ])
+        }
+    }
+
+    /// The plain store's backup settings become the real vault's own, and then none are left on the device.
+    @Test
+    func encrypt_movesTheBackupSettingsIntoTheVaultThenDeletesThemFromTheDevice() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try PlainVaultConversionHarness(directory: directory)
+            let settings = anyVaultBackupSettings()
+            harness.deviceBackupSettings.stored.modify { $0 = settings }
+
+            try await harness.encrypt()
+
+            let vault = try #require(try await harness.openEncryptedVault())
+            #expect(vault.state.vault.settings == settings)
+            #expect(harness.deviceBackupSettings.stored.value == nil)
+        }
+    }
+
+    /// A backup that finished while the user authenticated for the backup password is moved too.
+    @Test
+    func encrypt_movesBackupSettingsSavedWhileTheUserAuthenticated() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try PlainVaultConversionHarness(directory: directory)
+            let settings = anyVaultBackupSettings()
+            harness.deviceBackupSettings.stored.modify { $0 = settings }
+            let stored = harness.deviceBackupSettings.stored
+            harness.deviceBackupSettings.afterReadingPassword.modify {
+                $0 = { stored.modify { $0?.autoBackup.backupFilenames.append("later.pdf") } }
+            }
+
+            try await harness.encrypt()
+
+            let vault = try #require(try await harness.openEncryptedVault())
+            #expect(vault.state.vault.settings.autoBackup.backupFilenames == ["Vault Backup.pdf", "later.pdf"])
+            #expect(vault.state.vault.settings.backupPassword == settings.backupPassword)
+        }
+    }
+
+    /// Only the plain store seeds its list of backup files from the folder: the vault doesn't, as the folder could
+    /// come to hold another vault's.
+    @Test
+    func encrypt_givesTheVaultAListOfBackupFilesItWillNotSeed() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try PlainVaultConversionHarness(directory: directory)
+            harness.deviceBackupSettings.stored.modify { $0?.autoBackup.backupFilenamesAreComplete = false }
+
+            try await harness.encrypt()
+
+            let vault = try #require(try await harness.openEncryptedVault())
+            #expect(vault.state.vault.settings.autoBackup.backupFilenamesAreComplete)
+        }
+    }
+
+    /// Reading the backup password asks the user to authenticate. If they don't, nothing has changed.
+    @Test
+    func encrypt_whenTheBackupSettingsCannotBeRead_changesNothing() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try PlainVaultConversionHarness(directory: directory)
+            let settings = anyVaultBackupSettings()
+            harness.deviceBackupSettings.stored.modify { $0 = settings }
+            harness.deviceBackupSettings.readError.modify { $0 = TestError() }
+
+            await #expect(throws: TestError.self) { try await harness.encrypt() }
+
+            try await Self.expectUntouched(harness)
+            #expect(harness.deviceBackupSettings.stored.value == settings)
+            #expect(harness.log.value == ["read the backup password"])
         }
     }
 
@@ -283,8 +354,10 @@ extension VaultEncryptionConverterTests {
                     #expect(throws: (any Error).self, context) { try result.get() }
                     #expect(await !harness.session.isLocked, context)
                     #expect(try !harness.fileNames().contains(EncryptedVaultFile.fileName), context)
+                    #expect(harness.deviceBackupSettings.stored.value != nil, context)
                 } else {
                     #expect(throws: Never.self, context) { try result.get() }
+                    #expect(harness.deviceBackupSettings.stored.value == nil, context)
                 }
                 try await Self.expectRelaunch(harness, as: staysPlain ? .plain : .password, with: before, context)
             }

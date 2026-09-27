@@ -54,6 +54,6 @@ public final class BackupGeneratedPDFViewModel {
         fileBeingShared = nil
         guard completed, !isSaved else { return }
         isSaved = true
-        backupEventLogger.exportedToPDF(backupDate: pdf.createdDate, hash: pdf.dataHash)
+        backupEventLogger.exportedToPDF(backupDate: pdf.createdDate, hash: pdf.dataHash, vaultToken: pdf.vaultToken)
     }
 }

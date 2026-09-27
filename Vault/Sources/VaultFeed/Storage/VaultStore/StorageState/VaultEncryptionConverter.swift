@@ -16,18 +16,22 @@ import Foundation
 /// **Steps.** Each is journaled in `vault-storage-state.json`, so launch recovery (`VaultStorageRecovery`) can finish
 /// or undo a conversion the app was stopped in the middle of:
 ///
-/// 1. Resets the attempt counter, so a count left from before doesn't carry over to the new password.
+/// 1. Reads the plain store's backup settings (`DeviceBackupSettings`), which asks the user to authenticate if a
+///    backup password is set, and resets the attempt counter, so a count left from before doesn't carry over to the
+///    new password.
 /// 2. Takes `vault-slots.lock` and holds it until the commit. Journals `encrypting`, so the extensions stay away from
 ///    the plain store, and locks the store session, so the app's own writes finish first. An extension's write to
 ///    the plain store takes the lock too, and checks the journal once it has it (`GuardedPlainVaultStore`).
 /// 3. Takes a snapshot of the plain store as records, field for field, including items that don't decode.
 /// 4. Calibrates the key derivation for this device, derives the password's key with a fresh salt, and builds the
-///    file: the vault in a slot chosen at random, with ten duress slots, and every other slot random.
+///    file: the vault in a slot chosen at random, with ten duress slots and the backup settings read at step 1, and
+///    every other slot random.
 /// 5. Writes it through a flushed temp file and verifies it before the rename: the whole unlock path with the
 ///    password has to open exactly that slot and nothing else, and decode to exactly the snapshot.
 /// 6. Commits: journals the password mode, the device's unlock deadline, and the plain store's deletion. The
 ///    journal's rename is the commit point.
-/// 7. Lets go of the plain store, and deletes its files, its pending rehash files and the confirmed archives.
+/// 7. Lets go of the plain store, and deletes its files, its pending rehash files and the confirmed archives. Then
+///    deletes the plain store's backup settings, which are the vault's own now.
 /// 8. Clears the QuickType identity store and reloads the widgets, journaled so the next launch does it again if
 ///    the app stops first. Then it clears the journal, and switches the store session to the vault, unless the app
 ///    has locked meanwhile.
@@ -74,6 +78,8 @@ public actor VaultEncryptionConverter {
     private let calibrate: @Sendable () throws -> AppLockKeyDerivationCalibration
     /// Stamps the new vault's key wrap.
     private let wrapStamper: any VaultWrapStamping
+    /// The plain store's backup settings, which become the real vault's own.
+    private let deviceBackupSettings: any DeviceBackupSettingsMoving
 
     /// - Parameters:
     ///   - directory: The vault's storage directory, where the plain store is and the encrypted file will be.
@@ -82,6 +88,7 @@ public actor VaultEncryptionConverter {
     ///     empty fallback.
     ///   - archives: The archives of the plain store, set aside when it failed to open.
     ///   - backgroundTime: Keeps the app running until the conversion has finished: `.application` in the app.
+    ///   - deviceBackupSettings: The plain store's backup settings: moved into the real vault, then deleted.
     public init(
         directory: URL,
         plainStore: PersistedLocalVaultStore,
@@ -89,6 +96,7 @@ public actor VaultEncryptionConverter {
         session: VaultStoreSession,
         archives: any VaultStoreArchiving,
         attemptCounter: AppLockPasswordAttemptCounter,
+        deviceBackupSettings: any DeviceBackupSettingsMoving,
         hooks: Hooks,
         backgroundTime: VaultBackgroundTime,
     ) {
@@ -104,6 +112,7 @@ public actor VaultEncryptionConverter {
             backgroundTime: backgroundTime,
             calibrate: { try AppLockKeyDerivationCalibrator().calibrate() },
             wrapStamper: VaultDeviceWrapStamper(),
+            deviceBackupSettings: deviceBackupSettings,
         )
     }
 
@@ -119,6 +128,7 @@ public actor VaultEncryptionConverter {
         backgroundTime: VaultBackgroundTime = .none,
         calibrate: @escaping @Sendable () throws -> AppLockKeyDerivationCalibration,
         wrapStamper: any VaultWrapStamping,
+        deviceBackupSettings: any DeviceBackupSettingsMoving,
     ) {
         self.directory = directory
         self.fileSystem = fileSystem
@@ -131,6 +141,7 @@ public actor VaultEncryptionConverter {
         self.backgroundTime = backgroundTime
         self.calibrate = calibrate
         self.wrapStamper = wrapStamper
+        self.deviceBackupSettings = deviceBackupSettings
     }
 }
 
@@ -188,6 +199,10 @@ extension VaultEncryptionConverter {
         guard try await Self.fitsTheLargestSlot(plainStore.recordState()) else {
             throw VaultEncryptionError.vaultTooLarge
         }
+        // Read first, because reading the backup password asks the user to authenticate: if they don't, nothing has
+        // changed. The rest of the backup settings are read once the session has locked, below, so none saved while
+        // the user authenticates is lost.
+        let backupPassword = try await deviceBackupSettings.readBackupPassword()
         try await attemptCounter.reset()
 
         // Held from the journal to the commit. An extension's write to the plain store takes it too, and checks the
@@ -200,7 +215,12 @@ extension VaultEncryptionConverter {
         do {
             try stateFile.write(VaultStorageState(mode: .plain, transition: .encrypting))
             lockEpoch = await session.lock()
-            converted = try await convert(plainStore, password: password)
+            // Nothing saves the plain store's settings once the session has locked (`OpenVaultBackupSettings`).
+            var backupSettings = await deviceBackupSettings.read(backupPassword: backupPassword)
+            // Only the plain store seeds its list of backup files from the folder (`AutoBackupServiceImpl`): a vault
+            // never does, as the folder could hold another vault's.
+            backupSettings.autoBackup.backupFilenamesAreComplete = true
+            converted = try await convert(plainStore, backupSettings: backupSettings, password: password)
             guard try held.locked.read() == nil else { throw VaultEncryptionError.alreadyEncrypted }
             try held.locked.write(converted.file) { written in
                 try Self.verify(written, opens: converted.state, inSlot: converted.slot.index, password: password)
@@ -237,6 +257,8 @@ extension VaultEncryptionConverter {
             // The journal still says to delete the plain store, so the next launch finishes it, then clears the
             // system surfaces again.
         }
+        // They're the real vault's now. If deleting them fails, the next launch deletes them (`VaultRoot`).
+        try? await deviceBackupSettings.delete()
         await hooks.clearCredentialIdentities()
         await hooks.reloadWidgets()
         if deletedPlainStore {
@@ -265,10 +287,15 @@ extension VaultEncryptionConverter {
     }
 
     /// Takes the snapshot and builds the encrypted file in memory.
-    private func convert(_ plainStore: PersistedLocalVaultStore, password: String) async throws -> Converted {
+    private func convert(
+        _ plainStore: PersistedLocalVaultStore,
+        backupSettings: VaultBackupSettings,
+        password: String,
+    ) async throws -> Converted {
         let realSlot = Int.random(in: VaultSlotFile.slotIndices)
         var state = try await plainStore.recordState()
         state.vault.duressSlots = VaultDuressSlots.forFirstVault(inSlot: realSlot)
+        state.vault.settings = backupSettings
         // Checked again: the vault could have grown since the precondition was checked.
         guard try Self.fitsTheLargestSlot(state) else { throw VaultEncryptionError.vaultTooLarge }
         var payload = try EncryptedVaultPayload.encode(state)

@@ -15,6 +15,8 @@ public final class VaultInjector {
     public let encryptedVaultDecoder: any EncryptedVaultDecoder<KeyData<32>>
     public let autoBackupService: any AutoBackupService
     public let defaults: Defaults
+    /// Where the PDF backup's hint is kept: the open vault's own settings.
+    public let backupPDFHintStorage: any BackupPDFHintStorage
     public let fileManager: FileManager
     /// Vaults set aside because they couldn't be opened.
     public let vaultStoreArchives: any VaultStoreArchiving
@@ -27,6 +29,7 @@ public final class VaultInjector {
         encryptedVaultDecoder: any EncryptedVaultDecoder<KeyData<32>>,
         autoBackupService: any AutoBackupService,
         defaults: Defaults,
+        backupPDFHintStorage: (any BackupPDFHintStorage)? = nil,
         fileManager: FileManager,
         vaultStoreArchives: any VaultStoreArchiving = NoVaultStoreArchives(),
     ) {
@@ -37,6 +40,7 @@ public final class VaultInjector {
         self.encryptedVaultDecoder = encryptedVaultDecoder
         self.autoBackupService = autoBackupService
         self.defaults = defaults
+        self.backupPDFHintStorage = backupPDFHintStorage ?? defaults
         self.fileManager = fileManager
         self.vaultStoreArchives = vaultStoreArchives
     }

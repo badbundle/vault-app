@@ -244,6 +244,52 @@ extension DuressVaultTests {
         #expect(duressSlots.count == realDuressSlots.count)
     }
 
+    /// A new duress vault has backup settings of its own, all unset: nothing of the vault it was made from, which
+    /// would show there's another vault (MANIFESTO C10).
+    @Test
+    func makeDuressVault_startsWithNoBackupSettings() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot)
+        let real = try fixture.open(slot: realSlot, password: "real")
+        let settings = anyVaultBackupSettings()
+        try await real.updateBackupSettings { $0 = settings }
+        let target = await real.records.state.vault.duressSlots[0]
+
+        try await real.makeDuressVault(password: "duress")
+
+        #expect(try fixture.state(ofSlot: target, password: "duress").vault.settings == VaultBackupSettings())
+        #expect(try fixture.state(ofSlot: realSlot, password: "real").vault.settings == settings)
+    }
+
+    /// Whatever a vault's backup settings hold, the section has the same keys at every level: a real vault with every
+    /// setting set, and a new duress vault with none, look alike but for the values.
+    @Test
+    func duressVaultPayload_withNoBackupSettings_hasTheSameKeysAsARealVaultWithEverySetting() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot)
+        let real = try fixture.open(slot: realSlot, password: "real")
+        try await real.updateBackupSettings { $0 = anyVaultBackupSettings(backupFilenames: ["a.pdf", "b.pdf"]) }
+        let target = await real.records.state.vault.duressSlots[0]
+        try await real.makeDuressVault(password: "duress")
+
+        let realPayload = try #require(try fixture.payloadJSON(ofSlot: realSlot, password: "real") as? [String: Any])
+        let duressPayload = try #require(try fixture.payloadJSON(ofSlot: target, password: "duress") as? [String: Any])
+
+        #expect(Set(duressPayload.keys) == Set(realPayload.keys))
+        for path in [["vault"], ["vault", "settings"], ["vault", "settings", "autoBackup"]] {
+            let realSection = try #require(Self.object(at: path, in: realPayload), "\(path)")
+            let duressSection = try #require(Self.object(at: path, in: duressPayload), "\(path)")
+            #expect(Set(duressSection.keys) == Set(realSection.keys), "\(path)")
+        }
+        // They hold different things, so the keys being alike isn't down to the settings being alike.
+        let realSettings = try #require(Self.object(at: ["vault", "settings"], in: realPayload))
+        let duressSettings = try #require(Self.object(at: ["vault", "settings"], in: duressPayload))
+        #expect(Self.shape(of: duressSettings) != Self.shape(of: realSettings))
+    }
+
+    /// The JSON object at `path` in `json`.
+    private static func object(at path: [String], in json: [String: Any]) -> [String: Any]? {
+        path.reduce(Optional(json)) { object, key in object?[key] as? [String: Any] }
+    }
+
     /// Making one takes the same steps whichever vault it's made from, in the same order: the header read to derive
     /// the key, the derivation, then, under the file's lock, the file read, the vault's own slot tried against the new
     /// password, the wrap stamped, and the file replaced.

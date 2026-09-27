@@ -33,6 +33,11 @@ public final actor VaultStoreSession {
     /// Calls that reached a store and haven't returned yet.
     private var operationsInFlight = 0
     private var waitingForOperations = [CheckedContinuation<Void, Never>]()
+    /// Everything following `openVaultChanges()`.
+    private var openVaultObservers = [UUID: AsyncStream<OpenVault>.Continuation]()
+    /// Counts the times the session has switched to a plain store, so each time is a different open vault
+    /// (`OpenVault.plain(_:)`), even if it's the same store again.
+    private var plainStoreOpenings = 0
 
     public init(target: Target) {
         self.target = target
@@ -79,9 +84,12 @@ public final actor VaultStoreSession {
     /// one has finished, so the old store isn't in use any more.
     public func switchTo(_ newTarget: Target) async {
         target = newTarget
-        if case .locked = newTarget {
-            lockEpoch += 1
+        switch newTarget {
+        case .locked: lockEpoch += 1
+        case .plain: plainStoreOpenings += 1
+        case .unlocked: break
         }
+        notifyOpenVaultObservers()
         await waitForOperationsInFlight()
     }
 
@@ -104,8 +112,17 @@ public final actor VaultStoreSession {
         target = .locked
         lockEpoch += 1
         let epoch = lockEpoch
+        notifyOpenVaultObservers()
         await waitForOperationsInFlight()
         return epoch
+    }
+
+    /// Tells everything following `openVaultChanges()` which vault is open now.
+    private func notifyOpenVaultObservers() {
+        let openVault = openVault
+        for observer in openVaultObservers.values {
+            observer.yield(openVault)
+        }
     }
 
     private func waitForOperationsInFlight() async {
@@ -308,5 +325,81 @@ extension VaultStoreSession {
         operationsInFlight += 1
         defer { operationDidFinish() }
         try await store.makeDuressVault(password: password)
+    }
+}
+
+// MARK: - Open vault
+
+extension VaultStoreSession {
+    /// Which vault the session reads and writes.
+    public enum OpenVault: Sendable {
+        /// The plain store, whose settings are device-wide, as the session opened it one time.
+        case plain(PlainStoreOpening)
+        /// An encrypted vault the App Lock Password opened.
+        case encrypted(EncryptedVaultStore)
+        /// None: the vault is locked.
+        case locked
+
+        /// One time the session switched to a plain store. Each is a different open vault, even if it's the same
+        /// store: something that read the settings before an erase or a conversion locked the session mustn't write
+        /// them after it switches back.
+        public struct PlainStoreOpening: Equatable, Sendable {
+            let count: Int
+        }
+
+        /// Whether it's the same vault as `other`, opened the same time: the plain store since the same switch, or
+        /// the same unlocked encrypted store. No vault is never the same as anything.
+        func isSame(as other: OpenVault) -> Bool {
+            switch (self, other) {
+            case let (.plain(opening), .plain(otherOpening)): opening == otherOpening
+            case let (.encrypted(store), .encrypted(otherStore)): store === otherStore
+            default: false
+            }
+        }
+    }
+
+    public var openVault: OpenVault {
+        switch target {
+        case .plain: .plain(OpenVault.PlainStoreOpening(count: plainStoreOpenings))
+        case let .unlocked(store): .encrypted(store)
+        case .locked: .locked
+        }
+    }
+
+    /// Runs `body` if `vault` is still the open vault, and keeps it open until `body` finishes: a lock or a switch
+    /// waits for it, as for any other call.
+    ///
+    /// For writing a vault's own settings: something that read them from one vault mustn't save them into another
+    /// that's been opened since.
+    ///
+    /// - Throws: `VaultStoreSessionError.locked` if `vault` isn't the open vault any more, or none is, or what `body`
+    ///   throws.
+    public func whileOpen<T: Sendable>(
+        _ vault: OpenVault,
+        _ body: @Sendable () async throws -> T,
+    ) async throws -> T {
+        guard !isLocked, openVault.isSame(as: vault) else { throw VaultStoreSessionError.locked }
+        operationsInFlight += 1
+        defer { operationDidFinish() }
+        return try await body()
+    }
+
+    /// Yields the vault that's open now, then the vault that's open each time the session switches store or locks,
+    /// until the stream is dropped.
+    ///
+    /// What follows the open vault, such as its backup settings, reloads from this.
+    public func openVaultChanges() -> AsyncStream<OpenVault> {
+        let (stream, continuation) = AsyncStream.makeStream(of: OpenVault.self, bufferingPolicy: .bufferingNewest(1))
+        let id = UUID()
+        openVaultObservers[id] = continuation
+        continuation.yield(openVault)
+        continuation.onTermination = { [weak self] _ in
+            Task { await self?.stopObserving(id) }
+        }
+        return stream
+    }
+
+    private func stopObserving(_ id: UUID) {
+        openVaultObservers[id] = nil
     }
 }

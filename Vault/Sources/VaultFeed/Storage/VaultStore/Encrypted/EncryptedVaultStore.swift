@@ -241,3 +241,24 @@ extension EncryptedVaultStore {
         )
     }
 }
+
+// MARK: - Backup settings
+
+extension EncryptedVaultStore {
+    /// This vault's own backup settings, as saved in its payload.
+    public var backupSettings: VaultBackupSettings {
+        get async {
+            await records.state.vault.settings
+        }
+    }
+
+    /// Changes this vault's backup settings, and saves them to its slot like any other change: if another writer
+    /// saved first, the change is made again on top of what it saved.
+    ///
+    /// Use `VaultStoreSession.whileOpen(_:_:)` around it, so it's only made while this vault is the open one.
+    func updateBackupSettings(_ update: @escaping @Sendable (inout VaultBackupSettings) -> Void) async throws {
+        try await records.change { state in
+            update(&state.vault.settings)
+        }
+    }
+}

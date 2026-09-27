@@ -1,4 +1,5 @@
 import Foundation
+import FoundationExtensions
 import TestHelpers
 import Testing
 @testable import VaultFeed
@@ -246,6 +247,157 @@ struct VaultStoreSessionTests {
         #expect(secondEpoch == 2)
         #expect(await !sut.switchTo(.plain(store), unlessLockedSince: firstEpoch))
         #expect(await sut.isLocked)
+    }
+}
+
+// MARK: - Open vault
+
+extension VaultStoreSessionTests {
+    @Test
+    func openVault_isTheVaultTheSessionReads() async throws {
+        let store = try await EncryptedVaultFixture().openStore()
+        let other = try await EncryptedVaultFixture().openStore()
+        let plainStore = GatedVaultStore()
+        let sut = VaultStoreSession(target: .plain(plainStore))
+        let plain = await sut.openVault
+        guard case .plain = plain else {
+            Issue.record("Expected the plain store open")
+            return
+        }
+        #expect(await sut.openVault.isSame(as: plain))
+
+        await sut.switchTo(.unlocked(store))
+        #expect(await sut.openVault.isSame(as: .encrypted(store)))
+        #expect(await !sut.openVault.isSame(as: .encrypted(other)))
+
+        await sut.lock()
+        // Nothing is the same as no vault: there's nothing whose settings could be written.
+        #expect(await !sut.openVault.isSame(as: .locked))
+        guard case .locked = await sut.openVault else {
+            Issue.record("Expected no vault open")
+            return
+        }
+
+        // Opening the plain store again, even the same store, is another time it's open.
+        await sut.switchTo(.plain(plainStore))
+        #expect(await !sut.openVault.isSame(as: plain))
+        let reopened = await sut.openVault
+        #expect(await sut.openVault.isSame(as: reopened))
+    }
+
+    @Test
+    func openVaultChanges_yieldsTheVaultOpenAfterEachSwitch() async throws {
+        let store = try await EncryptedVaultFixture().openStore()
+        let other = try await EncryptedVaultFixture().openStore()
+        let sut = VaultStoreSession(target: .plain(GatedVaultStore()))
+        let plain = await sut.openVault
+        var changes = await sut.openVaultChanges().makeAsyncIterator()
+
+        // The vault open now, first.
+        #expect(await changes.next()?.isSame(as: plain) == true)
+        await sut.switchTo(.unlocked(store))
+        #expect(await changes.next()?.isSame(as: .encrypted(store)) == true)
+        await sut.lock()
+        let locked = await changes.next()
+        guard case .locked = locked else {
+            Issue.record("Expected no vault open, got \(String(describing: locked))")
+            return
+        }
+        await sut.switchTo(.unlocked(other))
+        #expect(await changes.next()?.isSame(as: .encrypted(other)) == true)
+    }
+
+    @Test
+    func whileOpen_withTheOpenVault_runs() async throws {
+        let store = try await EncryptedVaultFixture().openStore()
+        let sut = VaultStoreSession(target: .unlocked(store))
+
+        let result = try await sut.whileOpen(.encrypted(store)) { 42 }
+
+        #expect(result == 42)
+    }
+
+    /// Something that read one vault's settings mustn't write them into another.
+    @Test
+    func whileOpen_afterAnotherVaultOpened_throwsLockedWithoutRunning() async throws {
+        let store = try await EncryptedVaultFixture().openStore()
+        let other = try await EncryptedVaultFixture().openStore()
+        let sut = VaultStoreSession(target: .unlocked(store))
+        await sut.switchTo(.unlocked(other))
+        let ran = Flag()
+
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await sut.whileOpen(.encrypted(store)) { await ran.set() }
+        }
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await sut.whileOpen(.plain(.init(count: 0))) { await ran.set() }
+        }
+        #expect(await !ran.isSet)
+    }
+
+    /// An erase or a conversion locks the session, then deletes the plain store's settings: something that read them
+    /// before mustn't write them back, even once the session has the plain store again.
+    @Test
+    func whileOpen_forThePlainStoreAsItWasOpenBeforeALock_throwsLockedWithoutRunning() async throws {
+        let store = GatedVaultStore()
+        let sut = VaultStoreSession(target: .plain(store))
+        let plain = await sut.openVault
+        let ran = Flag()
+
+        await sut.lock()
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await sut.whileOpen(plain) { await ran.set() }
+        }
+        await sut.switchTo(.plain(store))
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await sut.whileOpen(plain) { await ran.set() }
+        }
+        #expect(await !ran.isSet)
+        try await sut.whileOpen(sut.openVault) { await ran.set() }
+        #expect(await ran.isSet)
+    }
+
+    @Test
+    func whileOpen_whenLocked_throwsLockedWithoutRunning() async throws {
+        let sut = VaultStoreSession(target: .locked)
+        let ran = Flag()
+
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await sut.whileOpen(.plain(.init(count: 0))) { await ran.set() }
+        }
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await sut.whileOpen(.locked) { await ran.set() }
+        }
+        #expect(await !ran.isSet)
+    }
+
+    /// Like any other call, it keeps the vault open until it's done: locking waits for it.
+    @Test
+    func lock_waitsForAWhileOpenUnderway() async throws {
+        let store = try await EncryptedVaultFixture().openStore()
+        let sut = VaultStoreSession(target: .unlocked(store))
+        let started = Pending<Void>.signal()
+        let release = Pending<Void>.signal()
+        let body = Task {
+            try await sut.whileOpen(.encrypted(store)) {
+                await started.fulfill()
+                try await release.wait()
+            }
+        }
+        try await started.wait()
+
+        let lockFinished = Flag()
+        let locking = Task {
+            await sut.lock()
+            await lockFinished.set()
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await !lockFinished.isSet)
+
+        await release.fulfill()
+        try await body.value
+        await locking.value
+        #expect(await lockFinished.isSet)
     }
 }
 

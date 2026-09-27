@@ -51,7 +51,8 @@ struct BackupGeneratedPDFViewModelTests {
         let logger = BackupEventLoggerMock()
         let directory = try TemporaryTestDirectory()
         defer { directory.remove() }
-        let pdf = anyGeneratedPDF(createdDate: Date(timeIntervalSince1970: 1234))
+        let pdf = anyGeneratedPDF(createdDate: Date(timeIntervalSince1970: 1234), vaultToken: 7)
+        logger.vaultToken = 8
         let sut = makeSUT(pdf: pdf, backupEventLogger: logger, directory: directory.url)
         sut.share()
 
@@ -60,6 +61,8 @@ struct BackupGeneratedPDFViewModelTests {
         #expect(sut.isSaved)
         #expect(logger.exportedToPDFArgValues.map(\.0) == [Date(timeIntervalSince1970: 1234)])
         #expect(logger.exportedToPDFArgValues.map(\.1) == [pdf.dataHash])
+        // Into the vault it was made of, whatever is open now.
+        #expect(logger.exportedToPDFArgValues.map(\.2) == [7])
         #expect(sut.fileBeingShared == nil)
         #expect(try directory.contents() == [])
     }

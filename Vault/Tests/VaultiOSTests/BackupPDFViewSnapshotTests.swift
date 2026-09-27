@@ -58,11 +58,13 @@ extension BackupPDFViewSnapshotTests {
     private func makeCreateSUT() -> some View {
         let userDefaults = UserDefaults(suiteName: #function) ?? .standard
         userDefaults.removePersistentDomain(forName: #function)
+        let defaults = Defaults(userDefaults: userDefaults)
         let viewModel = BackupCreatePDFViewModel(
             backupPassword: DerivedEncryptionKey(key: .zero(), salt: Data(), keyDervier: .testing),
             dataModel: anyVaultDataModel(),
             clock: EpochClockMock(currentTime: 100),
-            defaults: Defaults(userDefaults: userDefaults),
+            defaults: defaults,
+            hintStorage: defaults,
         )
         return NavigationStack {
             BackupCreatePDFView(viewModel: viewModel, navigationPath: .constant(NavigationPath()))
@@ -101,6 +103,7 @@ extension BackupPDFViewSnapshotTests {
             size: .a4,
             dataHash: .init(value: Data(repeating: 0xAB, count: 32)),
             createdDate: Date(timeIntervalSince1970: 100),
+            vaultToken: 0,
         )
     }
 }

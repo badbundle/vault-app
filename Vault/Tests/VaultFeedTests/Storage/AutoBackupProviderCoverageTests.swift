@@ -63,6 +63,43 @@ struct AutoBackupProviderCoverageTests {
         }
     }
 
+    /// A backup never replaces a file that's there, which could be another vault's backup.
+    @Test
+    func iCloudDriveProvider_write_neverReplacesAFile() async throws {
+        try await withTemporaryDirectory { folder in
+            let sut = try await Self.provider(backingUpTo: folder)
+            try await sut.write(data: Data("first".utf8), filename: "vault-auto-backup-a.pdf")
+
+            await #expect(throws: AutoBackupError.backupFileExists) {
+                try await sut.write(data: Data("second".utf8), filename: "vault-auto-backup-a.pdf")
+            }
+
+            let file = folder.appending(path: "vault-auto-backup-a.pdf")
+            #expect(try Data(contentsOf: file) == Data("first".utf8))
+            #expect(try Self.fileNames(in: folder) == ["vault-auto-backup-a.pdf"])
+            #expect(try await sut.containsBackup(filename: "vault-auto-backup-a.pdf"))
+            #expect(try await !sut.containsBackup(filename: "vault-auto-backup-b.pdf"))
+        }
+    }
+
+    /// A file only in iCloud for now has a hidden placeholder instead, which isn't listed, but is there: it's never
+    /// replaced, and cleaning up doesn't forget it.
+    @Test
+    func iCloudDriveProvider_aFileOnlyInICloud_isThereButNotListed() async throws {
+        try await withTemporaryDirectory { folder in
+            let sut = try await Self.provider(backingUpTo: folder)
+            try Data().write(to: folder.appending(path: ".vault-auto-backup-a.pdf.icloud"))
+
+            await #expect(throws: AutoBackupError.backupFileExists) {
+                try await sut.write(data: Data("new".utf8), filename: "vault-auto-backup-a.pdf")
+            }
+
+            #expect(try await sut.containsBackup(filename: "vault-auto-backup-a.pdf"))
+            #expect(try await sut.listBackups().isEmpty)
+            #expect(try Self.fileNames(in: folder) == [".vault-auto-backup-a.pdf.icloud"])
+        }
+    }
+
     @Test
     func autoBackupErrorsExposeDescriptionsAndRecoverySuggestions() {
         let cases: [AutoBackupError] = [
@@ -73,6 +110,7 @@ struct AutoBackupProviderCoverageTests {
             .backupPasswordNotSet,
             .pdfGenerationFailed(reason: "PDF"),
             .writeFailed(reason: "Write"),
+            .backupFileExists,
             .cleanupFailed(reason: "Cleanup"),
             .networkUnavailable,
             .storageFull,
@@ -83,6 +121,21 @@ struct AutoBackupProviderCoverageTests {
             #expect(error.errorDescription?.isEmpty == false)
             #expect(error.recoverySuggestion?.isEmpty == false)
         }
+    }
+}
+
+extension AutoBackupProviderCoverageTests {
+    /// A provider backing up to `folder`, as if the user had picked it.
+    private static func provider(backingUpTo folder: URL) async throws -> iCloudDriveProvider {
+        let sut = iCloudDriveProvider()
+        let bookmark = try folder.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil)
+        let configuration = iCloudDriveProviderConfiguration(folderBookmark: bookmark, folderDisplayName: "Backups")
+        try await sut.restoreConfiguration(from: JSONEncoder().encode(configuration))
+        return sut
+    }
+
+    private static func fileNames(in folder: URL) throws -> Set<String> {
+        try Set(FileManager.default.contentsOfDirectory(atPath: folder.path(percentEncoded: false)))
     }
 }
 

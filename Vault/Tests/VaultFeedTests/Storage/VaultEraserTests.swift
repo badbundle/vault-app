@@ -639,6 +639,17 @@ struct VaultEraseHarness {
         for key in Self.vaultSettingsKeys {
             #expect(userDefaults.object(forKey: key) == nil, "\(key)", sourceLocation: sourceLocation)
         }
+        // None of the plain store's backup settings, which turning encryption on would move into a vault.
+        let deviceBackupSettings = DeviceBackupSettings(
+            passwordStore: BackupPasswordStoreImpl(secureStorage: keychain, clock: EpochClockMock(currentTime: 0)),
+            secureStorage: keychain,
+            defaults: defaults,
+        )
+        #expect(try await deviceBackupSettings.readBackupPassword() == nil, sourceLocation: sourceLocation)
+        #expect(
+            deviceBackupSettings.read(backupPassword: nil) == VaultBackupSettings(),
+            sourceLocation: sourceLocation,
+        )
         #expect(defaults.get(for: Self.unrelatedSetting) == "kept", context, sourceLocation: sourceLocation)
         let temporaryFiles = try FileManager.default.contentsOfDirectory(
             atPath: temporaryDirectory.path(percentEncoded: false),

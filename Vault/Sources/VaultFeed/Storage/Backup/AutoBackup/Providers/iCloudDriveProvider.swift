@@ -94,15 +94,25 @@ public actor iCloudDriveProvider: BackupStorageProvider {
         config.folderDisplayName = folderURL.lastPathComponent
     }
 
+    /// Writes the backup to a hidden temp file first, then moves it into place, which fails rather than replace a
+    /// file that's there: that could be another vault's backup (MANIFESTO C10). A file only in iCloud for now counts
+    /// as there.
     public func write(data: Data, filename: String) async throws {
         let folderURL = try accessFolder()
         defer { folderURL.stopAccessingSecurityScopedResource() }
 
         let fileURL = folderURL.appendingPathComponent(filename)
+        guard !contains(filename, in: folderURL) else { throw AutoBackupError.backupFileExists }
+        let temporaryURL = folderURL.appendingPathComponent(".\(filename).\(UUID().uuidString).tmp")
 
         do {
-            try data.write(to: fileURL, options: .atomic)
+            try data.write(to: temporaryURL)
+            try fileManager.moveItem(at: temporaryURL, to: fileURL)
         } catch {
+            try? fileManager.removeItem(at: temporaryURL)
+            if fileManager.fileExists(atPath: fileURL.path) {
+                throw AutoBackupError.backupFileExists
+            }
             throw AutoBackupError.writeFailed(reason: error.localizedDescription)
         }
     }
@@ -129,6 +139,19 @@ public actor iCloudDriveProvider: BackupStorageProvider {
                 )
             }
             .sorted { $0.createdDate > $1.createdDate }
+    }
+
+    public func containsBackup(filename: String) async throws -> Bool {
+        let folderURL = try accessFolder()
+        defer { folderURL.stopAccessingSecurityScopedResource() }
+        return contains(filename, in: folderURL)
+    }
+
+    /// Whether the file is in the folder, or only in iCloud for now: then there's a hidden placeholder for it,
+    /// `.<name>.icloud`, until it's downloaded again.
+    private func contains(_ filename: String, in folderURL: URL) -> Bool {
+        fileManager.fileExists(atPath: folderURL.appendingPathComponent(filename).path)
+            || fileManager.fileExists(atPath: folderURL.appendingPathComponent(".\(filename).icloud").path)
     }
 
     public func delete(filename: String) async throws {
