@@ -75,17 +75,21 @@ public final class BackupCreatePDFViewModel {
         public let dataHash: Digest<VaultApplicationPayload>.SHA256
         /// When the vault was exported into this PDF.
         public let createdDate: Date
+        /// The vault exported into this PDF (`BackupEventLogger.vaultToken`), which saving it is logged into.
+        public let vaultToken: Int
 
         public init(
             document: PDFDocument,
             size: Size,
             dataHash: Digest<VaultApplicationPayload>.SHA256,
             createdDate: Date,
+            vaultToken: Int,
         ) {
             self.document = document
             self.size = size
             self.dataHash = dataHash
             self.createdDate = createdDate
+            self.vaultToken = vaultToken
         }
 
         public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -98,7 +102,6 @@ public final class BackupCreatePDFViewModel {
     }
 
     private static let pdfSizeKey = Key<Size>(VaultIdentifiers.Preferences.PDF.defaultSize)
-    private static let userHintKey = Key<String>(VaultIdentifiers.Preferences.PDF.userHint)
     private static let defaultUserHint =
         "This is my description, which is visible in plain text on the vault backup. You can use the Vault app to import this data if you lose access to your device."
 
@@ -113,20 +116,30 @@ public final class BackupCreatePDFViewModel {
     private let dataModel: VaultDataModel
     private let clock: any EpochClock
     private let defaults: Defaults
+    private let hintStorage: any BackupPDFHintStorage
+    /// The vault open when the page opened, whose hint it shows and saves, and which a PDF is logged into.
+    private let vaultToken: Int
 
+    /// - Parameters:
+    ///   - defaults: Where the paper size is kept, device-wide.
+    ///   - hintStorage: Where the hint is kept: the open vault's own settings (`OpenVaultBackupSettings`), so no
+    ///     vault shows or prints another's.
     public init(
         backupPassword: DerivedEncryptionKey,
         dataModel: VaultDataModel,
         clock: any EpochClock,
         defaults: Defaults,
+        hintStorage: any BackupPDFHintStorage,
     ) {
         self.backupPassword = backupPassword
         self.dataModel = dataModel
         self.clock = clock
         self.defaults = defaults
+        self.hintStorage = hintStorage
+        vaultToken = hintStorage.vaultToken
 
         size = defaults.get(for: Self.pdfSizeKey) ?? .a4
-        userHint = defaults.get(for: Self.userHintKey) ?? Self.defaultUserHint
+        userHint = hintStorage.pdfUserHint() ?? Self.defaultUserHint
     }
 
     /// Publishes a PDF whenever one is generated.
@@ -146,6 +159,7 @@ public final class BackupCreatePDFViewModel {
                 size: size,
                 dataHash: hash,
                 createdDate: currentDate,
+                vaultToken: vaultToken,
             ))
 
             // The backup event is logged once the PDF is saved (see `BackupGeneratedPDFViewModel`), not
@@ -163,7 +177,8 @@ public final class BackupCreatePDFViewModel {
 
     private func commitLatestSettings() {
         try? defaults.set(size, for: Self.pdfSizeKey)
-        try? defaults.set(userHint, for: Self.userHintKey)
+        // Dropped if another vault has opened since the page did: the hint is this vault's.
+        try? hintStorage.savePDFUserHint(userHint, for: vaultToken)
     }
 }
 

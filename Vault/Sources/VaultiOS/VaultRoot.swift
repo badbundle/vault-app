@@ -173,8 +173,31 @@ public enum VaultRoot {
         return .init(target: .plain(GuardedPlainVaultStore(store: plainVaultStore, directory: vaultStorageDirectory)))
     }()
 
-    public static let backupPasswordStore: some BackupPasswordStore =
-        BackupPasswordStoreImpl(secureStorage: secureStorage, clock: clock)
+    /// The plain store's backup password, in the keychain.
+    static let deviceBackupPasswordStore = BackupPasswordStoreImpl(secureStorage: secureStorage, clock: clock)
+
+    /// The plain store's backup settings, which turning encryption on moves into the real vault.
+    @MainActor
+    static let deviceBackupSettings = DeviceBackupSettings(
+        passwordStore: deviceBackupPasswordStore,
+        secureStorage: secureStorage,
+        defaults: defaults,
+    )
+
+    /// The backup password, last backup, auto-backup configuration and PDF hint of whichever vault is open:
+    /// device-wide for the plain store, and each encrypted vault's own. `setup()` reads them, and reads them again
+    /// whenever the vault changes.
+    @MainActor
+    public static let openVaultBackupSettings = OpenVaultBackupSettings(
+        session: vaultStore,
+        device: deviceBackupSettings,
+        clock: clock,
+        authenticate: {
+            try await deviceAuthenticationService.validateAuthentication(
+                reason: "Authenticate to use the backup password.",
+            )
+        },
+    )
 
     public static let killphraseKeyStore: some KillphraseKeyStore<KeyData<32>> =
         KillphraseKeyStoreImpl(secureStorage: secureStorage)
@@ -226,7 +249,7 @@ public enum VaultRoot {
         vaultDeleter: vaultStore,
         vaultKillphraseDeleter: vaultStore,
         vaultOtpAutofillStore: vaultOtpAutofillStore,
-        backupPasswordStore: backupPasswordStore,
+        backupPasswordStore: openVaultBackupSettings,
         killphraseKeyStore: killphraseKeyStore,
         killphraseRehashService: killphraseRehashService,
         searchPassphraseKeyStore: searchPassphraseKeyStore,
@@ -319,7 +342,10 @@ public enum VaultRoot {
     public static let vaultKeyDeriverFactory: some VaultKeyDeriverFactory = VaultKeyDeriverFactoryImpl()
 
     @MainActor
-    static let backupEventLogger: some BackupEventLogger = BackupEventLoggerImpl(defaults: defaults, clock: clock)
+    static let backupEventLogger: some BackupEventLogger = BackupEventLoggerImpl(
+        storage: openVaultBackupSettings,
+        clock: clock,
+    )
 
     static let encryptedVaultDecoder: some EncryptedVaultDecoder<KeyData<32>> = EncryptedVaultDecoderImpl()
 
@@ -434,7 +460,7 @@ public enum VaultRoot {
         dataModel: vaultDataModel,
         backupEventLogger: backupEventLogger,
         clock: clock,
-        defaults: defaults,
+        configurationStorage: openVaultBackupSettings,
         providers: [iCloudDriveProvider],
     )
 
@@ -447,6 +473,7 @@ public enum VaultRoot {
         encryptedVaultDecoder: encryptedVaultDecoder,
         autoBackupService: autoBackupService,
         defaults: defaults,
+        backupPDFHintStorage: openVaultBackupSettings,
         fileManager: fileManager,
         vaultStoreArchives: vaultStoreArchives,
     )
@@ -488,6 +515,17 @@ public enum VaultRoot {
             reloadWidgetTimelines()
         }
         reloadWidgetTimelines()
+        // Each vault has its own backup settings, so the Backups page, the backup password and auto-backup follow
+        // whichever vault is open: reloaded, in this order, every time the store session switches vault or locks.
+        // The Backups page goes first, because auto-backup waits for a backup of the previous vault to finish.
+        let vaultChanges = vaultStore
+        Task {
+            for await _ in await vaultChanges.openVaultChanges() {
+                await openVaultBackupSettings.reload()
+                await vaultDataModel.openVaultDidChange()
+                await autoBackupService.vaultDidChange()
+            }
+        }
         // Clear deleted content an earlier session left in the SQLite store's files, and columns a migration has
         // just dropped (MANIFESTO C6). The store scrubs after each deletion itself from then on.
         if let store = plainVaultStore {
@@ -498,6 +536,11 @@ public enum VaultRoot {
         // Finish a conversion to an encrypted vault that the app was stopped in the middle of: QuickType mustn't
         // keep the vault's issuers and accounts, nor the widgets its codes.
         if storageMode != .plain {
+            // Turning encryption on moved the plain store's backup settings into the real vault. If deleting them
+            // then failed, they go now: none may be left outside the encrypted vault.
+            Task {
+                try? await deviceBackupSettings.delete()
+            }
             let otpAutofillStore = vaultOtpAutofillStore
             let directory = vaultStorageDirectory
             Task {

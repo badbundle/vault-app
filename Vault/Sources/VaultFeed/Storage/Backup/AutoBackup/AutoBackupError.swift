@@ -23,6 +23,9 @@ public enum AutoBackupError: Error, Equatable, Sendable {
     /// Failed to write the backup file.
     case writeFailed(reason: String)
 
+    /// A file with the backup's name is there already. It's never replaced: it could be another vault's backup.
+    case backupFileExists
+
     /// Failed to delete old backup files.
     case cleanupFailed(reason: String)
 
@@ -53,6 +56,8 @@ extension AutoBackupError: LocalizedError {
             "Failed to create backup: \(reason)"
         case let .writeFailed(reason):
             "Failed to save backup: \(reason)"
+        case .backupFileExists:
+            "A backup with the same name is already there"
         case let .cleanupFailed(reason):
             "Failed to clean up old backups: \(reason)"
         case .networkUnavailable:
@@ -76,7 +81,7 @@ extension AutoBackupError: LocalizedError {
             "Please reselect the backup folder."
         case .backupPasswordNotSet:
             "Create a backup password first."
-        case .pdfGenerationFailed, .writeFailed, .unknown:
+        case .pdfGenerationFailed, .writeFailed, .backupFileExists, .unknown:
             "Please try again later."
         case .cleanupFailed:
             "You may need to manually delete old backups."

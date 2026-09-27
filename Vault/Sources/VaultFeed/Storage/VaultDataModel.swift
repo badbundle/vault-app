@@ -189,6 +189,9 @@ public final class VaultDataModel {
     /// Counts `purgeVaultContents()` calls. A reload that started before the
     /// latest one is out of date by the time it finishes, so it's dropped.
     @ObservationIgnored private var contentsGeneration = 0
+    /// Counts `openVaultDidChange()` calls, so what one reads for a vault that's
+    /// no longer open is dropped.
+    @ObservationIgnored private var openVaultChanges = 0
 
     public init(
         vaultStore: any VaultStore,
@@ -284,8 +287,13 @@ public final class VaultDataModel {
     }
 
     /// Updates the current payload hash in the background.
+    /// Dropped if another vault opens while it's computed: it'd be the previous vault's hash, and auto-backup would
+    /// compare the next vault's backups against it (`openVaultDidChange()`).
     private func updateCurrentPayloadHash() async {
-        currentPayloadHash = try? await computeVaultHash()
+        let change = openVaultChanges
+        let hash = try? await computeVaultHash()
+        guard change == openVaultChanges else { return }
+        currentPayloadHash = hash
     }
 
     private nonisolated func computeVaultHash() async throws -> Digest<VaultApplicationPayload>.SHA256 {
@@ -352,10 +360,46 @@ extension VaultDataModel {
     }
 }
 
+// MARK: - Open Vault
+
+extension VaultDataModel {
+    /// Follows the vault that's open now, once its backup settings have
+    /// reloaded (`OpenVaultBackupSettings`): forgets the backup password, its
+    /// status, the last backup event and the payload hash of the vault that was
+    /// open, and reads the open vault's. While the vault is locked there are
+    /// none, so the Backups page never shows one vault's backups in another.
+    public func openVaultDidChange() async {
+        openVaultChanges += 1
+        let change = openVaultChanges
+        backupPassword = .notFetched
+        backupPasswordLoadingState = .notLoading
+        backupPasswordStatus = .unknown
+        lastBackupEvent = backupEventLogger.lastBackupEvent()
+        currentPayloadHash = nil
+
+        let status: BackupPasswordStatus
+        do {
+            status = try await backupPasswordStore.fetchPasswordMetadata().map { .set($0) } ?? .notSet
+        } catch {
+            // Locked, or it can't be read: it stays unknown.
+            status = .unknown
+        }
+        guard change == openVaultChanges else { return }
+        backupPasswordStatus = status
+
+        let hash = try? await computeVaultHash()
+        guard change == openVaultChanges else { return }
+        currentPayloadHash = hash
+    }
+}
+
 // MARK: - Backup Password
 
 extension VaultDataModel {
+    /// What it reads is dropped if another vault opens meanwhile: it's the previous vault's
+    /// (`openVaultDidChange()`).
     public func loadBackupPassword() async {
+        let change = openVaultChanges
         do {
             if case .fetched = backupPassword {
                 return
@@ -363,14 +407,16 @@ extension VaultDataModel {
             backupPasswordLoadingState = .loading
             defer { backupPasswordLoadingState = .notLoading }
             let password = try await backupPasswordStore.fetchPassword()
+            guard change == openVaultChanges else { return }
             if let password {
                 backupPassword = .fetched(password)
-                await markBackupPasswordStatusSet()
+                await markBackupPasswordStatusSet(change: change)
             } else {
                 backupPassword = .notCreated
                 backupPasswordStatus = .notSet
             }
         } catch {
+            guard change == openVaultChanges else { return }
             backupPassword = .error(PresentationError(
                 userTitle: "Encryption Key Error",
                 userDescription: "Unable to load encryption key from storage",
@@ -381,8 +427,11 @@ extension VaultDataModel {
 
     /// Refreshes `backupPasswordStatus` without loading the password.
     public func loadBackupPasswordStatus() async {
+        let change = openVaultChanges
         do {
-            if let metadata = try await backupPasswordStore.fetchPasswordMetadata() {
+            let metadata = try await backupPasswordStore.fetchPasswordMetadata()
+            guard change == openVaultChanges else { return }
+            if let metadata {
                 backupPasswordStatus = .set(metadata)
             } else {
                 backupPasswordStatus = .notSet
@@ -394,15 +443,18 @@ extension VaultDataModel {
     }
 
     public func store(backupPassword: DerivedEncryptionKey) async throws {
+        let change = openVaultChanges
         try await backupPasswordStore.set(password: backupPassword)
+        guard change == openVaultChanges else { return }
         self.backupPassword = .fetched(backupPassword)
-        await markBackupPasswordStatusSet()
+        await markBackupPasswordStatusSet(change: change)
     }
 
-    /// Marks the backup password as set, once it's known to exist.
-    private func markBackupPasswordStatusSet() async {
+    /// Marks the backup password as set, once it's known to exist, unless another vault has opened since `change`.
+    private func markBackupPasswordStatusSet(change: Int) async {
         // It's set, even if the store can't say when.
         let metadata = try? await backupPasswordStore.fetchPasswordMetadata()
+        guard change == openVaultChanges else { return }
         backupPasswordStatus = .set(metadata ?? BackupPasswordMetadata(lastSetDate: nil))
     }
 }

@@ -20,6 +20,8 @@ struct PlainVaultConversionHarness {
     let attemptStorage: LoggingAttemptStorage
     /// Where the conversion's wrap is stamped, in memory.
     let wrapStamp = InMemoryWrapStampStorage()
+    /// The plain store's backup settings, which the conversion moves into the vault.
+    let deviceBackupSettings: FakeDeviceBackupSettings
     let converter: VaultEncryptionConverter
 
     /// - Parameters:
@@ -57,7 +59,9 @@ struct PlainVaultConversionHarness {
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: LiveSlotFileSystem())
         let log = SharedMutex([String]())
         let attemptStorage = LoggingAttemptStorage(log: log)
+        let deviceBackupSettings = FakeDeviceBackupSettings(log: log)
         self.directory = directory
+        self.deviceBackupSettings = deviceBackupSettings
         self.store = store
         self.session = session
         self.fileSystem = fileSystem
@@ -92,6 +96,7 @@ struct PlainVaultConversionHarness {
                 )
             },
             wrapStamper: wrapStamper,
+            deviceBackupSettings: deviceBackupSettings,
         )
     }
 
@@ -153,4 +158,41 @@ struct PlainVaultConversionHarness {
 
     /// A conversion never erases, so recovery never has one to finish.
     struct UnexpectedErase: Error {}
+}
+
+/// The plain store's backup settings, in memory. Reading and deleting them are logged.
+final class FakeDeviceBackupSettings: DeviceBackupSettingsMoving {
+    /// What's stored: `nil` once they're deleted.
+    let stored = SharedMutex<VaultBackupSettings?>(VaultBackupSettings())
+    /// What reading them throws, as when the user doesn't authenticate for the backup password.
+    let readError = SharedMutex<(any Error)?>(nil)
+    /// Runs once the backup password has been read, while the user would be authenticating.
+    let afterReadingPassword = SharedMutex<(@Sendable () -> Void)?>(nil)
+    private let log: SharedMutex<[String]>
+
+    init(log: SharedMutex<[String]> = SharedMutex([])) {
+        self.log = log
+    }
+
+    func readBackupPassword() async throws -> StoredBackupPassword? {
+        log.modify { $0.append("read the backup password") }
+        if let error = readError.value {
+            throw error
+        }
+        let password = stored.value?.backupPassword
+        afterReadingPassword.value?()
+        return password
+    }
+
+    func read(backupPassword: StoredBackupPassword?) async -> VaultBackupSettings {
+        log.modify { $0.append("read the backup settings") }
+        var settings = stored.value ?? VaultBackupSettings()
+        settings.backupPassword = backupPassword
+        return settings
+    }
+
+    func delete() async throws {
+        log.modify { $0.append("delete the backup settings") }
+        stored.modify { $0 = nil }
+    }
 }

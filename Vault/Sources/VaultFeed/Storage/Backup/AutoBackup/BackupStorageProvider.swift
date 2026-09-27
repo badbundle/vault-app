@@ -49,15 +49,24 @@ public protocol BackupStorageProvider: Identifiable, Sendable {
     /// Configure the provider with a user-selected folder URL.
     func configure(with folderURL: URL) async throws
 
-    /// Write backup data to the provider.
+    /// Write backup data to the provider, as a new file.
+    ///
+    /// It never replaces a file that's there already, which could be another vault's backup (MANIFESTO C10), even
+    /// one only in the cloud for now.
+    ///
     /// - Parameters:
     ///   - data: The PDF backup data to write.
     ///   - filename: The filename to use (e.g., "vault-auto-backup-2025-01-11.pdf").
+    /// - Throws: `AutoBackupError.backupFileExists` if a file with that name is there already.
     func write(data: Data, filename: String) async throws
 
     /// List all backup files in the configured location.
     /// - Returns: Array of backup file information, sorted by date (newest first).
     func listBackups() async throws -> [BackupFileInfo]
+
+    /// Whether a backup file with this name is there, including one that's only in the cloud for now, which
+    /// `listBackups()` might not list.
+    func containsBackup(filename: String) async throws -> Bool
 
     /// Delete a specific backup file.
     /// - Parameter filename: The filename to delete.

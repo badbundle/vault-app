@@ -64,6 +64,8 @@ public final class DeviceTransferExportViewModel {
         do {
             state = .generating
             let currentDate = clock.currentDate
+            // The vault being exported, which the transfer is logged into, whatever is open by then.
+            let vaultToken = backupEventLogger.vaultToken
 
             // Export vault data
             let payload = try await dataModel.makeExport(userDescription: "")
@@ -84,7 +86,7 @@ public final class DeviceTransferExportViewModel {
             payloadHash = hash
 
             // Log export event
-            backupEventLogger.exportedToDevice(backupDate: currentDate, hash: hash)
+            backupEventLogger.exportedToDevice(backupDate: currentDate, hash: hash, vaultToken: vaultToken)
 
             // Start displaying first QR code
             state = .displayingQR(currentIndex: 0, totalCount: shards.count)

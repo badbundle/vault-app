@@ -96,11 +96,31 @@ struct DeviceTransferExportViewModelTests {
             .init(userDescription: "", items: [], tags: [])
         }
         let logger = BackupEventLoggerMock()
+        logger.vaultToken = 7
         let sut = try makeSUT(vaultStore: vaultStore, backupEventLogger: logger)
 
         await sut.generateShards()
 
         #expect(logger.exportedToDeviceCallCount == 1)
+        #expect(logger.exportedToDeviceArgValues.map(\.2) == [7])
+    }
+
+    /// The transfer is logged into the vault that was exported, even if another has opened by the time it's
+    /// ready.
+    @Test
+    func generateShards_logsIntoTheVaultOpenWhenItStarted() async throws {
+        let logger = BackupEventLoggerMock()
+        logger.vaultToken = 7
+        let vaultStore = VaultStoreStub()
+        vaultStore.exportVaultHandler = { _ in
+            logger.vaultToken = 8
+            return .init(userDescription: "", items: [], tags: [])
+        }
+        let sut = try makeSUT(vaultStore: vaultStore, backupEventLogger: logger)
+
+        await sut.generateShards()
+
+        #expect(logger.exportedToDeviceArgValues.map(\.2) == [7])
     }
 
     @Test

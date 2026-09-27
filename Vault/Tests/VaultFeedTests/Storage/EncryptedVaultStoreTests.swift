@@ -137,6 +137,47 @@ extension EncryptedVaultStoreTests {
     }
 }
 
+// MARK: - Backup settings
+
+extension EncryptedVaultStoreTests {
+    @Test
+    func updateBackupSettings_savesThemInTheVaultsSlot() async throws {
+        let item = uniqueVaultItem()
+        let fixture = try EncryptedVaultFixture(state: Self.state(items: [item]))
+        let sut = try await fixture.openStore()
+        let settings = anyVaultBackupSettings()
+
+        try await sut.updateBackupSettings { $0 = settings }
+
+        #expect(await sut.backupSettings == settings)
+        let saved = try fixture.savedState()
+        #expect(saved.vault.settings == settings)
+        #expect(saved.items.map(\.id) == [item.id.rawValue])
+        #expect(try await fixture.openStore().backupSettings == settings)
+    }
+
+    /// They're the vault's, not its items': emptying it, or replacing its items with an import, keeps them.
+    @Test
+    func deleteVaultAndImportingOverIt_keepTheBackupSettings() async throws {
+        let settings = anyVaultBackupSettings()
+        let fixture = try EncryptedVaultFixture(
+            state: VaultRecordState(items: [], tags: [], vault: VaultMetadata(settings: settings)),
+        )
+        let sut = try await fixture.openStore()
+
+        try await sut.insert(item: uniqueVaultItem().makeWritable())
+        try await sut.deleteVault()
+        #expect(try fixture.savedState().vault.settings == settings)
+
+        try await sut.importAndOverrideVault(payload: VaultApplicationPayload(
+            userDescription: "",
+            items: [uniqueVaultItem()],
+            tags: [],
+        ))
+        #expect(try fixture.savedState().vault.settings == settings)
+    }
+}
+
 // MARK: - Failures
 
 extension EncryptedVaultStoreTests {

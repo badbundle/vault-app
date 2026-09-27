@@ -455,11 +455,13 @@ compression, so either can change later. It's `EncryptedVaultPayload` (VAULT-45)
 ```
 { "items": [VaultItemRecord],   // every PersistedSchemaV3.PersistedVaultItem field + details, raw strings
   "tags":  [VaultTagRecord],
-  "vault": { "duressSlots": [UInt8] /* VAULT-51 */, "settings": { /* per-vault settings, VAULT-23 */ } } }
+  "vault": { "duressSlots": [UInt8] /* VAULT-51 */, "settings": VaultBackupSettings /* VAULT-70 */ } }
 ```
 
 The keys are the records' property names. The version is the body header's, not a JSON field. `vault` arrives
-with VAULT-51.
+with VAULT-51, and its `settings` with VAULT-70 (see
+[Each vault's backup settings](#each-vaults-backup-settings-vault-70)). `settings` is always written, with every
+key, `null` when it's unset, so every vault's payload has the same sections whatever it holds.
 
 - **`VaultItemRecord` mirrors the persisted schema, not the domain model.** Migration is then a field-for-field
   copy that can't fail, and an item that fails domain decoding in SQLite today survives the migration byte for
@@ -589,6 +591,9 @@ different order:
   the journal and switch the session back to the plain store. If the journal can't be read, the session stays
   locked and the next launch's recovery decides. If a deletion fails, the journal still says `migrating`, which
   recovery undoes the same way.
+- **The backup settings** move into the real vault (VAULT-70). They're read first, before the attempt counter is
+  reset, because reading the backup password asks the user to authenticate: if they don't, nothing has changed. They
+  go into the snapshot's `vault.settings`, and are deleted from the keychain and `UserDefaults` after the commit.
 - **After the commit**, "close the SwiftData container" is a hook the app provides (`releasePlainStore`, with
   `VaultRoot.plainVaultStore` releasable). The SQLite files, the rehash files and the confirmed archives are
   deleted, then the journal says `clearingSystemSurfaces` while the QuickType identity store is cleared and the
@@ -784,7 +789,7 @@ The format serves VAULT-23 directly:
 - **Sixteen slots always exist.** A file with a duress vault looks exactly like one without.
 - **Unlock timing is identical,** as described above.
 - **Each vault is a full payload,** with its own items, tags, killphrases and per-vault settings: backup
-  password, backup events, auto-backup configuration and the "backup password is set" record. VAULT-23 moves
+  password, backup events, auto-backup configuration and the "backup password is set" record. VAULT-70 moves
   those from `UserDefaults` and the keychain into `payload.vault.settings`.
 
 ### Making a duress database, from any vault
@@ -879,9 +884,91 @@ payloads.
 - **Turning the password off** rekeys the open vault only (see above).
 - **Backups and auto-backup** read only the open vault. VAULT-23 must keep each vault's auto-backup destination
   and retention cleanup in that vault's settings, so a duress vault never deletes or overwrites the real one's
-  backups.
+  backups. As built in VAULT-70: see below.
 - **Item dates.** Created dates inside a duress vault show how recently it was filled. That's outside storage,
   but VAULT-23's guidance should mention it.
+
+### Each vault's backup settings (VAULT-70)
+
+**As built** (`VaultBackupSettings`, `OpenVaultBackupSettings`, `DeviceBackupSettings`):
+
+- **In the payload.** Each encrypted vault keeps its own in `vault.settings`:
+  - the backup password's derived key, and when it was set;
+  - the last backup event;
+  - the auto-backup configuration, including the names of the files its auto-backup wrote;
+  - the hint its PDF backups print in plain text.
+
+  A new duress vault starts with none set, never a copy of the vault it was made from. Deleting a vault's data, or
+  importing over it, keeps them, as it does the plain store's. The paper size stays device-wide.
+- **The plain store's stay where they were:** the backup password and its record in the keychain, the rest in
+  `UserDefaults`. Turning encryption on moves them into the real vault (see
+  [Migration](#migration-plain-to-encrypted)):
+  - The backup password is read before anything changes, because reading it asks the user to authenticate.
+  - The rest is read once the session has locked, so a backup that finishes while the user authenticates isn't
+    lost.
+  - They're deleted after the commit. If that fails, or the app stops first, every launch with the vault encrypted
+    deletes them, with the password on or off.
+- **Following the open vault.** `OpenVaultBackupSettings` is what the backup password store, the backup event
+  logger, auto-backup and the PDF backup read and write through, so none of them knows about vaults. It holds the
+  plain store's device-wide settings, the unlocked vault's own, or none while the app is locked. It reads them
+  whenever the store session switches vault or locks, and when it's first set up
+  (`VaultStoreSession.openVaultChanges()`). Until it has, it has none.
+- **Never into another vault.** A change is saved only while the vault it was read from is still open
+  (`VaultStoreSession.whileOpen(_:_:)`), and a change meant for a vault that has been locked or replaced is dropped.
+  That holds for the plain store as well:
+  - Each time the session opens the plain store is a different open vault, even for the same store.
+  - So a change read before an erase or a conversion locked the session can't put back settings that were just
+    deleted.
+  - An auto-backup configuration, an event and a PDF hint each carry a token for the vault they were read from.
+    Saving with an earlier vault's token is refused.
+- **Events** go into the vault a backup was made of, which is the vault open when the backup started. That covers a
+  PDF export, a device transfer and an auto-backup. If that vault isn't open any more when the backup finishes, the
+  event is dropped.
+- **The backup password** of an encrypted vault is only read once the user has authenticated, as the keychain asks
+  for the plain store's.
+- **Auto-backup** (`AutoBackupServiceImpl`) follows every change of vault:
+  - Its configuration and status are the open vault's at once.
+  - The previous vault's destination is cleared at once, so a backup of it that's still underway can't write there
+    any more.
+  - The open vault's destination is set up only once that backup has finished or stopped, so the backup can't
+    write there either.
+  - A backup stops without writing if the vault changes while it's made, and it records, logs and shows nothing
+    in any vault other than its own.
+- **Backup files.** A provider never replaces a file, including one that's only in iCloud for now. If the name is
+  taken, perhaps by another vault's backup made in the same second, the backup is written as `-2`, `-3` and so on.
+  - Cleaning up deletes only files the vault's own auto-backup wrote. It never deletes another vault's, or one the
+    user put in the folder.
+  - It forgets a file once it has deleted it, or once the provider says the file is gone. A file that's only in the
+    cloud, or that one listing missed, is still there.
+  - It forgets files that are gone even when backups are kept forever, so the list doesn't grow for them.
+- **Seeding the plain store's list, once.** Cleaning up used to delete every auto-backup in the folder. A plain
+  store configuration saved before the files were recorded is seeded once from the folder, with every file the old
+  cleanup would have deleted, so those backups are still cleaned up. An encrypted vault never seeds its list, since
+  the folder could hold another vault's backups. A conversion that happens before the seed has run leaves those
+  older files for the user to delete.
+- **The Backups page** shows the open vault's last backup, its staleness, and whether it has a backup password
+  (`VaultDataModel.openVaultDidChange()`). It follows as soon as the settings have reloaded, before auto-backup,
+  which may wait for a backup to finish. Anything read for the previous vault that finishes after the change is
+  dropped: a backup password being loaded or set, and the payload hash.
+- **Erasing** (VAULT-52) needs nothing more:
+  - An encrypted vault's settings go with the file.
+  - The erase deletes the plain store's settings from the keychain and `UserDefaults`.
+  - Auto-backup forgets its configuration and its providers' folders, stops any backup underway, and backs up
+    nothing until the fresh plain store opens.
+- Nothing logs, prints or measures which vault is open (MANIFESTO C3).
+
+What's left:
+
+- **A backup written just as the vault changes** is in the previous vault's destination, but isn't recorded in its
+  settings, so its cleanup never deletes it. A backup that hadn't been written yet isn't made, and the vault is
+  backed up the next time it changes.
+- **A shared destination.** Two vaults auto-backing up to the same folder each leave a series of backups there.
+  The names don't say which vault wrote which, but two interleaved series show that more than one vault is backing
+  up. The folder is the user's choice, and VAULT-23's guidance should say to use a different one for a duress
+  vault, or none.
+- **The folder picker remembers.** The system's folder picker (`.fileImporter`) opens where it was last used,
+  whichever vault that was in. Choosing a destination in a duress vault can therefore start in the real vault's
+  folder. The app can't clear that.
 
 ## Erasing after failed attempts (VAULT-34)
 
@@ -974,8 +1061,9 @@ configuration, which the app can't edit. Turning on the password should tell use
 
 ## Backups, killphrases and everything else
 
-- **Backups, exports, device transfer, auto-backup.** Unchanged. They export from the unlocked store and encrypt
-  with the backup password. Auto-backup is only ever triggered by changes in the running app, and no background
+- **Backups, exports, device transfer, auto-backup.** Unchanged, except that each vault has its own backup
+  settings (VAULT-70). They export from the unlocked store and encrypt with the open vault's backup password.
+  Auto-backup is only ever triggered by changes in the running app, and no background
   task exists (no `BGTaskScheduler`), so nothing needs the vault while it's locked. The backup format keeps its
   own KDF and container.
 - **Killphrases.** Matching and deletion happen in memory, then the file is replaced. The deleted item is gone
@@ -999,7 +1087,7 @@ configuration, which the app can't edit. Turning on the password should tell use
 | Configured widget entities | Issuer, account | Unchanged until the user removes the widget (residual) |
 | Pending rehash files | Plaintext phrases (old-schema upgrades) | Removed; precondition of migration |
 | Failed-open archives | Plaintext copies of the vault | Removed, with confirmation |
-| `UserDefaults` and keychain settings | Dates, a payload hash, auto-backup configuration, the backup key | Same. VAULT-23 moves the per-vault parts into the payload. |
+| `UserDefaults` and keychain settings | Dates, a payload hash, auto-backup configuration, the PDF hint, the backup key | No backup settings: each vault's are in its payload (VAULT-70). App preferences stay. |
 | Wrap stamp (keychain, this device only) | Not there | When the device was last unlocked, or a key last wrapped: the same as the file's modification time |
 | Keyboard learning from note editors | Words typed with autocorrection on | Same. Outside storage; separate ticket VAULT-54. |
 
@@ -1037,8 +1125,8 @@ configuration, which the app can't edit. Turning on the password should tell use
 6. **Memory.** Decrypted items can't be reliably zeroed after locking (see above).
 7. **Rollback.** Someone who can write the app's files can put back an older copy of the file. Local storage
    can't prevent this.
-8. **Surfaces outside storage.** Configured widget entities, keyboard learning, and item dates inside a duress
-   vault.
+8. **Surfaces outside storage.** Configured widget entities, keyboard learning, item dates inside a duress
+   vault, auto-backups from more than one vault to the same folder, and the folder picker's last folder.
 9. **A vault's own key box.** Anyone with a vault's password can read when its key was last wrapped, which for a
    duress vault is when it was made, as its item dates show anyway. Its generation doesn't help: it starts at a
    random value in a range far wider than a vault's saves, so a new vault's looks like a long-used one's.
@@ -1183,7 +1271,7 @@ These are in implementation order. Each is one PR with its own tests. Keys and o
 12. **VAULT-51: Duress slots.** VAULT-23's storage part.
     - `duressSlots` (L = 10), "make duress database" into a slot, and the same-password rules.
     - A per-vault settings section: backup password and its record, backup events, auto-backup configuration
-      and retention.
+      and retention. Split out as VAULT-70.
     - **Tests:** chain safety, payload shape equality, timing equality, auto-backup isolation. Depends on 5–9.
       VAULT-23 also needs its own UI issues.
 13. **VAULT-52: Erase as key destruction.** VAULT-34's storage part.

@@ -7,8 +7,8 @@ struct VaultRecordState: Equatable, Sendable {
     var items: [VaultItemRecord]
     /// Tags in the order they were first stored.
     var tags: [VaultTagRecord]
-    /// About the vault itself, rather than what's in it. No store operation changes it: deleting all data and
-    /// override imports keep it.
+    /// About the vault itself, rather than what's in it. Only changing its backup settings changes it: deleting all
+    /// data and override imports keep it.
     var vault = VaultMetadata()
 
     static let empty = VaultRecordState(items: [], tags: [])
@@ -21,14 +21,19 @@ struct VaultMetadata: Codable, Equatable, Sendable {
     /// The slots this vault's duress vaults go in, in order: ten distinct slots, never its own. Making a duress
     /// vault uses the first, and hands on the rest (`VaultDuressSlots`). A vault stored in the plain store has none.
     var duressSlots: [Int] = []
+    /// The vault's own backup password, last backup and auto-backup configuration. Always written, even when it's
+    /// all defaults, so every payload has the same shape.
+    var settings = VaultBackupSettings()
 
-    init(duressSlots: [Int] = []) {
+    init(duressSlots: [Int] = [], settings: VaultBackupSettings = .init()) {
         self.duressSlots = duressSlots
+        self.settings = settings
     }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         duressSlots = try container.decodeIfPresent([Int].self, forKey: .duressSlots) ?? []
+        settings = try container.decodeIfPresent(VaultBackupSettings.self, forKey: .settings) ?? .init()
     }
 }
 

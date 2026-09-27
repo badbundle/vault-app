@@ -42,12 +42,28 @@ struct EncryptedVaultPayloadTests {
 
     @Test
     func encode_roundTripsTheVaultsMetadata() throws {
-        let state = VaultRecordState(items: [], tags: [], vault: VaultMetadata(duressSlots: [3, 14, 0]))
+        let state = VaultRecordState(
+            items: [],
+            tags: [],
+            vault: VaultMetadata(duressSlots: [3, 14, 0], settings: anyVaultBackupSettings()),
+        )
 
         let payload = try EncryptedVaultPayload.encode(state)
 
         #expect(try EncryptedVaultPayload.decode(payload) == state)
-        #expect(String(decoding: payload.data, as: UTF8.self).contains(#""vault":{"duressSlots":[3,14,0]}"#))
+        let vault = try Self.vaultSection(of: payload)
+        #expect(Set(vault.keys) == ["duressSlots", "settings"])
+        #expect(vault["duressSlots"] as? [Int] == [3, 14, 0])
+    }
+
+    /// The vault's settings are written even when none is set, so every payload has the same sections.
+    @Test
+    func encode_writesTheVaultsSettingsWhenNoneIsSet() throws {
+        let payload = try EncryptedVaultPayload.encode(.empty)
+
+        let vault = try Self.vaultSection(of: payload)
+        #expect(Set(vault.keys) == ["duressSlots", "settings"])
+        #expect(vault["settings"] is [String: Any])
     }
 
     /// Fields added later read as their defaults when they're missing.
@@ -127,6 +143,12 @@ struct EncryptedVaultPayloadTests {
 // MARK: - Fixtures
 
 extension EncryptedVaultPayloadTests {
+    /// The payload's `vault` section, as JSON.
+    private static func vaultSection(of payload: VaultSlotPayload) throws -> [String: Any] {
+        let json = try #require(try JSONSerialization.jsonObject(with: payload.data) as? [String: Any])
+        return try #require(json["vault"] as? [String: Any])
+    }
+
     /// A record with every field set, to values the golden JSON above spells out.
     private static func everyFieldItem() -> VaultItemRecord {
         VaultItemRecord(

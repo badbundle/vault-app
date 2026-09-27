@@ -32,7 +32,7 @@ struct BackupEventLoggerImplTests {
         let clock = EpochClockMock(currentTime: 100)
         let sut = makeSUT(defaults: defaults, clock: clock)
         let date = Date(timeIntervalSince1970: 1234)
-        sut.exportedToPDF(backupDate: date, hash: .init(value: Data(hex: "1234")))
+        sut.exportedToPDF(backupDate: date, hash: .init(value: Data(hex: "1234")), vaultToken: sut.vaultToken)
 
         let backup = sut.lastBackupEvent()
 
@@ -49,7 +49,7 @@ struct BackupEventLoggerImplTests {
         let sut = makeSUT(defaults: defaults, clock: clock)
         let date = Date(timeIntervalSince1970: 1234)
 
-        sut.exportedToDevice(backupDate: date, hash: .init(value: Data(hex: "1234")))
+        sut.exportedToDevice(backupDate: date, hash: .init(value: Data(hex: "1234")), vaultToken: sut.vaultToken)
 
         let backup = sut.lastBackupEvent()
         #expect(backup?.backupDate == date)
@@ -65,7 +65,12 @@ struct BackupEventLoggerImplTests {
         let sut = makeSUT(defaults: defaults, clock: clock)
         let date = Date(timeIntervalSince1970: 1234)
 
-        sut.exportedToAutoBackup(backupDate: date, hash: .init(value: Data(hex: "1234")), providerID: "icloud-drive")
+        sut.exportedToAutoBackup(
+            backupDate: date,
+            hash: .init(value: Data(hex: "1234")),
+            providerID: "icloud-drive",
+            vaultToken: sut.vaultToken,
+        )
 
         let backup = sut.lastBackupEvent()
         #expect(backup?.backupDate == date)
@@ -84,7 +89,7 @@ struct BackupEventLoggerImplTests {
         let defaults = try testUserDefaults()
         let sut = makeSUT(defaults: defaults, clock: EpochClockMock(currentTime: savedDate.timeIntervalSince1970))
 
-        sut.exportedToPDF(backupDate: madeDate, hash: .init(value: Data(hex: "1234")))
+        sut.exportedToPDF(backupDate: madeDate, hash: .init(value: Data(hex: "1234")), vaultToken: sut.vaultToken)
 
         let backup = try #require(sut.lastBackupEvent())
         #expect(backup.backupDate == madeDate)
@@ -100,7 +105,7 @@ struct BackupEventLoggerImplTests {
         let sut = makeSUT(defaults: defaults)
         let date = Date(timeIntervalSince1970: 1234)
 
-        sut.exportedToPDF(backupDate: date, hash: .init(value: Data(hex: "1234")))
+        sut.exportedToPDF(backupDate: date, hash: .init(value: Data(hex: "1234")), vaultToken: sut.vaultToken)
 
         #expect(beforeKeys.symmetricDifference(defaults.keys) == ["vault.backup.last-event"])
     }
@@ -116,8 +121,53 @@ struct BackupEventLoggerImplTests {
             sut.loggedEventPublisher.sink { _ in
                 confirmation.confirm()
             }.store(in: &bag)
-            sut.exportedToPDF(backupDate: date, hash: .init(value: Data(hex: "1234")))
+            sut.exportedToPDF(backupDate: date, hash: .init(value: Data(hex: "1234")), vaultToken: sut.vaultToken)
         }
+    }
+}
+
+// MARK: - Each vault's own
+
+extension BackupEventLoggerImplTests {
+    /// A backup of one vault that finishes once another is open isn't logged in either.
+    @Test
+    func exportedToPDF_forAVaultThatIsNotOpenAnyMore_logsNothing() async throws {
+        let (first, second) = try await EncryptedVaultFixture.twoVaults()
+        let session = try await VaultStoreSession(target: .unlocked(first.openStore()))
+        let settings = try OpenVaultBackupSettings.inMemory(session: session)
+        await settings.reload()
+        let sut = BackupEventLoggerImpl(storage: settings, clock: EpochClockMock(currentTime: 100))
+        let token = sut.vaultToken
+        var logged = [VaultBackupEvent]()
+        let cancellable = sut.loggedEventPublisher.sink { logged.append($0) }
+
+        try await session.switchTo(.unlocked(second.openStore()))
+        await settings.reload()
+        sut.exportedToPDF(backupDate: Date(), hash: .init(value: Data(hex: "1234")), vaultToken: token)
+
+        #expect(sut.lastBackupEvent() == nil)
+        #expect(logged.isEmpty)
+        // Anything saved has been by the time a later save finishes.
+        try await settings.saveAutoBackupConfiguration(AutoBackupConfiguration(), for: settings.vaultToken)
+        #expect(try first.savedState().vault.settings.lastBackupEvent == nil)
+        #expect(try second.savedState().vault.settings.lastBackupEvent == nil)
+        cancellable.cancel()
+    }
+
+    @Test
+    func exportedToPDF_forTheVaultThatIsOpen_logsItThere() async throws {
+        let (first, second) = try await EncryptedVaultFixture.twoVaults()
+        let session = try await VaultStoreSession(target: .unlocked(first.openStore()))
+        let settings = try OpenVaultBackupSettings.inMemory(session: session)
+        await settings.reload()
+        let sut = BackupEventLoggerImpl(storage: settings, clock: EpochClockMock(currentTime: 100))
+
+        sut.exportedToPDF(backupDate: Date(), hash: .init(value: Data(hex: "1234")), vaultToken: sut.vaultToken)
+
+        #expect(sut.lastBackupEvent()?.kind == .exportedToPDF)
+        try await settings.saveAutoBackupConfiguration(AutoBackupConfiguration(), for: settings.vaultToken)
+        #expect(try first.savedState().vault.settings.lastBackupEvent?.kind == .exportedToPDF)
+        #expect(try second.savedState().vault.settings.lastBackupEvent == nil)
     }
 }
 

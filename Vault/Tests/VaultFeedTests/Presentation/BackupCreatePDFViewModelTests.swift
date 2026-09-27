@@ -60,6 +60,51 @@ struct BackupCreatePDFViewModelTests {
         #expect(generated.map(\.createdDate) == [Date(timeIntervalSince1970: 1234)])
     }
 
+    /// Each vault has its own hint, so no vault shows or prints another's.
+    @Test
+    func init_showsTheOpenVaultsHint() throws {
+        let hints = VaultPDFHints(hints: [3: "The open vault's hint"], vaultToken: 3)
+
+        let sut = try makeSUT(hintStorage: hints)
+
+        #expect(sut.userHint == "The open vault's hint")
+    }
+
+    /// The default text, as before, for a vault that's never made a PDF backup.
+    @Test
+    func init_withoutAHint_showsTheDefault() throws {
+        let sut = try makeSUT(hintStorage: VaultPDFHints(hints: [:], vaultToken: 3))
+
+        #expect(sut.userHint.hasPrefix("This is my description"))
+    }
+
+    @Test
+    func createPDF_savesTheHintAndStampsThePDFWithTheVault() async throws {
+        let hints = VaultPDFHints(hints: [:], vaultToken: 3)
+        let sut = try makeSUT(hintStorage: hints)
+        sut.userHint = "New hint"
+        var generated = [BackupCreatePDFViewModel.GeneratedPDF]()
+        let cancellable = sut.generatedPDFPublisher().sink { generated.append($0) }
+        defer { cancellable.cancel() }
+
+        await sut.createPDF()
+
+        #expect(hints.hints == [3: "New hint"])
+        #expect(generated.map(\.vaultToken) == [3])
+    }
+
+    /// Another vault opened after the page did: the hint is the first vault's, so it isn't saved into this one.
+    @Test
+    func createPDF_afterAnotherVaultOpened_doesNotSaveTheHintThere() async throws {
+        let hints = VaultPDFHints(hints: [3: "First vault's hint"], vaultToken: 3)
+        let sut = try makeSUT(hintStorage: hints)
+        hints.vaultToken = 4
+
+        await sut.createPDF()
+
+        #expect(hints.hints == [3: "First vault's hint"])
+    }
+
     @Test
     func createPDF_errorSetsErrorState() async throws {
         let vaultStore = VaultStoreStub()
@@ -84,8 +129,9 @@ extension BackupCreatePDFViewModelTests {
         backupPasswordStore: any BackupPasswordStore = BackupPasswordStoreMock(),
         backupPassword: DerivedEncryptionKey = anyBackupPassword(),
         clock: some EpochClock = EpochClockMock(currentTime: 100),
+        hintStorage: (any BackupPDFHintStorage)? = nil,
     ) throws -> BackupCreatePDFViewModel {
-        let defaults = try testUserDefaults()
+        let defaults = try Defaults(userDefaults: testUserDefaults())
         return BackupCreatePDFViewModel(
             backupPassword: backupPassword,
             dataModel: VaultDataModel(
@@ -103,7 +149,29 @@ extension BackupCreatePDFViewModelTests {
                 backupEventLogger: BackupEventLoggerMock(),
             ),
             clock: clock,
-            defaults: Defaults(userDefaults: defaults),
+            defaults: defaults,
+            hintStorage: hintStorage ?? defaults,
         )
+    }
+}
+
+/// Each vault's PDF hint, by vault token, and which vault is open.
+@MainActor
+private final class VaultPDFHints: BackupPDFHintStorage {
+    var hints: [Int: String]
+    var vaultToken: Int
+
+    init(hints: [Int: String], vaultToken: Int) {
+        self.hints = hints
+        self.vaultToken = vaultToken
+    }
+
+    func pdfUserHint() -> String? {
+        hints[vaultToken]
+    }
+
+    func savePDFUserHint(_ hint: String, for token: Int) throws {
+        guard token == vaultToken else { throw VaultStoreSessionError.locked }
+        hints[token] = hint
     }
 }

@@ -111,6 +111,33 @@ func anyBackupPassword() -> DerivedEncryptionKey {
     .init(key: .random(), salt: .random(count: 32), keyDervier: .testing)
 }
 
+/// A vault's backup settings with every one set: a backup password, a backup made, auto-backup on, having written
+/// `backupFilenames`, and a PDF hint.
+func anyVaultBackupSettings(backupFilenames: [String] = ["Vault Backup.pdf"]) -> VaultBackupSettings {
+    VaultBackupSettings(
+        backupPassword: StoredBackupPassword(
+            password: anyBackupPassword(),
+            lastSetDate: Date(timeIntervalSince1970: 1000),
+        ),
+        lastBackupEvent: VaultBackupEvent(
+            backupDate: Date(timeIntervalSince1970: 2000),
+            eventDate: Date(timeIntervalSince1970: 3000),
+            kind: .exportedToPDF,
+            payloadHash: .init(value: Data(repeating: 0xAB, count: 32)),
+        ),
+        autoBackup: AutoBackupConfiguration(
+            isEnabled: true,
+            retentionDays: .days7,
+            providerID: "provider",
+            providerConfigs: ["provider": Data("config".utf8)],
+            lastBackupHash: "hash",
+            lastBackupDate: Date(timeIntervalSince1970: 2000),
+            backupFilenames: backupFilenames,
+        ),
+        pdfUserHint: "My backup hint",
+    )
+}
+
 func testUserDefaults() throws -> UserDefaults {
     struct NoDefaults: Error {}
     let id = UUID()
@@ -547,6 +574,7 @@ struct VaultItemEncryptableMock: Equatable, VaultItemEncryptable {
 func anyGeneratedPDF(
     pageCount: Int = 1,
     createdDate: Date = Date(timeIntervalSince1970: 100),
+    vaultToken: Int = 0,
 ) -> BackupCreatePDFViewModel.GeneratedPDF {
     let document = PDFDocument()
     for index in 0 ..< pageCount {
@@ -559,5 +587,6 @@ func anyGeneratedPDF(
         size: .a4,
         dataHash: .init(value: Data(repeating: 0xAB, count: 32)),
         createdDate: createdDate,
+        vaultToken: vaultToken,
     )
 }
