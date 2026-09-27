@@ -605,6 +605,15 @@ public enum VaultRoot {
         return PersistedLocalVaultStoreArchives(storageDirectory: vaultStorageDirectory)
     }()
 
+    /// Keeps the names of codes in Spotlight while the user has turned that on and App Lock is off (VAULT-72).
+    @MainActor
+    static let spotlightCodeIndexer = SpotlightCodeIndexer(index: CoreSpotlightCodeIndex()) {
+        try await vaultDataModel.spotlightCodes(
+            isTurnedOn: localSettings.state.showsCodesInSpotlight,
+            isAppLockOn: appLockService.isEnabled || appLockService.isPasswordSet,
+        )
+    }
+
     // MARK: - Setup
 
     /// Call this at app startup to wire up connections between components.
@@ -640,13 +649,18 @@ public enum VaultRoot {
         vaultDataModel.onDataChanged = {
             autoBackupService.notifyDataChanged()
             reloadWidgetTimelines()
+            spotlightCodeIndexer.update()
         }
-        // Deleting all data only refreshes the widgets, so they stop showing codes that are gone. It doesn't
-        // auto-backup the empty vault.
+        // Deleting all data only refreshes the widgets and Spotlight, so they stop showing codes that are gone. It
+        // doesn't auto-backup the empty vault.
         vaultDataModel.onVaultDeleted = {
             reloadWidgetTimelines()
+            spotlightCodeIndexer.update()
         }
         reloadWidgetTimelines()
+        // Spotlight follows its setting and App Lock too. The first update empties an index left from before, if it
+        // no longer applies.
+        updateSpotlightWhenItsSettingsChange()
         // Each vault has its own backup settings, so the Backups page, the backup password and auto-backup follow
         // whichever vault is open: reloaded, in this order, every time the store session switches vault or locks.
         // The Backups page goes first, because auto-backup waits for a backup of the previous vault to finish.
@@ -656,6 +670,7 @@ public enum VaultRoot {
                 await openVaultBackupSettings.reload()
                 await vaultDataModel.openVaultDidChange()
                 await autoBackupService.vaultDidChange()
+                spotlightCodeIndexer.update()
             }
         }
         // Clear deleted content an earlier session left in the SQLite store's files, and columns a migration has
@@ -736,6 +751,27 @@ public enum VaultRoot {
     static func emptySystemSurfaces() async throws {
         try await vaultOtpAutofillStore.removeAll()
         reloadWidgetTimelines()
+    }
+
+    /// Updates Spotlight now, and again whenever showing codes there, App Lock or the App Lock Password is turned on
+    /// or off.
+    ///
+    /// Turning App Lock on turns showing codes in Spotlight off, so turning App Lock off again later doesn't put them
+    /// back unless the user chooses to (MANIFESTO C7).
+    @MainActor
+    private static func updateSpotlightWhenItsSettingsChange() {
+        let isAppLockOn = withObservationTracking {
+            _ = localSettings.state.showsCodesInSpotlight
+            return appLockService.isEnabled || appLockService.isPasswordSet
+        } onChange: {
+            Task { @MainActor in
+                updateSpotlightWhenItsSettingsChange()
+            }
+        }
+        if isAppLockOn, localSettings.state.showsCodesInSpotlight {
+            localSettings.state.showsCodesInSpotlight = false
+        }
+        spotlightCodeIndexer.update()
     }
 
     @MainActor

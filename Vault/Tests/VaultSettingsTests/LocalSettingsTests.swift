@@ -161,6 +161,26 @@ struct LocalSettingsTests {
         #expect(!sut.state.showsNextCode)
     }
 
+    /// It lets codes be found without opening Vault, so it's only ever on once the user chooses (MANIFESTO C7).
+    @Test
+    func showsCodesInSpotlight_isOffByDefault() throws {
+        let sut = try makeSUT(defaults: .nonPersistent())
+
+        #expect(!sut.state.showsCodesInSpotlight)
+    }
+
+    @Test
+    func showsCodesInSpotlight_savesStateAfterTurningOnAndOff() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sut = try makeSUT(defaults: defaults)
+
+        sut.state.showsCodesInSpotlight = true
+        #expect(try makeSUT(defaults: defaults).state.showsCodesInSpotlight)
+
+        sut.state.showsCodesInSpotlight = false
+        #expect(try !makeSUT(defaults: defaults).state.showsCodesInSpotlight)
+    }
+
     @Test
     func showsNextCode_savesStateAfterTurningOnAndOff() throws {
         let defaults = try Defaults.nonPersistent()

@@ -1,3 +1,4 @@
+import CoreSpotlight
 import SwiftUI
 import Toasts
 import VaultFeed
@@ -64,6 +65,13 @@ public struct VaultMainScene: Scene {
                 .onOpenURL { url in
                     appLockService.performWhenUnlocked {
                         handle(url: url)
+                    }
+                }
+                // A code chosen in Spotlight opens its page (VAULT-72).
+                .onContinueUserActivity(CSSearchableItemActionType) { activity in
+                    guard let itemID = activity.spotlightItemID else { return }
+                    appLockService.performWhenUnlocked {
+                        pendingOpenItemDetail = itemID
                     }
                 }
             }

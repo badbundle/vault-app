@@ -1152,6 +1152,33 @@ final class VaultDataModelTests {
         #expect(sut.backupPasswordStatus == .notSet)
     }
 
+    /// Every code the vault shows without a search, however the feed is filtered.
+    @Test
+    func spotlightCodes_readsTheWholeVaultNotTheFilteredFeed() async throws {
+        let store = VaultStoreStub()
+        let item = uniqueVaultItem(item: .otpCode(anyOTPAuthCode(issuerName: "GitHub")))
+        store.retrieveHandler = { query in
+            query == .init() ? .init(items: [item]) : .init(items: [])
+        }
+        let sut = makeSUT(vaultStore: store)
+        sut.itemsSearchQuery = "something else"
+
+        let codes = try await sut.spotlightCodes(isTurnedOn: true, isAppLockOn: false)
+
+        #expect(codes == [SpotlightCode(id: item.id, name: "GitHub")])
+    }
+
+    @Test(arguments: [(false, false), (true, true), (false, true)])
+    func spotlightCodes_readsNothingUnlessTurnedOnWithAppLockOff(isTurnedOn: Bool, isAppLockOn: Bool) async throws {
+        let store = VaultStoreStub()
+        let sut = makeSUT(vaultStore: store)
+
+        let codes = try await sut.spotlightCodes(isTurnedOn: isTurnedOn, isAppLockOn: isAppLockOn)
+
+        #expect(codes.isEmpty)
+        #expect(store.calledMethods.isEmpty)
+    }
+
     @Test
     func deleteVault_removesAllDataFromVault() async throws {
         let deleter = VaultStoreDeleterMock()

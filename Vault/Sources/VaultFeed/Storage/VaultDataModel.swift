@@ -728,6 +728,14 @@ extension VaultDataModel {
 
     /// Performs a full sync of all vault items to the autofill store.
     /// Removes all existing items and repopulates with all OTP items from the vault.
+    /// The codes Spotlight should hold now (see `SpotlightCode`), from every item the open vault shows without a
+    /// search: never the feed's `items`, which follow its search and tag filters.
+    public func spotlightCodes(isTurnedOn: Bool, isAppLockOn: Bool) async throws -> [SpotlightCode] {
+        guard isTurnedOn, !isAppLockOn else { return [] }
+        let result = try await vaultStore.retrieve(query: .init())
+        return SpotlightCode.codes(in: result.items, isTurnedOn: isTurnedOn, isAppLockOn: isAppLockOn)
+    }
+
     public func syncAllToOTPAutofillStore() async throws {
         let result = try await vaultStore.retrieve(query: .init())
         try await vaultOtpAutofillStore.syncAll(items: result.items)
