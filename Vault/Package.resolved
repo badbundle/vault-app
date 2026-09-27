@@ -1,6 +1,15 @@
 {
-  "originHash" : "08fdd6334a64ba88000f220c86e3912ba966687c4877226488f32e7bdd65c7aa",
+  "originHash" : "e960b4586dd023fb61537ba2726e0145d3cebad379cf36f1d0951860ee375952",
   "pins" : [
+    {
+      "identity" : "bad-bundle-apps",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/badbundle/bad-bundle-apps",
+      "state" : {
+        "revision" : "675083edeb0b8f4498839b141bbd8742b0a8b8b2",
+        "version" : "0.1.0"
+      }
+    },
     {
       "identity" : "bigint",
       "kind" : "remoteSourceControl",

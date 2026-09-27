@@ -1,3 +1,4 @@
+import BadBundleApps
 import Foundation
 import SwiftUI
 import VaultFeed
@@ -17,6 +18,7 @@ struct VaultAboutView: View {
             headerSection
             generalSection
             policySection
+            moreAppsSection
             mastheadSection
         }
         .navigationTitle("About")
@@ -93,6 +95,16 @@ struct VaultAboutView: View {
                     Text(viewModel.thirdPartyTitle)
                 }
             }
+        }
+    }
+
+    private var moreAppsSection: some View {
+        Section {
+            ForEach(BadBundleApp.all(except: .vault)) { app in
+                BadBundleAppLink(app)
+            }
+        } header: {
+            Text("More Apps")
         }
     }
 
