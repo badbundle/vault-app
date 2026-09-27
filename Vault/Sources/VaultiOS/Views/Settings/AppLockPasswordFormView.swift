@@ -75,6 +75,9 @@ struct AppLockPasswordFormView: View {
                 if viewModel.purpose == .setDuress {
                     duressSection
                 }
+                if viewModel.purpose == .turnOff {
+                    restoringSection
+                }
                 if viewModel.needsCurrentPassword {
                     currentPasswordSection(passwordWait: passwordWait)
                 }
@@ -197,6 +200,19 @@ struct AppLockPasswordFormView: View {
                 detail: "Replaces the last duress vault with a new, empty one.",
                 systemImage: "arrow.triangle.2.circlepath",
                 color: .secondary,
+            )
+        }
+    }
+
+    /// With the password off, a key in this device's keychain opens the vault, and a backup restored onto another
+    /// iPhone only brings it if the backup is encrypted, so this says so before it's turned off.
+    private var restoringSection: some View {
+        Section {
+            note(
+                title: "Restoring onto another iPhone",
+                detail: "With the password off, a key on this device opens the vault. A backup restored onto another iPhone only brings that key if the backup is encrypted, or from iCloud, so keep a backup PDF too.",
+                systemImage: "exclamationmark.triangle.fill",
+                color: .orange,
             )
         }
     }

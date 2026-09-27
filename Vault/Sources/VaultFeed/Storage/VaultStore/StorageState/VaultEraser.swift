@@ -25,8 +25,9 @@ import VaultCore
 ///    can open a vault from here on. It holds the encrypted file's lock while it does, if it can, so a save underway
 ///    in an extension can't put the file back: a save reads the file under the lock, and fails if there isn't one.
 /// 4. Deletes every keychain item (`VaultIdentifiers.SecureStorageKey`): the killphrase and search passphrase HMAC
-///    keys, the backup password and its record, the count of attempts at the App Lock Password, and the wrap stamp,
-///    which shows a password vault was used and about when.
+///    keys, the backup password and its record, the count of attempts at the App Lock Password, the wrap stamp,
+///    which shows a password vault was used and about when, and the device key, which opens the vault while the
+///    password is off.
 /// 5. Clears the vault's settings still kept on the device: the last backup event, the auto-backup configuration,
 ///    which says where the backups are, and the PDF backup's hint. Then whatever holds them in memory forgets them
 ///    too (a hook).
@@ -82,6 +83,7 @@ public actor VaultEraser {
     private let secureStorage: any SecureStorage
     private let attemptCounter: AppLockPasswordAttemptCounter
     private let wrapStamps: any VaultWrapStampStorage
+    private let deviceKeyStore: any VaultDeviceKeyStoring
     private let defaults: Defaults
     private let temporaryDirectory: URL
     private let hooks: Hooks
@@ -114,6 +116,7 @@ public actor VaultEraser {
             secureStorage: secureStorage,
             attemptCounter: attemptCounter,
             wrapStamps: VaultWrapStampKeychainStorage(),
+            deviceKeyStore: VaultDeviceKeychainStore(),
             defaults: defaults,
             temporaryDirectory: temporaryDirectory,
             hooks: hooks,
@@ -132,6 +135,7 @@ public actor VaultEraser {
         secureStorage: any SecureStorage,
         attemptCounter: AppLockPasswordAttemptCounter,
         wrapStamps: any VaultWrapStampStorage,
+        deviceKeyStore: any VaultDeviceKeyStoring,
         defaults: Defaults,
         temporaryDirectory: URL,
         hooks: Hooks,
@@ -143,6 +147,7 @@ public actor VaultEraser {
         self.secureStorage = secureStorage
         self.attemptCounter = attemptCounter
         self.wrapStamps = wrapStamps
+        self.deviceKeyStore = deviceKeyStore
         self.defaults = defaults
         self.temporaryDirectory = temporaryDirectory
         self.hooks = hooks
@@ -290,6 +295,10 @@ extension VaultEraser {
         case .vaultWrapStamp:
             // It shows a password vault was used on this device, and about when one last opened (MANIFESTO C6).
             try wrapStamps.remove()
+        case .vaultDeviceKey:
+            // It opens the vault while the password is off. With the file gone it opens nothing, but it shows the
+            // password was turned off.
+            try deviceKeyStore.removeDeviceKey()
         }
     }
 

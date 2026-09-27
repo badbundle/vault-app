@@ -147,6 +147,47 @@ extension EncryptedVaultFileTests {
         }
     }
 
+    /// With the password off, the lock has to be taken while the device is locked, which a lock file with the app's
+    /// default protection (complete) can't be. The simulator doesn't enforce protection, so this checks the class the
+    /// file is given.
+    @Test
+    func live_tryLock_makesTheLockFileReadableAfterTheFirstUnlock() async throws {
+        try await withTemporaryDirectory { directory in
+            let url = directory.appending(path: EncryptedVaultFile.lockFileName)
+            let fileSystem = LiveSlotFileSystem()
+
+            let lock = try #require(try fileSystem.tryLock(url))
+            fileSystem.unlock(lock)
+
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path(percentEncoded: false))
+            let protection = attributes[.protectionKey] as? FileProtectionType
+            #expect(protection == nil || protection == .completeUntilFirstUserAuthentication)
+            #expect(try fileSystem.contents(of: url) == Data())
+        }
+    }
+
+    /// A lock file an earlier version made with complete protection is moved to the class that can be locked while
+    /// the device is locked, the first time it's locked while the device is unlocked.
+    @Test
+    func tryLock_movesALockFileWithCompleteProtectionToTheFirstUnlockClass() throws {
+        let fileSystem = InMemorySlotFileSystem()
+        let url = EncryptedVaultFixture.inMemoryDirectory.appending(path: EncryptedVaultFile.lockFileName)
+        fileSystem.setContents(Data(), at: url, protection: .complete)
+        fileSystem.isDeviceLocked = true
+        #expect(throws: POSIXError(.EPERM)) {
+            try fileSystem.tryLock(url)
+        }
+
+        fileSystem.isDeviceLocked = false
+        let unlockedLock = try #require(try fileSystem.tryLock(url))
+        fileSystem.unlock(unlockedLock)
+        fileSystem.isDeviceLocked = true
+        let lockedLock = try #require(try fileSystem.tryLock(url))
+        fileSystem.unlock(lockedLock)
+
+        #expect(fileSystem.protection(of: url) == .completeUntilFirstUserAuthentication)
+    }
+
     @Test
     func withLock_waitsForTheHolderToLetGo() async throws {
         try await withTemporaryDirectory { directory in

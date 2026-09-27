@@ -32,6 +32,9 @@ public enum VaultIdentifiers {
         /// The latest time this device stamped a vault's key wrap with, which later wraps must follow. Kept on this
         /// device only, and readable only while it's unlocked, with no biometric prompt.
         case vaultWrapStamp = "vault.secure-storage.vault-wrap-stamp.v1"
+        /// The device key, which wraps the encrypted vault's key while the App Lock Password is off. Readable once
+        /// the device has been unlocked after starting up, and restored with a backup.
+        case vaultDeviceKey = "vault.secure-storage.vault-device-key.v1"
     }
 
     public enum Backup {

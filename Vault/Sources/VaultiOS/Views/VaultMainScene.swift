@@ -31,7 +31,7 @@ public struct VaultMainScene: Scene {
     public var body: some Scene {
         WindowGroup {
             if let failureMessage = VaultRoot.vaultStoreLoadFailureMessage {
-                VaultStoreFailureView(message: failureMessage)
+                VaultStoreFailureView(reason: VaultRoot.vaultStoreLoadFailureReason, message: failureMessage)
             } else {
                 AppLockContainer(appLock: appLockService, localSettings: localSettings) {
                     if let interruptedErase, interruptedErase.state != .erased {

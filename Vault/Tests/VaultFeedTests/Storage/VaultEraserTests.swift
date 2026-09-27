@@ -37,6 +37,22 @@ struct VaultEraserTests {
         }
     }
 
+    /// With the App Lock Password off, the device key opens the vault. It goes with the file and every other key, so
+    /// nothing on the device shows the password was ever turned off.
+    @Test
+    func erase_withThePasswordOff_leavesNoDeviceKey() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try await VaultEraseHarness.deviceKeyDevice(in: directory)
+            #expect(harness.deviceKeys.key != nil)
+
+            try await harness.erase()
+
+            try await harness.expectErased()
+            #expect(harness.deviceKeys.key == nil)
+            #expect(try harness.stepsInOrder(["remove vault-slots.v1", "remove the device key"]))
+        }
+    }
+
     /// The encrypted file goes before anything else an erase removes: that alone makes every vault unreadable.
     @Test
     func erase_removesTheEncryptedFileFirst() async throws {
@@ -350,17 +366,24 @@ struct VaultEraseHarness {
     let keychain: FaultInjectingSecureStorage
     let attemptStorage: FaultInjectingAttemptStorage
     let wrapStamps: FaultInjectingWrapStampStorage
+    /// The device key, in memory. The eraser reaches it through `fileSystem`'s steps.
+    let deviceKeys: InMemoryDeviceKeyStore
     let userDefaults: UserDefaults
     let defaults: Defaults
     let session: VaultStoreSession
 
-    init(directory: URL, session: VaultStoreSession = VaultStoreSession(target: .locked)) throws {
+    init(
+        directory: URL,
+        session: VaultStoreSession = VaultStoreSession(target: .locked),
+        deviceKeys: InMemoryDeviceKeyStore = InMemoryDeviceKeyStore(),
+    ) throws {
         let fileSystem = FaultInjectingSlotFileSystem(wrapping: LiveSlotFileSystem())
         self.directory = directory
         self.fileSystem = fileSystem
         keychain = FaultInjectingSecureStorage(faults: fileSystem)
         attemptStorage = FaultInjectingAttemptStorage(faults: fileSystem)
         wrapStamps = FaultInjectingWrapStampStorage(faults: fileSystem)
+        self.deviceKeys = deviceKeys
         userDefaults = try testUserDefaults()
         defaults = Defaults(userDefaults: userDefaults)
         self.session = session
@@ -400,6 +423,32 @@ struct VaultEraseHarness {
         return harness
     }
 
+    /// A device with the App Lock Password turned off: its vault is wrapped with the device key, and the session is
+    /// unlocked on it, with everything else an erase removes (`seedDevice()`), the device key included.
+    static func deviceKeyDevice(in directory: URL) async throws -> VaultEraseHarness {
+        let deviceKeys = InMemoryDeviceKeyStore()
+        let deviceKey = try deviceKeys.makeNewDeviceKey()
+        var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
+        let slot = try contents.createVault(
+            inSlot: 9,
+            rootKey: .device(deviceKey),
+            payload: EncryptedVaultPayload.encode(EncryptedVaultStoreTests.state(items: [uniqueVaultItem()])),
+            wrappedAt: Date(),
+        )
+        let file = EncryptedVaultFile(directory: directory, protection: .completeUntilFirstUserAuthentication)
+        try file.fileSystem.createFile(at: file.url, contents: contents.bytes, protection: file.protection)
+        try VaultStorageStateFile(directory: directory)
+            .write(VaultStorageState(mode: .deviceKey, unlockDeadline: .seconds(1)))
+        let store = try EncryptedVaultStore(file: file, contents: contents, slot: slot)
+        let harness = try VaultEraseHarness(
+            directory: directory,
+            session: VaultStoreSession(target: .unlocked(store)),
+            deviceKeys: deviceKeys,
+        )
+        try await harness.seedDevice()
+        return harness
+    }
+
     /// A device whose encrypted file is already in `directory`, with its session unlocked on `vault`.
     static func device(in directory: URL, unlocking vault: EncryptedVaultFixture) async throws -> VaultEraseHarness {
         let file = EncryptedVaultFile(directory: directory)
@@ -426,6 +475,8 @@ struct VaultEraseHarness {
                 attemptStorage.setCount(AppLockPasswordAttemptCounter.eraseThreshold)
             case .vaultWrapStamp:
                 try wrapStamps.save(1_790_000_000_000)
+            case .vaultDeviceKey:
+                _ = try deviceKeys.makeNewDeviceKey()
             }
         }
         try defaults.set(
@@ -466,6 +517,7 @@ struct VaultEraseHarness {
             secureStorage: keychain,
             attemptCounter: AppLockPasswordAttemptCounter(storage: attemptStorage, clock: FakeAppLockClock()),
             wrapStamps: wrapStamps,
+            deviceKeyStore: FaultInjectingDeviceKeyStore(wrapping: deviceKeys, steps: fileSystem),
             defaults: defaults,
             temporaryDirectory: temporaryDirectory,
             hooks: VaultEraser.Hooks(
@@ -535,6 +587,8 @@ struct VaultEraseHarness {
             attemptStorage.hasRecord
         case .vaultWrapStamp:
             wrapStamps.hasStamp
+        case .vaultDeviceKey:
+            deviceKeys.key != nil
         }
     }
 
@@ -631,7 +685,7 @@ actor FaultInjectingSecureStorage: SecureStorage {
         case .searchPassphraseKey: "the search passphrase key"
         case .backupPassword: "the backup password"
         case .backupPasswordMetadata: "the backup password's record"
-        case .appLockPasswordAttempts, .vaultWrapStamp, nil: key
+        case .appLockPasswordAttempts, .vaultWrapStamp, .vaultDeviceKey, nil: key
         }
     }
 }

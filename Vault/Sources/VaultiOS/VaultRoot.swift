@@ -67,6 +67,11 @@ public enum VaultRoot {
     @MainActor
     public private(set) static var vaultStoreLoadFailureMessage: String?
 
+    /// Why the vault couldn't be opened, when `vaultStoreLoadFailureMessage`
+    /// is set, so the failure screen can say what to do.
+    @MainActor
+    private(set) static var vaultStoreLoadFailureReason: VaultStoreFailureView.Reason = .storeUnreadable
+
     /// Whether this is an app extension (AutoFill), rather than the app.
     static let isAppExtension = Bundle.main.bundleURL.pathExtension == "appex"
 
@@ -96,6 +101,9 @@ public enum VaultRoot {
         } catch {
             // Open no store at all: the scene shows the failure screen.
             vaultStoreLoadFailureMessage = error.localizedDescription
+            if error as? VaultStorageRecovery.Failure == .deviceKeyMissing {
+                vaultStoreLoadFailureReason = .deviceKeyMissing
+            }
             return .password
         }
     }()
@@ -470,7 +478,7 @@ public enum VaultRoot {
         }
         // Finish a conversion to an encrypted vault that the app was stopped in the middle of: QuickType mustn't
         // keep the vault's issuers and accounts, nor the widgets its codes.
-        if storageMode == .password {
+        if storageMode != .plain {
             let otpAutofillStore = vaultOtpAutofillStore
             let directory = vaultStorageDirectory
             Task {

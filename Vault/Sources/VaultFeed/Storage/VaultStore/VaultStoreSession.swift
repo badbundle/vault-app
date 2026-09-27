@@ -38,6 +38,35 @@ public final actor VaultStoreSession {
         self.target = target
     }
 
+    /// The encrypted vault the session reads and writes, if that's what it's switched to, and the `lockEpoch` it's
+    /// open in.
+    var unlockedStore: (store: EncryptedVaultStore, lockEpoch: Int)? {
+        if case let .unlocked(store) = target {
+            (store, lockEpoch)
+        } else {
+            nil
+        }
+    }
+
+    /// Runs `operation` as a call underway on `store`, if the session is still switched to it and hasn't locked since
+    /// `lockEpoch` was `epoch`: a lock waits for it to finish, as for any other call. For work on how the vault is
+    /// stored, such as moving it to another key (`VaultPasswordChangeService`).
+    ///
+    /// - Throws: `CancellationError` if the session has locked, or switched away from `store`, and `operation` didn't
+    ///   run.
+    func whileUnlocked<T: Sendable>(
+        _ store: EncryptedVaultStore,
+        since epoch: Int,
+        _ operation: @Sendable () async throws -> T,
+    ) async throws -> T {
+        guard lockEpoch == epoch, case let .unlocked(current) = target, current === store else {
+            throw CancellationError()
+        }
+        operationsInFlight += 1
+        defer { operationDidFinish() }
+        return try await operation()
+    }
+
     public var isLocked: Bool {
         if case .locked = target {
             true
@@ -66,8 +95,17 @@ public final actor VaultStoreSession {
     }
 
     /// Switch to `locked`, once every call already underway has finished.
-    public func lock() async {
-        await switchTo(.locked)
+    ///
+    /// - Returns: The `lockEpoch` this lock started. Something that locks the session to work on the vault, then
+    ///   switches it back with `switchTo(_:unlessLockedSince:)`, passes this: reading `lockEpoch` after the lock could
+    ///   miss a lock that came while this one waited.
+    @discardableResult
+    public func lock() async -> Int {
+        target = .locked
+        lockEpoch += 1
+        let epoch = lockEpoch
+        await waitForOperationsInFlight()
+        return epoch
     }
 
     private func waitForOperationsInFlight() async {

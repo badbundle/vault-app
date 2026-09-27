@@ -816,8 +816,8 @@ extension VaultUnlockServiceTests {
             return target
         }
 
-        /// Rewraps the vault `password` opens in `slot` with its password, as a password change does, stamped by
-        /// the wrap stamper with the time as `now`.
+        /// Rekeys the vault `password` opens in `slot` to its password, as a password change does, stamped by the
+        /// wrap stamper with the time as `now`.
         func rewrap(slot: Int, password: String, now: Date) async throws {
             wrapDate.modify { $0 = now }
             try await file.withLock { [wrapStamper] file in
@@ -825,7 +825,7 @@ extension VaultUnlockServiceTests {
                 let key = try contents.header.passwordKey(for: password)
                 let opened = try contents.openSlot(slot, with: key)
                 let stamp = try wrapStamper.nextWrapStamp(rewrapping: opened.wrappedAt)
-                try contents.rewrap(opened, with: key, wrappedAt: stamp)
+                try contents.rekey(opened, to: key, payload: contents.openPayload(of: opened), wrappedAt: stamp)
                 try file.write(contents) { _ in }
             }
         }
@@ -953,6 +953,10 @@ final class GatedSlotFileSystem: SlotFileSystem {
 
     func prefix(of url: URL, length: Int) throws -> (bytes: Data, fileSize: Int)? {
         try base.prefix(of: url, length: length)
+    }
+
+    func fileSize(of url: URL) throws -> Int? {
+        try base.fileSize(of: url)
     }
 
     func synchronizeFile(at url: URL) throws {
