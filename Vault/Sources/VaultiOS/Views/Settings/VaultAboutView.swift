@@ -96,22 +96,22 @@ struct VaultAboutView: View {
         }
     }
 
+    /// A plain footnote, worded and styled like the one at the end of GPS's settings, plus its "Open source" line:
+    /// Vault is open source, and GPS isn't. The version sits below it.
     private var mastheadSection: some View {
         Section {
             VStack(alignment: .center, spacing: 4) {
-                Image("bad-bundle-logo", bundle: VaultFeedAssets.bundle)
-                    .resizable(resizingMode: .stretch)
-                    .scaledToFit()
-                    .frame(height: 22)
-                Text("free and open since 2024 ✌️")
-                    .font(.caption2)
+                Text("Copyright 2026 Bad Bundle Limited")
+                Text("Made in the UK")
+                Text("Open source")
                 Text(appVersionText)
-                    .font(.caption2)
                     .padding(.top, 12)
             }
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
             .padding(.top, 24)
             .containerRelativeFrame(.horizontal)
-            .foregroundStyle(.secondary)
             .noListBackground()
         }
     }
