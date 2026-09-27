@@ -67,7 +67,9 @@ struct BackupCreatePDFView: View {
         } header: {
             Text("Options")
         } footer: {
-            Text("An optional hint printed on the document to help you remember its password.")
+            Text(
+                "An optional hint to help you remember the password. It's printed on the document in plain text, so anyone who sees it can read it.",
+            )
         }
     }
 

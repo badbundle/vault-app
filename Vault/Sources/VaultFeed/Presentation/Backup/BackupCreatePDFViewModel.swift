@@ -102,7 +102,10 @@ public final class BackupCreatePDFViewModel {
     }
 
     private static let pdfSizeKey = Key<Size>(VaultIdentifiers.Preferences.PDF.defaultSize)
-    private static let defaultUserHint =
+    /// The text the hint used to start with. The hint is printed in plain text, so it now starts empty (VAULT-63).
+    /// Making a PDF saves the hint, so a vault that made one without changing this has it saved: it's shown as no
+    /// hint.
+    private static let formerDefaultUserHint =
         "This is my description, which is visible in plain text on the vault backup. You can use the Vault app to import this data if you lose access to your device."
 
     public private(set) var state: State = .idle
@@ -139,7 +142,8 @@ public final class BackupCreatePDFViewModel {
         vaultToken = hintStorage.vaultToken
 
         size = defaults.get(for: Self.pdfSizeKey) ?? .a4
-        userHint = hintStorage.pdfUserHint() ?? Self.defaultUserHint
+        let savedHint = hintStorage.pdfUserHint()
+        userHint = savedHint == Self.formerDefaultUserHint ? "" : savedHint ?? ""
     }
 
     /// Publishes a PDF whenever one is generated.
