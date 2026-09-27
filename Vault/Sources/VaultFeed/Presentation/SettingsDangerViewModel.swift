@@ -60,7 +60,7 @@ public final class SettingsDangerViewModel {
         }
     }
 
-    /// Deletes every item and tag, once the user has confirmed and authenticated.
+    /// Deletes every item and tag, and the backup password, once the user has confirmed and authenticated.
     public func deleteEntireVault() async {
         switch state {
         case .confirming, .failed: break

@@ -7,6 +7,10 @@ import VaultKeygen
 public protocol BackupPasswordStore: Observable, Sendable {
     func fetchPassword() async throws -> DerivedEncryptionKey?
     func set(password: DerivedEncryptionKey) async throws
+    /// Removes the password, and the record that one is set. Does nothing if none is set.
+    ///
+    /// Unlike `fetchPassword()`, this never asks the user to authenticate: it doesn't read the password.
+    func removePassword() async throws
     /// What's known about the stored password, without loading the password itself.
     ///
     /// Unlike `fetchPassword()`, this never asks the user to authenticate (if the store would need

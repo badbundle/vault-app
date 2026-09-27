@@ -39,6 +39,13 @@ public final class BackupPasswordStoreImpl: BackupPasswordStore {
         try? await storeMetadata(BackupPasswordMetadata(lastSetDate: clock.currentDate))
     }
 
+    /// The password goes first: it's what decrypts backups. If the record can't be removed after it, it's removed the
+    /// next time the password is loaded and isn't found.
+    public func removePassword() async throws {
+        try await secureStorage.remove(key: KeychainKey.backupPassword)
+        try await secureStorage.remove(key: KeychainKey.backupPasswordMetadata)
+    }
+
     public func fetchPasswordMetadata() async throws -> BackupPasswordMetadata? {
         if let record = try await secureStorage.retrieveSilent(key: KeychainKey.backupPasswordMetadata) {
             return decodeMetadata(record)

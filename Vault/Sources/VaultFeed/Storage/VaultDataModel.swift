@@ -670,14 +670,40 @@ extension VaultDataModel {
 // MARK: - Delete
 
 extension VaultDataModel {
+    /// Deletes every item and tag in the open vault, the codes AutoFill suggests, and the vault's backup password.
+    ///
+    /// The backup password goes too (VAULT-60): kept, it would restore any backup of what was just deleted without
+    /// anyone typing it, and Face ID or the passcode is no gate against someone forcing the user (MANIFESTO C4). An
+    /// erase deletes it for the same reason. Backups, auto-backup's configuration and the app's settings stay.
     public func deleteVault() async throws {
         try await vaultDeleter.deleteVault()
-        // Reload and notify before clearing AutoFill, so nothing keeps showing items that are already gone if that
-        // fails.
+        // Reload and notify before the rest, so nothing keeps showing items that are already gone if that fails.
         await reloadItems()
         await reloadTags()
         onVaultDeleted?()
-        try await vaultOtpAutofillStore.removeAll()
+        // Each is tried whether or not the other fails, and deleting again finishes whatever didn't.
+        var failure: (any Error)?
+        do {
+            try await removeBackupPassword()
+        } catch {
+            failure = error
+        }
+        do {
+            try await vaultOtpAutofillStore.removeAll()
+        } catch {
+            failure = failure ?? error
+        }
+        if let failure {
+            throw failure
+        }
+    }
+
+    private func removeBackupPassword() async throws {
+        let change = openVaultChanges
+        try await backupPasswordStore.removePassword()
+        guard change == openVaultChanges else { return }
+        backupPassword = .notCreated
+        backupPasswordStatus = .notSet
     }
 }
 

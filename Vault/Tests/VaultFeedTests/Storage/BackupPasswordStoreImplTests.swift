@@ -286,6 +286,42 @@ struct BackupPasswordStoreImplTests {
     }
 
     @Test
+    func removePassword_removesThePasswordAndItsRecord() async throws {
+        let storage = InMemorySecureStorage()
+        let sut = makeSUT(secureStorage: storage)
+        try await sut.set(password: anyBackupPassword())
+
+        try await sut.removePassword()
+
+        #expect(try await sut.fetchPasswordMetadata() == nil)
+        #expect(try await sut.fetchPassword() == nil)
+    }
+
+    /// The password first: it's what decrypts backups. Removing never reads it, so never asks the user.
+    @Test
+    func removePassword_removesThePasswordBeforeItsRecordWithoutReadingIt() async throws {
+        let storage = SecureStorageMock()
+        let sut = makeSUT(secureStorage: storage)
+
+        try await sut.removePassword()
+
+        #expect(storage.removeArgValues == [passwordKey, metadataKey])
+        #expect(storage.retrieveCallCount == 0)
+    }
+
+    @Test
+    func removePassword_errorRemovingThePasswordRethrowsAndKeepsTheRecord() async {
+        let storage = SecureStorageMock()
+        let sut = makeSUT(secureStorage: storage)
+        storage.removeHandler = { _ in throw TestError() }
+
+        await #expect(throws: TestError.self) {
+            try await sut.removePassword()
+        }
+        #expect(storage.removeArgValues == [passwordKey])
+    }
+
+    @Test
     func fetchPasswordMetadata_withoutRecordAttributesErrorRethrowsError() async throws {
         let storage = SecureStorageMock()
         let sut = makeSUT(secureStorage: storage)
@@ -301,6 +337,10 @@ struct BackupPasswordStoreImplTests {
 // MARK: - Helpers
 
 extension BackupPasswordStoreImplTests {
+    private var passwordKey: String {
+        VaultIdentifiers.SecureStorageKey.backupPassword.rawValue
+    }
+
     private var metadataKey: String {
         VaultIdentifiers.SecureStorageKey.backupPasswordMetadata.rawValue
     }

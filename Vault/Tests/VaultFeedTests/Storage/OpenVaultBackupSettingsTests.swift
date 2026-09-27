@@ -59,6 +59,21 @@ extension OpenVaultBackupSettingsTests {
         #expect(sut.pdfUserHint() == "Saved hint")
     }
 
+    /// Delete All Data in the plain store: the keychain's password and its record go, without asking the user.
+    @Test
+    func plain_removePassword_removesItFromTheDevice() async throws {
+        let device = try TestDeviceBackupSettings()
+        let sut = try makeSUT(session: VaultStoreSession(target: .plain(GatedVaultStore())), device: device)
+        await sut.reload()
+        try await sut.set(password: anyBackupPassword())
+
+        try await sut.removePassword()
+
+        #expect(try await sut.fetchPasswordMetadata() == nil)
+        #expect(try await device.passwordStore.fetchPassword() == nil)
+        #expect(device.authentications.value == 0)
+    }
+
     /// An erase, or a conversion, locks the session, then deletes the plain store's settings. A change meant for the
     /// plain store as it was open before is dropped, so it can't put them back, even once the session has switched
     /// back to the same store.
@@ -134,6 +149,28 @@ extension OpenVaultBackupSettingsTests {
         #expect(device.device.read(backupPassword: nil) == VaultBackupSettings())
     }
 
+    /// Delete All Data in an encrypted vault, a duress vault among them: only that vault's own backup password goes.
+    /// The rest of its settings stay, and so does the plain store's password, which isn't this vault's.
+    @Test
+    func unlocked_removePassword_removesOnlyTheVaultsOwnPassword() async throws {
+        let settings = anyVaultBackupSettings()
+        let fixture = try EncryptedVaultFixture(state: .empty(with: settings))
+        let device = try TestDeviceBackupSettings()
+        try await device.passwordStore.set(password: anyBackupPassword())
+        let sut = try await makeSUT(session: VaultStoreSession(target: .unlocked(fixture.openStore())), device: device)
+        await sut.reload()
+
+        try await sut.removePassword()
+
+        let saved = try fixture.savedState().vault.settings
+        #expect(saved.backupPassword == nil)
+        #expect(saved.lastBackupEvent == settings.lastBackupEvent)
+        #expect(saved.autoBackup == settings.autoBackup)
+        #expect(try await sut.fetchPasswordMetadata() == nil)
+        #expect(try await device.passwordStore.fetchPasswordMetadata() != nil)
+        #expect(device.authentications.value == 0)
+    }
+
     /// As the keychain asks for the plain store's.
     @Test
     func unlocked_fetchPassword_whenTheUserDoesNotAuthenticate_throws() async throws {
@@ -189,6 +226,8 @@ extension OpenVaultBackupSettingsTests {
         await #expect(throws: VaultStoreSessionError.locked) { try await sut.fetchPassword() }
         await #expect(throws: VaultStoreSessionError.locked) { try await sut.fetchPasswordMetadata() }
         await #expect(throws: VaultStoreSessionError.locked) { try await sut.set(password: anyBackupPassword()) }
+        await #expect(throws: VaultStoreSessionError.locked) { try await sut.removePassword() }
+        #expect(try await device.passwordStore.fetchPasswordMetadata() != nil)
         let event = try #require(anyVaultBackupSettings().lastBackupEvent)
         #expect(throws: VaultStoreSessionError.locked) { try sut.saveLastBackupEvent(event, for: sut.vaultToken) }
         #expect(throws: VaultStoreSessionError.locked) { try sut.savePDFUserHint("Hint", for: sut.vaultToken) }

@@ -90,7 +90,7 @@ struct SettingsDangerView: View {
         VStack(alignment: .leading, spacing: 20) {
             SheetHeader(
                 title: "Danger Zone",
-                message: "Deleting your data can't be undone. If you might need it again, back it up first.",
+                message: "Deleting your data can't be undone. If you might need it again, back it up first, and make sure you know your backup password: you'll need it to restore.",
             )
 
             VStack(alignment: .leading, spacing: 16) {
@@ -102,6 +102,7 @@ struct SettingsDangerView: View {
                         "Every code, note and recovery phrase",
                         "All your tags",
                         "Codes suggested by AutoFill",
+                        "Your backup password",
                     ],
                 )
                 DeletionOutcomeList(
@@ -110,7 +111,6 @@ struct SettingsDangerView: View {
                     color: .green,
                     items: [
                         "Backups you've saved, as PDFs or auto-backups",
-                        "Your backup password",
                         "Auto-backup and app settings",
                     ],
                 )
@@ -146,7 +146,7 @@ struct SettingsDangerView: View {
         VStack(alignment: .leading, spacing: 20) {
             SheetHeader(
                 title: "Delete everything?",
-                message: "Every code, note, recovery phrase and tag on this device will be erased. You can't undo this.",
+                message: "Every code, note, recovery phrase and tag on this device will be erased, and your backup password with them. You can't undo this.",
             )
 
             if case let .failed(error) = viewModel.state {

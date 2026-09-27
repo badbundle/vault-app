@@ -1226,6 +1226,89 @@ final class VaultDataModelTests {
         #expect(vaultDeletedCount == 0)
     }
 
+    /// Kept, it would restore any backup of what was deleted without anyone typing it (VAULT-60).
+    @Test
+    func deleteVault_removesTheBackupPassword() async throws {
+        let store = BackupPasswordStoreMock()
+        store.fetchPasswordHandler = { anyBackupPassword() }
+        store.fetchPasswordMetadataHandler = { BackupPasswordMetadata(lastSetDate: nil) }
+        let sut = makeSUT(backupPasswordStore: store)
+        await sut.loadBackupPassword()
+
+        try await sut.deleteVault()
+
+        #expect(store.removePasswordCallCount == 1)
+        #expect(sut.backupPassword == .notCreated)
+        #expect(sut.backupPasswordStatus == .notSet)
+    }
+
+    @Test
+    func deleteVault_doesNotRemoveTheBackupPasswordWhenDeletingFails() async {
+        let deleter = VaultStoreDeleterMock()
+        deleter.deleteVaultHandler = { throw TestError() }
+        let store = BackupPasswordStoreMock()
+        let sut = makeSUT(vaultDeleter: deleter, backupPasswordStore: store)
+
+        await #expect(throws: TestError.self) {
+            try await sut.deleteVault()
+        }
+
+        #expect(store.removePasswordCallCount == 0)
+    }
+
+    @Test
+    func deleteVault_removesTheBackupPasswordEvenIfClearingAutofillFails() async {
+        let vaultOtpAutofillStore = VaultOTPAutofillStoreMock()
+        vaultOtpAutofillStore.removeAllHandler = { throw TestError() }
+        let store = BackupPasswordStoreMock()
+        let sut = makeSUT(vaultOtpAutofillStore: vaultOtpAutofillStore, backupPasswordStore: store)
+
+        await #expect(throws: TestError.self) {
+            try await sut.deleteVault()
+        }
+
+        #expect(store.removePasswordCallCount == 1)
+    }
+
+    /// Deleting again finishes it: the vault is already empty.
+    @Test
+    func deleteVault_clearsAutofillAndThrowsIfRemovingTheBackupPasswordFails() async {
+        let vaultOtpAutofillStore = VaultOTPAutofillStoreMock()
+        let store = BackupPasswordStoreMock()
+        store.removePasswordHandler = { throw TestError() }
+        let sut = makeSUT(vaultOtpAutofillStore: vaultOtpAutofillStore, backupPasswordStore: store)
+        var vaultDeletedCount = 0
+        sut.onVaultDeleted = { vaultDeletedCount += 1 }
+
+        await #expect(throws: TestError.self) {
+            try await sut.deleteVault()
+        }
+
+        #expect(vaultOtpAutofillStore.removeAllCallCount == 1)
+        #expect(vaultDeletedCount == 1)
+    }
+
+    @Test
+    func deleteVault_whenAnotherVaultOpensMeanwhile_leavesItsBackupPasswordStatus() async throws {
+        let store = BackupPasswordStoreMock()
+        let started = Pending<Void>.signal()
+        let release = Pending<Void>.signal()
+        store.removePasswordHandler = {
+            await started.fulfill()
+            try await release.wait()
+        }
+        store.fetchPasswordMetadataHandler = { BackupPasswordMetadata(lastSetDate: nil) }
+        let sut = makeSUT(backupPasswordStore: store)
+        let deleting = Task { try await sut.deleteVault() }
+        try await started.wait()
+
+        await sut.openVaultDidChange()
+        await release.fulfill()
+        try await deleting.value
+
+        #expect(sut.backupPasswordStatus == .set(BackupPasswordMetadata(lastSetDate: nil)))
+    }
+
     @Test
     func deleteVault_reloadsDataEvenIfClearingAutofillFails() async {
         let vaultStore = VaultStoreStub()

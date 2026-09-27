@@ -915,8 +915,8 @@ payloads.
 
 ### Everything else for VAULT-23
 
-- **Delete All Data** empties the open vault's slot and keeps the slot and its password. It's the same in every
-  vault.
+- **Delete All Data** empties the open vault's slot and keeps the slot and the password that opens it. It deletes
+  the vault's backup password (VAULT-60, below). It's the same in every vault.
 - **Turning the password off** rekeys the open vault only (see above).
 - **Backups and auto-backup** read only the open vault. VAULT-23 must keep each vault's auto-backup destination
   and retention cleanup in that vault's settings, so a duress vault never deletes or overwrites the real one's
@@ -934,8 +934,12 @@ payloads.
   - the auto-backup configuration, including the names of the files its auto-backup wrote;
   - the hint its PDF backups print in plain text.
 
-  A new duress vault starts with none set, never a copy of the vault it was made from. Deleting a vault's data, or
-  importing over it, keeps them, as it does the plain store's. The paper size stays device-wide.
+  A new duress vault starts with none set, never a copy of the vault it was made from. Importing over a vault's data
+  keeps them, as it does the plain store's. Deleting its data keeps them too, except the backup password and its
+  record, which Delete All Data deletes, in the plain store as in an encrypted vault (VAULT-60). Kept, the password
+  would restore any backup of what was deleted without anyone typing it, and the device authentication in front of
+  Restore is no gate against someone forcing the user (MANIFESTO C4). The erase deletes it for the same reason. The
+  paper size stays device-wide.
 - **The plain store's stay where they were:** the backup password and its record in the keychain, the rest in
   `UserDefaults`. Turning encryption on moves them into the real vault (see
   [Migration](#migration-plain-to-encrypted)):
