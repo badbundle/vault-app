@@ -916,7 +916,11 @@ payloads.
 ### Everything else for VAULT-23
 
 - **Delete All Data** empties the open vault's slot and keeps the slot and the password that opens it. It deletes
-  the vault's backup password (VAULT-60, below). It's the same in every vault.
+  the vault's backup password (VAULT-60, below). In the same write it fills every other slot with fresh random
+  bytes (VAULT-74), so every other vault goes with it: the duress vaults from the real vault, and the real vault
+  and every other one from a duress vault. It changes every other slot whether or not it held a vault, so neither
+  the file afterwards nor two copies from either side show whether others were there. It's the same in every
+  vault. Resetting just a duress vault is done by making a new one from the vault above it, which replaces it.
 - **Turning the password off** rekeys the open vault only (see above).
 - **Backups and auto-backup** read only the open vault. VAULT-23 must keep each vault's auto-backup destination
   and retention cleanup in that vault's settings, so a duress vault never deletes or overwrites the real one's

@@ -428,6 +428,89 @@ extension DuressVaultTests {
     }
 }
 
+// MARK: - Deleting all data (VAULT-74)
+
+extension DuressVaultTests {
+    @Test
+    func deleteVault_fromTheRealVault_destroysItsDuressVaults() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot, items: [uniqueVaultItem()])
+        let real = try fixture.open(slot: realSlot, password: "real")
+        let first = await real.records.state.vault.duressSlots[0]
+        try await real.makeDuressVault(password: "first")
+        let duress = try fixture.open(slot: first, password: "first")
+        try await duress.makeDuressVault(password: "second")
+
+        try await real.deleteVault()
+
+        #expect(try fixture.slotsOpened(by: "first").isEmpty)
+        #expect(try fixture.slotsOpened(by: "second").isEmpty)
+        #expect(try fixture.slotsOpened(by: "real") == [realSlot])
+        #expect(try fixture.state(ofSlot: realSlot, password: "real").items.isEmpty)
+    }
+
+    /// Deleting all data in a duress vault destroys the real vault too: it's destruction, not exposure.
+    @Test
+    func deleteVault_fromADuressVault_destroysTheRealVault() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot, items: [uniqueVaultItem()])
+        let real = try fixture.open(slot: realSlot, password: "real")
+        let first = await real.records.state.vault.duressSlots[0]
+        try await real.makeDuressVault(password: "duress")
+        let duress = try fixture.open(slot: first, password: "duress")
+
+        try await duress.deleteVault()
+
+        #expect(try fixture.slotsOpened(by: "real").isEmpty)
+        #expect(try fixture.slotsOpened(by: "duress") == [first])
+        #expect(try fixture.state(ofSlot: first, password: "duress").items.isEmpty)
+    }
+
+    /// Every other slot changes, whether or not it held a vault, so the file afterwards, and two copies of it from
+    /// either side, don't show whether other vaults were there. The file keeps its size.
+    @Test
+    func deleteVault_changesEveryOtherSlot_evenOnesThatHeldNothing() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot, items: [uniqueVaultItem()])
+        let real = try fixture.open(slot: realSlot, password: "real")
+        let before = try fixture.contents()
+
+        try await real.deleteVault()
+
+        let after = try fixture.contents()
+        #expect(after.header == before.header)
+        #expect(after.bytes.count == before.bytes.count)
+        for index in VaultSlotFile.slotIndices where index != realSlot {
+            #expect(after.bytes[after.slotRange(index)] != before.bytes[before.slotRange(index)], "slot \(index)")
+        }
+    }
+
+    /// A vault that's empty already still destroys the others: it's what deleting all data means, whatever this vault
+    /// holds.
+    @Test
+    func deleteVault_ofAnEmptyVault_stillDestroysTheOthers() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot)
+        let real = try fixture.open(slot: realSlot, password: "real")
+        try await real.makeDuressVault(password: "duress")
+
+        try await real.deleteVault()
+
+        #expect(try fixture.slotsOpened(by: "duress").isEmpty)
+    }
+
+    /// The vault keeps its duress slots, so it can make a duress vault again straight away.
+    @Test
+    func deleteVault_thenMakingADuressVault_putsItInTheSameSlot() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot)
+        let real = try fixture.open(slot: realSlot, password: "real")
+        let target = await real.records.state.vault.duressSlots[0]
+        try await real.makeDuressVault(password: "before")
+        try await real.deleteVault()
+
+        try await real.makeDuressVault(password: "after")
+
+        #expect(try fixture.slotsOpened(by: "after") == [target])
+        #expect(try fixture.slotsOpened(by: "before").isEmpty)
+    }
+}
+
 // MARK: - Wrap times
 
 extension DuressVaultTests {

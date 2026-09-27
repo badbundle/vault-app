@@ -12,6 +12,13 @@ protocol VaultRecordPersistence: Sendable {
     ///   from.
     /// - Throws: If it can't save. What's saved stays as it was.
     func save(_ state: VaultRecordState) async throws -> VaultRecordSaveOutcome
+
+    /// Saves `state` as `save(_:)` does, and in the same write destroys every other vault the storage holds: for
+    /// deleting all data (VAULT-74). It writes even if `state` is what's saved already, so the other vaults go
+    /// whatever this one holds.
+    ///
+    /// - Returns: As `save(_:)`. On a conflict, nothing is written, other vaults included.
+    func saveDestroyingOtherVaults(_ state: VaultRecordState) async throws -> VaultRecordSaveOutcome
 }
 
 /// What happened to a state `VaultRecordPersistence` was asked to save.

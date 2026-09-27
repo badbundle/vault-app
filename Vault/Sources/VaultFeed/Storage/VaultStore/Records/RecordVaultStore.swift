@@ -403,9 +403,11 @@ extension RecordVaultStore: VaultStoreImporter {
 // MARK: - VaultStoreDeleter
 
 extension RecordVaultStore: VaultStoreDeleter {
-    /// Deletes every item and tag. The vault itself stays, with its metadata.
+    /// Deletes every item and tag, and every other vault the storage holds (VAULT-74). This vault stays, with its
+    /// metadata, and so does what opens it. It saves even if this vault is empty already, so the other vaults go
+    /// whatever it holds.
     func deleteVault() async throws {
-        try await change { state in
+        try await change(saving: .destroyingOtherVaults) { state in
             state.items = []
             state.tags = []
         }
@@ -443,6 +445,14 @@ extension RecordVaultStore: VaultStoreKillphraseDeleter {
 // MARK: - Helpers
 
 extension RecordVaultStore {
+    /// How a change is saved.
+    enum ChangeSaving {
+        /// Only if it changes the state.
+        case ifChanged
+        /// Always, destroying every other vault the storage holds in the same write: for deleting all data.
+        case destroyingOtherVaults
+    }
+
     /// Works out a change from the current state, saves it, and only then publishes it. A change that leaves the
     /// state as it was saves nothing.
     ///
@@ -454,14 +464,24 @@ extension RecordVaultStore {
     ///
     /// Tests also call it, to save states the operations can't produce.
     @discardableResult
-    func change<Result>(_ makeChange: (inout VaultRecordState) throws -> Result) async throws -> Result {
+    func change<Result>(
+        saving: ChangeSaving = .ifChanged,
+        _ makeChange: (inout VaultRecordState) throws -> Result,
+    ) async throws -> Result {
         await waitForTurnToChange()
         defer { finishChange() }
         for _ in 0 ..< Self.conflictAttempts {
             var newState = state
             let result = try makeChange(&newState)
-            guard newState != state else { return result }
-            switch try await persistence?.save(newState) ?? .saved {
+            let outcome: VaultRecordSaveOutcome
+            switch saving {
+            case .ifChanged:
+                guard newState != state else { return result }
+                outcome = try await persistence?.save(newState) ?? .saved
+            case .destroyingOtherVaults:
+                outcome = try await persistence?.saveDestroyingOtherVaults(newState) ?? .saved
+            }
+            switch outcome {
             case .saved:
                 state = newState
                 return result

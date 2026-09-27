@@ -395,6 +395,18 @@ extension VaultSlotFile {
         return slotSize
     }
 
+    /// Fills every slot but `slot`'s with fresh random bytes, at the file's slot size: for deleting all data
+    /// (VAULT-74).
+    ///
+    /// Whatever vault was in a slot is gone, and no password opens it again. A slot that held nothing changes just as
+    /// one that held a vault does, so the file afterwards, and two copies of it from either side, look the same
+    /// whether or not other vaults were there. The file doesn't shrink: slot sizes never do (see `grow(to:)`).
+    public mutating func randomizeSlots(except slot: OpenedSlot) {
+        for index in Self.slotIndices where index != slot.index {
+            bytes.replaceSubrange(slotRange(index), with: SlotRandom.bytes(count: header.slotSize))
+        }
+    }
+
     /// Grows every slot to `newSlotSize`, if it's larger: each slot is copied to its new place, with random fill
     /// after it.
     private mutating func grow(to newSlotSize: Int) {

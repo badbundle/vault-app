@@ -160,10 +160,47 @@ extension RecordVaultStoreTests {
 
         try await sut.delete(id: .new())
         try await sut.deleteTag(id: .init(id: UUID()))
-        try await sut.deleteVault()
         _ = await sut.deleteItems(matchingKillphrase: "nothing", using: testDigester)
 
         #expect(persistence.saves.isEmpty)
+    }
+
+    /// Deleting all data destroys every other vault too, so it saves whatever this vault holds, empty or not
+    /// (VAULT-74).
+    @Test
+    func deleteVault_ofAnEmptyVault_stillSavesDestroyingOtherVaults() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+
+        try await sut.deleteVault()
+
+        #expect(persistence.saves.map(\.destroysOtherVaults) == [true])
+        #expect(persistence.saves.map(\.state) == [.empty])
+    }
+
+    @Test
+    func deleteVault_savesDestroyingOtherVaults_andOtherChangesDoNot() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+        try await sut.insert(item: uniqueVaultItem().makeWritable())
+
+        try await sut.deleteVault()
+
+        #expect(persistence.saves.map(\.destroysOtherVaults) == [false, true])
+        #expect(persistence.saves.last?.state.items == [])
+    }
+
+    /// Another writer saved first: the delete is worked out again on top of what it saved, and still destroys the
+    /// other vaults.
+    @Test
+    func deleteVault_afterAConflict_triesAgainDestroyingOtherVaults() async throws {
+        let persistence = ScriptedPersistence()
+        let sut = RecordVaultStore(persistence: persistence)
+        persistence.script(.success(.conflict(saved: .empty)))
+
+        try await sut.deleteVault()
+
+        #expect(persistence.saves.map(\.destroysOtherVaults) == [true, true])
     }
 
     @Test
@@ -320,6 +357,8 @@ extension RecordVaultStoreTests {
             var state: VaultRecordState
             /// What the store showed while the save was underway, if it's being observed.
             var publishedWhileSaving: VaultRecordState
+            /// Whether every other vault was to be destroyed in the same write.
+            var destroysOtherVaults = false
         }
 
         private struct State {
@@ -371,9 +410,23 @@ extension RecordVaultStoreTests {
         }
 
         func save(_ newState: VaultRecordState) async throws -> VaultRecordSaveOutcome {
+            try await save(newState, destroysOtherVaults: false)
+        }
+
+        func saveDestroyingOtherVaults(_ newState: VaultRecordState) async throws -> VaultRecordSaveOutcome {
+            try await save(newState, destroysOtherVaults: true)
+        }
+
+        private func save(_ newState: VaultRecordState, destroysOtherVaults: Bool) async throws
+            -> VaultRecordSaveOutcome
+        {
             let published = await state.get { $0.store }?.state
             let holds = state.modify { state in
-                state.saves.append(Save(state: newState, publishedWhileSaving: published ?? .empty))
+                state.saves.append(Save(
+                    state: newState,
+                    publishedWhileSaving: published ?? .empty,
+                    destroysOtherVaults: destroysOtherVaults,
+                ))
                 defer { state.holdsNextSave = false }
                 return state.holdsNextSave
             }

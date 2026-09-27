@@ -41,6 +41,9 @@ struct HelpView: View {
             HelpQuestionLink(question: "How do I move items to another device?") {
                 SettingsDocumentView(title: "Moving Between Devices", content: FAQSyncDevicesFileContent())
             }
+            HelpQuestionLink(question: "What's a duress password?") {
+                SettingsDocumentView(title: "Duress Password", content: FAQDuressFileContent())
+            }
         }
     }
 }
