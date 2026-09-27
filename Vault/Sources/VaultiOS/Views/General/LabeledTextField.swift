@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import VaultCore
 import VaultFeed
 
 /// A text field whose label stays visible once something has been entered.
@@ -45,8 +46,11 @@ struct LabeledTextField: View {
     private var prompt: String?
     private var kind: Kind
     private var status: Status
+    private var contentType: PasteboardContentType
 
     @FocusState private var isFocused: Bool
+    /// Identifies this field to `EditedTextClipboard` while it's focused.
+    @State private var clipboardID = UUID()
     @State private var floatingLabelHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.secretTextInput) private var declaredTextInput
@@ -54,18 +58,22 @@ struct LabeledTextField: View {
     /// - Parameters:
     ///   - title: Names what the field is for. Always visible, and read by VoiceOver.
     ///   - prompt: An example of what to enter, shown while the field is focused and empty.
+    ///   - contentType: What Cut and Copy put on the clipboard as, for the Universal Clipboard setting (see
+    ///     `EditedTextClipboard`). Only a note's contents are anything but a detail, which stays on this device.
     init(
         _ title: String,
         text: Binding<String>,
         prompt: String? = nil,
         kind: Kind = .plain,
         status: Status = .none,
+        copyingAs contentType: PasteboardContentType = .detail,
     ) {
         self.title = title
         _text = text
         self.prompt = prompt
         self.kind = kind
         self.status = status
+        self.contentType = contentType
     }
 
     var body: some View {
@@ -87,6 +95,12 @@ struct LabeledTextField: View {
         }
         .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: isLabelFloating)
         .animation(.snappy, value: status)
+        .onChange(of: isFocused) { _, isFocused in
+            EditedTextClipboard.field(clipboardID, isFocused: isFocused, copyingAs: contentType)
+        }
+        .onDisappear {
+            EditedTextClipboard.field(clipboardID, isFocused: false, copyingAs: contentType)
+        }
     }
 
     // MARK: - Label

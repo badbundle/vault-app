@@ -3,41 +3,14 @@ import Foundation
 import UniformTypeIdentifiers
 import VaultFeed
 
-private enum VaultItemTransferError: Error {
-    case unableToCreateString
-}
-
+/// A card in the feed is dragged to reorder it, as its ID.
+///
+/// It offers no text to another app: a code dropped there would skip the clipboard settings, as dragging selectable
+/// text would (see `SelectableTextView`), and on an iPad it could reach another device over Universal Control whatever
+/// Universal Clipboard allows. Tapping a code, or Copy Code, copies it through Vault's clipboard instead.
 extension VaultItem: Transferable {
     public static var transferRepresentation: some TransferRepresentation {
-        MainActor.assumeIsolated {
-            VaultSharingContentTransferRepresentation(copyActionHandler: VaultRoot.vaultItemCopyHandler)
-        }
-    }
-
-    public struct VaultSharingContentTransferRepresentation<C: VaultItemCopyActionHandler>: TransferRepresentation {
-        public typealias Item = VaultItem
-        private let copyActionHandler: C
-
-        init(copyActionHandler: C) {
-            self.copyActionHandler = copyActionHandler
-        }
-
-        public var body: some TransferRepresentation {
-            DataRepresentation(exportedContentType: .plainText) { item in
-                guard
-                    let data = await copyActionHandler.textToCopyForVaultItem(id: item.id),
-                    !data.requiresAuthenticationToCopy
-                else {
-                    return Data()
-                }
-                if let string = data.text.data(using: .utf8) {
-                    return string
-                } else {
-                    throw VaultItemTransferError.unableToCreateString
-                }
-            }
-            ProxyRepresentation(exporting: \.id)
-        }
+        ProxyRepresentation(exporting: \.id)
     }
 }
 
