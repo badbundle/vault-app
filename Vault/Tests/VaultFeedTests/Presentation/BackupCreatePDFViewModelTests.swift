@@ -70,12 +70,22 @@ struct BackupCreatePDFViewModelTests {
         #expect(sut.userHint == "The open vault's hint")
     }
 
-    /// The default text, as before, for a vault that's never made a PDF backup.
+    /// The hint is printed in plain text, so nothing is printed unless the user writes one.
     @Test
-    func init_withoutAHint_showsTheDefault() throws {
+    func init_withoutAHint_startsEmpty() throws {
         let sut = try makeSUT(hintStorage: VaultPDFHints(hints: [:], vaultToken: 3))
 
-        #expect(sut.userHint.hasPrefix("This is my description"))
+        #expect(sut.userHint == "")
+    }
+
+    /// A PDF made with the text the hint used to start with saved it as the hint, but the user never wrote it.
+    @Test
+    func init_withTheFormerDefaultSaved_startsEmpty() throws {
+        let formerDefault =
+            "This is my description, which is visible in plain text on the vault backup. You can use the Vault app to import this data if you lose access to your device."
+        let sut = try makeSUT(hintStorage: VaultPDFHints(hints: [3: formerDefault], vaultToken: 3))
+
+        #expect(sut.userHint == "")
     }
 
     @Test
