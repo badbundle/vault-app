@@ -57,6 +57,32 @@ struct AppLockPasswordSnapshotTests {
         }
     }
 
+    /// Copies of the vault set aside aren't encrypted, so the setup screen says setting the password deletes them.
+    @Test
+    func setupWithSetAsideVaults() async throws {
+        try await snapshotScenarios {
+            let service = FakeAppLockPasswordService()
+            service.setAsideVaultCount = 2
+            let viewModel = try AppLockPasswordFormViewModel(purpose: .set, appLock: makeAppLock(service: service))
+            await viewModel.onAppear()
+            return viewModel
+        }
+    }
+
+    /// A vault too large to encrypt says so, and what to do.
+    @Test
+    func setupVaultTooLarge() async throws {
+        try await snapshotScenarios {
+            let service = FakeAppLockPasswordService()
+            service.failure = VaultEncryptionError.vaultTooLarge
+            let viewModel = try AppLockPasswordFormViewModel(purpose: .set, appLock: makeAppLock(service: service))
+            viewModel.newPassword = Self.password
+            viewModel.confirmation = Self.password
+            await viewModel.submit()
+            return viewModel
+        }
+    }
+
     // MARK: - Password on
 
     @Test
@@ -304,10 +330,14 @@ struct AppLockPasswordSnapshotTests {
 
 extension AppLockPasswordSnapshotTests {
     private func makeAppLock(password: String?) throws -> AppLockService {
+        try makeAppLock(service: FakeAppLockPasswordService(password: password))
+    }
+
+    private func makeAppLock(service: FakeAppLockPasswordService) throws -> AppLockService {
         try AppLockService(
             settings: AppLockSettingsStore(userDefaults: .nonPersistent()),
             authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
-            passwordService: FakeAppLockPasswordService(password: password),
+            passwordService: service,
             purgeSensitiveData: {},
         )
     }

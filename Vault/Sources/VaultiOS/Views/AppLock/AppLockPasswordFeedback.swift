@@ -34,8 +34,20 @@ extension View {
     }
 }
 
-private struct WrongPasswordFeedback: ViewModifier {
+struct WrongPasswordFeedback: ViewModifier {
     var trigger: Int
+
+    /// The shake's offsets: to one side and the other, smaller each time, then back to exactly where the view started.
+    /// The last keyframe is cubic, not a spring: a spring cut off by its duration can end short of zero, which left the
+    /// field out of line with what's around it.
+    @KeyframeTrackContentBuilder<Double>
+    static var shake: some KeyframeTrackContent<Double> {
+        LinearKeyframe(-12, duration: 0.06)
+        LinearKeyframe(10, duration: 0.08)
+        LinearKeyframe(-7, duration: 0.08)
+        LinearKeyframe(4, duration: 0.07)
+        CubicKeyframe(0, duration: 0.15)
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -55,11 +67,7 @@ private struct WrongPasswordFeedback: ViewModifier {
                     content.offset(x: offset)
                 } keyframes: { _ in
                     KeyframeTrack {
-                        LinearKeyframe(-12, duration: 0.06)
-                        LinearKeyframe(10, duration: 0.08)
-                        LinearKeyframe(-7, duration: 0.08)
-                        LinearKeyframe(4, duration: 0.07)
-                        SpringKeyframe(0, duration: 0.2)
+                        Self.shake
                     }
                 }
             }

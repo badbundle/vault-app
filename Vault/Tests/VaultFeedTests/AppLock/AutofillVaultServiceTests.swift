@@ -56,7 +56,7 @@ struct AutofillVaultServiceTests {
         let service = try makeSUT().service
 
         await #expect(throws: AppLockPasswordUnavailableError.self) {
-            try await service.setPassword(Self.password)
+            try await service.setPassword(Self.password, deletingSetAsideVaults: false)
         }
         await #expect(throws: AppLockPasswordUnavailableError.self) {
             try await service.changePassword(current: Self.password, new: "battery staple")

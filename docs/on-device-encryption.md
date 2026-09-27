@@ -764,6 +764,20 @@ the same deadline. What differs afterwards is decoding time, which is proportion
 It's async, because the session waits for writes underway. The app lock's own purge hook is synchronous, so it
 starts the lock in a task, as it already does for the purge.
 
+- **The Require Unlock delay** still applies when the app goes to the background. While the password is set, the
+  device locking locks the app and the vault at once, whatever the delay
+  (`UIApplication.protectedDataWillBecomeUnavailableNotification`, `AppLockService.deviceWillLock()`), if the app is
+  still running then. Neither the delay nor that notification runs in a suspended app, and iOS suspends an app soon
+  after it goes to the background. So with a delay, the vault's keys can stay in the suspended app's memory until
+  it comes back, or is terminated, and the app then locks if the delay has passed. With "Immediately", the vault
+  locks as the app goes to the background. Without the password the delay stands, as the plain store has no keys to
+  hold.
+- **A lock racing an unlock.** Unlocking waits for any lock of the vault underway. If the app locks during an
+  attempt, the attempt's result is thrown away and the vault locked again after it, in case it opened after the
+  lock.
+- **A lock during a conversion** finds the plain store, which the app lock only hides, and the conversion then opens
+  the encrypted vault. Setting the password locks it again as soon as the conversion finishes.
+
 **Zeroing, honestly:**
 
 - Keys live in `SymmetricKey` and are zeroed. `K_pw` goes straight from the derivation's wiped buffer into one.
@@ -781,6 +795,28 @@ starts the lock in a task, as it already does for the purge.
 `VaultStoreSession` that implements the same protocols and forwards to `plain(PersistedLocalVaultStore)`,
 `unlocked(EncryptedVaultStore)` or `locked`. `VaultDataModel` already takes protocol types, so it barely
 changes.
+
+**In the app (VAULT-22, as built).** `AppLockService` works through `EncryptedVaultPasswordService`, which follows
+how the vault is stored as the password is set, changed, turned off and back on:
+
+- **Password mode:** device authentication, then the password, through `AppLockPasswordUnlocker` (VAULT-34's erase)
+  and `VaultUnlockService`. A turn off or on that couldn't record how it ended is settled from the file and the
+  password tried again. If it turns out the password was off, the vault opens with the device key, as device
+  authentication has passed.
+- **Device-key mode:** device authentication alone, which then opens the vault with `D`
+  (`openVaultWithoutPassword()`). With the app lock off as well, the vault opens at launch.
+- **Plain:** as before.
+- **Locking** locks the vault too (`lockVault()`), and unlocking waits for that to finish first. The plain store is
+  only hidden, as before. The device locking locks the app and the vault while the password is set (see
+  [Unlocking and locking](#unlocking-and-locking)).
+- **The mode is re-read** from the storage state after every change and settle, so a change that threw after its
+  rename can't leave the lock asking for the wrong thing. A password refused because the password is off opens the
+  vault with the device key, as device authentication has passed.
+- **Setting the password** converts the plain store, unless it opened this launch only after being set aside (then
+  it doesn't hold the vault). Copies set aside earlier are deleted once the user agrees, and the setup screen says so
+  first. Setting it turns erasing after failed passwords off. The screen names the precondition that failed:
+  phrases still being updated, the vault too large, or a store that didn't open.
+- **Background time** covers every conversion and rekey (`VaultBackgroundTime.application`).
 
 ## Duress vault (VAULT-23)
 

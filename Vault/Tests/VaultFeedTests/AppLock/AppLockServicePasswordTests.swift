@@ -49,6 +49,153 @@ struct AppLockServicePasswordTests {
         #expect(sut.state == .unlocked)
     }
 
+    /// With the password off after being on, device authentication is the only step, and it opens the vault, which
+    /// is encrypted with a key on the device.
+    @Test
+    func unlock_noPasswordSet_opensTheVaultWithoutAPassword() async throws {
+        let service = FakeAppLockPasswordService()
+        let sut = try makeSUT(isEnabled: true, passwordService: service)
+        await service.lockVault()
+
+        await sut.unlock()
+
+        #expect(sut.state == .unlocked)
+        #expect(service.isVaultOpen)
+    }
+
+    @Test
+    func unlock_vaultDoesNotOpenWithoutAPassword_staysLocked() async throws {
+        let service = FakeAppLockPasswordService()
+        service.failure = TestError()
+        let sut = try makeSUT(isEnabled: true, passwordService: service)
+
+        await sut.unlock()
+
+        #expect(sut.state == .locked(.init(step: .deviceAuthentication, failure: .failed)))
+    }
+
+    /// Opening the vault waits for the password: device authentication alone doesn't open it.
+    @Test
+    func unlock_passwordSet_doesNotOpenTheVaultAfterDeviceAuthentication() async throws {
+        let service = FakeAppLockPasswordService(password: Self.password)
+        let sut = try makeSUT(passwordService: service)
+        await service.lockVault()
+
+        await sut.unlock()
+
+        #expect(!service.isVaultOpen)
+    }
+
+    /// The app locking locks the vault too, so its keys and what was read from it go.
+    @Test
+    func lock_locksTheVault() async throws {
+        let service = FakeAppLockPasswordService(password: Self.password)
+        let sut = try await makeUnlockedSUT(passwordService: service)
+        #expect(service.isVaultOpen)
+
+        sut.scenePhaseDidChange(to: .background)
+        await sut.vaultLock?.value
+
+        #expect(!service.isVaultOpen)
+        #expect(sut.isLocked)
+    }
+
+    /// The app locks while the password is tried, and the attempt opens the vault after the lock has locked it. The
+    /// attempt's result is thrown away, and the vault is locked again.
+    @Test
+    func lock_whileThePasswordIsTried_locksTheVaultAgainAfterTheAttempt() async throws {
+        let service = FakeAppLockPasswordService(password: Self.password)
+        let sut = try makeSUT(passwordService: service)
+        await sut.unlock()
+        service.whileUnlocking = { [weak sut] in
+            sut?.scenePhaseDidChange(to: .background)
+        }
+
+        await sut.unlock(password: Self.password)
+        await sut.vaultLock?.value
+
+        #expect(sut.isLocked)
+        #expect(!service.isVaultOpen)
+    }
+
+    /// With the lock off and the password off after being on, the vault opens at launch without asking, and a widget's
+    /// link waiting for the app to be unlocked finds it open.
+    @Test
+    func openVaultIfUnlocked_lockOff_opensTheVaultBeforeWaitingActionsRun() async throws {
+        let service = FakeAppLockPasswordService()
+        await service.lockVault()
+        let sut = try makeSUT(isEnabled: false, passwordService: service)
+
+        sut.openVaultIfUnlocked()
+        let foundItOpen = BoolBox()
+        sut.performWhenUnlocked {
+            foundItOpen.value = service.isVaultOpen
+        }
+        await sut.vaultOpening?.value
+        for _ in 0 ..< 10 where foundItOpen.value == nil {
+            await Task.yield()
+        }
+
+        #expect(foundItOpen.value == true)
+    }
+
+    /// Setting the password while the app locks, then passes device authentication again before the conversion ends,
+    /// locks the app again once it's set, so the password is asked for.
+    @Test
+    func setPassword_appLockedMeanwhile_locksTheAppAgainOnceSet() async throws {
+        // Long enough that the conversion is still underway once the app has unlocked again, even on a busy machine.
+        let service = FakeAppLockPasswordService(deadline: .seconds(1))
+        let sut = try makeSUT(isEnabled: true, passwordService: service)
+        sut.scenePhaseDidChange(to: .active)
+        await sut.automaticUnlock?.value
+        let lockedMeanwhile = BoolBox()
+        service.whileSettingPassword = { [weak sut] in
+            sut?.scenePhaseDidChange(to: .background)
+            sut?.scenePhaseDidChange(to: .active)
+            lockedMeanwhile.value = true
+        }
+
+        let setting = Task { try await sut.setPassword(Self.password) }
+        for _ in 0 ..< 1000 where lockedMeanwhile.value == nil {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        try #require(lockedMeanwhile.value == true)
+        await sut.automaticUnlock?.value
+        #expect(!sut.isLocked)
+        #expect(try await setting.value)
+        await sut.vaultLock?.value
+
+        #expect(sut.state == .locked(.init(step: .deviceAuthentication)))
+        #expect(!service.isVaultOpen)
+    }
+
+    /// While the password is set, the device locking locks the app and the vault, whatever the delay, so the vault's
+    /// keys aren't in memory while the device is locked.
+    @Test
+    func deviceWillLock_passwordSet_locksTheAppAndTheVaultWhateverTheDelay() async throws {
+        let service = FakeAppLockPasswordService(password: Self.password)
+        let sut = try await makeUnlockedSUT(passwordService: service, delay: .fifteenMinutes)
+        sut.scenePhaseDidChange(to: .background)
+        #expect(!sut.isLocked)
+
+        sut.deviceWillLock()
+        await sut.vaultLock?.value
+
+        #expect(sut.isLocked)
+        #expect(!service.isVaultOpen)
+    }
+
+    @Test
+    func deviceWillLock_noPasswordSet_leavesTheDelayAlone() async throws {
+        let sut = try makeSUT(isEnabled: true, passwordService: FakeAppLockPasswordService(), delay: .fifteenMinutes)
+        await sut.unlock()
+        sut.scenePhaseDidChange(to: .background)
+
+        sut.deviceWillLock()
+
+        #expect(!sut.isLocked)
+    }
+
     @Test
     func unlock_deviceAuthenticationFails_neverAsksForThePassword() async throws {
         let sut = try makeSUT(
@@ -658,9 +805,11 @@ extension AppLockServicePasswordTests {
         clock: FakeAppLockClock = FakeAppLockClock(),
         passwordService: FakeAppLockPasswordService?,
         didChangeSettings: Counter = Counter(),
+        delay: AppLockDelay = .immediately,
     ) throws -> AppLockService {
         let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
         settings.isEnabled = isEnabled
+        settings.delay = delay
         return AppLockService(
             settings: settings,
             authenticationService: DeviceAuthenticationService(policy: policy),
@@ -676,8 +825,14 @@ extension AppLockServicePasswordTests {
         passwordService: FakeAppLockPasswordService,
         clock: FakeAppLockClock = FakeAppLockClock(),
         didChangeSettings: Counter = Counter(),
+        delay: AppLockDelay = .immediately,
     ) async throws -> AppLockService {
-        let sut = try makeSUT(clock: clock, passwordService: passwordService, didChangeSettings: didChangeSettings)
+        let sut = try makeSUT(
+            clock: clock,
+            passwordService: passwordService,
+            didChangeSettings: didChangeSettings,
+            delay: delay,
+        )
         await sut.unlock()
         await sut.unlock(password: Self.password)
         #expect(sut.state == .unlocked)
@@ -692,4 +847,10 @@ private final class Counter {
     func increment() {
         count += 1
     }
+}
+
+/// A value an action on the main actor sets.
+@MainActor
+private final class BoolBox {
+    var value: Bool?
 }

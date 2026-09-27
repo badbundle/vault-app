@@ -1,6 +1,7 @@
 import Foundation
 import FoundationExtensions
 import SwiftSecurity
+import UIKit
 import VaultFeed
 import VaultSettings
 #if canImport(WidgetKit)
@@ -135,14 +136,21 @@ public enum VaultRoot {
         }
         #endif
         do {
-            return try PersistedLocalVaultStoreFactory(storageDirectory: vaultStorageDirectory)
+            // The factory sets a store it can't open aside and starts an empty one. That one doesn't hold the vault,
+            // so the password can't be set on it until the next launch opens it normally.
+            let archivesBefore = vaultStoreArchives.archives().count
+            let store = try PersistedLocalVaultStoreFactory(storageDirectory: vaultStorageDirectory)
                 .makeVaultStoreOrThrow()
+            plainVaultStoreOpenedNormally = vaultStoreArchives.archives().count == archivesBefore
+            return store
         } catch {
             // Fall back to an empty in-memory store instead of crashing at
             // launch: the composition graph stays valid for every consumer
             // and the scene shows a failure screen. The failed store files
             // were archived beside the store by the factory's recovery.
             vaultStoreLoadFailureMessage = error.localizedDescription
+            // It doesn't hold the vault, so it's never encrypted as if it did.
+            plainVaultStoreOpenedNormally = false
             do {
                 return try .inMemory()
             } catch {
@@ -152,6 +160,12 @@ public enum VaultRoot {
             }
         }
     }()
+
+    /// Whether the plain store opened this launch without being set aside
+    /// and started again empty. Converting it to an encrypted vault needs
+    /// it to have: otherwise the vault is in the copy set aside.
+    @MainActor
+    private(set) static var plainVaultStoreOpenedNormally = true
 
     /// Lets go of the plain store, once the store session has switched away
     /// from it, so its database closes before its files are deleted. Nothing
@@ -410,12 +424,65 @@ public enum VaultRoot {
     public static let appLockService: AppLockService = .init(
         settings: appLockSettingsStore,
         authenticationService: deviceAuthenticationService,
-        // None until the encrypted vault's storage can set and change the App Lock Password (VAULT-47 and VAULT-48).
-        // Without one, Settings doesn't offer the password and the lock screen never asks for it.
-        passwordService: nil,
+        passwordService: vaultPasswordService,
         purgeSensitiveData: purgeSensitiveDataForAppLock,
         didChangeSettings: reloadWidgetTimelines,
     )
+
+    /// The App Lock Password, on the vault's storage: unlocking with it, and
+    /// setting, changing and turning it off, and making a duress vault, in
+    /// Settings. `nil` in screenshot mode, whose vault is in memory.
+    @MainActor
+    static let vaultPasswordService: EncryptedVaultPasswordService? = {
+        #if DEBUG
+        if ScreenshotMode.isEnabled {
+            return nil
+        }
+        #endif
+        let mode: VaultStorageState.Mode = switch storageMode {
+        // An erase finishes before the vault shows, and leaves a fresh plain store.
+        case .plain, .erasing: .plain
+        case .password: .password
+        case .deviceKey: .deviceKey
+        }
+        return EncryptedVaultPasswordService(
+            directory: vaultStorageDirectory,
+            mode: mode,
+            session: vaultStore,
+            settings: appLockSettingsStore,
+            erase: {
+                try await eraseVault()
+            },
+            archives: vaultStoreArchives,
+            deviceBackupSettings: deviceBackupSettings,
+            purgeVaultContents: { @MainActor in
+                await vaultDataModel.purgeVaultContents()
+            },
+            conversionHooks: .init(
+                releasePlainStore: {
+                    await releasePlainVaultStore()
+                },
+                clearCredentialIdentities: {
+                    try await vaultOtpAutofillStore.removeAll()
+                },
+                reloadWidgets: {
+                    await reloadWidgetTimelines()
+                },
+            ),
+            passwordHooks: .init(
+                passwordDidTurnOff: {
+                    try await refillSystemSurfaces()
+                },
+                passwordDidTurnOn: {
+                    try await emptySystemSurfaces()
+                },
+            ),
+            plainStore: {
+                plainVaultStore.map { ($0, plainVaultStoreOpenedNormally) }
+            },
+            backgroundTime: .application,
+        )
+    }()
 
     /// Clears what a locked app shouldn't be holding: everything read from
     /// the vault, and the search, which might be a search passphrase. The
@@ -471,6 +538,10 @@ public enum VaultRoot {
     @MainActor
     static func eraseVault() async throws {
         plainVaultStore = try await vaultEraser.erase()
+        plainVaultStoreOpenedNormally = true
+        vaultPasswordService?.vaultWasErased()
+        // Whether the erase started at the lock screen or not, there's no password now.
+        appLockService.vaultWasErased()
         await vaultDataModel.resetAfterErase()
     }
 
@@ -547,6 +618,22 @@ public enum VaultRoot {
                 await interruptedErase.finish()
             }
         }
+        // While the password is set, the vault locks as the device does,
+        // whatever the delay, so its keys aren't in memory while it's locked.
+        NotificationCenter.default.addObserver(
+            forName: UIApplication.protectedDataWillBecomeUnavailableNotification,
+            object: nil,
+            queue: .main,
+        ) { _ in
+            MainActor.assumeIsolated {
+                appLockService.deviceWillLock()
+            }
+        }
+        // With the password off after being on, the vault is encrypted with a
+        // key on this device. With the app lock off too, nothing asks the user
+        // to unlock, so it opens now, as the plain store always has. Links from
+        // widgets wait for it.
+        appLockService.openVaultIfUnlocked()
         // Wire up auto-backup and widget reloads to trigger when vault data
         // changes. The OTP widget reads items from the shared App Group
         // container and only refreshes when the system or this hook asks it to.

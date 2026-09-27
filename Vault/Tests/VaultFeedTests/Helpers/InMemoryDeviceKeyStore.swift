@@ -24,6 +24,11 @@ final class InMemoryDeviceKeyStore: VaultDeviceKeyStoring {
         state.get { $0.key }
     }
 
+    /// Puts back a key made earlier, as if it had never been deleted.
+    func restore(_ key: SymmetricKey) throws {
+        state.modify { $0.key = key }
+    }
+
     func failToMake() {
         state.modify { $0.failsToMake = true }
     }

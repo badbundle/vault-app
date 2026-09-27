@@ -158,7 +158,12 @@ public final class AutofillVaultService: AppLockPasswordService {
         try await unlockService.unlockWithDeviceKey()
     }
 
-    public func setPassword(_: String) async throws {
+    /// Nothing is set aside here: the extension never sets the password.
+    public var setAsideVaultCount: Int {
+        0
+    }
+
+    public func setPassword(_: String, deletingSetAsideVaults _: Bool) async throws {
         throw AppLockPasswordUnavailableError()
     }
 
@@ -175,6 +180,12 @@ public final class AutofillVaultService: AppLockPasswordService {
     }
 
     public func setErasesAfterFailedPasswords(_: Bool, current _: String) async throws -> AppLockPasswordResult {
+        throw AppLockPasswordUnavailableError()
+    }
+
+    /// The sheet's app lock only gets this service while the password is needed, so opening without it is never its
+    /// last step. `openWithDeviceKey()` opens the vault while the password is off.
+    public func openVaultWithoutPassword() async throws {
         throw AppLockPasswordUnavailableError()
     }
 

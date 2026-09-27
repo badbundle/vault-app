@@ -67,6 +67,17 @@ struct AppLockPasswordFormView: View {
         .onChange(of: viewModel.refusedPasswordCount) {
             AccessibilityNotification.Announcement(Self.refusedPasswordMessage).post()
         }
+        .confirmationDialog(
+            "Delete the Copies Set Aside?",
+            isPresented: $viewModel.isConfirmingSetAsideDeletion,
+            titleVisibility: .visible,
+        ) {
+            Button("Delete and Set Password", role: .destructive) {
+                Task { await viewModel.confirmSetAsideDeletion() }
+            }
+        } message: {
+            Text("They aren't encrypted, so they're deleted when the password is set. This can't be undone.")
+        }
         .onDisappear {
             viewModel.didDisappear()
         }
@@ -78,10 +89,16 @@ struct AppLockPasswordFormView: View {
                 doneSections
             } else {
                 headerSection
+                if viewModel.state == .failed, viewModel.setFailure != nil {
+                    setFailureSection
+                }
                 switch viewModel.purpose {
                 case .set:
                     forgettingSection
                     systemSurfacesSection
+                    if viewModel.setAsideVaultCount > 0 {
+                        setAsideSection
+                    }
                 case .setDuress:
                     duressSection
                 case .turnOff:
@@ -90,7 +107,9 @@ struct AppLockPasswordFormView: View {
                     Section {
                         lastBackupNote
                     }
-                case .change, .turnOffErasing:
+                case .change:
+                    changingSection
+                case .turnOffErasing:
                     EmptyView()
                 }
                 if viewModel.needsCurrentPassword {
@@ -283,6 +302,38 @@ struct AppLockPasswordFormView: View {
         }
     }
 
+    /// Changing the password to a duress password is accepted without a word, as refusing it would say the duress
+    /// vault is there, but the duress vault can't be opened any more. This says so to everyone, the same in every
+    /// vault, so it gives nothing away.
+    private var changingSection: some View {
+        Section {
+            note(
+                title: "Don't reuse a duress password",
+                detail: "Choose a new password you haven't used for a duress vault. Otherwise that vault can't be opened.",
+                systemImage: "exclamationmark.triangle.fill",
+                color: .orange,
+            )
+        }
+    }
+
+    /// Copies of the vault set aside because they couldn't be opened aren't encrypted, so setting the password
+    /// deletes them. This says so before the user sets it, and it asks again when they do.
+    private var setAsideSection: some View {
+        Section {
+            let count = viewModel.setAsideVaultCount
+            note(
+                title: count == 1 ? "A copy of your vault was set aside" :
+                    "\(count) copies of your vault were set aside",
+                detail: count == 1
+                    ? "Vault set it aside when it couldn't open it. It isn't encrypted, so setting the password deletes it. Restore a backup first if you need anything from it."
+                    :
+                    "Vault set them aside when it couldn't open them. They aren't encrypted, so setting the password deletes them. Restore a backup first if you need anything from them.",
+                systemImage: "archivebox.fill",
+                color: .orange,
+            )
+        }
+    }
+
     private func note(title: String, detail: String, systemImage: String, color: Color) -> some View {
         FormRow(
             image: Image(systemName: systemImage),
@@ -456,12 +507,40 @@ struct AppLockPasswordFormView: View {
 
     private var failureMessage: String {
         switch viewModel.purpose {
-        case .set: "Something went wrong. The App Lock Password wasn't set."
+        case .set: setFailureMessage
         case .change: "Something went wrong. The App Lock Password wasn't changed."
         case .turnOff: "Something went wrong. The App Lock Password is still on."
         case .setDuress: "Something went wrong. The duress password wasn't set."
         case .turnOnErasing: "Something went wrong. Erasing is still off."
         case .turnOffErasing: "Something went wrong. Erasing is still on."
+        }
+    }
+
+    /// Why the password wasn't set, where the user can do something about it: at the top, where they'll see it.
+    private var setFailureSection: some View {
+        Section {
+            note(
+                title: "The App Lock Password wasn't set",
+                detail: setFailureMessage,
+                systemImage: "xmark.octagon.fill",
+                color: .red,
+            )
+        }
+    }
+
+    /// Why the password wasn't set, and what to do about it where there's something to do.
+    private var setFailureMessage: String {
+        switch viewModel.setFailure {
+        case .updatingPhrases:
+            "Vault is still updating phrases from an earlier version. Leave it open for a minute, then try again."
+        case .setAsideVaults:
+            "The copies of your vault set aside have to be deleted first. The App Lock Password wasn't set."
+        case .vaultTooLarge:
+            "Your vault is too large to encrypt. Delete some items, then try again."
+        case .vaultDidNotOpen:
+            "Vault couldn't open your vault when it started, and set it aside. Open Vault again, or restore a backup, before setting a password."
+        case nil:
+            "Something went wrong. The App Lock Password wasn't set."
         }
     }
 

@@ -3,8 +3,8 @@ import Foundation
 /// The storage side of the App Lock Password, as the lock screen and Settings need it.
 ///
 /// VAULT-46's unlock service unlocks, VAULT-47's conversion sets the password, and VAULT-48 changes it and turns it
-/// off. Until those are wired in, `FakeAppLockPasswordService` stands in for them in previews and tests, and the app
-/// offers no password at all.
+/// off: `EncryptedVaultPasswordService` in the app, and `AutofillVaultService` in the AutoFill extension.
+/// `FakeAppLockPasswordService` stands in for them in previews and tests.
 ///
 /// Everything that takes a password the user already chose counts an attempt with `AppLockPasswordAttemptCounter`
 /// before deriving anything, and resets the count if the password is right, so wrong passwords typed into Settings
@@ -33,10 +33,21 @@ public protocol AppLockPasswordService {
     /// plain vault. It never answers `.wrong` first (`AppLockPasswordUnlocker`).
     func unlock(password: String) async throws -> AppLockPasswordResult
 
-    /// Sets the App Lock Password where there's none, which encrypts the vault with it.
+    /// How many copies of the vault were set aside because they couldn't be opened. They aren't encrypted, so
+    /// setting the password deletes them, once the user has agreed (`setPassword(_:deletingSetAsideVaults:)`).
+    var setAsideVaultCount: Int { get }
+
+    /// Sets the App Lock Password where there's none, which encrypts the vault with it, or turns it back on after it
+    /// was turned off.
     ///
     /// The caller has checked it against `AppLockPasswordRules` and its confirmation.
-    func setPassword(_ password: String) async throws
+    ///
+    /// - Parameter deletingSetAsideVaults: Whether the user has agreed to delete the copies of the vault set aside
+    ///   (`setAsideVaultCount`). If there are any and they haven't, it throws
+    ///   `VaultEncryptionError.archivesNeedDeleting` and changes nothing.
+    /// - Throws: `VaultEncryptionError` if the vault can't be encrypted as it is, or whatever stopped it. Nothing
+    ///   changed then.
+    func setPassword(_ password: String, deletingSetAsideVaults: Bool) async throws
 
     /// Changes the password of the vault that's open, once `current` is shown to be its password.
     func changePassword(current: String, new: String) async throws -> AppLockPasswordResult
@@ -63,6 +74,15 @@ public protocol AppLockPasswordService {
     /// as it does for changing the password, but never erases: the vault is open. It's a setting of the device, so any
     /// vault's own password turns it on or off for every vault, a duress vault's included.
     func setErasesAfterFailedPasswords(_ erases: Bool, current: String) async throws -> AppLockPasswordResult
+
+    /// Opens the vault once device authentication has passed, where no password is asked for: when the password is
+    /// off after being on, the vault is encrypted with a key on this device, and this opens it. Does nothing while
+    /// the vault is plain, or already open.
+    func openVaultWithoutPassword() async throws
+
+    /// Locks the vault as the app locks: its keys, and everything read from it, go. The vault then opens again only
+    /// as unlocking does. Does nothing while the vault is plain.
+    func lockVault() async
 }
 
 /// What happened to an attempt at the App Lock Password.
