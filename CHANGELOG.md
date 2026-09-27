@@ -28,6 +28,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - New Items settings: whether new codes and notes start locked, and whether new codes start out offered in QuickType
 - Tap a Code To, in a new Codes section of Settings: tapping a code copies it (as before) or opens its details. Either way, touch and hold a code for Copy Code and Show Details
 - Show Next Code, off by default: in the last seconds of its countdown, a time-based code shows the next code, smaller, above its timer bar. Copying still takes the current code
+- Show in Spotlight, in the Codes section of Settings and off by default: find a code by its site's name in Spotlight and Apple Intelligence, and open it in Vault. Only while App Lock is off, and never account names, locked or hidden codes. Turning on App Lock turns it off
 
 ### Fixed
 

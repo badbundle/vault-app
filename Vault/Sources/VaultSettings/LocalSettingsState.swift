@@ -29,6 +29,10 @@ public struct LocalSettingsState {
     /// default.
     @DefaultsStored public var showsNextCode: Bool
 
+    /// When `true`, the names of codes can be found in Spotlight, while App Lock is off. Off by default, since it
+    /// lets them be found without opening Vault (MANIFESTO C7).
+    @DefaultsStored public var showsCodesInSpotlight: Bool
+
     init(defaults: Defaults, sharedDefaults: Defaults) {
         Self.move(PasteTTL.storageKey, from: defaults, to: sharedDefaults)
         _codeTapAction = DefaultsStored(
@@ -39,6 +43,11 @@ public struct LocalSettingsState {
         _showsNextCode = DefaultsStored(
             defaults: defaults,
             defaultsKey: .init(VaultIdentifiers.Preferences.General.showsNextCode),
+            defaultValue: false,
+        )
+        _showsCodesInSpotlight = DefaultsStored(
+            defaults: defaults,
+            defaultsKey: .init(VaultIdentifiers.Preferences.General.showsCodesInSpotlight),
             defaultValue: false,
         )
         _pasteTimeToLive = DefaultsStored(
