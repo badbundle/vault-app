@@ -113,7 +113,9 @@ public struct VaultMainScene: Scene {
     #endif
 
     private func handle(url: URL) {
-        guard let action = WidgetDeepLink.parse(url) else { return }
+        guard let action = WidgetDeepLink.parse(url), action.isAllowed(isVaultPlain: VaultRoot.isVaultPlain) else {
+            return
+        }
         switch action {
         case let .incrementHOTP(itemID):
             Task {
@@ -121,6 +123,17 @@ public struct VaultMainScene: Scene {
             }
         case let .openItemDetail(itemID):
             pendingOpenItemDetail = .init(id: itemID)
+        }
+    }
+}
+
+extension WidgetDeepLink.Action {
+    /// Whether the app follows this link from a widget now. Widgets never offer to advance a HOTP counter while the
+    /// vault is encrypted, and a link left from before it was doesn't either.
+    func isAllowed(isVaultPlain: Bool) -> Bool {
+        switch self {
+        case .incrementHOTP: isVaultPlain
+        case .openItemDetail: true
         }
     }
 }

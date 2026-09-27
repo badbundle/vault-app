@@ -29,22 +29,42 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
             }
         case .showAllCodesSelector:
             NavigationStack {
-                AppLockGate(appLock: viewModel.appLock) {
-                    viewModel.cancelRequestSubject.send(.userCancelled)
-                } content: {
-                    VaultAutofillCodeSelectorView(
-                        localSettings: viewModel.localSettings,
-                        viewGenerator: generator,
-                        copyActionHandler: copyActionHandler,
-                        textToInsertSubject: viewModel.textToInsertSubject,
-                        cancelSubject: viewModel.cancelRequestSubject,
-                    )
+                switch viewModel.unlockAvailability {
+                case .checking:
+                    ProgressView()
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Cancel", action: cancel)
+                                    .tint(.red)
+                            }
+                        }
+                case .available:
+                    AppLockGate(appLock: viewModel.appLock, cancel: cancel) {
+                        VaultAutofillCodeSelectorView(
+                            localSettings: viewModel.localSettings,
+                            viewGenerator: generator,
+                            copyActionHandler: copyActionHandler,
+                            textToInsertSubject: viewModel.textToInsertSubject,
+                            cancelSubject: viewModel.cancelRequestSubject,
+                        )
+                    }
+                case .needsTheApp(.notEnoughMemory):
+                    AppLockOpenVaultView(reason: .notEnoughMemory, cancel: cancel)
+                case .needsTheApp(.unavailable):
+                    AppLockOpenVaultView(reason: .unavailableHere, cancel: cancel)
                 }
+            }
+            .task {
+                await viewModel.prepareToUnlock()
             }
         case let .unimplemented(name):
             Text("Unimplemented \(name)")
         case nil:
             ProgressView()
         }
+    }
+
+    private func cancel() {
+        viewModel.cancelRequestSubject.send(.userCancelled)
     }
 }

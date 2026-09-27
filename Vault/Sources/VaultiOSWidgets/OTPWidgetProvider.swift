@@ -17,8 +17,9 @@ import WidgetKit
 /// state shown for deleted or missing items, so a viewer cannot distinguish
 /// the two (manifesto C2).
 ///
-/// While the app lock is on, every widget renders as `.locked`, whatever it
-/// was set up to show.
+/// While the app lock is on, or the vault is encrypted with the App Lock
+/// Password, every widget renders as `.locked`, whatever it was set up to
+/// show.
 public struct OTPWidgetProvider: AppIntentTimelineProvider {
     public typealias Entry = OTPWidgetEntry
     public typealias Intent = OTPWidgetIntent
@@ -53,8 +54,8 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
 
     func makeTimeline(for configuration: OTPWidgetIntent) async -> Timeline<OTPWidgetEntry> {
         // Checked before anything else, so no item is read. The app reloads
-        // every timeline when the lock is turned on or off.
-        if loader.isAppLocked {
+        // every timeline when the lock or the password is turned on or off.
+        if loader.isLocked {
             return lockedTimeline()
         }
 

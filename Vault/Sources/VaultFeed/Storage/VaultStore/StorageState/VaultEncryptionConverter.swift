@@ -47,14 +47,15 @@ public actor VaultEncryptionConverter {
         /// Lets go of the plain store once the conversion has committed, so its database closes before its files
         /// are deleted. The store session has already switched away from it.
         public var releasePlainStore: @Sendable () async -> Void
-        /// Empties the QuickType identity store, which holds every visible code's issuer and account name.
-        public var clearCredentialIdentities: @Sendable () async -> Void
+        /// Empties the QuickType identity store, which holds every visible code's issuer and account name. If it
+        /// throws, the journal keeps the step, so the app's next launch empties it again.
+        public var clearCredentialIdentities: @Sendable () async throws -> Void
         /// Reloads the widgets' timelines, so none keeps showing a code.
         public var reloadWidgets: @Sendable () async -> Void
 
         public init(
             releasePlainStore: @escaping @Sendable () async -> Void,
-            clearCredentialIdentities: @escaping @Sendable () async -> Void,
+            clearCredentialIdentities: @escaping @Sendable () async throws -> Void,
             reloadWidgets: @escaping @Sendable () async -> Void,
         ) {
             self.releasePlainStore = releasePlainStore
@@ -259,9 +260,9 @@ extension VaultEncryptionConverter {
         }
         // They're the real vault's now. If deleting them fails, the next launch deletes them (`VaultRoot`).
         try? await deviceBackupSettings.delete()
-        await hooks.clearCredentialIdentities()
+        let clearedCredentialIdentities = (try? await hooks.clearCredentialIdentities()) != nil
         await hooks.reloadWidgets()
-        if deletedPlainStore {
+        if deletedPlainStore, clearedCredentialIdentities {
             // If this fails, the next launch clears the surfaces again, which does no harm.
             _ = try? await stateFile.update { state in
                 if state.transition == .clearingSystemSurfaces {

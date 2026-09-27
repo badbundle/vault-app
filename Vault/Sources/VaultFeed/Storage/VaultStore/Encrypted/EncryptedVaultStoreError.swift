@@ -15,4 +15,6 @@ public enum EncryptedVaultStoreError: Error, Equatable, Sendable {
     /// The vault was saved by a newer version of the app. Reading it would drop what that version added the next
     /// time it's saved.
     case unsupportedPayloadVersion(UInt32)
+    /// This process, the AutoFill extension, hasn't the memory to replace the file. Nothing was saved.
+    case notEnoughMemory
 }

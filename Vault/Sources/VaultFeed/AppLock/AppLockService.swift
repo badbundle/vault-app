@@ -54,6 +54,8 @@ public final class AppLockService {
 
     /// - Parameters:
     ///   - passwordService: The App Lock Password's storage, or `nil` where the password isn't offered.
+    ///   - delay: How long it can be in the background before it locks, if not the user's setting: the AutoFill
+    ///     extension always locks straight away.
     ///   - clock: What `delay`, and the wait after wrong passwords, are measured with.
     ///   - purgeSensitiveData: Clears sensitive data from memory. Called every time the app locks.
     ///   - didChangeSettings: Called when the lock or its password is turned on or off, so the extensions can catch
@@ -62,6 +64,7 @@ public final class AppLockService {
         settings: AppLockSettingsStore,
         authenticationService: DeviceAuthenticationService,
         passwordService: (any AppLockPasswordService)? = nil,
+        delay: AppLockDelay? = nil,
         clock: any AppLockClock = ContinuousClock(),
         purgeSensitiveData: @escaping @MainActor () -> Void,
         didChangeSettings: @escaping @MainActor () -> Void = {},
@@ -77,7 +80,7 @@ public final class AppLockService {
         // A vault with a password can only be opened with it, so the lock is on whatever the setting says.
         let isEnabled = settings.isEnabled || isPasswordSet
         self.isEnabled = isEnabled
-        delay = settings.delay
+        self.delay = delay ?? settings.delay
         // A launch always starts locked, however the app was last left and whatever the delay: the time the app
         // went to the background is only ever kept in memory.
         state = isEnabled ? .locked(AppLockedState(step: .deviceAuthentication)) : .unlocked

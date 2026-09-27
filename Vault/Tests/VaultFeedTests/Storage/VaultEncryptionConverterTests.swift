@@ -490,6 +490,25 @@ extension VaultEncryptionConverterTests {
             #expect(try stateFile.read().transition == nil)
         }
     }
+
+    /// QuickType mustn't keep the vault's issuers and accounts, so a clear that fails leaves the journal for the next
+    /// launch to clear it again. The vault is encrypted all the same.
+    @Test
+    func encrypt_clearingQuickTypeFails_keepsTheJournalForTheNextLaunch() async throws {
+        try await withTemporaryDirectory { directory in
+            struct ClearFailure: Error {}
+            let harness = try PlainVaultConversionHarness(
+                directory: directory,
+                clearingCredentialIdentities: { throw ClearFailure() },
+            )
+
+            try await harness.encrypt()
+
+            let state = try VaultStorageStateFile(directory: directory).read()
+            #expect(state.mode == .password)
+            #expect(state.transition == .clearingSystemSurfaces)
+        }
+    }
 }
 
 // MARK: - Helpers

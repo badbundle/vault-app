@@ -110,6 +110,25 @@ struct AutofillOTPCredentialResolverTests {
         #expect(outcome == .userInteractionRequired)
         #expect(retrieveCount == 0)
     }
+
+    /// QuickType never serves a code from an encrypted vault: it needs the App Lock Password, in the extension's UI.
+    @Test
+    func resolve_vaultNotPlain_returnsUserInteractionRequiredWithoutReadingTheVault() async {
+        let item = VaultItem(metadata: anyVaultItemMetadata(), item: .otpCode(makeTOTPCode(period: 30)))
+        var retrieveCount = 0
+        let sut = makeSUT(
+            retrieveItems: {
+                retrieveCount += 1
+                return .init(items: [item])
+            },
+            isVaultPlain: false,
+        )
+
+        let outcome = await sut.resolve(recordIdentifier: item.id.rawValue.uuidString)
+
+        #expect(outcome == .userInteractionRequired)
+        #expect(retrieveCount == 0)
+    }
 }
 
 // MARK: - Helpers
@@ -132,12 +151,14 @@ extension AutofillOTPCredentialResolverTests {
         requiresAuthenticationToCopy: Bool = false,
         clock: EpochClockMock = EpochClockMock(currentTime: 100),
         isAppLockEnabled: Bool = false,
+        isVaultPlain: Bool = true,
     ) -> AutofillOTPCredentialResolver {
         AutofillOTPCredentialResolver(
             retrieveItems: retrieveItems,
             copyActionHandler: CopyActionHandlerStub(requiresAuthenticationToCopy: requiresAuthenticationToCopy),
             clock: clock,
             isAppLockEnabled: isAppLockEnabled,
+            isVaultPlain: isVaultPlain,
         )
     }
 

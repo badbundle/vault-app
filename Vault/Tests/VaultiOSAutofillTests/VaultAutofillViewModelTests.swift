@@ -65,17 +65,151 @@ struct VaultAutofillViewModelTests {
     }
 }
 
+// MARK: - Unlocking
+
+extension VaultAutofillViewModelTests {
+    @Test
+    func plainVault_unlocksWithDeviceAuthenticationAlone() async throws {
+        let sut = try makeSUT(storage: .plain)
+
+        await sut.prepareToUnlock()
+
+        #expect(sut.unlockAvailability == .available)
+        #expect(!sut.appLock.isPasswordSet)
+    }
+
+    /// Never Face ID alone for an encrypted vault (MANIFESTO C4).
+    @Test
+    func encryptedVault_asksForThePasswordAfterDeviceAuthentication() async throws {
+        let service = FakeAutofillPasswordService()
+        let sut = try makeSUT(storage: .encrypted(service))
+        await sut.prepareToUnlock()
+
+        await sut.appLock.unlock()
+
+        #expect(sut.appLock.isPasswordSet)
+        #expect(sut.appLock.state == .locked(.init(step: .password)))
+    }
+
+    @Test
+    func encryptedVault_isCheckedBeforeAnythingIsAsked() throws {
+        let sut = try makeSUT(storage: .encrypted(FakeAutofillPasswordService()))
+
+        #expect(sut.unlockAvailability == .checking)
+    }
+
+    /// An unlock left from an earlier request, and anything read then, don't carry over.
+    @Test
+    func prepareToUnlock_encryptedVault_locksItFirst() async throws {
+        let service = FakeAutofillPasswordService()
+        let sut = try makeSUT(storage: .encrypted(service))
+
+        await sut.prepareToUnlock()
+
+        #expect(service.lockCount == 1)
+        #expect(sut.unlockAvailability == .available)
+    }
+
+    /// Deriving the key without the memory would get the extension stopped mid-attempt, having counted a wrong one.
+    @Test
+    func prepareToUnlock_notEnoughMemory_needsTheApp() async throws {
+        let sut = try makeSUT(storage: .encrypted(FakeAutofillPasswordService(headroom: .notEnough)))
+
+        await sut.prepareToUnlock()
+
+        #expect(sut.unlockAvailability == .needsTheApp(.notEnoughMemory))
+    }
+
+    /// Checked again before the password is tried, and before any save: either sends the user to the app.
+    @Test
+    func runningOutOfMemoryLater_needsTheApp() async throws {
+        let service = FakeAutofillPasswordService()
+        let sut = try makeSUT(storage: .encrypted(service))
+        await sut.prepareToUnlock()
+
+        service.runOutOfMemory()
+
+        #expect(sut.unlockAvailability == .needsTheApp(.notEnoughMemory))
+    }
+
+    @Test
+    func unavailableVault_needsTheAppAndForgetsEarlierReads() async throws {
+        let purges = Counter()
+        let sut = try makeSUT(storage: .unavailable, purges: purges)
+
+        await sut.prepareToUnlock()
+
+        #expect(sut.unlockAvailability == .needsTheApp(.unavailable))
+        #expect(purges.count == 1)
+    }
+
+    /// A process that served a request while the vault was plain serves the next one, after the app turned encryption
+    /// on, as encrypted: it never shows what it read before on device authentication alone.
+    @Test
+    func requestAfterEncryptionIsTurnedOn_asksForThePasswordAndLocksFirst() async throws {
+        let first = try makeSUT(storage: .plain)
+        await first.prepareToUnlock()
+        await first.appLock.unlock()
+        #expect(first.appLock.state == .unlocked)
+
+        let service = FakeAutofillPasswordService()
+        let second = try makeSUT(storage: .encrypted(service))
+        await second.prepareToUnlock()
+        await second.appLock.unlock()
+
+        #expect(service.lockCount == 1)
+        #expect(second.appLock.state == .locked(.init(step: .password)))
+    }
+
+    // MARK: - Locking
+
+    @Test
+    func endRequest_locksTheVault() async throws {
+        let service = FakeAutofillPasswordService()
+        let sut = try makeSUT(storage: .encrypted(service))
+
+        await sut.endRequest()
+
+        #expect(service.lockCount == 1)
+    }
+
+    /// Whatever delay the user chose for the app, the extension locks as soon as it leaves the screen.
+    @Test
+    func appLock_locksStraightAway() throws {
+        let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
+        settings.isEnabled = true
+        settings.delay = .fifteenMinutes
+
+        let sut = try makeSUT(storage: .plain, appLockSettings: settings)
+
+        #expect(sut.appLock.delay == .immediately)
+    }
+}
+
 // MARK: - Helpers
 
 extension VaultAutofillViewModelTests {
-    private func makeSUT() throws -> VaultAutofillViewModel {
-        try VaultAutofillViewModel(
+    private func makeSUT(
+        storage: AutofillVaultStorage = .plain,
+        appLockSettings: AppLockSettingsStore? = nil,
+        purges: Counter = Counter(),
+    ) throws -> VaultAutofillViewModel {
+        let settings = try appLockSettings ?? AppLockSettingsStore(userDefaults: .nonPersistent())
+        return try VaultAutofillViewModel(
             localSettings: LocalSettings(defaults: Defaults.nonPersistent()),
-            appLock: AppLockService(
-                settings: AppLockSettingsStore(userDefaults: .nonPersistent()),
-                authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
-                purgeSensitiveData: {},
-            ),
+            storage: storage,
+            appLockSettings: settings,
+            authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
+            purgeVaultContents: { purges.increment() },
         )
+    }
+}
+
+@MainActor
+private final class Counter {
+    private(set) var count = 0
+
+    func increment() {
+        count += 1
     }
 }

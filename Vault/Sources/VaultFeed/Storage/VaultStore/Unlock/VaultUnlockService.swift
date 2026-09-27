@@ -67,6 +67,8 @@ public actor VaultUnlockService {
     private let availableMemory: @Sendable () -> Int?
     /// Stamps key wraps, and is raised to every vault that opens.
     private let wrapStamper: VaultDeviceWrapStamper
+    /// Checked before every save of a vault this opens, in the AutoFill extension. `nil` in the app.
+    private let writeMemoryCheck: VaultWriteMemoryCheck?
 
     private var isUnlocking = false
 
@@ -94,7 +96,9 @@ public actor VaultUnlockService {
         )
     }
 
-    /// - Parameter availableMemory: The memory the process can still use, or `nil` if it has no limit.
+    /// - Parameters:
+    ///   - availableMemory: The memory the process can still use, or `nil` if it has no limit.
+    ///   - writeMemoryCheck: Checked before every save of a vault this opens, in the AutoFill extension.
     init(
         file: EncryptedVaultFile,
         session: VaultStoreSession,
@@ -106,6 +110,7 @@ public actor VaultUnlockService {
         work: any VaultUnlockWork = LiveVaultUnlockWork(),
         availableMemory: @escaping @Sendable () -> Int? = VaultUnlockService.processAvailableMemory,
         wrapStamper: VaultDeviceWrapStamper,
+        writeMemoryCheck: VaultWriteMemoryCheck? = nil,
     ) {
         self.file = file
         self.session = session
@@ -117,6 +122,7 @@ public actor VaultUnlockService {
         self.work = work
         self.availableMemory = availableMemory
         self.wrapStamper = wrapStamper
+        self.writeMemoryCheck = writeMemoryCheck
     }
 }
 
@@ -206,6 +212,7 @@ extension VaultUnlockService {
                 state: opened.state,
                 work: work,
                 wrapStamper: wrapStamper,
+                memoryCheck: writeMemoryCheck,
             )
             // The session only switches if it hasn't locked since this attempt began, checked on the session itself,
             // so a lock can't slip in between the check and the switch.

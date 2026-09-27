@@ -257,6 +257,29 @@ struct VaultStorageRecoveryTests {
         }
     }
 
+    /// A clear that fails leaves the journal, so the next launch tries again.
+    @Test
+    func finishClearingSystemSurfaces_clearFails_keepsTheJournal() async throws {
+        try await withTemporaryDirectory { directory in
+            struct ClearFailure: Error {}
+            let state = VaultStorageState(
+                mode: .password,
+                transition: .clearingSystemSurfaces,
+                unlockDeadline: .seconds(1),
+            )
+            try Self.write(state, in: directory)
+            let recovery = VaultStorageRecovery(directory: directory)
+
+            await #expect(throws: ClearFailure.self) {
+                try await recovery.finishClearingSystemSurfaces { throw ClearFailure() }
+            }
+            #expect(try Self.read(in: directory) == state)
+
+            try await recovery.finishClearingSystemSurfaces {}
+            #expect(try Self.read(in: directory) == VaultStorageState(mode: .password, unlockDeadline: .seconds(1)))
+        }
+    }
+
     @Test
     func recover_encrypted_touchesNothingButStrayStateTempFiles() async throws {
         try await withTemporaryDirectory { directory in
