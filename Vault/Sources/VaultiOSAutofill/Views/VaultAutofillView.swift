@@ -8,6 +8,7 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
     var generator: Generator
     var copyActionHandler: any VaultItemCopyActionHandler
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.isSceneCaptured) private var isSceneCaptured
 
     init(
         viewModel: VaultAutofillViewModel,
@@ -20,6 +21,27 @@ struct VaultAutofillView<Generator: VaultItemPreviewViewGenerator<VaultItem.Payl
     }
 
     var body: some View {
+        feature
+            .accessibilityHidden(isCoveredWhileScreenCaptured)
+            .overlay {
+                if isCoveredWhileScreenCaptured {
+                    AppScreenCaptureCoverView()
+                }
+            }
+    }
+
+    /// Whether the sheet is covered, as the app is, while the screen is recorded, mirrored or shared (Hide While
+    /// Recording). The sheet's own lock (`AppLockGate`) stands in for the app's privacy cover.
+    private var isCoveredWhileScreenCaptured: Bool {
+        AppCover.required(
+            isPrivacyCoverRequired: false,
+            hidesVaultWhileScreenCaptured: viewModel.localSettings.state.hidesVaultWhileScreenCaptured,
+            isScreenCaptured: isSceneCaptured,
+        ) == .screenCapture
+    }
+
+    @ViewBuilder
+    private var feature: some View {
         switch viewModel.feature {
         case .setupConfiguration:
             NavigationStack {

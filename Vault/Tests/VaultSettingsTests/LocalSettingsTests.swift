@@ -284,6 +284,48 @@ struct LocalSettingsTests {
 
         #expect(sut.state.pasteTimeToLive == .init(duration: 30))
     }
+
+    /// The AutoFill extension reads it too, so its sheet is covered while the screen is recorded.
+    @Test
+    func hidesVaultWhileScreenCaptured_isStoredInTheSharedDefaults() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sharedDefaults = try Defaults.nonPersistent()
+        let sut = LocalSettings(defaults: defaults, sharedDefaults: sharedDefaults)
+
+        sut.state.hidesVaultWhileScreenCaptured = false
+
+        #expect(sharedDefaults.get(for: hideWhileScreenCapturedKey) == false)
+        #expect(!defaults.has(hideWhileScreenCapturedKey))
+        // As an extension sees it, with defaults of its own.
+        let extensionSettings = try LocalSettings(defaults: .nonPersistent(), sharedDefaults: sharedDefaults)
+        #expect(!extensionSettings.state.hidesVaultWhileScreenCaptured)
+    }
+
+    @Test(arguments: [false, true])
+    func hidesVaultWhileScreenCaptured_movesAnEarlierChoiceToTheSharedDefaults(choice: Bool) throws {
+        let defaults = try Defaults.nonPersistent()
+        let sharedDefaults = try Defaults.nonPersistent()
+        // Where earlier versions kept the choice.
+        try defaults.set(choice, for: hideWhileScreenCapturedKey)
+
+        let sut = LocalSettings(defaults: defaults, sharedDefaults: sharedDefaults)
+
+        #expect(sut.state.hidesVaultWhileScreenCaptured == choice)
+        #expect(sharedDefaults.get(for: hideWhileScreenCapturedKey) == choice)
+        #expect(!defaults.has(hideWhileScreenCapturedKey))
+    }
+
+    @Test
+    func hidesVaultWhileScreenCaptured_movesNothingIfNeverChosen() throws {
+        let defaults = try Defaults.nonPersistent()
+        let sharedDefaults = try Defaults.nonPersistent()
+
+        let sut = LocalSettings(defaults: defaults, sharedDefaults: sharedDefaults)
+
+        #expect(sut.state.hidesVaultWhileScreenCaptured)
+        #expect(!sharedDefaults.has(hideWhileScreenCapturedKey))
+        #expect(!defaults.has(hideWhileScreenCapturedKey))
+    }
 }
 
 // MARK: - Helpers
@@ -291,6 +333,10 @@ struct LocalSettingsTests {
 extension LocalSettingsTests {
     private var pasteTTLKey: Key<PasteTTL> {
         Key(VaultIdentifiers.Preferences.General.settingsPasteTTL)
+    }
+
+    private var hideWhileScreenCapturedKey: Key<Bool> {
+        Key(VaultIdentifiers.Preferences.General.hideWhileScreenCaptured)
     }
 
     private func makeSUT(defaults: Defaults) throws -> LocalSettings {
