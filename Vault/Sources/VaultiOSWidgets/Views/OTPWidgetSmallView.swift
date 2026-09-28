@@ -10,7 +10,9 @@ import WidgetKit
 ///
 /// This is the only family with in-widget actions. The lock-screen accessory
 /// families stay non-interactive on purpose: their buttons would be reachable
-/// on a locked device, and advancing an HOTP counter is irreversible.
+/// on a locked device, and advancing an HOTP counter is irreversible. In StandBy,
+/// this family's actions ask for the iPhone to be unlocked first, and its code,
+/// issuer and account are hidden until it is (`privacySensitive`).
 struct OTPWidgetSmallView: View {
     let snapshot: OTPWidgetSnapshot
 
@@ -58,6 +60,7 @@ struct OTPWidgetSmallView: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
+        .privacySensitive(snapshot.showsCodeDetails)
         .frame(maxWidth: .infinity, alignment: .leading)
 
         switch snapshot {
@@ -82,6 +85,7 @@ struct OTPWidgetSmallView: View {
             .minimumScaleFactor(0.5)
             .lineLimit(1)
             .foregroundStyle(.primary)
+            .privacySensitive(snapshot.showsCodeDetails)
             .frame(maxWidth: .infinity, alignment: .leading)
 
         switch snapshot {

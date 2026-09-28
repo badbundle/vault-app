@@ -1387,6 +1387,68 @@ final class VaultDataModelTests {
     }
 
     @Test
+    func incrementCounterIfWidgetEligible_incrementsAnEligibleCode() async throws {
+        let item = uniqueVaultItem(item: .otpCode(anyOTPAuthCode(type: .hotp(counter: 4))))
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in .init(items: [uniqueVaultItem(), item]) }
+        let sut = makeSUT(vaultStore: store)
+
+        try await sut.incrementCounterIfWidgetEligible(id: item.id)
+
+        #expect(store.incrementCounterArgValues == [item.id])
+    }
+
+    @Test
+    func incrementCounterIfWidgetEligible_ignoresALockedCode() async throws {
+        let item = uniqueVaultItem(
+            item: .otpCode(anyOTPAuthCode(type: .hotp())),
+            lockState: .lockedWithNativeSecurity,
+        )
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in .init(items: [item]) }
+        let sut = makeSUT(vaultStore: store)
+
+        try await sut.incrementCounterIfWidgetEligible(id: item.id)
+
+        #expect(store.incrementCounterCallCount == 0)
+    }
+
+    @Test
+    func incrementCounterIfWidgetEligible_ignoresAHiddenCode() async throws {
+        let item = uniqueVaultItem(item: .otpCode(anyOTPAuthCode(type: .hotp())), visibility: .onlySearch)
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in .init(items: [item]) }
+        let sut = makeSUT(vaultStore: store)
+
+        try await sut.incrementCounterIfWidgetEligible(id: item.id)
+
+        #expect(store.incrementCounterCallCount == 0)
+    }
+
+    @Test
+    func incrementCounterIfWidgetEligible_ignoresAMissingID() async throws {
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in .init(items: [uniqueVaultItem(item: .otpCode(anyOTPAuthCode(type: .hotp())))]) }
+        let sut = makeSUT(vaultStore: store)
+
+        try await sut.incrementCounterIfWidgetEligible(id: .new())
+
+        #expect(store.incrementCounterCallCount == 0)
+    }
+
+    @Test
+    func incrementCounterIfWidgetEligible_ignoresATOTPCode() async throws {
+        let item = uniqueVaultItem(item: .otpCode(anyOTPAuthCode(type: .totp())))
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in .init(items: [item]) }
+        let sut = makeSUT(vaultStore: store)
+
+        try await sut.incrementCounterIfWidgetEligible(id: item.id)
+
+        #expect(store.incrementCounterCallCount == 0)
+    }
+
+    @Test
     func autofillStoreHelpers_forwardToStore() async throws {
         let autofillStore = VaultOTPAutofillStoreMock()
         let sut = makeSUT(vaultOtpAutofillStore: autofillStore)

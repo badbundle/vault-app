@@ -70,6 +70,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Auto-backup's cleanup only deletes backups it recorded making, instead of any auto-backup PDF in the folder. Existing setups are seeded once with the files the old cleanup would have deleted, so they carry on being cleaned up
 - The text in a code's timer bar is smaller and readable on every bar color
 - Images in Markdown notes aren't loaded, so opening a note never goes online
+- Widgets on the Lock Screen and in StandBy hide their codes, sites and accounts until the iPhone is unlocked, and copying a code from a widget asks for the iPhone to be unlocked first
 
 ### Removed
 

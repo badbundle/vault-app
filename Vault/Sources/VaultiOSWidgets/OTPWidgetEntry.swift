@@ -91,3 +91,15 @@ public enum OTPWidgetSnapshot: Sendable, Equatable {
         }
     }
 }
+
+extension OTPWidgetSnapshot {
+    /// Whether it shows a code's issuer, account or digits. These are marked `privacySensitive`, so on the Lock Screen
+    /// and in StandBy the system hides them until the iPhone is unlocked. The locked and unavailable states show none
+    /// of them, so they stay readable.
+    var showsCodeDetails: Bool {
+        switch self {
+        case .totp, .hotp: true
+        case .placeholder, .unavailable, .locked: false
+        }
+    }
+}

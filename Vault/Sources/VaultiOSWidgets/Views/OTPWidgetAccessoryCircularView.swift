@@ -5,7 +5,8 @@ import WidgetKit
 /// `accessoryCircular` (lock-screen ring) layout. Too small for the chunked
 /// code in a readable size; we show the seconds remaining inside the ring
 /// (TOTP), a key glyph (HOTP) or a padlock (unavailable / locked) and let the user open the app
-/// to read the actual code.
+/// to read the actual code. The digits in the ring are hidden until the iPhone is unlocked
+/// (`privacySensitive`).
 struct OTPWidgetAccessoryCircularView: View {
     let snapshot: OTPWidgetSnapshot
 
@@ -19,9 +20,11 @@ struct OTPWidgetAccessoryCircularView: View {
                 ) {
                     Text(state.code.suffix(3))
                         .font(.system(.caption2, design: .monospaced).weight(.semibold))
+                        .privacySensitive()
                 } currentValueLabel: {
                     Text(state.code.suffix(3))
                         .font(.system(.caption2, design: .monospaced).weight(.semibold))
+                        .privacySensitive()
                 }
                 .progressViewStyle(.circular)
             case .hotp:

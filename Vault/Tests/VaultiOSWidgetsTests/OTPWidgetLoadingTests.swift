@@ -111,10 +111,6 @@ struct OTPWidgetLoadingTests {
             makeOTPVaultItem(accountName: "locked", lockState: .lockedWithNativeSecurity),
             makeOTPVaultItem(accountName: "hidden", visibility: .onlySearch),
             makeOTPVaultItem(accountName: "passphrase", searchableLevel: .onlyPassphrase),
-            makeOTPVaultItem(
-                accountName: "killphrase",
-                killphrase: .init(salt: Data([1]), digest: Data([2])),
-            ),
             makeSecureNoteVaultItem(),
         ]))])
         let loader = WidgetVaultLoader(store: store)
@@ -122,6 +118,27 @@ struct OTPWidgetLoadingTests {
         let items = try await loader.eligibleItems()
 
         #expect(items == [eligible])
+    }
+
+    /// A code with a killphrase is offered like any other visible code, as in Spotlight, so the widget's picker lists
+    /// the same codes the feed shows (MANIFESTO C5).
+    @Test
+    func suggestedEntities_includesACodeWithAKillphrase() async throws {
+        let plain = makeOTPVaultItem(accountName: "plain", issuer: "First")
+        let withKillphrase = makeOTPVaultItem(
+            accountName: "killphrase",
+            issuer: "Second",
+            killphrase: .init(salt: Data([1]), digest: Data([2])),
+        )
+        let store = FakeVaultStoreReader(results: [.success(.init(items: [plain, withKillphrase]))])
+        let query = OTPWidgetItemEntityQuery(loader: WidgetVaultLoader(store: store))
+
+        let entities = try await query.suggestedEntities()
+
+        #expect(entities == [
+            OTPWidgetItemEntity(id: plain.id.rawValue, issuer: "First", accountName: "plain"),
+            OTPWidgetItemEntity(id: withKillphrase.id.rawValue, issuer: "Second", accountName: "killphrase"),
+        ])
     }
 
     @Test

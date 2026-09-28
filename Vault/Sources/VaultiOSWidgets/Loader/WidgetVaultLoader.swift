@@ -75,8 +75,8 @@ public actor WidgetVaultLoader {
     }
 
     /// All items that are currently eligible to appear in a widget. Hidden,
-    /// locked, killphrase-protected, and search-passphrase items are filtered
-    /// out — see `VaultItemWidgetEligibility`.
+    /// locked, and search-passphrase items are filtered out — see
+    /// `VaultItemWidgetEligibility`.
     public func eligibleItems() async throws -> [VaultItem] {
         guard let store = try await openStore() else { return [] }
         return try await retrieveItems(from: store).filter(VaultItemWidgetEligibility.isEligible)

@@ -634,6 +634,19 @@ extension VaultDataModel: VaultStoreHOTPIncrementer {
         await updateCurrentPayloadHash()
         onDataChanged?()
     }
+
+    /// Advances a HOTP code's counter for a widget's link, as the widget itself would: only for a code a widget may
+    /// show (`VaultItemWidgetEligibility`). Anything else the link names, whether it's locked, hidden, not a HOTP code
+    /// or not in the vault at all, is left as it is, and all of them look the same to the caller.
+    public func incrementCounterIfWidgetEligible(id: Identifier<VaultItem>) async throws {
+        let items = try await vaultStore.retrieve(query: .init()).items
+        guard let item = items.first(where: { $0.id == id }),
+              VaultItemWidgetEligibility.isEligible(item),
+              case let .otpCode(code) = item.item,
+              case .hotp = code.type
+        else { return }
+        try await incrementCounter(id: id)
+    }
 }
 
 // MARK: - Import

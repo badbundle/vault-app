@@ -128,7 +128,8 @@ public struct VaultMainScene: Scene {
         switch action {
         case let .incrementHOTP(itemID):
             Task {
-                try? await vaultDataModel.incrementCounter(id: .init(id: itemID))
+                // Only for a code a widget could have shown, as when the widget advances it itself.
+                try? await vaultDataModel.incrementCounterIfWidgetEligible(id: .init(id: itemID))
             }
         case let .openItemDetail(itemID):
             pendingOpenItemDetail = .init(id: itemID)

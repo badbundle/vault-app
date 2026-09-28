@@ -91,8 +91,10 @@ public final class VaultStoreStub: VaultStore {
     }
 
     public private(set) var incrementCounterCallCount = 0
-    public func incrementCounter(id _: Identifier<VaultItem>) async throws {
+    public private(set) var incrementCounterArgValues = [Identifier<VaultItem>]()
+    public func incrementCounter(id: Identifier<VaultItem>) async throws {
         incrementCounterCallCount += 1
+        incrementCounterArgValues.append(id)
     }
 }
 
