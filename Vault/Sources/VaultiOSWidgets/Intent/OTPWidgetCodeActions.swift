@@ -6,9 +6,12 @@ import VaultiOSShared
 import VaultSettings
 import WidgetKit
 
+/// Copies a time-based code from the widget. In StandBy, or anywhere else the widget can be seen while the iPhone is
+/// locked, it asks for the iPhone to be unlocked first.
 public struct CopyTOTPCodeIntent: AppIntent {
     public nonisolated static let title: LocalizedStringResource = "Copy Code"
     public nonisolated static let openAppWhenRun = false
+    public nonisolated static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @Parameter(title: "Item ID")
     public var itemID: String
@@ -33,9 +36,12 @@ public struct CopyTOTPCodeIntent: AppIntent {
     }
 }
 
+/// Advances a counter-based code and copies the next one from the widget. Like copying a time-based code, it asks for
+/// the iPhone to be unlocked first.
 public struct IncrementAndCopyHOTPCodeIntent: AppIntent {
     public nonisolated static let title: LocalizedStringResource = "Next Code"
     public nonisolated static let openAppWhenRun = false
+    public nonisolated static let authenticationPolicy: IntentAuthenticationPolicy = .requiresAuthentication
 
     @Parameter(title: "Item ID")
     public var itemID: String

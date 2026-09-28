@@ -4,7 +4,8 @@ import VaultiOSShared
 import WidgetKit
 
 /// `accessoryRectangular` (lock-screen rectangular) layout. Tight space —
-/// issuer caption, chunked digits, thin progress bar.
+/// issuer caption, chunked digits, thin progress bar. The caption and digits are
+/// hidden until the iPhone is unlocked (`privacySensitive`).
 struct OTPWidgetAccessoryRectangularView: View {
     let snapshot: OTPWidgetSnapshot
 
@@ -13,12 +14,14 @@ struct OTPWidgetAccessoryRectangularView: View {
             Text(issuerLine)
                 .font(.caption2)
                 .lineLimit(1)
+                .privacySensitive(snapshot.showsCodeDetails)
 
             OTPCodeTextView(codeState: codeState, scaledDigitSpacing: 3)
                 .font(.system(.title3, design: .monospaced))
                 .fontWeight(.semibold)
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
+                .privacySensitive(snapshot.showsCodeDetails)
 
             timerBar
                 .frame(height: 3)
