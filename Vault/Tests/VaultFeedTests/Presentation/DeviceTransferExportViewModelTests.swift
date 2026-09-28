@@ -89,38 +89,23 @@ struct DeviceTransferExportViewModelTests {
         #expect(sut.currentQRCodeImage != nil)
     }
 
+    /// A transfer saves nothing, so it isn't a backup: the last backup stays what it was.
     @Test
-    func generateShards_recordsBackupEvent() async throws {
+    func generateShards_isNotLoggedAsABackup() async throws {
         let vaultStore = VaultStoreStub()
         vaultStore.exportVaultHandler = { _ in
             .init(userDescription: "", items: [], tags: [])
         }
-        let logger = BackupEventLoggerMock()
-        logger.vaultToken = 7
+        let logger = try BackupEventLoggerImpl(
+            defaults: .init(userDefaults: testUserDefaults()),
+            clock: EpochClockMock(currentTime: 100),
+        )
         let sut = try makeSUT(vaultStore: vaultStore, backupEventLogger: logger)
 
         await sut.generateShards()
 
-        #expect(logger.exportedToDeviceCallCount == 1)
-        #expect(logger.exportedToDeviceArgValues.map(\.2) == [7])
-    }
-
-    /// The transfer is logged into the vault that was exported, even if another has opened by the time it's
-    /// ready.
-    @Test
-    func generateShards_logsIntoTheVaultOpenWhenItStarted() async throws {
-        let logger = BackupEventLoggerMock()
-        logger.vaultToken = 7
-        let vaultStore = VaultStoreStub()
-        vaultStore.exportVaultHandler = { _ in
-            logger.vaultToken = 8
-            return .init(userDescription: "", items: [], tags: [])
-        }
-        let sut = try makeSUT(vaultStore: vaultStore, backupEventLogger: logger)
-
-        await sut.generateShards()
-
-        #expect(logger.exportedToDeviceArgValues.map(\.2) == [7])
+        #expect(sut.state.isDisplaying)
+        #expect(logger.lastBackupEvent() == nil)
     }
 
     @Test
@@ -246,10 +231,9 @@ extension DeviceTransferExportViewModelTests {
                 killphraseRehashService: nil,
                 searchPassphraseKeyStore: StubSearchPassphraseKeyStore(),
                 searchPassphraseRehashService: nil,
-                backupEventLogger: BackupEventLoggerMock(),
+                backupEventLogger: backupEventLogger,
             ),
             clock: clock,
-            backupEventLogger: backupEventLogger,
             intervalTimer: intervalTimer,
         )
     }

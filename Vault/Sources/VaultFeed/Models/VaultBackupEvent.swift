@@ -59,6 +59,8 @@ extension VaultBackupEvent {
     public enum Kind: Equatable, Hashable, Sendable, Codable {
         case exportedToPDF
         case importedToPDF
+        /// A transfer to another device, which earlier versions logged. It saved nothing, so it isn't logged any
+        /// more, and one left from then isn't counted as a backup (`BackupEventLogger.lastBackupEvent()`).
         case exportedToDevice
         case importedFromDevice
         case exportedToAutoBackup(providerID: String)

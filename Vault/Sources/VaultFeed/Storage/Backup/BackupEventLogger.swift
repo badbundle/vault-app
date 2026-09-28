@@ -15,6 +15,8 @@ import VaultCore
 public protocol BackupEventLogger: Sendable {
     /// Identifies the vault that's open now. Read it when a backup starts, and log the backup with it.
     var vaultToken: Int { get }
+    /// The latest backup that saved the vault somewhere: a PDF or an auto-backup. A transfer to another device saves
+    /// nothing, so it isn't one.
     func lastBackupEvent() -> VaultBackupEvent?
     /// Logs a PDF backup, once it's been saved somewhere.
     ///
@@ -23,8 +25,6 @@ public protocol BackupEventLogger: Sendable {
     ///     is dated now.
     ///   - vaultToken: The vault the backup was made of: `vaultToken` when it was.
     func exportedToPDF(backupDate: Date, hash: Digest<VaultApplicationPayload>.SHA256, vaultToken: Int)
-    /// Logs a transfer to another device. `backupDate` is when the vault was exported for it.
-    func exportedToDevice(backupDate: Date, hash: Digest<VaultApplicationPayload>.SHA256, vaultToken: Int)
     /// Logs an auto-backup. `backupDate` is when the vault was exported for it.
     func exportedToAutoBackup(
         backupDate: Date,
@@ -58,16 +58,15 @@ public final class BackupEventLoggerImpl: BackupEventLogger {
         storage.vaultToken
     }
 
+    /// Earlier versions logged transfers to another device too. One left from then isn't counted: it saved nothing,
+    /// and it replaced whatever backup was logged before it.
     public func lastBackupEvent() -> VaultBackupEvent? {
-        storage.lastBackupEvent()
+        guard let event = storage.lastBackupEvent(), event.kind != .exportedToDevice else { return nil }
+        return event
     }
 
     public func exportedToPDF(backupDate: Date, hash: Digest<VaultApplicationPayload>.SHA256, vaultToken: Int) {
         log(.exportedToPDF, backupDate: backupDate, hash: hash, vaultToken: vaultToken)
-    }
-
-    public func exportedToDevice(backupDate: Date, hash: Digest<VaultApplicationPayload>.SHA256, vaultToken: Int) {
-        log(.exportedToDevice, backupDate: backupDate, hash: hash, vaultToken: vaultToken)
     }
 
     public func exportedToAutoBackup(

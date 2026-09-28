@@ -43,6 +43,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - The editor's Tags, Encryption and Password rows needed a second tap to open their sheets
 - VoiceOver read the editor's text fields and recovery phrase words without their names
 - Killphrases didn't delete anything, and items that only show for their passphrase couldn't be found, after restoring a backup on another iPhone or after an erase. Backups now carry the keys that check them, and restoring one adds them to this device. Backups made before this don't carry them, so their phrases only work on the device that made them
+- Moving the vault to another device with QR codes counted as a backup, so the Backups page and the App Lock Password screen could show a recent backup when nothing had been saved. Transfers aren't counted any more, including one made before this change
 - At the largest text sizes, codes in the feed ran off the edge of the screen, and the item editor wrapped its titles a word to a line with "Continue" split in two. The feed now shows a card per row at those sizes, and the editor puts each step's icon above its title
 - Codes with a period other than 30 seconds, such as 60, came out wrong in AutoFill's QuickType bar and in widgets, which always worked them out as 30 second codes. They now use the code's own period, as the feed does
 
