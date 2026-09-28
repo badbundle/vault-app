@@ -48,8 +48,19 @@ public final class BackupKeyChangeViewModel {
         newlyEnteredPassword == newlyEnteredPasswordConfirm
     }
 
+    /// The rule the new password breaks, once something's been typed.
+    ///
+    /// A new backup password follows the App Lock Password's rules (`AppLockPasswordRules`): anyone with a copy of a
+    /// backup can try passwords on their own computers, as fast as the key derivation allows. A password set before
+    /// the rules applied is kept.
+    public var newPasswordProblem: AppLockPasswordRules.Problem? {
+        guard newlyEnteredPassword.isNotEmpty else { return nil }
+        return AppLockPasswordRules.problem(with: newlyEnteredPassword)
+    }
+
     public var canSetBackupPassword: Bool {
-        !newPassword.isLoading && passwordConfirmMatches && newlyEnteredPassword.isNotBlank
+        !newPassword.isLoading && passwordConfirmMatches
+            && AppLockPasswordRules.problem(with: newlyEnteredPassword) == nil
     }
 
     public var encryptionKeyDeriverSignature: VaultKeyDeriver.Signature {
@@ -89,6 +100,8 @@ public final class BackupKeyChangeViewModel {
     private struct PasswordConfirmError: Error {}
 
     public func saveEnteredPassword() async {
+        // The form doesn't offer to save a password that breaks the rules.
+        guard AppLockPasswordRules.problem(with: newlyEnteredPassword) == nil else { return }
         do {
             guard newlyEnteredPassword == newlyEnteredPasswordConfirm else {
                 throw PasswordConfirmError()

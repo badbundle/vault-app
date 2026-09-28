@@ -4,7 +4,7 @@ You can change your backup password at any time. The new password is used for ev
 
 Nothing. Changing your password **doesn't update backups you've already made**: each one stays encrypted with the password that was set when it was created.
 
-To restore an older backup, you'll need the password that was set when that backup was made. Backups made with your current password open without asking for it.
+Restoring a backup always asks for the password that was set when it was made, even if that's your current password. The password Vault keeps on this device is only used to make backups, never to open them.
 
 ## Should I make a new backup afterwards?
 

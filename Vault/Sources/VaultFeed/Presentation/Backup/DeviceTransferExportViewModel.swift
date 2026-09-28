@@ -38,34 +38,29 @@ public final class DeviceTransferExportViewModel {
 
     private var shards: [DataShard] = []
     private var cycleTask: Task<Void, Never>?
-    private var payloadHash: Digest<VaultApplicationPayload>.SHA256?
 
     private let backupPassword: DerivedEncryptionKey
     private let dataModel: VaultDataModel
     private let clock: any EpochClock
-    private let backupEventLogger: any BackupEventLogger
     private let intervalTimer: any IntervalTimer
 
+    /// A transfer saves nothing, so it isn't logged as a backup: the Backups page and the App Lock Password's form go
+    /// by the last backup that was saved somewhere.
     public init(
         backupPassword: DerivedEncryptionKey,
         dataModel: VaultDataModel,
         clock: any EpochClock,
-        backupEventLogger: any BackupEventLogger,
         intervalTimer: any IntervalTimer,
     ) {
         self.backupPassword = backupPassword
         self.dataModel = dataModel
         self.clock = clock
-        self.backupEventLogger = backupEventLogger
         self.intervalTimer = intervalTimer
     }
 
     public func generateShards() async {
         do {
             state = .generating
-            let currentDate = clock.currentDate
-            // The vault being exported, which the transfer is logged into, whatever is open by then.
-            let vaultToken = backupEventLogger.vaultToken
 
             // Export vault data
             let payload = try await dataModel.makeExport(userDescription: "")
@@ -80,13 +75,6 @@ public final class DeviceTransferExportViewModel {
             // Split into shards
             let shardBuilder = DataShardBuilder()
             shards = shardBuilder.makeShards(from: vaultData)
-
-            // Store hash for event logging
-            let hash = try DigestHasher().sha256(value: payload)
-            payloadHash = hash
-
-            // Log export event
-            backupEventLogger.exportedToDevice(backupDate: currentDate, hash: hash, vaultToken: vaultToken)
 
             // Start displaying first QR code
             state = .displayingQR(currentIndex: 0, totalCount: shards.count)

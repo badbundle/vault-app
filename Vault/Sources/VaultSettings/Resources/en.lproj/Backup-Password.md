@@ -11,12 +11,14 @@ Anyone trying to guess your password from a leaked backup has to go through the 
 
 No. The key stays on this device and isn't synced anywhere. Each device you make backups from has its own backup password, and they don't have to match.
 
-To restore a backup on another device, you enter the password that backup was made with, and Vault prepares the key there.
+To restore a backup, on this device or another, you enter the password that backup was made with, and Vault prepares the key from it. Vault asks for it every time, even for a backup made with the password set now: the key it keeps is only used to make backups, never to open them.
 
 ## Choosing a password
 
 Your password is the only thing protecting your backups, so treat it like the master password for a password manager: long, unique and not used anywhere else.
 A few random words strung together make a good start.
+
+Like the App Lock Password, it has to be at least 8 characters, and not only numbers. A password you set before this was required keeps working.
 
 ## What if I forget it?
 

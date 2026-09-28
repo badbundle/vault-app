@@ -27,6 +27,18 @@ final class BackupKeyChangeViewSnapshotTests {
         }
     }
 
+    /// A password that breaks the App Lock Password's rules says why under the field, and can't be set.
+    @Test
+    func layoutAuthenticatedPasswordTooShort() async {
+        await snapshotScenarios {
+            let viewModel = makeViewModel()
+            viewModel.permissionState = .allowed
+            viewModel.newlyEnteredPassword = "1234"
+            viewModel.newlyEnteredPasswordConfirm = "1234"
+            return BackupKeyChangeView(viewModel: viewModel)
+        }
+    }
+
     /// With no passcode there's nothing to authenticate with, so the sheet says a passcode is needed.
     @Test
     func layoutPasscodeRequired() async {

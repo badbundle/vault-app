@@ -42,20 +42,23 @@ struct BackupEventLoggerImplTests {
         #expect(backup?.kind == .exportedToPDF)
     }
 
+    /// Earlier versions logged a transfer to another device as a backup. It saved nothing, so one left from then
+    /// isn't the last backup.
     @Test
-    func exportedToDevice_savesDeviceEvent() throws {
+    func lastBackupEvent_transferLoggedByAnEarlierVersion_isNotABackup() throws {
         let defaults = try testUserDefaults()
-        let clock = EpochClockMock(currentTime: 100)
-        let sut = makeSUT(defaults: defaults, clock: clock)
-        let date = Date(timeIntervalSince1970: 1234)
+        let sut = makeSUT(defaults: defaults)
+        try Defaults(userDefaults: defaults).set(
+            VaultBackupEvent(
+                backupDate: Date(timeIntervalSince1970: 1234),
+                eventDate: Date(timeIntervalSince1970: 1234),
+                kind: .exportedToDevice,
+                payloadHash: .init(value: Data(hex: "1234")),
+            ),
+            for: Key<VaultBackupEvent>(VaultIdentifiers.Backup.lastBackupEvent),
+        )
 
-        sut.exportedToDevice(backupDate: date, hash: .init(value: Data(hex: "1234")), vaultToken: sut.vaultToken)
-
-        let backup = sut.lastBackupEvent()
-        #expect(backup?.backupDate == date)
-        #expect(backup?.eventDate == clock.currentDate)
-        #expect(backup?.payloadHash == .init(value: Data(hex: "1234")))
-        #expect(backup?.kind == .exportedToDevice)
+        #expect(sut.lastBackupEvent() == nil)
     }
 
     @Test

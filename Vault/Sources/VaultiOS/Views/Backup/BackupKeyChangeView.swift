@@ -167,14 +167,19 @@ struct BackupKeyChangeView: View {
 
     private var passwordSection: some View {
         Section {
-            LabeledTextField("New Password", text: $viewModel.newlyEnteredPassword, kind: .secure())
-                .secretTextInput(.verbatim)
-                .focused($focusedField, equals: .new)
-                .submitLabel(.next)
-                .onSubmit {
-                    focusedField = .confirm
-                }
-                .disabled(viewModel.newPassword.isLoading)
+            LabeledTextField(
+                "New Password",
+                text: $viewModel.newlyEnteredPassword,
+                kind: .secure(),
+                status: newPasswordStatus,
+            )
+            .secretTextInput(.verbatim)
+            .focused($focusedField, equals: .new)
+            .submitLabel(.next)
+            .onSubmit {
+                focusedField = .confirm
+            }
+            .disabled(viewModel.newPassword.isLoading)
 
             if viewModel.newlyEnteredPassword.isNotEmpty {
                 LabeledTextField(
@@ -189,8 +194,26 @@ struct BackupKeyChangeView: View {
                 .onSubmit(saveEnteredPassword)
                 .disabled(viewModel.newPassword.isLoading)
             }
+        } footer: {
+            Text(
+                "Use at least \(AppLockPasswordRules.minimumLength) characters, and not only numbers. Anyone with a copy of a backup could try passwords on a computer, so a PIN isn't enough.",
+            )
         }
         .animation(.snappy, value: viewModel.newlyEnteredPassword)
+    }
+
+    /// Says what's wrong with the new password once the user has moved on from it, not while they're typing it, as the
+    /// App Lock Password's form does.
+    private var newPasswordStatus: LabeledTextField.Status {
+        guard focusedField != .new else { return .none }
+        switch viewModel.newPasswordProblem {
+        case .tooShort:
+            return .error(message: "Use at least \(AppLockPasswordRules.minimumLength) characters.")
+        case .onlyNumbers:
+            return .error(message: "Use some letters or symbols, not only numbers.")
+        case nil:
+            return .none
+        }
     }
 
     @ViewBuilder

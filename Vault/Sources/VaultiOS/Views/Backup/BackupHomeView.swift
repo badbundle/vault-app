@@ -114,7 +114,7 @@ struct BackupHomeView: View {
                 }
             }
         } footer: {
-            Text("Import items from a backup PDF or another device.")
+            Text("Import items from a backup PDF or another device, with the password the backup was made with.")
         }
     }
 

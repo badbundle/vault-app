@@ -116,8 +116,8 @@ struct BackupKeyChangeViewModelTests {
     func saveEnteredPassword_isPasswordConfirmErrorIfPasswordsDoNotMatch() async {
         let sut = makeSUT()
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "world"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "world peace"
 
         await sut.saveEnteredPassword()
 
@@ -132,8 +132,8 @@ struct BackupKeyChangeViewModelTests {
         }
         let sut = makeSUT(deriverFactory: deriverFactory)
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "hello"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "hello there"
 
         await sut.saveEnteredPassword()
 
@@ -144,8 +144,8 @@ struct BackupKeyChangeViewModelTests {
     func saveEnteredPassword_successSetsNewPasswordStateToSuccess() async {
         let sut = makeSUT()
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "hello"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "hello there"
 
         await sut.saveEnteredPassword()
 
@@ -159,8 +159,8 @@ struct BackupKeyChangeViewModelTests {
         store.fetchPasswordMetadataHandler = { metadata }
         let sut = makeSUT(dataModel: anyVaultDataModel(backupPasswordStore: store))
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "hello"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "hello there"
 
         await sut.saveEnteredPassword()
 
@@ -176,8 +176,8 @@ struct BackupKeyChangeViewModelTests {
         await sut.onAppear()
         store.fetchPasswordMetadataHandler = { .init(lastSetDate: nil) }
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "hello"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "hello there"
 
         await sut.saveEnteredPassword()
 
@@ -192,8 +192,8 @@ struct BackupKeyChangeViewModelTests {
         let sut = makeSUT(dataModel: dataModel)
         await sut.onAppear()
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "hello"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "hello there"
 
         await sut.saveEnteredPassword()
 
@@ -209,8 +209,8 @@ struct BackupKeyChangeViewModelTests {
         let dataModel = anyVaultDataModel(backupPasswordStore: store)
         let first = makeSUT(dataModel: dataModel)
         await first.onAppear()
-        first.newlyEnteredPassword = "hello"
-        first.newlyEnteredPasswordConfirm = "hello"
+        first.newlyEnteredPassword = "hello there"
+        first.newlyEnteredPasswordConfirm = "hello there"
         await first.saveEnteredPassword()
         first.didDisappear()
 
@@ -235,8 +235,8 @@ struct BackupKeyChangeViewModelTests {
         let sut = makeSUT(dataModel: anyVaultDataModel(backupPasswordStore: store), deriverFactory: deriverFactory)
         await sut.onAppear()
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "hello"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "hello there"
 
         await sut.saveEnteredPassword()
 
@@ -247,8 +247,8 @@ struct BackupKeyChangeViewModelTests {
     func saveEnteredPassword_successResetsEnteredPassword() async {
         let sut = makeSUT()
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "hello"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "hello there"
 
         await sut.saveEnteredPassword()
 
@@ -262,8 +262,8 @@ struct BackupKeyChangeViewModelTests {
         let dataModel = anyVaultDataModel(backupPasswordStore: store)
         let sut = makeSUT(dataModel: dataModel)
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "hello"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "hello there"
 
         let task = Task { await sut.saveEnteredPassword() }
         // Cancel before the task body has had a chance to run: the save
@@ -280,8 +280,8 @@ struct BackupKeyChangeViewModelTests {
     func saveEnteredPassword_cancelled_clearsEnteredPasswords() async {
         let sut = makeSUT()
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "hello"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "hello there"
 
         let task = Task { await sut.saveEnteredPassword() }
         task.cancel()
@@ -299,8 +299,8 @@ struct BackupKeyChangeViewModelTests {
         }
         let sut = makeSUT(deriverFactory: deriverFactory)
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "hello"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "hello there"
 
         await sut.saveEnteredPassword()
 
@@ -312,23 +312,58 @@ struct BackupKeyChangeViewModelTests {
     func saveEnteredPassword_passwordConfirmError_retainsEnteredPasswords() async {
         let sut = makeSUT()
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "world"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "world peace"
 
         await sut.saveEnteredPassword()
 
         // The user is mid-correction with the view still frontmost, so
         // the entered text deliberately survives this error.
-        #expect(sut.newlyEnteredPassword == "hello")
-        #expect(sut.newlyEnteredPasswordConfirm == "world")
+        #expect(sut.newlyEnteredPassword == "hello there")
+        #expect(sut.newlyEnteredPasswordConfirm == "world peace")
+    }
+
+    // MARK: - Password rules
+
+    /// A new backup password follows the App Lock Password's rules: at least 8 characters, and not only numbers.
+    @Test(arguments: [
+        ("", nil),
+        ("short", .tooShort),
+        ("1234567", .tooShort),
+        ("12345678", .onlyNumbers),
+        ("1234 5678", .onlyNumbers),
+        ("password", nil),
+        ("four random words", nil),
+    ] as [(String, AppLockPasswordRules.Problem?)])
+    func newPassword_followsTheAppLockPasswordsRules(password: String, problem: AppLockPasswordRules.Problem?) {
+        let sut = makeSUT()
+
+        sut.newlyEnteredPassword = password
+        sut.newlyEnteredPasswordConfirm = password
+
+        #expect(sut.newPasswordProblem == problem)
+        #expect(sut.canSetBackupPassword == (password.isNotEmpty && problem == nil))
+    }
+
+    @Test
+    func saveEnteredPassword_breakingTheRules_setsNothing() async {
+        let store = BackupPasswordStoreMock()
+        let sut = makeSUT(dataModel: anyVaultDataModel(backupPasswordStore: store))
+        sut.newlyEnteredPassword = "12345678"
+        sut.newlyEnteredPasswordConfirm = "12345678"
+
+        await sut.saveEnteredPassword()
+
+        #expect(sut.newPassword == .initial)
+        #expect(store.setCallCount == 0)
     }
 
     @Test
     func didDisappear_clearsEnteredPasswords() {
         let sut = makeSUT()
 
-        sut.newlyEnteredPassword = "hello"
-        sut.newlyEnteredPasswordConfirm = "hello"
+        sut.newlyEnteredPassword = "hello there"
+        sut.newlyEnteredPasswordConfirm = "hello there"
 
         sut.didDisappear()
 

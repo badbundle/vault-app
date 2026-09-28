@@ -87,7 +87,6 @@ struct BackupExportView: View {
                             backupPassword: password,
                             dataModel: dataModel,
                             clock: injector.clock,
-                            backupEventLogger: injector.backupEventLogger,
                             intervalTimer: injector.intervalTimer,
                         ),
                     )

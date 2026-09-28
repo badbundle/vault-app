@@ -949,10 +949,10 @@ payloads.
 
   A new duress vault starts with none set, never a copy of the vault it was made from. Importing over a vault's data
   keeps them, as it does the plain store's. Deleting its data keeps them too, except the backup password and its
-  record, which Delete All Data deletes, in the plain store as in an encrypted vault (VAULT-60). Kept, the password
-  would restore any backup of what was deleted without anyone typing it, and the device authentication in front of
-  Restore is no gate against someone forcing the user (MANIFESTO C4). The erase deletes it for the same reason. The
-  paper size stays device-wide.
+  record, which Delete All Data deletes, in the plain store as in an encrypted vault (VAULT-60). The password is the
+  key to every backup of what was deleted, so it goes with the data. Restoring never uses it: a backup always asks
+  for the password it was made with, since the device authentication in front of Restore is no gate against someone
+  forcing the user (MANIFESTO C4). The erase deletes it for the same reason. The paper size stays device-wide.
 - **The plain store's stay where they were:** the backup password and its record in the keychain, the rest in
   `UserDefaults`. Turning encryption on moves them into the real vault (see
   [Migration](#migration-plain-to-encrypted)):
@@ -1177,9 +1177,10 @@ configuration, which the app can't edit. Turning on the password should tell use
 
 - **Backups, exports, device transfer, auto-backup.** Unchanged, except that each vault has its own backup
   settings (VAULT-70). They export from the unlocked store and encrypt with the open vault's backup password.
-  Auto-backup is only ever triggered by changes in the running app, and no background
-  task exists (no `BGTaskScheduler`), so nothing needs the vault while it's locked. The backup format keeps its
-  own KDF and container.
+  That stored key only makes backups: restoring one always asks for the password it was made with, even when it's
+  the password set now. Auto-backup is only ever triggered by changes in the running app, and no background task
+  exists (no `BGTaskScheduler`), so nothing needs the vault while it's locked. The backup format keeps its own KDF
+  and container.
 - **Backup sizes (VAULT-75).** A saved backup, a PDF or an auto-backup, is padded to just under a fixed size: 32 KiB
   of ciphertext, about 130 typical items, or the first power of two times that it fits. So a backup doesn't show
   how much its vault holds, and one found next to a duress vault with few items can't show that a bigger vault

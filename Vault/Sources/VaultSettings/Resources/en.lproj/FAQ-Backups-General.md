@@ -25,3 +25,9 @@ This can be saved to a safe place like your iCloud drive–or you can print this
 You should try to keep any backups safe, but it's not the end of the world if this falls into the wrong hands.
 All backups created by Vault are required to be encrypted, meaning someone cannot retrieve the data from your backup without knowing the password used to encrypt the backup.
 
+## What happens to items I delete?
+
+They stay in any backup made before you deleted them, including items deleted by a killphrase.
+Automatic backups keep earlier versions of your vault in their folder until Vault cleans them up, after the time you chose in **Keep Backups For**, so a deleted item is still in those files until then.
+Choose how long backups are kept with that in mind, and keep the folder somewhere you trust.
+
