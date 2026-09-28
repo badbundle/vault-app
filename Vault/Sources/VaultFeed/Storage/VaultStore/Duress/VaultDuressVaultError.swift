@@ -5,8 +5,9 @@ import Foundation
 /// None of them depends on what's in any other slot, so trying a password here says nothing about the vaults the
 /// open one can't see (MANIFESTO C2).
 public enum VaultDuressVaultError: Error, Equatable, Sendable {
-    /// The new password is the open vault's own App Lock Password: it must differ from it. That's checked the same way
-    /// in every vault.
+    /// The new password is the open vault's own App Lock Password, which was entered as the current one: it must
+    /// differ from it. That's checked the same way in every vault, and only once the current password is shown to be
+    /// right (`VaultPasswordChangeService.makeDuressVault(current:password:)`).
     case matchesAppLockPassword
     /// The open vault isn't an encrypted one, so there's no slot to make a duress vault in.
     case notEncrypted

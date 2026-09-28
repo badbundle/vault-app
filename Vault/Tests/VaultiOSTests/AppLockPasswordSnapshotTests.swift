@@ -267,7 +267,7 @@ struct AppLockPasswordSnapshotTests {
         }
     }
 
-    /// The App Lock Password, refused by the password service.
+    /// The App Lock Password, refused by the password service once it's checked as the current password.
     @Test
     func setDuressRefused() async throws {
         try await snapshotScenarios {
@@ -303,13 +303,17 @@ struct AppLockPasswordSnapshotTests {
     /// without one.
     @Test
     func setDuress_isTheSameWithADuressVaultAndInOne() async throws {
-        for makeAppLock in [makeUnlockedAppLockWithDuressVault, makeAppLockInDuressVault] {
+        let vaults = [
+            (makeAppLock: makeUnlockedAppLockWithDuressVault, current: Self.password),
+            (makeAppLock: makeAppLockInDuressVault, current: Self.duressPassword),
+        ]
+        for (makeAppLock, current) in vaults {
             try await snapshotScenarios(dynamicTypeSizes: [.medium, .xxLarge], testName: "setDuress()") {
                 try await AppLockPasswordFormViewModel(purpose: .setDuress, appLock: makeAppLock())
             }
             try await snapshotScenarios(testName: "setDuressDone()") {
                 let viewModel = try await AppLockPasswordFormViewModel(purpose: .setDuress, appLock: makeAppLock())
-                await submitDuressPassword("nested decoy", with: viewModel)
+                await submitDuressPassword("nested decoy", current: current, with: viewModel)
                 return viewModel
             }
         }
@@ -366,18 +370,25 @@ extension AppLockPasswordSnapshotTests {
     /// Unlocked into the real vault, which has made a duress vault.
     private func makeUnlockedAppLockWithDuressVault() async throws -> AppLockService {
         let service = FakeAppLockPasswordService(password: Self.password)
-        try await service.makeDuressVault(password: Self.duressPassword)
+        #expect(try await service.makeDuressVault(current: Self.password, password: Self.duressPassword) == .accepted)
         return try await makeUnlockedAppLock(service: service)
     }
 
     /// Unlocked into a duress vault, with its password.
     private func makeAppLockInDuressVault() async throws -> AppLockService {
         let service = FakeAppLockPasswordService(password: Self.password)
-        try await service.makeDuressVault(password: Self.duressPassword)
+        #expect(try await service.makeDuressVault(current: Self.password, password: Self.duressPassword) == .accepted)
         return try await makeUnlockedAppLock(service: service, unlockingWith: Self.duressPassword)
     }
 
-    private func submitDuressPassword(_ password: String, with viewModel: AppLockPasswordFormViewModel) async {
+    /// Submits `password` as the duress password, with `current` as the current password: the real vault's unless
+    /// it's given.
+    private func submitDuressPassword(
+        _ password: String,
+        current: String = Self.password,
+        with viewModel: AppLockPasswordFormViewModel,
+    ) async {
+        viewModel.currentPassword = current
         viewModel.newPassword = password
         viewModel.confirmation = password
         await viewModel.submit()

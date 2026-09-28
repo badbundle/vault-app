@@ -4,9 +4,9 @@ import FoundationExtensions
 /// Sets, changes or turns off the App Lock Password, sets a duress password, or turns erasing after failed passwords
 /// on or off, for their screens in Settings.
 ///
-/// Changing it, turning it off, and turning erasing on or off need the current password. A wrong one counts as a wrong
-/// attempt and waits, just as at the lock screen, and the screen says only that it was wrong and how long to wait:
-/// never how many attempts are left.
+/// Changing it, turning it off, setting a duress password, and turning erasing on or off need the current password. A
+/// wrong one counts as a wrong attempt and waits, just as at the lock screen, and the screen says only that it was
+/// wrong and how long to wait: never how many attempts are left.
 ///
 /// Setting a duress password looks and behaves the same whether or not one was set before, and in a duress vault as in
 /// the real one: nothing here knows (MANIFESTO.md C2, C9).
@@ -20,7 +20,8 @@ public final class AppLockPasswordFormViewModel {
         case change
         /// Turn the password off, which needs the current one.
         case turnOff
-        /// Set a duress password, which makes a new, empty duress vault that it opens. It replaces the last one.
+        /// Set a duress password, which makes a new, empty duress vault that it opens, and needs the current one. It
+        /// replaces the last one.
         case setDuress
         /// Turn on erasing every vault after too many wrong passwords in a row, which needs the current one.
         case turnOnErasing
@@ -74,7 +75,8 @@ public final class AppLockPasswordFormViewModel {
     /// Counts wrong current passwords, so the screen can react to each one.
     public private(set) var wrongPasswordCount = 0
     /// Whether the last new password was refused for being the App Lock Password, until another is typed. Only a
-    /// duress password is refused this way, by the password service: the form doesn't compare it with anything.
+    /// duress password is refused this way, by the password service, once the current password is shown to be right:
+    /// the form doesn't compare the two.
     public private(set) var isNewPasswordRefused = false
     /// Counts refused new passwords, so the screen can react to each one.
     public private(set) var refusedPasswordCount = 0
@@ -100,11 +102,12 @@ public final class AppLockPasswordFormViewModel {
     /// They aren't encrypted, so setting the password deletes them, once the user agrees.
     public private(set) var setAsideVaultCount = 0
 
-    /// Whether the form asks for the current password: to change it or turn it off, or to turn erasing on or off.
+    /// Whether the form asks for the current password: to change it or turn it off, to set a duress password, or to
+    /// turn erasing on or off.
     public var needsCurrentPassword: Bool {
         switch purpose {
-        case .change, .turnOff, .turnOnErasing, .turnOffErasing: true
-        case .set, .setDuress: false
+        case .change, .turnOff, .setDuress, .turnOnErasing, .turnOffErasing: true
+        case .set: false
         }
     }
 
@@ -193,9 +196,10 @@ public final class AppLockPasswordFormViewModel {
             case .turnOff:
                 try await handle(appLock.turnOffPassword(current: currentPassword))
             case .setDuress:
-                if try await appLock.makeDuressVault(password: newPassword) {
-                    finish()
+                if let result = try await appLock.makeDuressVault(current: currentPassword, password: newPassword) {
+                    await handle(result)
                 } else {
+                    // The user didn't authenticate: nothing was tried, and they can try again.
                     state = .editing
                 }
             case .turnOnErasing:

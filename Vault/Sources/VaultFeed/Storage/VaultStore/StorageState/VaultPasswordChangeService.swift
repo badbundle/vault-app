@@ -1,6 +1,6 @@
 import Foundation
 
-/// Changes the open vault's App Lock Password, or turns it off and back on.
+/// Changes the open vault's App Lock Password, or turns it off and back on, and makes duress vaults from it.
 ///
 /// - **Change** (`changePassword(current:new:)`): checks the current password, derives the new one's key with the
 ///   file's salt, and rekeys the vault's slot. The rename is atomic, so either password works afterwards, never
@@ -13,6 +13,8 @@ import Foundation
 /// - **Erasing after failed passwords** (`setErasesAfterFailedPasswords(_:current:)`, VAULT-34): checks the current
 ///   password, and turns it on or off. It's a setting of the device, not of a vault, so the open vault's own password
 ///   changes it, a duress vault's included. Turning the password off, or back on, turns it off.
+/// - **Make a duress vault** (`makeDuressVault(current:password:)`, VAULT-23): checks the current password, refuses
+///   a new one equal to it, and makes the duress vault (`EncryptedVaultStore.makeDuressVault(password:)`).
 ///
 /// No check tries the attempt that would make the erase threshold's wrong password in a row
 /// (`.onlyAtTheLockScreen`): that one is only ever tried at the lock screen.
@@ -119,7 +121,8 @@ public actor VaultPasswordChangeService {
 
 /// How changing the password, or turning it off, turned out.
 public enum VaultPasswordChangeResult: Equatable, Sendable {
-    /// Done: the password is changed, off or back on, or erasing after failed passwords is on or off.
+    /// Done: the password is changed, off or back on, erasing after failed passwords is on or off, or the duress vault
+    /// is made.
     case changed
     /// The current password wasn't the open vault's. It counted as a wrong attempt, and nothing changed.
     ///
@@ -185,13 +188,14 @@ extension VaultPasswordChangeService {
     /// Turns the password back on, from the `deviceKey` mode, as `password`. The current vault is open already, and
     /// device authentication opened it, so there's no current password to check.
     ///
-    /// It resets the attempt counter on device authentication alone. That's accepted (MANIFESTO C4): with the
-    /// password off, device authentication opens the vault anyway, so the count guards nothing a coercer couldn't
-    /// already open, and a count left from before mustn't carry over to the new password.
+    /// It clears the count of attempts in a row on device authentication alone. That's accepted (MANIFESTO C4): with
+    /// the password off, device authentication opens the vault anyway, so the count guards nothing a coercer couldn't
+    /// already open, and a count left from before mustn't carry over to the new password. The recent count, which the
+    /// delays follow, stays, so turning the password off and on again doesn't shorten them.
     public func turnOnPassword(_ password: String) async throws {
         try await whileChanging {
             let vault = try await openVault(inMode: .deviceKey, orThrow: .passwordIsNotOff)
-            try await attemptCounter.reset()
+            try await attemptCounter.resetCountInARow()
             let key = try await passwordKey(for: password)
             // Settling deletes the device key, once it's shown to open nothing.
             try await rekey(vault, journaling: .turningOn, becoming: .password) { key }
@@ -217,6 +221,33 @@ extension VaultPasswordChangeService {
                 return refused
             }
             settings.erasesAfterFailedPasswords = erases
+            return .changed
+        }
+    }
+
+    /// Makes a duress vault from the open vault, for `password`, once `current` is shown to be the open vault's own
+    /// password: the same counted check, held to the deadline, as changing the password, and never the attempt that
+    /// would make the erase threshold's in a row.
+    ///
+    /// Once the check has passed, a new password equal to `current`, once both are in Unicode's composed form, is
+    /// refused (`VaultDuressVaultError.matchesAppLockPassword`). It's the only one refused, and the refusal is the same
+    /// in every vault. One that happens to open another vault is accepted without a word, as the design's "Same
+    /// passwords" requires: nothing is tried against any other slot.
+    ///
+    /// - Throws: `VaultDuressVaultError` if it's refused or can't be made, or what making it threw. The file is
+    ///   unchanged then.
+    public func makeDuressVault(current: String, password: String) async throws -> VaultPasswordChangeResult {
+        try await whileChanging {
+            let vault = try await openVault(inMode: .password, orThrow: .passwordIsNotOn)
+            if let refused = try await check(current, opens: vault.store) {
+                return refused
+            }
+            guard Self.normalized(current) != Self.normalized(password) else {
+                throw VaultDuressVaultError.matchesAppLockPassword
+            }
+            try await session.whileUnlocked(vault.store, since: vault.lockEpoch) {
+                try await vault.store.makeDuressVault(password: password)
+            }
             return .changed
         }
     }

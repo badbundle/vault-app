@@ -7,10 +7,10 @@ import Foundation
 /// `FakeAppLockPasswordService` stands in for them in previews and tests.
 ///
 /// Everything that takes a password the user already chose counts an attempt with `AppLockPasswordAttemptCounter`
-/// before deriving anything, and resets the count if the password is right, so wrong passwords typed into Settings
-/// count and wait just as they do on the lock screen. Each of those calls finishes at the device's fixed unlock
-/// deadline, whether the password is the real one, a duress one or wrong (MANIFESTO.md C2), and the caller shows the
-/// result as soon as it arrives. Nothing may log, print or measure anything about a password or its result.
+/// before deriving anything, and notes it as right if it is, so wrong passwords typed into Settings count and wait
+/// just as they do on the lock screen. Each of those calls finishes at the device's fixed unlock deadline, whether the
+/// password is the real one, a duress one or wrong (MANIFESTO.md C2), and the caller shows the result as soon as it
+/// arrives. Nothing may log, print or measure anything about a password or its result.
 @MainActor
 public protocol AppLockPasswordService {
     /// Whether the App Lock Password is set, so unlocking asks for it after device authentication. Known at launch,
@@ -56,18 +56,20 @@ public protocol AppLockPasswordService {
     /// failed passwords goes off with it.
     func turnOffPassword(current: String) async throws -> AppLockPasswordResult
 
-    /// Makes a duress vault from the vault that's open: a separate, empty vault that `password` opens at the lock
-    /// screen. Making one again from the same vault replaces the last one with a new, empty vault.
+    /// Makes a duress vault from the vault that's open, once `current` is shown to be its password: a separate, empty
+    /// vault that `password` opens at the lock screen. Making one again from the same vault replaces the last one with
+    /// a new, empty vault.
     ///
     /// It works the same way from the real vault and from a duress vault, whether or not one was made before, and
-    /// nothing records that it was made (MANIFESTO.md C2, C6). It isn't an attempt at the App Lock Password, so it
-    /// isn't counted and doesn't wait. The caller has checked `password` against `AppLockPasswordRules` and its
+    /// nothing records that it was made (MANIFESTO.md C2, C6). `current` is checked as changing the password checks
+    /// it: a wrong one counts and waits, and the attempt that would make the erase threshold's in a row is only ever
+    /// tried at the lock screen. The caller has checked `password` against `AppLockPasswordRules` and its
     /// confirmation, and nothing else.
     ///
-    /// - Throws: `VaultDuressVaultError.matchesAppLockPassword` if `password` is the open vault's own App Lock
-    ///   Password. That's the only password it refuses: one that happens to open another vault is accepted without a
-    ///   word, or trying passwords here would say which other vaults exist.
-    func makeDuressVault(password: String) async throws
+    /// - Throws: `VaultDuressVaultError.matchesAppLockPassword` if `current` is right and `password` is the same.
+    ///   That's the only password it refuses: one that happens to open another vault is accepted without a word, or
+    ///   trying passwords here would say which other vaults exist.
+    func makeDuressVault(current: String, password: String) async throws -> AppLockPasswordResult
 
     /// Turns erasing after failed passwords on or off, once `current` is shown to be the password of the vault that's
     /// open (`VaultPasswordChangeService.setErasesAfterFailedPasswords(_:current:)`). A wrong one counts and waits,

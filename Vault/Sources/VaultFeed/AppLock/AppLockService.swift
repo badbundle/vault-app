@@ -493,25 +493,27 @@ public final class AppLockService {
         return try await passwordService.turnOffPassword(current: current)
     }
 
-    /// Sets a duress password, once the user has authenticated: it makes a new, empty duress vault, which the
-    /// password opens at the lock screen instead of the open vault. Doing it again replaces that vault.
+    /// Sets a duress password, once the user has authenticated, if `current` is the password: it makes a new, empty
+    /// duress vault, which the duress password opens at the lock screen instead of the open vault. Doing it again
+    /// replaces that vault.
     ///
     /// Authenticating first, as for setting the password, means someone else can't open the unlocked app and set one
-    /// up. It never decides which vault opens: the password does (MANIFESTO.md C4). This works the same way in every
-    /// vault, whether or not a duress vault was made before, and changes nothing the lock knows about. The caller has
-    /// checked the password against `AppLockPasswordRules` and its confirmation.
+    /// up. It never decides which vault opens: the password does (MANIFESTO.md C4). A wrong current password counts as
+    /// a wrong attempt and waits, just as it does on the lock screen. This works the same way in every vault, whether
+    /// or not a duress vault was made before, and changes nothing the lock knows about. The caller has checked the
+    /// duress password against `AppLockPasswordRules` and its confirmation.
     ///
-    /// - Returns: `false` if the user didn't authenticate, and nothing changed.
-    /// - Throws: `VaultDuressVaultError.matchesAppLockPassword` if it's the open vault's own App Lock Password, or
-    ///   another error if the vault couldn't be made. Nothing changed then either.
-    public func makeDuressVault(password: String) async throws -> Bool {
+    /// - Returns: `nil` if the user didn't authenticate, and nothing was tried or changed. Otherwise how the current
+    ///   password was taken: `.accepted` once the duress vault is made.
+    /// - Throws: `VaultDuressVaultError.matchesAppLockPassword` if the duress password is the current one, or another
+    ///   error if the vault couldn't be made. Nothing changed then either.
+    public func makeDuressVault(current: String, password: String) async throws -> AppLockPasswordResult? {
         let passwordService = try passwordServiceForSettings()
         guard isPasswordSet else { throw AppLockPasswordUnavailableError() }
-        guard await authenticateToChangeSettings(reason: "Set Duress Password") else { return false }
+        guard await authenticateToChangeSettings(reason: "Set Duress Password") else { return nil }
         isChangingSettings = true
         defer { isChangingSettings = false }
-        try await passwordService.makeDuressVault(password: password)
-        return true
+        return try await passwordService.makeDuressVault(current: current, password: password)
     }
 
     /// Turns erasing after failed passwords on or off, if `current` is the password. A wrong one counts as a wrong

@@ -260,18 +260,18 @@ extension EncryptedVaultStore {
     /// The real vault and a duress vault make one the same way, with the same steps, and the new vault's payload has
     /// the same shape as every other's. Nothing in either vault records that the duress vault was made.
     ///
-    /// - A password that's this vault's own App Lock Password is refused. One that happens to open another slot is
-    ///   accepted, without anything being tried against the other slots: refusing it would be an oracle. If a
-    ///   password opens more than one slot, unlocking opens the most recently wrapped, which is this new vault: its
-    ///   wrap is stamped by `VaultWrapStamping`, later than every wrap this device has made and than this vault's
-    ///   own, whatever the device's clock says.
+    /// - It tries `password` against no slot at all, so nothing about it depends on what the other slots hold. The
+    ///   caller checks this vault's own password first, as an attempt, and refuses a new password equal to it
+    ///   (`VaultPasswordChangeService.makeDuressVault(current:password:)`). One that happens to open another slot is
+    ///   accepted: refusing it would be an oracle. If a password opens more than one slot, unlocking opens the most
+    ///   recently wrapped, which is this new vault: its wrap is stamped by `VaultWrapStamping`, later than every wrap
+    ///   this device has made and than this vault's own, whatever the device's clock says.
     /// - It derives the password's key as unlocking does, which takes about half a second.
     ///
     /// Never log, print or measure anything about it (MANIFESTO C3).
     ///
-    /// - Throws: `VaultDuressVaultError.matchesAppLockPassword` for this vault's own password, `.unavailable` if this
-    ///   vault's duress slots aren't a valid list, or an error reading or replacing the file. The file is unchanged
-    ///   when it throws.
+    /// - Throws: `VaultDuressVaultError.unavailable` if this vault's duress slots aren't a valid list, or an error
+    ///   reading or replacing the file. The file is unchanged when it throws.
     public func makeDuressVault(password: String) async throws {
         try checkWrite()
         let slot = await persistence.slot

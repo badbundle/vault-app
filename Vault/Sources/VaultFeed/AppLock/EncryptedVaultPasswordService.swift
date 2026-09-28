@@ -206,8 +206,8 @@ public final class EncryptedVaultPasswordService: AppLockPasswordService {
         return result
     }
 
-    public func makeDuressVault(password: String) async throws {
-        try await session.makeDuressVault(password: password)
+    public func makeDuressVault(current: String, password: String) async throws -> AppLockPasswordResult {
+        try await Self.result(of: changeService.makeDuressVault(current: current, password: password))
     }
 
     public func setErasesAfterFailedPasswords(_ erases: Bool, current: String) async throws -> AppLockPasswordResult {

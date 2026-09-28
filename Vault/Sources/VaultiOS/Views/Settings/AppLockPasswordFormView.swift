@@ -6,8 +6,8 @@ import VaultFeed
 /// on or off.
 ///
 /// Setting it says plainly what forgetting it means, and when the vault was last backed up, and so does turning on
-/// erasing. Changing it, turning it off, and turning erasing on or off ask for the current password, which waits after
-/// wrong ones just as the lock screen does, and never says how many attempts are left.
+/// erasing. Changing it, turning it off, setting a duress password, and turning erasing on or off ask for the current
+/// password, which waits after wrong ones just as the lock screen does, and never says how many attempts are left.
 ///
 /// Setting a duress password shows the same screens every time, in every vault, whether or not one was set before: it
 /// never says "create" or "replace", and nothing on it depends on what exists (MANIFESTO.md C2, C9).
@@ -194,7 +194,7 @@ struct AppLockPasswordFormView: View {
             case .turnOnErasing:
                 BackupHeroHeader(
                     title: "Erase After \(eraseThreshold) Failed Passwords",
-                    subtitle: "If \(eraseThreshold) App Lock Passwords in a row are wrong, Vault erases every vault on this iPhone, including any duress vault. Only a backup can bring them back.",
+                    subtitle: "If \(eraseThreshold) App Lock Passwords in a row are wrong, Vault erases every vault on this iPhone. The right password starts the count again. Only a backup can bring them back.",
                     systemImage: "trash.fill",
                     color: .red,
                     iconSize: 56,
@@ -434,7 +434,8 @@ struct AppLockPasswordFormView: View {
         }
     }
 
-    /// Why the password service refused a duress password. Only the open vault's own App Lock Password is refused.
+    /// Why the password service refused a duress password. Only the current password, once it's shown to be the open
+    /// vault's own App Lock Password, is refused.
     private static let refusedPasswordMessage = "Must be different from your App Lock Password."
 
     // MARK: - Action

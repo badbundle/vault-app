@@ -175,7 +175,7 @@ public final class AutofillVaultService: AppLockPasswordService {
         throw AppLockPasswordUnavailableError()
     }
 
-    public func makeDuressVault(password _: String) async throws {
+    public func makeDuressVault(current _: String, password _: String) async throws -> AppLockPasswordResult {
         throw AppLockPasswordUnavailableError()
     }
 

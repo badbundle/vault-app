@@ -66,7 +66,8 @@ struct AppLockPasswordUnlockTests {
                 iconName: VaultItemTag.defaultIconName,
             ))
             #expect(try await sut.appLock.setPassword(Self.password))
-            #expect(try await sut.appLock.makeDuressVault(password: Self.duressPassword))
+            #expect(try await sut.appLock
+                .makeDuressVault(current: Self.password, password: Self.duressPassword) == .accepted)
             try await sut.unlockAgain(with: Self.duressPassword)
             let duressItem = try await sut.insertItem()
             let duressTag = try await sut.session.insertTag(item: .init(

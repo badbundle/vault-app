@@ -14,6 +14,9 @@ import VaultCore
 struct VaultPasswordChangeServiceTests {
     private static let realSlot = 4
     private static let duressSlot = 11
+    /// Where each vault makes its duress vaults: the first of each is a slot no vault is in yet.
+    private static let realDuressSlots = [12, 0, 1, 2, 3, 5, 6, 7, 8, 9]
+    private static let duressDuressSlots = [13, 0, 1, 2, 3, 5, 6, 7, 8, 9]
     private static let deadline = Duration.seconds(1)
     private static let lastAttempt = AppLockPasswordAttemptCounter.eraseThreshold - 1
     /// When both vaults were made.
@@ -383,7 +386,7 @@ extension VaultPasswordChangeServiceTests {
     @Test
     func turnOffPassword_keepsAnUnlockDeadlineRaisedMeanwhile() async throws {
         let sut = try await makeSUT()
-        sut.attemptStorage.doWhileRemoving { [stateFile = sut.stateFile] in
+        sut.attemptStorage.doWhileResetting { [stateFile = sut.stateFile] in
             try? stateFile.write(VaultStorageState(mode: .password, unlockDeadline: .seconds(3)))
         }
 
@@ -436,8 +439,10 @@ extension VaultPasswordChangeServiceTests {
         #expect(try sut.contents().header.salt == before.header.salt)
     }
 
+    /// Only the count in a row. The recent count, which the waits follow, stays, so turning the password off and on
+    /// again doesn't shorten them.
     @Test
-    func turnOnPassword_resetsTheCountFirst() async throws {
+    func turnOnPassword_resetsTheCountInARowFirstAndKeepsTheRecentCount() async throws {
         let sut = try await makeSUT(mode: .deviceKey)
         sut.attemptStorage.setRecord(count: 3, latestAt: sut.attemptClock.now)
         sut.log.modify { $0.removeAll() }
@@ -445,7 +450,9 @@ extension VaultPasswordChangeServiceTests {
         try await sut.service.turnOnPassword("new")
 
         #expect(sut.log.value == ["reset the count"])
-        #expect(try sut.attemptStorage.load() == nil)
+        let record = try #require(try sut.attemptStorage.load())
+        #expect(record.count == .zero)
+        #expect(record.recentWrong == 3)
     }
 
     @Test
@@ -495,6 +502,170 @@ extension VaultPasswordChangeServiceTests {
         try Self.expectOnlySlotChanged(Self.duressSlot, from: before, to: sut.contents())
         #expect(try sut.slots(openedBy: "real") == [Self.realSlot])
         #expect(try sut.slots(openedBy: "new") == [Self.duressSlot])
+    }
+}
+
+// MARK: - Making a duress vault
+
+extension VaultPasswordChangeServiceTests {
+    @Test
+    func makeDuressVault_withTheCurrentPassword_makesAnEmptyVaultTheNewPasswordOpens() async throws {
+        let sut = try await makeSUT()
+        let before = try sut.contents()
+        let target = Self.realDuressSlots[0]
+
+        let result = try await sut.service.makeDuressVault(current: "real", password: "new")
+
+        #expect(result == .changed)
+        #expect(try sut.slots(openedBy: "new") == [target])
+        #expect(try sut.savedState(inSlot: target, with: sut.passwordKey("new")).items.isEmpty)
+        try Self.expectOnlySlotChanged(target, from: before, to: sut.contents())
+        #expect(try sut.slots(openedBy: "real") == [Self.realSlot])
+        #expect(await !sut.session.isLocked)
+    }
+
+    /// The check is an unlock attempt, as for changing the password: counted first, held to the deadline, and noted
+    /// as right before the vault is made.
+    @Test
+    func makeDuressVault_checksTheCurrentPasswordAsAnAttempt() async throws {
+        let sut = try await makeSUT()
+        sut.log.modify { $0.removeAll() }
+        let start = sut.clock.now
+
+        _ = try await sut.service.makeDuressVault(current: "real", password: "new")
+
+        let log = sut.log.value
+        #expect(log.first == "count the attempt")
+        #expect(log.dropFirst().first == "derive")
+        #expect(log.filter { $0 == "count the attempt" || $0 == "reset the count" } == [
+            "count the attempt",
+            "reset the count",
+        ])
+        #expect(!log.contains("open a body"))
+        #expect(sut.clock.sleeps.last == start.advanced(by: Self.deadline))
+    }
+
+    /// Another vault's password is as wrong as any other, as for changing the password, so this never shows another
+    /// vault is there.
+    @Test(arguments: ["wrong", "duress"])
+    func makeDuressVault_withAPasswordThatIsNotTheOpenVaults_isWrongAndMakesNothing(password: String) async throws {
+        let sut = try await makeSUT()
+        let before = try sut.bytes()
+        sut.log.modify { $0.removeAll() }
+
+        let result = try await sut.service.makeDuressVault(current: password, password: "new")
+
+        #expect(result == .wrongPassword(reachesEraseThreshold: false))
+        #expect(try sut.bytes() == before)
+        #expect(sut.log.value.first == "count the attempt")
+        #expect(!sut.log.value.contains("reset the count"))
+    }
+
+    /// Once the check has passed, a new password equal to the current one, in Unicode's composed form, is refused, and
+    /// nothing more is done.
+    @Test(arguments: [("real", "real"), ("\u{E9}t\u{E9}", "e\u{301}te\u{301}")])
+    func makeDuressVault_withTheCurrentPasswordAsTheNewOne_isRefusedOnceItsChecked(
+        current: String,
+        new: String,
+    ) async throws {
+        let sut = try await makeSUT(password: current)
+        let before = try sut.bytes()
+        sut.log.modify { $0.removeAll() }
+
+        await #expect(throws: VaultDuressVaultError.matchesAppLockPassword) {
+            try await sut.service.makeDuressVault(current: current, password: new)
+        }
+
+        #expect(try sut.bytes() == before)
+        #expect(sut.log.value.first == "count the attempt")
+        #expect(sut.log.value.last == "reset the count")
+    }
+
+    /// A wrong current password with the same new one is just wrong: nothing's compared until the check has passed.
+    @Test
+    func makeDuressVault_withAWrongPasswordAsBoth_isWrong() async throws {
+        let sut = try await makeSUT()
+
+        let result = try await sut.service.makeDuressVault(current: "wrong", password: "wrong")
+
+        #expect(result == .wrongPassword(reachesEraseThreshold: false))
+    }
+
+    /// From a duress vault it behaves exactly as from the real one: its own password is refused, and the real vault's
+    /// is accepted without a word, leaving the real vault as it was.
+    @Test
+    func makeDuressVault_fromADuressVault_refusesOnlyItsOwnPassword() async throws {
+        let sut = try await makeSUT(openedWith: "duress")
+        let target = Self.duressDuressSlots[0]
+
+        await #expect(throws: VaultDuressVaultError.matchesAppLockPassword) {
+            try await sut.service.makeDuressVault(current: "duress", password: "duress")
+        }
+        let before = try sut.contents()
+        let result = try await sut.service.makeDuressVault(current: "duress", password: "real")
+
+        #expect(result == .changed)
+        try Self.expectOnlySlotChanged(target, from: before, to: sut.contents())
+        #expect(try sut.slots(openedBy: "real") == [Self.realSlot, target])
+        #expect(try sut.savedState(inSlot: Self.realSlot, with: sut.passwordKey("real")) == sut.realState)
+    }
+
+    @Test
+    func makeDuressVault_whileTheUserMustWait_triesNothing() async throws {
+        let sut = try await makeSUT()
+        let before = try sut.bytes()
+        sut.log.modify { $0.removeAll() }
+        sut.attemptStorage.setRecord(count: 5, latestAt: sut.attemptClock.now)
+        sut.attemptClock.advance(by: .seconds(20))
+
+        let result = try await sut.service.makeDuressVault(current: "real", password: "new")
+
+        #expect(result == .mustWait(.seconds(40)))
+        #expect(sut.log.value.isEmpty)
+        #expect(try sut.bytes() == before)
+    }
+
+    /// Never the attempt that would make the tenth in a row: that one is only tried at the lock screen.
+    @Test
+    func makeDuressVault_atTheLastAttempt_isOnlyAtTheLockScreen() async throws {
+        let sut = try await makeSUT()
+        let before = try sut.bytes()
+        sut.attemptStorage.setRecord(count: Self.lastAttempt, latestAt: sut.attemptClock.now)
+        sut.attemptClock.advance(by: .seconds(60 * 60))
+        sut.log.modify { $0.removeAll() }
+
+        let result = try await sut.service.makeDuressVault(current: "real", password: "new")
+
+        #expect(result == .onlyAtTheLockScreen)
+        #expect(sut.log.value.isEmpty)
+        #expect(try sut.bytes() == before)
+    }
+
+    @Test
+    func makeDuressVault_withThePasswordOff_throws() async throws {
+        let sut = try await makeSUT(mode: .deviceKey)
+
+        await #expect(throws: VaultPasswordChangeError.passwordIsNotOn) {
+            try await sut.service.makeDuressVault(current: "real", password: "new")
+        }
+    }
+
+    /// Locking while the current password is checked throws the check away, as it does an unlock attempt.
+    @Test
+    func makeDuressVault_lockedWhileChecking_makesNothing() async throws {
+        let sut = try await makeSUT()
+        let before = try sut.bytes()
+        sut.clock.hold()
+        let making = Task { try await sut.service.makeDuressVault(current: "real", password: "new") }
+        await sut.clock.waitUntilHolding()
+
+        await sut.unlockService.lock()
+        sut.clock.release()
+
+        await #expect(throws: CancellationError.self) {
+            try await making.value
+        }
+        #expect(try sut.bytes() == before)
     }
 }
 
@@ -676,13 +847,14 @@ extension VaultPasswordChangeServiceTests {
         _ = try await sut.service.turnOffPassword(current: "real")
         await sut.unlockService.lock()
         sut.log.modify { $0.removeAll() }
+        let record = try sut.attemptStorage.load()
 
         await #expect(throws: VaultUnlockError.passwordIsOff) {
             try await sut.unlockService.unlock(password: "real")
         }
 
         #expect(sut.log.value.isEmpty)
-        #expect(try sut.attemptStorage.load() == nil)
+        #expect(try sut.attemptStorage.load() == record)
     }
 
     @Test
@@ -988,7 +1160,7 @@ extension VaultPasswordChangeServiceTests {
         let before = try sut.bytes()
         let stateBefore = try sut.stateOnDisk()
         let session = sut.session
-        sut.attemptStorage.doWhileRemoving {
+        sut.attemptStorage.doWhileResetting {
             let locked = DispatchSemaphore(value: 0)
             Task.detached {
                 await session.lock()
@@ -1297,8 +1469,10 @@ extension VaultPasswordChangeServiceTests {
         let keychain = FaultInjectingDeviceKeyStore(wrapping: deviceKeyStore, steps: fileSystem)
         let wrapStampStorage = InMemoryWrapStampStorage()
         let realItem = uniqueVaultItem()
-        let realState = try EncryptedVaultStoreTests.state(items: [realItem])
-        let duressState = try EncryptedVaultStoreTests.state(items: [uniqueVaultItem()])
+        var realState = try EncryptedVaultStoreTests.state(items: [realItem])
+        realState.vault.duressSlots = realDuressSlots
+        var duressState = try EncryptedVaultStoreTests.state(items: [uniqueVaultItem()])
+        duressState.vault.duressSlots = duressDuressSlots
 
         var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
         let realKey: VaultSlotRootKey = if mode == .deviceKey, let key = deviceKeyStore.key {

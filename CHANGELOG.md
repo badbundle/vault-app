@@ -84,6 +84,8 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Restoring a backup always asks for the password it was made with, even when it's the backup password set now. The backup password kept on the device only makes backups
 - A new backup password has to be at least 8 characters, and not only numbers, like the App Lock Password. The form says so, and a password set before this keeps working
 - The Backups FAQ explains that deleted items, including those a killphrase deleted, stay in backups made before they were deleted, and in an auto-backup folder until its older backups are cleaned up
+- The wait after wrong App Lock Passwords keeps growing when a password opens Vault in between, and only gets shorter with time, by one wrong password for every hour that passes. A password that opens Vault still starts the count towards erasing after 10 again, and the erasing settings say so
+- Setting a duress password asks for the current App Lock Password, which waits after wrong ones as changing the password does
 
 ### Removed
 
