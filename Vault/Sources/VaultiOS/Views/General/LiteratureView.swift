@@ -20,6 +20,7 @@ struct LiteratureView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case let .markdown(markdownString):
                     Markdown(MarkdownContent(markdownString.content))
+                        .markdownImagesNeverLoad()
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }

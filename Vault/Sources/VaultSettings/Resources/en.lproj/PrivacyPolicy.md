@@ -40,8 +40,8 @@ This means that the stronger the passcode is on your iOS device, the better that
 If you create encrypted items, they will also be protected by the custom password that you have chosen using industry standard encryption.
 This information is never transmitted to Vault's webservers, it is only shared between you and people you explicitly share this information with.
 
-If you include links in Secure notes, such as image links, this may fetch data automatically when you view the note.
-This could collect information about you, as the data may be from a third-party webserver.
+Vault never loads anything from the internet when you view a note, even if it contains an image link.
+A link in a note only opens if you tap it.
 
 ## Analytics
 
@@ -108,3 +108,4 @@ If we decide to change our privacy policy, we will post those changes on this pa
 Summary of changes so far:
 
 - 24 November 2024: First published.
+- 28 September 2026: Vault no longer loads images linked in notes.
