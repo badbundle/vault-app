@@ -12,6 +12,8 @@ struct AutoBackupView: View {
     @State private var viewModel: AutoBackupViewModel
     @State private var isShowingFolderPicker = false
     @State private var isShowingCreatePassword = false
+    /// A shorter time to keep backups for, waiting to be confirmed.
+    @State private var retentionToConfirm: AutoBackupRetention?
 
     init(viewModel: AutoBackupViewModel) {
         _viewModel = .init(wrappedValue: viewModel)
@@ -211,8 +213,12 @@ struct AutoBackupView: View {
             Picker(selection: Binding(
                 get: { viewModel.configuration.retentionDays },
                 set: { retention in
-                    Task {
-                        await viewModel.setRetention(retention)
+                    if viewModel.needsConfirmation(toKeepBackupsFor: retention) {
+                        retentionToConfirm = retention
+                    } else {
+                        Task {
+                            await viewModel.setRetention(retention)
+                        }
                     }
                 },
             )) {
@@ -223,6 +229,28 @@ struct AutoBackupView: View {
                 FormRow(image: Image(systemName: "clock.arrow.circlepath"), color: .blue) {
                     Text("Keep Backups For")
                 }
+            }
+            // A shorter time deletes backups straight away, so it's confirmed first.
+            .confirmationDialog(
+                retentionToConfirm.map { "Keep Backups for \($0.localizedTitle)?" } ?? "",
+                isPresented: Binding(
+                    get: { retentionToConfirm != nil },
+                    set: { isPresented in
+                        if !isPresented {
+                            retentionToConfirm = nil
+                        }
+                    },
+                ),
+                titleVisibility: .visible,
+                presenting: retentionToConfirm,
+            ) { retention in
+                Button("Delete Older Backups", role: .destructive) {
+                    Task {
+                        await viewModel.setRetention(retention)
+                    }
+                }
+            } message: { retention in
+                Text(viewModel.confirmationMessage(toKeepBackupsFor: retention))
             }
         } header: {
             Text("Settings")

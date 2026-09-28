@@ -20,6 +20,13 @@ public enum AutoBackupRetention: Int, CaseIterable, Codable, Sendable {
     public var shouldCleanup: Bool {
         self != .forever
     }
+
+    /// Whether changing from `current` to this keeps backups for less time, so that the clean-up straight after the
+    /// change can delete backups `current` kept (`AutoBackupService.setRetention(_:)`).
+    public func keepsLess(than current: AutoBackupRetention) -> Bool {
+        guard shouldCleanup else { return false }
+        return !current.shouldCleanup || rawValue < current.rawValue
+    }
 }
 
 /// Configuration for automated backups.

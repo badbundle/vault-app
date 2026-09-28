@@ -313,6 +313,39 @@ struct AutoBackupViewModelTests {
         #expect(sut.scheduleSummary.hasSuffix("Backups older than 7 days are deleted, apart from the newest."))
     }
 
+    /// A shorter time deletes older backups as soon as it's chosen, so it's confirmed first. A longer one deletes
+    /// nothing the current one keeps.
+    @Test(arguments: [
+        (AutoBackupRetention.forever, AutoBackupRetention.days30, true),
+        (.year1, .days7, true),
+        (.days30, .days7, true),
+        (.days7, .days30, false),
+        (.days30, .forever, false),
+        (.days30, .days30, false),
+        (.forever, .forever, false),
+    ])
+    func needsConfirmation_onlyForAShorterTime(
+        current: AutoBackupRetention,
+        chosen: AutoBackupRetention,
+        expected: Bool,
+    ) {
+        var configuration = enabledConfiguration()
+        configuration.retentionDays = current
+        let sut = makeSUT(service: AutoBackupServiceMock(status: .idle, configuration: configuration))
+
+        #expect(sut.needsConfirmation(toKeepBackupsFor: chosen) == expected)
+    }
+
+    @Test
+    func confirmationMessage_saysEveryBackupCanGo() {
+        let sut = makeSUT(service: AutoBackupServiceMock(status: .idle, configuration: enabledConfiguration()))
+
+        let message = sut.confirmationMessage(toKeepBackupsFor: .days7)
+
+        #expect(message.contains("older than 7 days are deleted as soon as you choose this"))
+        #expect(message.contains("every one of them"))
+    }
+
     @Test
     func scheduleSummary_saysBackupsAreKeptForever() {
         var configuration = enabledConfiguration()
