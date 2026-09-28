@@ -38,7 +38,9 @@ struct BackupRestoreView: View {
             case .unavailable:
                 PasscodeRequiredSection(message: "Set up a passcode on this device to restore a backup.")
             case .allowed:
-                if dataModel.hasAnyItems {
+                // Only what the feed shows: a vault holding only items a search shows gets the same sections as an
+                // empty one. Importing into it merges, so they're kept.
+                if dataModel.hasVisibleItems {
                     mergeImportSection
                     overrideImportSection
                 } else {
@@ -49,7 +51,7 @@ struct BackupRestoreView: View {
         .navigationTitle(Text(viewModel.strings.homeTitle))
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            await dataModel.reloadItems()
+            await dataModel.reloadHasVisibleItems()
         }
         .onDisappear {
             viewModel.lock()
@@ -59,7 +61,8 @@ struct BackupRestoreView: View {
                 viewModel.lock()
             }
         }
-        .sheet(item: $modal, onDismiss: nil) { sheet in
+        // An import reloads the items for whatever search is set, so read again what the feed shows without one.
+        .sheet(item: $modal, onDismiss: reloadHasVisibleItems) { sheet in
             switch sheet {
             case let .importToCurrentlyEmpty(backupPassword):
                 BackupImportFlowView(viewModel: .init(
@@ -90,6 +93,10 @@ struct BackupRestoreView: View {
 // MARK: - BackupRestoreView Extensions
 
 extension BackupRestoreView {
+    private func reloadHasVisibleItems() {
+        Task { await dataModel.reloadHasVisibleItems() }
+    }
+
     /// What restoring does, and what it needs, before anything else.
     private var headerSection: some View {
         Section {

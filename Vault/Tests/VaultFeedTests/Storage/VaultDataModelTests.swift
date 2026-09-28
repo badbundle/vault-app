@@ -84,7 +84,7 @@ final class VaultDataModelTests {
         #expect(sut.backupPassword == .notFetched)
         #expect(sut.backupPasswordStatus == .unknown)
         #expect(sut.allTagsRetrievalError == nil)
-        #expect(sut.hasAnyItems == false)
+        #expect(sut.hasVisibleItems == false)
     }
 
     @Test
@@ -326,16 +326,112 @@ final class VaultDataModelTests {
     }
 
     @Test
-    func reloadItems_loadsHasItems() async {
+    func reloadItems_loadsWhetherAnyItemsShow() async {
         let store = VaultStoreStub()
         let sut = makeSUT(vaultStore: store)
         for hasItems in [true, false] {
-            store.hasAnyItemsHandler = { hasItems }
+            store.retrieveHandler = { _ in .init(items: hasItems ? [uniqueVaultItem()] : []) }
 
             await sut.reloadItems()
 
-            #expect(sut.hasAnyItems == hasItems)
+            #expect(sut.hasVisibleItems == hasItems)
         }
+    }
+
+    /// An item that couldn't be read counts as one that shows.
+    @Test
+    func reloadItems_itemThatCouldntBeRead_countsAsShowing() async {
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in .init(errors: [.unknown]) }
+        let sut = makeSUT(vaultStore: store)
+
+        await sut.reloadItems()
+
+        #expect(sut.hasVisibleItems)
+    }
+
+    /// A vault holding only items that a search shows, such as one behind a search passphrase, looks empty, as it does
+    /// in the feed. So the Restore page offers the same import as for an empty vault, which merges, keeping them.
+    @Test
+    func reloadItems_onlyItemsASearchShows_hasNoVisibleItems() async throws {
+        let store = try await Self.storeWithOnlyItemsASearchShows()
+        let sut = makeSUT(vaultStore: store, vaultTagStore: store)
+        await sut.loadSearchPassphraseDigester()
+
+        await sut.reloadItems()
+
+        #expect(await store.hasAnyItems)
+        #expect(sut.items.isEmpty)
+        #expect(!sut.hasVisibleItems)
+    }
+
+    /// Even while a search shows them: whether any items show is decided without the search.
+    @Test
+    func reloadHasVisibleItems_whileASearchShowsHiddenItems_findsNone() async throws {
+        let store = try await Self.storeWithOnlyItemsASearchShows()
+        let sut = makeSUT(vaultStore: store, vaultTagStore: store)
+        await sut.loadSearchPassphraseDigester()
+        sut.itemsSearchQuery = Self.hiddenItemPassphrase
+        await sut.reloadItems()
+
+        await sut.reloadHasVisibleItems()
+
+        #expect(sut.items.count == 1)
+        #expect(!sut.hasVisibleItems)
+    }
+
+    /// While a search or tag filter shows none of them, items that show without one still count.
+    @Test
+    func reloadHasVisibleItems_whileASearchShowsNothing_findsVisibleItems() async throws {
+        let store = RecordVaultStore()
+        try await store.importAndOverrideVault(payload: .init(
+            userDescription: "",
+            items: [anySecureNote(title: "shown").wrapInAnyVaultItem()],
+            tags: [],
+        ))
+        let sut = makeSUT(vaultStore: store, vaultTagStore: store)
+        sut.itemsSearchQuery = "matches nothing"
+        await sut.reloadItems()
+
+        await sut.reloadHasVisibleItems()
+
+        #expect(sut.items.isEmpty)
+        #expect(sut.hasVisibleItems)
+    }
+
+    /// A search reads only what it shows, so it leaves whether any items show as it was.
+    @Test
+    func reloadItems_whileSearching_leavesVisibleItemsAsTheyWere() async {
+        let store = VaultStoreStub()
+        store.retrieveHandler = { query in .init(items: query.filterText == nil ? [uniqueVaultItem()] : []) }
+        let sut = makeSUT(vaultStore: store)
+        await sut.reloadItems()
+        sut.itemsSearchQuery = "matches nothing"
+
+        await sut.reloadItems()
+
+        #expect(sut.items.isEmpty)
+        #expect(sut.hasVisibleItems)
+        #expect(store.retrieveCallCount == 2)
+    }
+
+    @Test
+    func reloadHasVisibleItems_deletesNothingAndLeavesTheItems() async {
+        let store = VaultStoreStub()
+        let item = uniqueVaultItem()
+        store.retrieveHandler = { query in .init(items: query.filterText == nil ? [] : [item]) }
+        let killphraseDeleter = VaultStoreKillphraseDeleterMock()
+        let sut = makeSUT(vaultStore: store, vaultKillphraseDeleter: killphraseDeleter)
+        await sut.loadKillphraseDigester()
+        sut.itemsSearchQuery = "a search"
+        await sut.reloadItems()
+        let deletions = killphraseDeleter.deleteItemsCallCount
+
+        await sut.reloadHasVisibleItems()
+
+        #expect(killphraseDeleter.deleteItemsCallCount == deletions)
+        #expect(sut.items == [item])
+        #expect(!sut.hasVisibleItems)
     }
 
     @Test
@@ -1781,6 +1877,28 @@ final class VaultDataModelTests {
 // MARK: - Helpers
 
 extension VaultDataModelTests {
+    private static let hiddenItemPassphrase = "find me"
+
+    /// A store with an item behind a search passphrase, and one only a search shows: none that the feed shows
+    /// without a search.
+    private static func storeWithOnlyItemsASearchShows() async throws -> RecordVaultStore {
+        let digester = SearchPassphraseDigester(key: .zero())
+        let store = RecordVaultStore()
+        try await store.importAndOverrideVault(payload: .init(
+            userDescription: "",
+            items: [
+                anySecureNote(title: "hidden").wrapInAnyVaultItem(
+                    visibility: .onlySearch,
+                    searchableLevel: .onlyPassphrase,
+                    searchPassphrase: digester.makeDigest(phrase: hiddenItemPassphrase),
+                ),
+                anySecureNote(title: "searchable").wrapInAnyVaultItem(visibility: .onlySearch),
+            ],
+            tags: [],
+        ))
+        return store
+    }
+
     private func makeSUT(
         vaultStore: any VaultStore = VaultStoreStub(),
         vaultTagStore: any VaultTagStore = VaultTagStoreStub(),

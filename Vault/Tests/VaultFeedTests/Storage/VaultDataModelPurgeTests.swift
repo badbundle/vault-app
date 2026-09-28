@@ -16,13 +16,13 @@ struct VaultDataModelPurgeTests {
         sut.toggleFiltering(tag: tag.id)
         #expect(sut.items.count == 2)
         #expect(sut.allTags == [tag])
-        #expect(sut.hasAnyItems)
+        #expect(sut.hasVisibleItems)
 
         await sut.purgeVaultContents()
 
         #expect(sut.items.isEmpty)
         #expect(sut.itemErrors.isEmpty)
-        #expect(!sut.hasAnyItems)
+        #expect(!sut.hasVisibleItems)
         #expect(sut.itemsState == .base)
         #expect(sut.allTags.isEmpty)
         #expect(sut.allTagsState == .base)
@@ -83,7 +83,7 @@ struct VaultDataModelPurgeTests {
         await reload.value
 
         #expect(sut.items.isEmpty)
-        #expect(!sut.hasAnyItems)
+        #expect(!sut.hasVisibleItems)
         #expect(sut.itemsRetrievalError == nil)
     }
 
