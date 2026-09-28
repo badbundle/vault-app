@@ -15,9 +15,10 @@ If you do not want this information to be collected, do not use Vault.
 ## Technical basics
 
 Vault stores your information locally on your device.
-This data is not backed up or recorded anywhere other than the device you create it on.
+Vault does not back up or record this data anywhere other than the device you create it on, unless you create a backup or turn on automatic backups.
 
 If you create an encrypted backup, you have the option of saving this to third party storage services.
+If you turn on automatic backups, Vault saves an encrypted backup whenever your items change, to a folder you choose, which may be on a third party storage service such as iCloud Drive.
 
 ## Information usage
 
