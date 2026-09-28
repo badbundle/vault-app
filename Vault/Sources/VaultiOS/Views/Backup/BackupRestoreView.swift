@@ -114,7 +114,7 @@ extension BackupRestoreView {
         Section {
             importButton(
                 title: "Import Backup",
-                icon: "square.and.arrow.down",
+                icon: BackupImportContext.toEmptyVault.systemImage,
             ) {
                 modal = .importToCurrentlyEmpty
             }
@@ -127,7 +127,7 @@ extension BackupRestoreView {
         Section {
             importButton(
                 title: "Import & Merge",
-                icon: "square.and.arrow.down.on.square",
+                icon: BackupImportContext.merge.systemImage,
             ) {
                 modal = .importAndMerge
             }
@@ -144,7 +144,7 @@ extension BackupRestoreView {
         Section {
             importButton(
                 title: "Import & Override",
-                icon: "exclamationmark.triangle.fill",
+                icon: BackupImportContext.override.systemImage,
                 isDestructive: true,
             ) {
                 modal = .importAndOverride

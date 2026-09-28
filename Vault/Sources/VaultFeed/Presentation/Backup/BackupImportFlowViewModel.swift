@@ -111,6 +111,15 @@ public final class BackupImportFlowViewModel {
         }
     }
 
+    /// Clears the last import's error as the user goes to choose another backup, so the screen asks for one again.
+    ///
+    /// Done as they choose, not once the backup is read: reading a PDF doesn't wait for anything, so the same error
+    /// again would replace the last one before the UI saw it go, and nothing would react to it.
+    public func clearError() {
+        guard payloadState.isError else { return }
+        payloadState = .none
+    }
+
     public func handleVaultDecoded(payload: VaultApplicationPayload) {
         payloadState = .ready(payload, UUID())
     }

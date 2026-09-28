@@ -76,15 +76,8 @@ struct BackupImportFlowView: View {
 
     private var rootContent: some View {
         Form {
-            switch viewModel.payloadState {
-            case .none, .ready, .needsPasswordEntry:
-                EmptyView()
-            case let .error(presentationError):
-                errorSection(error: presentationError)
-            }
-
-            automaticImportSection
-            qrCodeImportSection
+            sourceHeaderSection
+            sourcesSection
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
@@ -120,38 +113,76 @@ struct BackupImportFlowView: View {
         }
     }
 
-    // MARK: - Import Source Sections
+    // MARK: - Header Section
 
-    private var automaticImportSection: some View {
-        Section {
-            ProminentActionButton("Select PDF File", systemImage: "doc.badge.arrow.up.fill") {
-                isImporting = true
-            }
-        } header: {
-            Text("Automatic Import")
-        } footer: {
-            Text("Select your Vault Export PDF from your files.")
-        }
-        .fileImporter(isPresented: $isImporting, allowedContentTypes: [.pdf]) { result in
-            importTask = Task {
-                await viewModel.handleImport(fromPDF: result.tryMap { url in
-                    _ = url.startAccessingSecurityScopedResource()
-                    defer { url.stopAccessingSecurityScopedResource() }
-                    return try Data(contentsOf: url)
-                })
-            }
+    /// What's about to happen to the vault, with the symbol of the Restore page's row that opened this sheet.
+    private var sourceHeaderSection: some View {
+        BackupImportHeaderSection(
+            title: sourceTitle,
+            subtitle: sourceSubtitle,
+            systemImage: viewModel.importContext.systemImage,
+            color: viewModel.importContext.color,
+            error: payloadError,
+        )
+    }
+
+    private var payloadError: PresentationError? {
+        switch viewModel.payloadState {
+        case let .error(error): error
+        case .none, .needsPasswordEntry, .ready: nil
         }
     }
 
-    private var qrCodeImportSection: some View {
+    private var sourceTitle: String {
+        switch viewModel.importContext {
+        case .toEmptyVault: "Import a Backup"
+        case .merge: "Merge a Backup"
+        case .override: "Replace Your Vault"
+        }
+    }
+
+    private var sourceSubtitle: String {
+        switch viewModel.importContext {
+        case .toEmptyVault, .merge:
+            "Choose a PDF or scan QR codes. You'll need the backup's password."
+        case .override:
+            "Everything on this device will be replaced. You'll need the backup's password."
+        }
+    }
+
+    // MARK: - Sources Section
+
+    /// Where the backup comes from, as rows in the style of the Export page's options.
+    private var sourcesSection: some View {
         Section {
-            ProminentActionButton("Start Scanning", systemImage: "qrcode.viewfinder") {
+            BackupOptionRow(
+                title: "Choose a PDF Backup",
+                detail: "Pick the backup file from Files.",
+                systemImage: "doc.text.fill",
+                color: .accentColor,
+            ) {
+                viewModel.clearError()
+                isImporting = true
+            }
+            .fileImporter(isPresented: $isImporting, allowedContentTypes: [.pdf]) { result in
+                importTask = Task {
+                    await viewModel.handleImport(fromPDF: result.tryMap { url in
+                        _ = url.startAccessingSecurityScopedResource()
+                        defer { url.stopAccessingSecurityScopedResource() }
+                        return try Data(contentsOf: url)
+                    })
+                }
+            }
+
+            BackupOptionRow(
+                title: "Scan QR Codes",
+                detail: "From a PDF backup, or the Export screen on another device.",
+                systemImage: "qrcode.viewfinder",
+                color: .indigo,
+            ) {
+                viewModel.clearError()
                 modal = .cameraScanning
             }
-        } header: {
-            Text("QR Code Import")
-        } footer: {
-            Text("Use your camera to scan the QR codes from a PDF backup or another device.")
         }
     }
 
@@ -221,6 +252,61 @@ struct BackupImportFlowView: View {
     private func importRow(vault: VaultApplicationPayload) -> some View {
         ProminentActionButton("Import Now", systemImage: "square.and.arrow.down") {
             await viewModel.importPayload(payload: vault)
+        }
+    }
+}
+
+// MARK: - BackupImportHeaderSection
+
+/// An import screen's hero header, or the error in its place: a red cross replaces the symbol, the error's title and
+/// description replace the header's, and the error haptic plays.
+///
+/// One header either way, so the symbol is replaced in place rather than the whole header swapped out.
+struct BackupImportHeaderSection: View {
+    var title: String
+    var subtitle: String
+    var systemImage: String
+    var color: Color
+    var error: PresentationError?
+
+    var body: some View {
+        Section {
+            BackupHeroHeader(
+                title: error?.userTitle ?? title,
+                subtitle: error.map { $0.userDescription ?? "" } ?? subtitle,
+                systemImage: error == nil ? systemImage : "xmark.octagon.fill",
+                color: error == nil ? color : .red,
+                iconSize: 56,
+            )
+            .sensoryFeedback(.error, trigger: error) { _, newValue in
+                newValue != nil
+            }
+            .onChange(of: error) { _, newValue in
+                if let newValue {
+                    AccessibilityNotification.Announcement(newValue.userTitle).post()
+                }
+            }
+        }
+    }
+}
+
+// MARK: - BackupImportContext
+
+extension BackupImportContext {
+    /// The symbol for this kind of import, on the Restore page's row and on the import sheet that it opens.
+    var systemImage: String {
+        switch self {
+        case .toEmptyVault: "square.and.arrow.down"
+        case .merge: "square.and.arrow.down.on.square"
+        case .override: "exclamationmark.triangle.fill"
+        }
+    }
+
+    /// Red for replacing the vault, which deletes anything that isn't in the backup.
+    var color: Color {
+        switch self {
+        case .toEmptyVault, .merge: .accentColor
+        case .override: .red
         }
     }
 }

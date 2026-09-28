@@ -18,11 +18,12 @@ struct BackupHeroHeader<Accessory: View>: View {
     var icon: Icon
     /// Point size of the symbol at the default Dynamic Type size.
     var iconSize: Double
-    /// Bounces the symbol once when the header first appears, to celebrate a finished step.
+    /// Bounces the symbol once when the header first appears, to celebrate a finished step. Not with Reduce Motion.
     var bouncesOnAppear: Bool
     @ViewBuilder var accessory: () -> Accessory
 
     @ScaledMetric(relativeTo: .largeTitle) private var iconScale: Double = 1
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hasAppeared = false
 
     init(
@@ -82,7 +83,8 @@ struct BackupHeroHeader<Accessory: View>: View {
         .padding(.vertical, 8)
         .noListBackground()
         .onAppear {
-            if bouncesOnAppear {
+            // With Reduce Motion, the symbol stays still.
+            if bouncesOnAppear, !reduceMotion {
                 hasAppeared = true
             }
         }
@@ -95,6 +97,8 @@ struct BackupHeroHeader<Accessory: View>: View {
             Image(systemName: systemImage)
                 .font(.system(size: iconSize * iconScale))
                 .foregroundStyle(color)
+                // A new symbol, such as an error's, replaces the old one. With Reduce Motion, it fades in.
+                .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
                 .symbolEffect(.bounce, value: hasAppeared)
         case .appLockPassword:
             AppLockPasswordMark.Hero(size: iconSize * iconScale)
