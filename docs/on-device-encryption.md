@@ -1077,8 +1077,10 @@ and resets the counter.
   says where its backups are: once a new backup password is set, auto-backup would write there, and its retention
   clean-up delete the erased vault's backups. The auto-backup service and the data model read them at launch, so a
   hook makes them forget their copies too, and the providers their folders. It turns off erasing after failed
-  passwords, which only means anything with a password. It also removes the pending rehash files and backup PDFs
-  left in the temporary directory. The storage state goes last, when the journal is cleared.
+  passwords, which only means anything with a password. It also removes the pending rehash files, backup PDFs
+  left in the temporary directory, and `app-lock-password-attempts.lock`, which the attempt count takes its lock on:
+  step 2 makes it again if it isn't there, and nothing else does until a password is set. The storage state goes
+  last, when the journal is cleared.
 - **Step 4** tries the QuickType store a few times, and then carries on without it: while the password is on it's kept
   empty already, and a store that's stuck mustn't leave the vaults half erased.
 - **Step 5** creates the store without the plain store's failed-open recovery, so it never sets a copy aside, then

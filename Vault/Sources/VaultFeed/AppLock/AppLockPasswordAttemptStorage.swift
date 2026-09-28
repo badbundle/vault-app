@@ -26,6 +26,8 @@ protocol AppLockPasswordAttemptStorage: Sendable {
     /// Keeps other processes from reading or writing the record until the access is released, waiting first for any
     /// that has it.
     func acquireExclusiveAccess() async throws -> AppLockPasswordAttemptAccess
+    /// Removes whatever `acquireExclusiveAccess()` leaves on disk, if anything. The next access makes it again.
+    func removeLockFile() throws
 }
 
 extension AppLockPasswordAttemptStorage {
@@ -33,6 +35,9 @@ extension AppLockPasswordAttemptStorage {
     func acquireExclusiveAccess() async throws -> AppLockPasswordAttemptAccess {
         AppLockPasswordAttemptAccess {}
     }
+
+    /// Storage no other process shares leaves nothing on disk to take a lock on.
+    func removeLockFile() throws {}
 }
 
 /// Exclusive access to the attempt record. Release it exactly once.
@@ -57,10 +62,13 @@ struct AppLockPasswordAttemptKeychainStorage: AppLockPasswordAttemptStorage {
     /// How long to wait for another process to let go of the lock before giving up.
     private let lockTimeout: Duration
 
+    /// The lock file's name, in the App Group's storage directory.
+    static let lockFileName = "app-lock-password-attempts.lock"
+
     init(
         accessGroup: String? = VaultSharedStorage.appGroupID,
         lockFileURL: @escaping @Sendable () -> URL = {
-            VaultSharedStorage.directory().appending(path: "app-lock-password-attempts.lock")
+            VaultSharedStorage.directory().appending(path: lockFileName)
         },
         lockTimeout: Duration = .seconds(5),
     ) {
@@ -96,6 +104,16 @@ struct AppLockPasswordAttemptKeychainStorage: AppLockPasswordAttemptStorage {
         }
         return AppLockPasswordAttemptAccess {
             close(descriptor)
+        }
+    }
+
+    /// Removes the lock file, if it's there. Only an erase does, once there's no password left to count attempts at:
+    /// the file shows one was tried on this device. Setting a password makes it again.
+    func removeLockFile() throws {
+        guard unlink(lockFileURL().path) == 0 else {
+            let error = errno
+            guard error != ENOENT else { return }
+            throw POSIXError(Self.errorCode(error))
         }
     }
 

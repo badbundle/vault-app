@@ -38,6 +38,30 @@ struct VaultEraserTests {
         }
     }
 
+    /// The count of wrong attempts takes its lock on a file beside the vault, which shows a password was tried on this
+    /// device. An erase leaves none, however often the lock screen took the lock beforehand, and nothing makes it again
+    /// until a password is set.
+    @Test
+    func erase_leavesNoAttemptsLockFile() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try await VaultEraseHarness.encryptedDevice(in: directory)
+            let counter = AppLockPasswordAttemptCounter(storage: harness.attemptStorage, clock: FakeAppLockClock())
+            // As the lock screen does, to show how long to wait.
+            _ = try await counter.remainingDelay()
+            #expect(try harness.fileNames().contains(AppLockPasswordAttemptKeychainStorage.lockFileName))
+
+            try await harness.erase()
+            _ = try await harness.relaunch()
+
+            #expect(try !harness.fileNames().contains(AppLockPasswordAttemptKeychainStorage.lockFileName))
+            #expect(try harness.stepsInOrder([
+                "reset the attempt count",
+                "remove \(AppLockPasswordAttemptKeychainStorage.lockFileName)",
+                "create the plain store",
+            ]))
+        }
+    }
+
     /// With the App Lock Password off, the device key opens the vault. It goes with the file and every other key, so
     /// nothing on the device shows the password was ever turned off.
     @Test
@@ -438,7 +462,7 @@ struct VaultEraseHarness {
         self.directory = directory
         self.fileSystem = fileSystem
         keychain = FaultInjectingSecureStorage(faults: fileSystem)
-        attemptStorage = FaultInjectingAttemptStorage(faults: fileSystem)
+        attemptStorage = FaultInjectingAttemptStorage(faults: fileSystem, directory: directory)
         wrapStamps = FaultInjectingWrapStampStorage(faults: fileSystem)
         self.deviceKeys = deviceKeys
         userDefaults = try testUserDefaults()
@@ -772,13 +796,28 @@ actor FaultInjectingSecureStorage: SecureStorage {
     }
 }
 
-/// The count of wrong attempts in memory, whose removal is a step of a `FaultInjectingSlotFileSystem`.
+/// The count of wrong attempts in memory, whose removal is a step of a `FaultInjectingSlotFileSystem`. Its lock is the
+/// app's own, on a lock file in the vault's directory (`AppLockPasswordAttemptKeychainStorage`), and removing that is
+/// a step too.
 final class FaultInjectingAttemptStorage: AppLockPasswordAttemptStorage {
     private let record = SharedMutex<AppLockPasswordAttemptRecord?>(nil)
     private let faults: FaultInjectingSlotFileSystem
+    private let lock: AppLockPasswordAttemptKeychainStorage
 
-    init(faults: FaultInjectingSlotFileSystem) {
+    init(faults: FaultInjectingSlotFileSystem, directory: URL) {
         self.faults = faults
+        lock = AppLockPasswordAttemptKeychainStorage(accessGroup: nil, lockFileURL: {
+            directory.appending(path: AppLockPasswordAttemptKeychainStorage.lockFileName)
+        })
+    }
+
+    func acquireExclusiveAccess() async throws -> AppLockPasswordAttemptAccess {
+        try await lock.acquireExclusiveAccess()
+    }
+
+    func removeLockFile() throws {
+        try faults.step("remove \(AppLockPasswordAttemptKeychainStorage.lockFileName)")
+        try lock.removeLockFile()
     }
 
     var hasRecord: Bool {
