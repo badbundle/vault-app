@@ -79,6 +79,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - The AutoFill sheet locks when the iPhone does, as Vault does: with App Lock on, locking the iPhone with the sheet open hides the codes until the sheet is unlocked again
 - Restoring a backup always asks for the password it was made with, even when it's the backup password set now. The backup password kept on the device only makes backups
 - A new backup password has to be at least 8 characters, and not only numbers, like the App Lock Password. The form says so, and a password set before this keeps working
+- The Backups FAQ explains that deleted items, including those a killphrase deleted, stay in backups made before they were deleted, and in an auto-backup folder until its older backups are cleaned up
 
 ### Removed
 
