@@ -359,20 +359,25 @@ extension EncryptedVaultPasswordServiceTests {
         let session: VaultStoreSession
         let keychain: Keychain
         let attemptStorage: LoggingAttemptStorage
+        /// What the app shows the vault with, which a lock purges as `VaultRoot` has it.
+        let dataModel: VaultDataModel
         /// The plain store while the vault is in it, as `VaultRoot` keeps it: dropped once a conversion commits, and a
         /// fresh one after an erase.
         let plainStore: PlainStoreBox
         /// The unlock service's clock, which can hold an attempt at its deadline.
         let unlockClock: ManualUnlockClock
 
-        /// - Parameter mode: How the vault is stored, as launch recovery left it. In the plain mode, the plain store
-        ///   opens, and the session reads it; otherwise the session starts locked.
+        /// - Parameters:
+        ///   - mode: How the vault is stored, as launch recovery left it. In the plain mode, the plain store opens, and
+        ///     the session reads it; otherwise the session starts locked.
+        ///   - delay: Require Unlock.
         init(
             directory: URL,
             keychain: Keychain? = nil,
             mode: VaultStorageState.Mode = .plain,
             isLockEnabled: Bool = false,
             plainStoreOpenedNormally: Bool = true,
+            delay: AppLockDelay = .immediately,
         ) async throws {
             let keychain = try keychain ?? Keychain()
             let plainStore = try PlainStoreBox(
@@ -381,6 +386,20 @@ extension EncryptedVaultPasswordServiceTests {
                     : nil,
             )
             let session = VaultStoreSession(target: plainStore.store.map { .plain($0) } ?? .locked)
+            let dataModel = VaultDataModel(
+                vaultStore: session,
+                vaultTagStore: session,
+                vaultImporter: session,
+                vaultDeleter: session,
+                vaultKillphraseDeleter: session,
+                vaultOtpAutofillStore: VaultOTPAutofillStoreMock(),
+                backupPasswordStore: BackupPasswordStoreMock(),
+                killphraseKeyStore: StubKillphraseKeyStore(),
+                killphraseRehashService: nil,
+                searchPassphraseKeyStore: StubSearchPassphraseKeyStore(),
+                searchPassphraseRehashService: nil,
+                backupEventLogger: BackupEventLoggerMock(),
+            )
             let unlockClock = ManualUnlockClock()
             let attemptCounter = AppLockPasswordAttemptCounter(storage: keychain.attempts, clock: keychain.attemptClock)
             let settings = keychain.settings
@@ -413,7 +432,9 @@ extension EncryptedVaultPasswordServiceTests {
                 attemptCounter: attemptCounter,
                 deadlineStore: VaultStorageStateFile(directory: directory),
                 deviceKeyStore: keychain.deviceKeys,
-                purgeVaultContents: {},
+                purgeVaultContents: {
+                    await dataModel.purgeVaultContents()
+                },
                 clock: unlockClock,
                 availableMemory: { nil },
                 wrapStamper: wrapStamper,
@@ -471,13 +492,15 @@ extension EncryptedVaultPasswordServiceTests {
             if isLockEnabled {
                 settings.isEnabled = true
             }
-            settings.delay = .immediately
+            settings.delay = delay
             appLock = AppLockService(
                 settings: settings,
                 authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
                 passwordService: service,
                 clock: keychain.attemptClock,
-                purgeSensitiveData: {},
+                purgeSensitiveData: {
+                    dataModel.purgeSensitiveData()
+                },
             )
             self.service = service
             self.session = session
@@ -485,6 +508,7 @@ extension EncryptedVaultPasswordServiceTests {
             self.plainStore = plainStore
             self.unlockClock = unlockClock
             attemptStorage = keychain.attempts
+            self.dataModel = dataModel
         }
 
         func insertItem() async throws -> Identifier<VaultItem> {
