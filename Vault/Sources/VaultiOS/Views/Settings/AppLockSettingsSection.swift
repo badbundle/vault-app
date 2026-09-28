@@ -14,7 +14,7 @@ struct AppLockSettingsSection: View {
     /// Likewise for the delay.
     @State private var requestedDelay: AppLockDelay?
     /// The App Lock Password's sheet, and whether the password was set when it opened.
-    @State private var passwordSheet: PasswordSheet?
+    @State private var passwordSheet: PasswordSheet? = Self.initialPasswordSheet
 
     private struct PasswordSheet: Identifiable {
         var startsWithPasswordSet: Bool
@@ -22,6 +22,16 @@ struct AppLockSettingsSection: View {
         var id: Bool {
             startsWithPasswordSet
         }
+    }
+
+    /// Open straight away for its marketing screenshot, and closed otherwise.
+    private static var initialPasswordSheet: PasswordSheet? {
+        #if DEBUG
+        if ScreenshotMode.scene == .appLockPassword {
+            return PasswordSheet(startsWithPasswordSet: true)
+        }
+        #endif
+        return nil
     }
 
     var body: some View {

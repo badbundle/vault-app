@@ -1,5 +1,5 @@
 {
-  "originHash" : "e960b4586dd023fb61537ba2726e0145d3cebad379cf36f1d0951860ee375952",
+  "originHash" : "ee92230cbf8db918fdc0e53bdad3c6162fd3a3d4fdb3e0c1115e153275f42ff4",
   "pins" : [
     {
       "identity" : "bad-bundle-apps",
@@ -43,7 +43,7 @@
       "location" : "https://github.com/badbundle/device-screenshot-framer",
       "state" : {
         "branch" : "main",
-        "revision" : "760a2ded0da0d49fc4cb44bfff55351cba0df639"
+        "revision" : "dfca45c20a4cfff9651ffd51b32f52f2e1f51304"
       }
     },
     {

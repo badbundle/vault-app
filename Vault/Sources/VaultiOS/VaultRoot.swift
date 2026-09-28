@@ -211,10 +211,20 @@ public enum VaultRoot {
     /// The plain store's backup settings, which turning encryption on moves into the real vault.
     @MainActor
     static let deviceBackupSettings = DeviceBackupSettings(
-        passwordStore: deviceBackupPasswordStore,
+        passwordStore: deviceBackupPasswordStoreOrStandIn,
         secureStorage: secureStorage,
         defaults: defaults,
     )
+
+    /// `deviceBackupPasswordStore`, but never in screenshot mode, which doesn't read the keychain's backup password.
+    private static var deviceBackupPasswordStoreOrStandIn: any BackupPasswordStore {
+        #if DEBUG
+        if ScreenshotMode.isEnabled {
+            return ScreenshotMode.backupPasswordStore
+        }
+        #endif
+        return deviceBackupPasswordStore
+    }
 
     /// The backup password, last backup, auto-backup configuration and PDF hint of whichever vault is open:
     /// device-wide for the plain store, and each encrypted vault's own. `setup()` reads them, and reads them again
@@ -424,8 +434,8 @@ public enum VaultRoot {
     @MainActor
     public static let deviceAuthenticationService: DeviceAuthenticationService = {
         #if DEBUG
-        // UI tests answer device authentication themselves.
-        if let policy = UITestVault.authenticationPolicy {
+        // UI tests answer device authentication themselves, and marketing screenshots always pass it.
+        if let policy = UITestVault.authenticationPolicy ?? ScreenshotMode.authenticationPolicy {
             return .init(policy: policy)
         }
         #endif
@@ -438,7 +448,7 @@ public enum VaultRoot {
     @MainActor
     public static let appLockSettingsStore: AppLockSettingsStore = {
         #if DEBUG
-        // Marketing screenshots never show the lock, whatever the simulator has set.
+        // Marketing screenshots show the lock only where their scene asks for it, whatever the simulator has set.
         if ScreenshotMode.isEnabled {
             return ScreenshotMode.makeAppLockSettingsStore()
         }
@@ -457,12 +467,24 @@ public enum VaultRoot {
     public static let appLockService: AppLockService = .init(
         settings: appLockSettingsStore,
         authenticationService: deviceAuthenticationService,
-        passwordService: vaultPasswordService,
+        passwordService: appLockPasswordService,
         purgeSensitiveData: {
             purgeSensitiveDataForAppLock(vaultDataModel)
         },
         didChangeSettings: reloadWidgetTimelines,
     )
+
+    /// What the lock and Settings use for the App Lock Password: `vaultPasswordService`, or in screenshot mode, a
+    /// stand-in for the scenes that show the password.
+    @MainActor
+    private static var appLockPasswordService: (any AppLockPasswordService)? {
+        #if DEBUG
+        if ScreenshotMode.isEnabled {
+            return ScreenshotMode.makeAppLockPasswordService()
+        }
+        #endif
+        return vaultPasswordService
+    }
 
     /// The App Lock Password, on the vault's storage: unlocking with it, and
     /// setting, changing and turning it off, and making a duress vault, in

@@ -20,7 +20,9 @@
 #   SCREENSHOT_RUNTIME         simulator runtime (default: iOS 27.0)
 #   SCREENSHOT_IPHONE_DEVICE   device type (default: iPhone 18 Pro Max, 1320x2868)
 #   SCREENSHOT_IPAD_DEVICE     device type (default: iPad Pro 13-inch (M5), 2064x2752)
-#   SCREENSHOT_SETTLE_SECONDS  wait after launch before capturing (default: 5)
+#   SCREENSHOT_SETTLE_SECONDS  wait after launch before capturing (default: 5).
+#                              Scenes behind the App Lock Password wait 4
+#                              seconds longer, for the lock to open.
 
 set -euo pipefail
 
@@ -39,7 +41,10 @@ SETTLE_SECONDS="${SCREENSHOT_SETTLE_SECONDS:-5}"
 
 # Order here is the order of the numbered output files. Names must match
 # ScreenshotMode.Scene's raw values.
-SCENES=(feed detail tags backups settings)
+SCENES=(feed detail search editor lock app-lock-password backups settings)
+# Scenes that start behind the lock and enter the App Lock Password, which
+# takes Face ID, the password and the door opening before they show.
+UNLOCKING_SCENES=(app-lock-password settings)
 
 CLASSES=("$@")
 if [[ ${#CLASSES[@]} -eq 0 ]]; then
@@ -110,11 +115,22 @@ make_simulator() {
     xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
 }
 
+settle_seconds_for() {
+    local scene="$1" unlocking
+    for unlocking in "${UNLOCKING_SCENES[@]}"; do
+        if [[ "$scene" == "$unlocking" ]]; then
+            printf '%s' "$((SETTLE_SECONDS + 4))"
+            return
+        fi
+    done
+    printf '%s' "$SETTLE_SECONDS"
+}
+
 capture_scene() {
     local udid="$1" scene="$2" output="$3"
     xcrun simctl launch --terminate-running-process "$udid" "$BUNDLE_ID" \
         -screenshot-scene "$scene" >/dev/null
-    sleep "$SETTLE_SECONDS"
+    sleep "$(settle_seconds_for "$scene")"
     # simctl chatters on stderr for every capture; only show it on failure.
     local result
     if ! result="$(xcrun simctl io "$udid" screenshot --type=png "$output" 2>&1)"; then

@@ -4,7 +4,7 @@ import Foundation
 ///
 /// VAULT-46's unlock service unlocks, VAULT-47's conversion sets the password, and VAULT-48 changes it and turns it
 /// off: `EncryptedVaultPasswordService` in the app, and `AutofillVaultService` in the AutoFill extension.
-/// `FakeAppLockPasswordService` stands in for them in previews and tests.
+/// `FakeAppLockPasswordService` stands in for them in previews, tests and marketing screenshots.
 ///
 /// Everything that takes a password the user already chose counts an attempt with `AppLockPasswordAttemptCounter`
 /// before deriving anything, and notes it as right if it is, so wrong passwords typed into Settings count and wait

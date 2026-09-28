@@ -42,6 +42,14 @@ Push a new release build to the App Store
 
 Upload the existing VaultApp.ipa to App Store Connect (no build, no bump)
 
+### ios upload_screenshots
+
+```sh
+[bundle exec] fastlane ios upload_screenshots
+```
+
+Replace the App Store screenshots with fastlane/screenshots (no build, no listing)
+
 ### ios tag_release
 
 ```sh
