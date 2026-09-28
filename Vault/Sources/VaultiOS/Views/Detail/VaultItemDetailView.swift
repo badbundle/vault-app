@@ -311,6 +311,7 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View, 
                 Text(viewModel.strings.doneEditingTitle)
                     .tint(.accentColor)
             }
+            .accessibilityIdentifier("detail.done")
         }
     }
 

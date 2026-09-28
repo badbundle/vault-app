@@ -5,18 +5,6 @@
    <BuildAction
       parallelizeBuildables = "YES"
       buildImplicitDependencies = "YES">
-      <BuildActionEntries>
-         <BuildActionEntry
-            buildForTesting = "YES"
-            buildForRunning = "YES"
-            buildForProfiling = "NO"
-            buildForArchiving = "NO"
-            buildForAnalyzing = "NO">
-            <TestPlanReference
-               reference = "container:CI/ios_alltests.xctestplan">
-            </TestPlanReference>
-         </BuildActionEntry>
-      </BuildActionEntries>
    </BuildAction>
    <TestAction
       buildConfiguration = "Debug"
@@ -28,22 +16,7 @@
             reference = "container:TestPlans/CI/iOSAllTests.xctestplan"
             default = "YES">
          </TestPlanReference>
-         <TestPlanReference
-            reference = "container:../macOS_SupportedTests.xctestplan">
-         </TestPlanReference>
       </TestPlans>
-      <Testables>
-         <TestableReference
-            skipped = "NO">
-            <BuildableReference
-               BuildableIdentifier = "primary"
-               BlueprintIdentifier = "CryptoDocumentExporterTests"
-               BuildableName = "CryptoDocumentExporterTests"
-               BlueprintName = "CryptoDocumentExporterTests"
-               ReferencedContainer = "container:">
-            </BuildableReference>
-         </TestableReference>
-      </Testables>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

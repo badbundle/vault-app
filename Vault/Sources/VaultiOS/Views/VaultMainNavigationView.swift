@@ -50,6 +50,7 @@ struct VaultMainNavigationView: View {
                     NavigationLink(value: SidebarItem.items) {
                         Label("Items", systemImage: "key.horizontal.fill")
                     }
+                    .accessibilityIdentifier("sidebar.items")
                     NavigationLink(value: SidebarItem.tags) {
                         Label("Tags", systemImage: "tag.fill")
                     }
@@ -65,6 +66,7 @@ struct VaultMainNavigationView: View {
                     NavigationLink(value: SidebarItem.settings) {
                         Label("Settings", systemImage: "gear")
                     }
+                    .accessibilityIdentifier("sidebar.settings")
 
                     NavigationLink(value: SidebarItem.about) {
                         Label("About", systemImage: "info.bubble.fill")

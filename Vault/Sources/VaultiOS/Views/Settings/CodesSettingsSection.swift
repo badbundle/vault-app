@@ -16,12 +16,14 @@ struct CodesSettingsSection: View {
                 ForEach(CodeTapAction.allCases) { option in
                     Text(option.localizedName)
                         .tag(option)
+                        .accessibilityIdentifier("settings.code-tap-action.\(option.rawValue)")
                 }
             } label: {
                 FormRow(image: Image(systemName: "hand.tap.fill"), color: SettingsIconColor.codes) {
                     Text(viewModel.codeTapActionTitle)
                 }
             }
+            .accessibilityIdentifier("settings.code-tap-action")
             Toggle(isOn: $localSettings.state.showsNextCode) {
                 FormRow(image: Image(systemName: "hourglass.bottomhalf.filled"), color: SettingsIconColor.codes) {
                     Text(viewModel.showNextCodeTitle)

@@ -135,6 +135,7 @@ struct SecureNoteDetailView: View {
                 )
                 .frame(minHeight: noteMinHeight(in: size), alignment: .top)
                 .listRowInsets(EdgeInsets())
+                .accessibilityIdentifier("secure-note.contents")
             case .markdown:
                 // Formatted text can't be selected with a copy Vault controls, so the note is copied or selected
                 // from its menu, both through Vault's clipboard.
@@ -142,6 +143,7 @@ struct SecureNoteDetailView: View {
                     .markdownImagesNeverLoad()
                     .frame(minHeight: noteMinHeight(in: size), alignment: .top)
                     .listRowInsets(EdgeInsets(vertical: 12, horizontal: 16))
+                    .accessibilityIdentifier("secure-note.contents")
                     .contextMenu {
                         Button("Copy Note", systemImage: "doc.on.doc") {
                             pasteboard?.copy(viewModel.editingModel.detail.contents, as: .note)

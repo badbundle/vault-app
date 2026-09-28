@@ -122,6 +122,8 @@ struct EncryptedItemDetailView: View {
                         .clipped()
                 }
                 .accessibilityElement(children: .combine)
+                // Tells a wrong password apart from the prompt for one, for the UI tests.
+                .accessibilityIdentifier(error == nil ? "encrypted-item.header" : "encrypted-item.error")
                 // The flood covers the whole row, insets and all.
                 .listRowInsets(EdgeInsets())
         }
@@ -206,6 +208,7 @@ struct EncryptedItemDetailView: View {
             )
             .secretTextInput(.verbatim)
             .disabled(viewModel.isDecrypted)
+            .accessibilityIdentifier("encrypted-item.password")
         }
         .onChange(of: viewModel.enteredEncryptionPassword) { _, _ in
             // When the text changes, reset the state.
@@ -217,6 +220,7 @@ struct EncryptedItemDetailView: View {
                 await viewModel.startDecryption()
             }
             .disabled(!viewModel.canStartDecryption)
+            .accessibilityIdentifier("encrypted-item.decrypt")
         }
         .animation(.snappy, value: viewModel.state)
     }
