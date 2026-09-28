@@ -86,6 +86,25 @@ struct AppLockServiceTests {
         #expect(sut.state == .locked(.init(step: .deviceAuthentication, failure: .cancelled)))
     }
 
+    /// Every `LocalAuthentication` error the lock tells apart, and one it doesn't. A prompt the app closed itself
+    /// counts
+    /// as cancelled, and a device with no passcode is unavailable rather than a failure.
+    @Test(arguments: [
+        (LAError.Code.userCancel, AppUnlockFailure.cancelled),
+        (.systemCancel, .cancelled),
+        (.appCancel, .cancelled),
+        (.passcodeNotSet, .unavailable),
+        (.authenticationFailed, .failed),
+        (.biometryLockout, .failed),
+    ])
+    func unlock_localAuthenticationError_saysWhy(code: LAError.Code, failure: AppUnlockFailure) async throws {
+        let (sut, _) = try makeSUT(isEnabled: true, policy: throwingPolicy(LAError(code)))
+
+        await activate(sut)
+
+        #expect(sut.state == .locked(.init(step: .deviceAuthentication, failure: failure)))
+    }
+
     @Test
     func unlock_otherAuthenticationError_staysLockedAndFails() async throws {
         let (sut, _) = try makeSUT(isEnabled: true, policy: throwingPolicy(TestError()))

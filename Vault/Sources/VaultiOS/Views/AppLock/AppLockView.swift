@@ -19,6 +19,8 @@ struct AppLockView: View {
     var onOpened: () -> Void = {}
     var unlock: () async -> Void
     var unlockWithPassword: (String) async -> Void = { _ in }
+    /// What the wait after wrong passwords counts down with: the app lock's clock.
+    var clock: any AppLockClock = ContinuousClock()
 
     @State private var clickCount = 0
     @State private var password = ""
@@ -159,7 +161,7 @@ struct AppLockView: View {
 
     /// How long the password has to wait, if it does.
     private var passwordWait: Duration? {
-        state.step == .password ? AppLockPasswordWait.remaining(until: state.passwordRetryAt) : nil
+        state.step == .password ? AppLockPasswordWait.remaining(until: state.passwordRetryAt, now: clock.now) : nil
     }
 
     private func message(passwordWait: Duration?) -> String {

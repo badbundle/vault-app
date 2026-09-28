@@ -45,6 +45,26 @@ To inspect the next build number without changing project files:
 bundle exec fastlane increment_build
 ```
 
+## Checking a build on a device
+
+The unit tests stand in for Face ID and the passcode, and the simulator has
+neither, so the app's use of the real ones is checked by hand, on an iPhone
+with Face ID and a passcode, before each release. With App Lock on and an App
+Lock Password set:
+
+- Launch: Face ID is asked for by itself, then the password. The vault opens
+  with the password.
+- Cancel the Face ID prompt: the lock screen stays, with Unlock to try again.
+- Look away until Face ID fails, then use the passcode instead: the password is
+  asked for next.
+- Lock the device with the app open, then unlock the device: Vault is locked,
+  and asks for Face ID and the password again, whatever Require Unlock says.
+- Open the AutoFill sheet from a one-time code field: it asks for Face ID, then
+  the password, and fills the code.
+- Turn off the device passcode (Settings, Face ID & Passcode): Vault's lock
+  screen says to set one up, and never shows the password field. Turn the
+  passcode back on: Face ID, then the password, open the vault again.
+
 ## Shipping a build
 
 Run the release lane only when you intend to build and upload a real App Store

@@ -102,17 +102,20 @@ public enum VaultRoot {
         } catch {
             // Open no store at all: the scene shows the failure screen.
             vaultStoreLoadFailureMessage = error.localizedDescription
-            switch error as? VaultStorageRecovery.Failure {
-            case .deviceKeyMissing:
-                vaultStoreLoadFailureReason = .deviceKeyMissing
-            case .vaultMissing:
-                vaultStoreLoadFailureReason = .vaultMissing
-            default:
-                break
-            }
+            vaultStoreLoadFailureReason = failureReason(forRecoveryError: error)
             return .password
         }
     }()
+
+    /// What the failure screen says to do, when launch recovery (`VaultStorageRecovery`) couldn't work out how the
+    /// vault is stored.
+    static func failureReason(forRecoveryError error: any Error) -> VaultStoreFailureView.Reason {
+        switch error as? VaultStorageRecovery.Failure {
+        case .deviceKeyMissing: .deviceKeyMissing
+        case .vaultMissing: .vaultMissing
+        default: .storeUnreadable
+        }
+    }
 
     /// Today's SQLite store in the App Group container, while the vault is
     /// stored in it. `nil` once encryption is on, so it's never opened then.
