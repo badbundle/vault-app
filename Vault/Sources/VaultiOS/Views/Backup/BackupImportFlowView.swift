@@ -94,22 +94,9 @@ struct BackupImportFlowView: View {
         .navigationTitle(Text("Import"))
         .navigationBarTitleDisplayMode(.inline)
         .navigationDestination(for: VaultApplicationPayload.self) { payload in
-            readyToImportView(vaultApplicationPayload: payload)
-        }
-    }
-
-    // MARK: - Error Section
-
-    private func errorSection(error: PresentationError) -> some View {
-        Section {
-            PlaceholderView(
-                systemIcon: "exclamationmark.triangle.fill",
-                title: error.userTitle,
-                subtitle: error.userDescription,
-            )
-            .padding()
-            .containerRelativeFrame(.horizontal)
-            .foregroundStyle(.red)
+            BackupImportReadyView(viewModel: viewModel, payload: payload) {
+                dismiss()
+            }
         }
     }
 
@@ -183,75 +170,6 @@ struct BackupImportFlowView: View {
                 viewModel.clearError()
                 modal = .cameraScanning
             }
-        }
-    }
-
-    // MARK: - Ready to Import View
-
-    private func readyToImportView(vaultApplicationPayload: VaultApplicationPayload) -> some View {
-        Form {
-            switch viewModel.importState {
-            case .notStarted:
-                readyToImportSection(payload: vaultApplicationPayload)
-            case let .error(error):
-                errorSection(error: error)
-                importSection(vault: vaultApplicationPayload)
-            case .success:
-                successSection
-            }
-        }
-        .animation(.snappy, value: viewModel.importState)
-        .animation(.snappy, value: viewModel.payloadState)
-        .toolbar {
-            if viewModel.importState.isFinished {
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Text("Done")
-                    }
-                }
-            }
-        }
-    }
-
-    // MARK: - Ready to Import Section
-
-    private func readyToImportSection(payload: VaultApplicationPayload) -> some View {
-        Section {
-            importRow(vault: payload)
-        } header: {
-            Text(viewModel.importContext.readyToImportTitle)
-        } footer: {
-            Text(viewModel.importContext.readyToImportDescription)
-        }
-    }
-
-    private func importSection(vault: VaultApplicationPayload) -> some View {
-        Section {
-            importRow(vault: vault)
-        }
-    }
-
-    // MARK: - Success Section
-
-    private var successSection: some View {
-        Section {
-            PlaceholderView(
-                systemIcon: "checkmark.circle.fill",
-                title: "Imported",
-                subtitle: "Your vault has been updated with the items from this backup.",
-            )
-            .padding()
-            .containerRelativeFrame(.horizontal)
-        }
-    }
-
-    // MARK: - Import Row
-
-    private func importRow(vault: VaultApplicationPayload) -> some View {
-        ProminentActionButton("Import Now", systemImage: "square.and.arrow.down") {
-            await viewModel.importPayload(payload: vault)
         }
     }
 }

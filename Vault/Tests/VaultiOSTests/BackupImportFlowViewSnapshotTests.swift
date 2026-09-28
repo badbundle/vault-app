@@ -29,13 +29,64 @@ final class BackupImportFlowViewSnapshotTests {
             return BackupImportFlowView(viewModel: viewModel)
         }
     }
+
+    /// The decrypted backup, with what importing it will do and a button named for it. Replacing is in red.
+    @Test
+    func layoutReady() async {
+        for context in [BackupImportContext.toEmptyVault, .merge, .override] {
+            await snapshotScenarios(named: "\(context)") {
+                makeReadyView(viewModel: makeViewModel(context: context))
+            }
+        }
+    }
+
+    @Test
+    func layoutImported() async {
+        for context in [BackupImportContext.toEmptyVault, .merge, .override] {
+            await snapshotScenarios(named: "\(context)") {
+                let viewModel = makeViewModel(context: context)
+                await viewModel.importPayload(payload: anyPayload())
+                #expect(viewModel.importState == .success)
+                return makeReadyView(viewModel: viewModel)
+            }
+        }
+    }
+
+    /// The error takes the header's place, with the button still there to try again.
+    @Test
+    func layoutImportFailed() async {
+        for context in [BackupImportContext.toEmptyVault, .merge, .override] {
+            await snapshotScenarios(named: "\(context)") {
+                let importer = VaultStoreImporterMock()
+                importer.importAndMergeVaultHandler = { _ in throw TestError() }
+                importer.importAndOverrideVaultHandler = { _ in throw TestError() }
+                let viewModel = makeViewModel(context: context, dataModel: anyVaultDataModel(vaultImporter: importer))
+                await viewModel.importPayload(payload: anyPayload())
+                return makeReadyView(viewModel: viewModel)
+            }
+        }
+    }
 }
 
 // MARK: - Helpers
 
 extension BackupImportFlowViewSnapshotTests {
-    private func makeViewModel(context: BackupImportContext) -> BackupImportFlowViewModel {
-        BackupImportFlowViewModel(importContext: context, dataModel: anyVaultDataModel())
+    private func makeViewModel(
+        context: BackupImportContext,
+        dataModel: VaultDataModel = anyVaultDataModel(),
+    ) -> BackupImportFlowViewModel {
+        BackupImportFlowViewModel(importContext: context, dataModel: dataModel)
+    }
+
+    /// The screen pushed once the backup is decrypted, in a navigation stack for its Done button.
+    private func makeReadyView(viewModel: BackupImportFlowViewModel) -> some View {
+        NavigationStack {
+            BackupImportReadyView(viewModel: viewModel, payload: anyPayload(), close: {})
+        }
+    }
+
+    private func anyPayload() -> VaultApplicationPayload {
+        VaultApplicationPayload(userDescription: "", items: [], tags: [])
     }
 
     /// A PDF with a blank page, and no backup attached.

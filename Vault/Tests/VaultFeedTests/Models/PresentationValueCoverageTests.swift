@@ -170,6 +170,10 @@ struct PresentationValueCoverageTests {
         for context in contexts {
             #expect(context.readyToImportTitle.isEmpty == false)
             #expect(context.readyToImportDescription.isEmpty == false)
+            #expect(context.importActionTitle.isEmpty == false)
+            #expect(context.importingMessage.isEmpty == false)
+            #expect(context.importedTitle.isEmpty == false)
+            #expect(context.importedDescription.isEmpty == false)
         }
     }
 
