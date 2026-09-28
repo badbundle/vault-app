@@ -10,6 +10,10 @@ Read [`../MANIFESTO.md`](../MANIFESTO.md) before proposing or implementing any f
 
 Use the simulator configuration specified in `README.md` for all builds and tests.
 
+### UI Tests
+
+The UI tests are in `VaultApp/VaultAppUITests`, a target of the app's Xcode project, as a Swift package can't hold UI tests. They launch the app on the in-memory demo vault (`-screenshot-scene feed`, see `ScreenshotMode`), so they never touch the simulator's own vault, and find elements by accessibility identifier rather than by text. To run only them, from the root of the repo: `xcodebuild test -workspace Vault.xcworkspace -scheme VaultAppUITests -destination 'id=<simulator UDID>' -skipMacroValidation -skipPackagePluginValidation`.
+
 ## Committing
 
 Before every commit, run `make format` and `make lint` from the `Vault/` directory to ensure code is properly formatted and passes linting.

@@ -40,6 +40,7 @@ struct VaultSettingsView: View {
         // A little more room than the default between sections, so a footer doesn't run into the next heading.
         .listSectionSpacing(.custom(28))
         .navigationTitle(viewModel.title)
+        .accessibilityIdentifier("settings")
         .sheet(item: $modal, onDismiss: nil) { item in
             switch item {
             case .universalClipboard:

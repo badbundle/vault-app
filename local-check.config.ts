@@ -43,6 +43,19 @@ export default (({ xcode }) => {
         flags: ["-skipMacroValidation", "-skipPackagePluginValidation"],
       }),
       ios.testWithoutBuilding(),
+      // The UI tests are in the app's project, as a Swift package can't hold
+      // them, so they have a scheme of their own. They build into the same
+      // DerivedData, which by now has the package built and its dependencies
+      // resolved. Each test step runs the newest .xctestrun, which every
+      // build rewrites, so each build has to stay just before its tests.
+      ios.buildForTesting({
+        name: "Build UI tests",
+        workspace: "Vault.xcworkspace",
+        scheme: "VaultAppUITests",
+        testPlan: "VaultAppUITests",
+        flags: ["-skipMacroValidation", "-skipPackagePluginValidation", "-skipPackageUpdates"],
+      }),
+      ios.testWithoutBuilding({ name: "UI tests" }),
     ],
   };
 }) satisfies ConfigFunction;

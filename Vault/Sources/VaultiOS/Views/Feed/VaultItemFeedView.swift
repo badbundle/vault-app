@@ -672,6 +672,7 @@ public struct VaultItemFeedView<
                 metadata: storedItem.metadata,
                 behaviour: currentBehaviour,
             )
+            .accessibilityIdentifier(accessibilityIdentifier(for: storedItem.item))
             .id(makeID(item: storedItem))
             .opacity(targetedIds.contains(storedItem.id) ? 0.5 : 1)
             .draggable(storedItem)
@@ -719,6 +720,16 @@ public struct VaultItemFeedView<
         hasher.combine(state.isEditing)
         hasher.combine(dataModel.itemSearchHash)
         return hasher.finalize()
+    }
+
+    /// Names a card by the kind of item it shows, for the UI tests to find it by.
+    private func accessibilityIdentifier(for item: VaultItem.Payload) -> String {
+        switch item {
+        case .otpCode: "feed.item.otp-code"
+        case .secureNote: "feed.item.secure-note"
+        // A recovery phrase shows as an encrypted card.
+        case .encryptedItem, .recoveryPhrase: "feed.item.encrypted-item"
+        }
     }
 
     /// The gap between neighboring cards, the same across and down.
