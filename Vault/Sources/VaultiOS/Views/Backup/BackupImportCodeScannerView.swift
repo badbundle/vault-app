@@ -4,16 +4,24 @@ import SwiftUI
 import VaultBackup
 import VaultFeed
 
+/// Scans a backup's QR codes, from a PDF backup or another device's Export screen, in any order.
+///
+/// Each new code ticks off its tile with a light tap, and the last one plays the success haptic before the sheet
+/// moves on.
 @MainActor
 struct BackupImportCodeScannerView: View {
     @State private var scanner: CodeScanningManager<BackupImportScanningHandler>
     @Environment(\.presentationMode) private var presentationMode
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isCodeImagePickerGalleryVisible = false
     @State private var handler: BackupImportScanningHandler
     var loadedEncryptedVault: (EncryptedVault) async -> Void
 
-    init(intervalTimer: any IntervalTimer, loadedEncryptedVault: @escaping (EncryptedVault) async -> Void) {
-        let handler = BackupImportScanningHandler()
+    init(
+        intervalTimer: any IntervalTimer,
+        handler: BackupImportScanningHandler = BackupImportScanningHandler(),
+        loadedEncryptedVault: @escaping (EncryptedVault) async -> Void,
+    ) {
         scanner = CodeScanningManager(intervalTimer: intervalTimer, handler: handler)
         self.handler = handler
         self.loadedEncryptedVault = loadedEncryptedVault
@@ -21,10 +29,25 @@ struct BackupImportCodeScannerView: View {
 
     var body: some View {
         Form {
-            section
+            headlineSection
+            if let state = handler.shardState {
+                progressSection(state: state)
+            }
         }
-        .navigationTitle(Text("Import Vault"))
+        .navigationTitle(Text("Scan Backup"))
+        .navigationBarTitleDisplayMode(.inline)
         .interactiveDismissDisabled(scanner.hasPartialState)
+        .animation(reduceMotion ? .easeInOut(duration: 0.25) : .snappy, value: scannedCount)
+        .sensoryFeedback(.impact(weight: .light), trigger: scannedCount) { oldValue, newValue in
+            // Only for a new code, as a code scanned again changes nothing. The last one has the success haptic.
+            newValue > oldValue && newValue < totalCount
+        }
+        .sensoryFeedback(.success, trigger: scanner.scanningState) { _, newValue in
+            newValue == .success(.complete)
+        }
+        .sensoryFeedback(.error, trigger: scanner.scanningState) { _, newValue in
+            newValue == .failure(.unrecoverable)
+        }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 Button {
@@ -46,26 +69,32 @@ struct BackupImportCodeScannerView: View {
         }
     }
 
-    private var section: some View {
+    private var scannedCount: Int {
+        handler.shardState?.collectedShardIndexes.count ?? 0
+    }
+
+    private var totalCount: Int {
+        handler.shardState?.totalNumberOfShards ?? 0
+    }
+
+    // MARK: - Headline Section
+
+    /// What to scan, under the camera. Smaller than the other screens' headers: the camera is the hero here.
+    private var headlineSection: some View {
         Section {
-            if let state = handler.shardState {
-                LabeledContent("Total Codes", value: "\(state.totalNumberOfShards)")
-                LabeledContent("Scanned Codes", value: "\(state.collectedShardIndexes.count)")
-                BackupImportCodeStateVisualizerView(
-                    totalCount: state.totalNumberOfShards,
-                    selectedIndexes: state.collectedShardIndexes,
-                )
-                .padding(.horizontal)
-                .containerRelativeFrame(.horizontal)
-            } else {
-                PlaceholderView(
-                    systemIcon: "qrcode.viewfinder",
-                    title: "Scan a QR code to start",
-                    subtitle: "Face your camera at the codes located on your Vault export document.",
-                )
-                .padding()
-                .containerRelativeFrame(.horizontal)
+            VStack(spacing: 6) {
+                Text("Scan the QR Codes")
+                    .font(.title3.bold())
+                    .foregroundStyle(.primary)
+                    .accessibilityAddTraits(.isHeader)
+                Text("From a PDF backup, or the Export screen on another device. Any order works.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
             }
+            .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity)
+            .accessibilityElement(children: .combine)
+            .noListBackground()
         } header: {
             CodeScanningView(
                 scanner: scanner,
@@ -73,6 +102,33 @@ struct BackupImportCodeScannerView: View {
             )
             .padding()
             .frame(maxWidth: .infinity)
+        }
+    }
+
+    // MARK: - Progress Section
+
+    private func progressSection(state: BackupImportScanningHandler.State) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("\(state.collectedShardIndexes.count) of \(state.totalNumberOfShards) scanned")
+                    .font(.headline)
+                    .monospacedDigit()
+                    .contentTransition(reduceMotion ? .opacity : .numericText())
+                ProgressView(
+                    value: Double(state.collectedShardIndexes.count),
+                    total: Double(state.totalNumberOfShards),
+                )
+            }
+            .padding(.vertical, 4)
+            .accessibilityElement(children: .combine)
+
+            // The line above says the same for VoiceOver.
+            BackupImportCodeStateVisualizerView(
+                totalCount: state.totalNumberOfShards,
+                selectedIndexes: state.collectedShardIndexes,
+            )
+            .padding(.vertical, 4)
+            .accessibilityHidden(true)
         }
     }
 }
