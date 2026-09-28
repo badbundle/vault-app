@@ -37,7 +37,7 @@ struct VaultAutofillConfigurationView: View {
                 Text("OTP Autofill")
                     .font(.title.bold())
 
-                Text("Your OTP codes are now available for autofill")
+                Text("Vault can now fill in your codes")
                     .font(.headline)
                     .foregroundStyle(.secondary)
             }
@@ -52,12 +52,12 @@ struct VaultAutofillConfigurationView: View {
         Section {
             featureRow(
                 icon: "network",
-                text: "OTP codes appear on their configured domain names",
+                text: "A code is suggested above the keyboard on its site, unless it's hidden, locked or not shown in QuickType",
             )
 
             featureRow(
                 icon: "arrow.triangle.2.circlepath",
-                text: "Codes update automatically based on your vault items",
+                text: "Suggestions follow the changes you make in Vault",
             )
         }
     }

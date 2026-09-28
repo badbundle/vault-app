@@ -672,6 +672,18 @@ struct AppLockPasswordFormViewModelTests {
         #expect(!appLock.erasesAfterFailedPasswords)
     }
 
+    /// Turning the password off turns erasing off too (`VaultPasswordChangeServiceTests`), so the form says so, but
+    /// only
+    /// while erasing is on.
+    @Test(arguments: [true, false])
+    func turnsOffErasing_whileErasingIsOn(erases: Bool) async throws {
+        let (turnOff, _, _) = try await makeSUT(purpose: .turnOff, erasesAfterFailedPasswords: erases)
+        let (change, _, _) = try await makeSUT(purpose: .change, erasesAfterFailedPasswords: erases)
+
+        #expect(turnOff.turnsOffErasing == erases)
+        #expect(!change.turnsOffErasing)
+    }
+
     @Test
     func submit_turnOffErasing_wrong_leavesItOn() async throws {
         let (sut, _, appLock) = try await makeSUT(purpose: .turnOffErasing, erasesAfterFailedPasswords: true)

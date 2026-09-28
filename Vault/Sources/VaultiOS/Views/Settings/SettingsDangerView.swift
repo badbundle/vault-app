@@ -111,6 +111,7 @@ struct SettingsDangerView: View {
                     color: .green,
                     items: [
                         "Backups you've saved, as PDFs or auto-backups",
+                        "Your App Lock Password, if you've set one",
                         "Auto-backup and app settings",
                     ],
                 )

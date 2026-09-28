@@ -125,6 +125,12 @@ public final class AppLockPasswordFormViewModel {
         return AppLockPasswordRules.problem(with: newPassword)
     }
 
+    /// Whether turning the password off turns erasing after failed passwords off too, which it does whenever erasing is
+    /// on: with no password, there's nothing to get wrong.
+    public var turnsOffErasing: Bool {
+        purpose == .turnOff && appLock.erasesAfterFailedPasswords
+    }
+
     /// Whether the new password is the one it would replace, which wouldn't change anything.
     public var isNewPasswordSameAsCurrent: Bool {
         purpose == .change && newPassword.isNotEmpty && newPassword == currentPassword

@@ -164,7 +164,7 @@ struct AppLockPasswordFormView: View {
             case .set:
                 BackupHeroHeader(
                     title: "Set an App Lock Password",
-                    subtitle: "Vault will ask for it every time it unlocks, after Face ID, Touch ID or your passcode. It's a different password from your backup password.",
+                    subtitle: "Vault will ask for it every time it unlocks, after Face ID, Touch ID or your passcode. It's separate from your backup password, so use a different one.",
                     icon: .appLockPassword,
                     iconSize: 56,
                 )
@@ -277,6 +277,14 @@ struct AppLockPasswordFormView: View {
                 systemImage: "exclamationmark.triangle.fill",
                 color: .orange,
             )
+            if viewModel.turnsOffErasing {
+                note(
+                    title: "Erasing turns off too",
+                    detail: "Vault stops erasing after \(eraseThreshold) failed passwords, as there's no password to get wrong. Turning the password back on leaves it off.",
+                    systemImage: "trash.slash.fill",
+                    color: .secondary,
+                )
+            }
         }
     }
 

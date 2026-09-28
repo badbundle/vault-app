@@ -227,6 +227,17 @@ struct AppLockPasswordSnapshotTests {
         }
     }
 
+    /// With erasing on, it says turning the password off turns erasing off too.
+    @Test
+    func turnOffErasingOn() async throws {
+        try await snapshotScenarios {
+            try await AppLockPasswordFormViewModel(
+                purpose: .turnOff,
+                appLock: makeUnlockedAppLock(service: makeService(erasesAfterFailedPasswords: true)),
+            )
+        }
+    }
+
     /// Back after a wait started, it only says how long is left.
     @Test
     func turnOffWaiting() async throws {
