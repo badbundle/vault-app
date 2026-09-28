@@ -18,6 +18,8 @@ To restore a backup, on this device or another, you enter the password that back
 Your password is the only thing protecting your backups, so treat it like the master password for a password manager: long, unique and not used anywhere else.
 A few random words strung together make a good start.
 
+Like the App Lock Password, it has to be at least 8 characters, and not only numbers. A password you set before this was required keeps working.
+
 ## What if I forget it?
 
 There is **no way to recover** a forgotten backup password, and backups made with it can't be restored without it.
