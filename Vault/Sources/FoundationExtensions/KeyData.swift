@@ -12,6 +12,25 @@ public struct KeyData<let bytes: Int>: Equatable, Hashable, Sendable {
     }
 }
 
+// MARK: - Redaction
+
+// A key's bytes must never end up in a log, crash report or test failure message via string interpolation or
+// reflection (`Data`'s own mirror lists its bytes), so all textual representations leave them out.
+
+extension KeyData: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var description: String {
+        "KeyData<\(bytes)>(<redacted>)"
+    }
+
+    public var debugDescription: String {
+        description
+    }
+
+    public var customMirror: Mirror {
+        Mirror(self, children: [], displayStyle: .struct)
+    }
+}
+
 extension KeyData: Codable {
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()

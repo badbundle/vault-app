@@ -18,9 +18,22 @@ public struct DerivedEncryptionKey: Equatable, Hashable, Sendable {
     }
 }
 
-extension DerivedEncryptionKey: CustomDebugStringConvertible {
+// MARK: - Redaction
+
+// The key must never end up in a log, crash report or test failure message via string interpolation or reflection, so
+// all textual representations leave it out.
+
+extension DerivedEncryptionKey: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var description: String {
+        "DerivedEncryptionKey(<redacted>, keyDeriver: \(keyDervier.rawValue))"
+    }
+
     public var debugDescription: String {
-        "DerviedEncryptionKey(data: \(key.data.toHexString()), salt: \(salt.toHexString()), keyDeriver: \(keyDervier.rawValue))"
+        description
+    }
+
+    public var customMirror: Mirror {
+        Mirror(self, children: ["keyDeriver": keyDervier.rawValue], displayStyle: .struct)
     }
 }
 

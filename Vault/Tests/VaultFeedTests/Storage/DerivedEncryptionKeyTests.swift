@@ -30,4 +30,43 @@ struct DerivedEncryptionKeyTests {
 
         #expect(seenIVs.count == 10)
     }
+
+    @Test
+    func description_leavesOutTheKey() throws {
+        let sut = try DerivedEncryptionKey(
+            key: KeyData<32>(data: Data(repeating: 0xAB, count: 32)),
+            salt: Data(repeating: 0xCD, count: 16),
+            keyDervier: .backupFastV1,
+        )
+
+        let representations = [
+            String(describing: sut),
+            String(reflecting: sut),
+            "\(sut)",
+            String(describing: [sut]),
+            String(describing: Optional(sut) as Any),
+            dumped(sut),
+        ]
+        for representation in representations {
+            #expect(!representation.lowercased().contains("abab"))
+            #expect(!representation.contains("171"), "The key's bytes, in decimal")
+            #expect(!representation.lowercased().contains("cdcd"))
+            #expect(representation.contains("vault.keygen.backup.fast.v1"))
+        }
+    }
+
+    @Test
+    func mirror_showsOnlyTheKeyDeriver() {
+        let sut = DerivedEncryptionKey(key: .random(), salt: .random(count: 16), keyDervier: .testing)
+
+        let children = Mirror(reflecting: sut).children.map { "\($0.label ?? ""): \($0.value)" }
+
+        #expect(children == ["keyDeriver: vault.keygen.testing"])
+    }
+
+    private func dumped(_ value: some Any) -> String {
+        var output = ""
+        dump(value, to: &output)
+        return output
+    }
 }
