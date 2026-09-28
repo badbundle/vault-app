@@ -20,7 +20,8 @@ import VaultKeygen
 /// - It never replaces a file that's there already (`BackupStorageProvider.write(data:filename:)`); it picks another
 ///   name instead.
 /// - Cleaning up only deletes the files this vault's auto-backup wrote (`AutoBackupConfiguration.backupFilenames`),
-///   never another vault's, one written before they were recorded, or one the user put there (MANIFESTO C10).
+///   never another vault's, one written before they were recorded, or one the user put there (MANIFESTO C10). It
+///   always keeps the newest of them, however old, so a vault that has been backed up keeps a backup.
 @MainActor
 public final class AutoBackupServiceImpl: AutoBackupService {
     // MARK: - Public Properties
@@ -203,7 +204,9 @@ public final class AutoBackupServiceImpl: AutoBackupService {
     }
 
     /// Deletes this vault's backups that are older than its retention, and only those: never a file its
-    /// auto-backup didn't write.
+    /// auto-backup didn't write, and never the newest one it did, however old. A backup is only made after the vault
+    /// changes, so without that a shorter retention, or a vault left unchanged for long enough, would leave no backup
+    /// at all.
     ///
     /// Then it forgets the files it deleted, and any the user has, whatever the retention, so the list doesn't grow
     /// for files that are gone. A file that isn't listed is only forgotten once the provider says it's gone
@@ -231,7 +234,9 @@ public final class AutoBackupServiceImpl: AutoBackupService {
                     value: -retention.rawValue,
                     to: clock.currentDate,
                 ) ?? clock.currentDate
-                for backup in backups where own.contains(backup.filename) && backup.createdDate < cutoffDate {
+                let ownBackups = backups.filter { own.contains($0.filename) }
+                let newest = ownBackups.max { $0.createdDate < $1.createdDate }
+                for backup in ownBackups where backup.createdDate < cutoffDate && backup.filename != newest?.filename {
                     guard generation == vaultGeneration else { return }
                     try await provider.delete(filename: backup.filename)
                     forgotten.insert(backup.filename)

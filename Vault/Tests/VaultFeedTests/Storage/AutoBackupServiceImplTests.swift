@@ -569,6 +569,70 @@ struct AutoBackupServiceImplTests {
         #expect(sut.configuration.backupFilenames == ["new.pdf"])
     }
 
+    /// A backup is only made after the vault changes, so a shorter retention can find every backup past it. The
+    /// newest this vault recorded making stays, however old; the older ones go.
+    @Test @LeakTracked
+    func setRetention_withNoNewerBackup_keepsTheNewestAndDeletesTheRestPastIt() async throws {
+        let day: Double = 86400
+        let clock = EpochClockMock(currentTime: 100 * day)
+        let provider = BackupStorageProviderStub(id: "test", backups: [
+            BackupFileInfo(filename: "oldest.pdf", createdDate: Date(timeIntervalSince1970: 0), size: 100),
+            BackupFileInfo(filename: "newest.pdf", createdDate: Date(timeIntervalSince1970: 50 * day), size: 100),
+            BackupFileInfo(filename: "older.pdf", createdDate: Date(timeIntervalSince1970: 10 * day), size: 100),
+        ])
+        let storage = TwoVaultConfigurationStorage(first: .written(["oldest.pdf", "older.pdf", "newest.pdf"]))
+        let sut = makeSUT(clock: clock, storage: storage, providers: [provider])
+        await sut.selectProvider(id: "test")
+
+        await sut.setRetention(.days7)
+
+        #expect(provider.deletedFilenames == ["oldest.pdf", "older.pdf"])
+        #expect(provider.files.map(\.filename) == ["newest.pdf"])
+        #expect(storage.saved[0].backupFilenames == ["newest.pdf"])
+    }
+
+    /// With only one backup, however far past the retention, it's kept.
+    @Test @LeakTracked
+    func cleanupOldBackups_keepsTheOnlyBackupHoweverOld() async throws {
+        let clock = EpochClockMock(currentTime: 1000 * 86400)
+        let provider = BackupStorageProviderStub(id: "test", backups: [
+            BackupFileInfo(filename: "only.pdf", createdDate: Date(timeIntervalSince1970: 0), size: 100),
+        ])
+        let storage = TwoVaultConfigurationStorage(first: .written(["only.pdf"]))
+        let sut = makeSUT(clock: clock, storage: storage, providers: [provider])
+        await sut.setRetention(.days7)
+        await sut.selectProvider(id: "test")
+
+        await sut.cleanupOldBackups()
+
+        #expect(provider.deletedFilenames.isEmpty)
+        #expect(storage.saved[0].backupFilenames == ["only.pdf"])
+    }
+
+    /// Cleaning up after a backup keeps the one just made, and those still within the retention, and deletes the
+    /// rest.
+    @Test @LeakTracked
+    func forceBackup_thenCleanup_keepsTheNewBackupAndDeletesOlderOnesByRetention() async throws {
+        let day: Double = 86400
+        let clock = EpochClockMock(currentTime: 100 * day)
+        let provider = BackupStorageProviderStub(id: "test", backups: [
+            BackupFileInfo(filename: "old.pdf", createdDate: Date(timeIntervalSince1970: 60 * day), size: 100),
+            BackupFileInfo(filename: "recent.pdf", createdDate: Date(timeIntervalSince1970: 95 * day), size: 100),
+        ])
+        provider.clock = clock
+        var configuration = AutoBackupConfiguration.backingUp(providerConfig: "folder", retention: .days30)
+        configuration.backupFilenames = ["old.pdf", "recent.pdf"]
+        let storage = TwoVaultConfigurationStorage(first: configuration)
+        let sut = try await makeSUT(clock: clock, storage: storage, providers: [provider], dataModel: readyDataModel())
+        let newFile = Self.filename(at: clock)
+
+        await sut.forceBackup()
+
+        #expect(provider.deletedFilenames == ["old.pdf"])
+        #expect(provider.files.map(\.filename) == ["recent.pdf", newFile])
+        #expect(storage.saved[0].backupFilenames == ["recent.pdf", newFile])
+    }
+
     /// Only the files this vault's auto-backup wrote: never another vault's, one from before they were recorded,
     /// or one the user put there, however old (MANIFESTO C10).
     @Test @LeakTracked
@@ -577,11 +641,12 @@ struct AutoBackupServiceImplTests {
         let old = Date(timeIntervalSince1970: 0)
         let provider = BackupStorageProviderStub(id: "test", backups: [
             BackupFileInfo(filename: "mine.pdf", createdDate: old, size: 100),
+            BackupFileInfo(filename: "my-newest.pdf", createdDate: Date(timeIntervalSince1970: 99 * 86400), size: 100),
             BackupFileInfo(filename: "another-vaults.pdf", createdDate: old, size: 100),
             BackupFileInfo(filename: "the-users.pdf", createdDate: old, size: 100),
         ])
         let storage = TwoVaultConfigurationStorage(
-            first: .written(["mine.pdf"]),
+            first: .written(["mine.pdf", "my-newest.pdf"]),
             second: .written(["another-vaults.pdf"]),
         )
         let sut = makeSUT(clock: clock, storage: storage, providers: [provider])
@@ -591,7 +656,7 @@ struct AutoBackupServiceImplTests {
         await sut.cleanupOldBackups()
 
         #expect(provider.deletedFilenames == ["mine.pdf"])
-        #expect(storage.saved[0].backupFilenames.isEmpty)
+        #expect(storage.saved[0].backupFilenames == ["my-newest.pdf"])
         #expect(storage.saved[1].backupFilenames == ["another-vaults.pdf"])
     }
 
@@ -1058,13 +1123,14 @@ extension AutoBackupServiceImplTests {
         #expect(provider.files.map(\.filename) == [firstsFile, secondsNewFile])
         #expect(storage.saved[1].backupFilenames == [secondsNewFile])
 
+        // The first vault's only backup is its newest, so cleaning up keeps it, however old.
         storage.open(0)
         await sut.vaultDidChange()
         await sut.cleanupOldBackups()
 
-        #expect(provider.deletedFilenames == [secondsFile, firstsFile])
-        #expect(provider.files.map(\.filename) == [secondsNewFile])
-        #expect(storage.saved[0].backupFilenames.isEmpty)
+        #expect(provider.deletedFilenames == [secondsFile])
+        #expect(provider.files.map(\.filename) == [firstsFile, secondsNewFile])
+        #expect(storage.saved[0].backupFilenames == [firstsFile])
         #expect(storage.saved[1].backupFilenames == [secondsNewFile])
     }
 }

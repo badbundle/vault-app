@@ -192,7 +192,7 @@ public final class AutoBackupViewModel {
     /// When auto-backup runs and how long it keeps backups, in a sentence.
     public var scheduleSummary: String {
         let retention = if configuration.retentionDays.shouldCleanup {
-            "Backups older than \(configuration.retentionDays.localizedTitle) are deleted."
+            "Backups older than \(configuration.retentionDays.localizedTitle) are deleted, apart from the newest."
         } else {
             "Old backups are never deleted."
         }
