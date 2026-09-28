@@ -1812,9 +1812,9 @@ final class VaultDataModelTests {
         )
 
         try await confirmation { confirm in
-            vaultOtpAutofillStore.syncHandler = { id, payload, _, _, _ in
+            vaultOtpAutofillStore.syncHandler = { id, write in
                 #expect(id == itemID.rawValue)
-                #expect(payload == .otpCode(otpCode))
+                #expect(write.item == .otpCode(otpCode))
                 confirm()
             }
 
@@ -1850,9 +1850,9 @@ final class VaultDataModelTests {
         )
 
         try await confirmation { confirm in
-            vaultOtpAutofillStore.syncHandler = { id, payload, _, _, _ in
+            vaultOtpAutofillStore.syncHandler = { id, write in
                 #expect(id == itemID.rawValue)
-                #expect(payload == .secureNote(secureNote))
+                #expect(write.item == .secureNote(secureNote))
                 confirm()
             }
 
@@ -1894,6 +1894,43 @@ final class VaultDataModelTests {
 
             // Updates use full sync since we don't have access to old values
             #expect(vaultOtpAutofillStore.syncAllCallCount == 1)
+        }
+    }
+
+    @Test
+    func insert_lockedOTPItem_passesItsLockStateToTheAutofillStore() async throws {
+        let vaultOtpAutofillStore = VaultOTPAutofillStoreMock()
+        let sut = makeSUT(vaultOtpAutofillStore: vaultOtpAutofillStore)
+        var item = uniqueVaultItem().makeWritable()
+        item.lockState = .lockedWithNativeSecurity
+
+        try await confirmation { confirm in
+            vaultOtpAutofillStore.syncHandler = { _, write in
+                #expect(write.lockState == .lockedWithNativeSecurity)
+                confirm()
+            }
+
+            try await sut.insert(item: item)
+        }
+    }
+
+    /// Locking or unlocking a code is an update, which syncs every code again with its lock state as it's now saved.
+    @Test
+    func update_lockingACode_syncsItAgainWithItsLockState() async throws {
+        let store = VaultStoreStub()
+        let vaultOtpAutofillStore = VaultOTPAutofillStoreMock()
+        let sut = makeSUT(vaultStore: store, vaultOtpAutofillStore: vaultOtpAutofillStore)
+        let locked = uniqueVaultItem(lockState: .lockedWithNativeSecurity)
+        // The store as it is once the lock is saved.
+        store.retrieveHandler = { _ in .init(items: [locked]) }
+
+        try await confirmation { confirm in
+            vaultOtpAutofillStore.syncAllHandler = { items in
+                #expect(items.map(\.metadata.lockState) == [.lockedWithNativeSecurity])
+                confirm()
+            }
+
+            try await sut.update(itemID: locked.id, data: locked.makeWritable())
         }
     }
 

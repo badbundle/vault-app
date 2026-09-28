@@ -349,6 +349,24 @@ func uniqueVaultItem(
     )
 }
 
+/// An item as it's written, with the fields that decide whether QuickType offers it.
+func anyItemWrite(
+    _ item: VaultItem.Payload,
+    visibility: VaultItemVisibility = .always,
+    searchableLevel: VaultItemSearchableLevel = .full,
+    lockState: VaultItemLockState = .notLocked,
+    showInQuickType: Bool = true,
+) -> VaultItem.Write {
+    var write = uniqueVaultItem(
+        item: item,
+        visibility: visibility,
+        searchableLevel: searchableLevel,
+        lockState: lockState,
+    ).makeWritable()
+    write.showInQuickType = showInQuickType
+    return write
+}
+
 /// A deterministic killphrase digester used to build test fixtures from
 /// plaintext phrases. The key is zeroed so test assertions remain stable.
 let testDigester: KillphraseDigester = {

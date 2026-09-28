@@ -104,7 +104,7 @@ These are facts from the code and from the prototypes described in the [appendix
 - **Readable flags.** Non-null `killphraseDigest` and `searchPassphraseDigest` columns show which items have a
   killphrase or a search passphrase to anyone who can read the file. That's the enumeration C5 forbids in the UI.
 - **The QuickType identity store** (`ASCredentialIdentityStore`) holds the issuer, account name and item UUID
-  of every visible OTP item, outside the app's sandbox.
+  of every visible, unlocked OTP item, outside the app's sandbox.
 - **Widgets.** WidgetKit archives the rendered timeline entries (issuer, account name, current code) in system
   storage. It also keeps the configured `OTPWidgetItemEntity`, which has the issuer and account name.
 - **Pending rehash files.** `vault-primary.pending-killphrase-rehash.json` and the search passphrase equivalent
@@ -1214,7 +1214,7 @@ configuration, which the app can't edit. Turning on the password should tell use
 | --- | --- | --- |
 | Vault store | Everything, plus old versions of edited items until the next launch | The header (format, slot count, slot size bucket, KDF parameters, salt). Nothing per vault. |
 | Device backups (iCloud, Finder) | The plaintext store | Ciphertext, open to offline guessing of the password |
-| QuickType identity store | Issuer, account and UUID per visible OTP | Empty |
+| QuickType identity store | Issuer, account and UUID per visible, unlocked OTP | Empty |
 | Widget timelines | Issuer, account, codes | Locked placeholder |
 | Configured widget entities | Issuer, account | Unchanged until the user removes the widget (residual) |
 | Pending rehash files | Plaintext phrases (old-schema upgrades) | Removed; precondition of migration |

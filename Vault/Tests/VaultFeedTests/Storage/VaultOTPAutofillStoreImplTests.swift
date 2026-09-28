@@ -23,10 +23,7 @@ struct VaultOTPAutofillStoreImplTests {
 
         try await sut.sync(
             id: id,
-            item: .otpCode(code),
-            visibility: .always,
-            searchableLevel: .full,
-            showInQuickType: true,
+            item: anyItemWrite(.otpCode(code)),
         )
 
         let identities = try #require(spy.saveCredentialIdentitiesArgValues.first)
@@ -46,10 +43,7 @@ struct VaultOTPAutofillStoreImplTests {
 
         try await sut.sync(
             id: id,
-            item: .otpCode(code),
-            visibility: .always,
-            searchableLevel: .full,
-            showInQuickType: true,
+            item: anyItemWrite(.otpCode(code)),
         )
 
         #expect(spy.saveCredentialIdentitiesCallCount == 1)
@@ -66,10 +60,7 @@ struct VaultOTPAutofillStoreImplTests {
 
         try await sut.sync(
             id: id,
-            item: .otpCode(code),
-            visibility: .always,
-            searchableLevel: .full,
-            showInQuickType: true,
+            item: anyItemWrite(.otpCode(code)),
         )
 
         // Should remove existing identity first, then save the new one
@@ -91,10 +82,7 @@ struct VaultOTPAutofillStoreImplTests {
 
         try await sut.sync(
             id: id,
-            item: .secureNote(.init(title: "Note", contents: "Content", format: .plain)),
-            visibility: .always,
-            searchableLevel: .full,
-            showInQuickType: true,
+            item: anyItemWrite(.secureNote(.init(title: "Note", contents: "Content", format: .plain))),
         )
 
         #expect(spy.saveCredentialIdentitiesCallCount == 0)
@@ -115,10 +103,7 @@ struct VaultOTPAutofillStoreImplTests {
         await #expect(throws: (any Error).self) {
             try await sut.sync(
                 id: UUID(),
-                item: .otpCode(anyOTPAuthCode()),
-                visibility: .always,
-                searchableLevel: .full,
-                showInQuickType: true,
+                item: anyItemWrite(.otpCode(anyOTPAuthCode())),
             )
         }
     }
@@ -235,10 +220,7 @@ struct VaultOTPAutofillStoreImplTests {
 
         try await sut.sync(
             id: id,
-            item: .otpCode(code),
-            visibility: .onlySearch,
-            searchableLevel: .onlyPassphrase,
-            showInQuickType: true,
+            item: anyItemWrite(.otpCode(code), visibility: .onlySearch, searchableLevel: .onlyPassphrase),
         )
 
         // Should remove from autofill store, not save
@@ -293,6 +275,54 @@ struct VaultOTPAutofillStoreImplTests {
         #expect(otpIdentities.first(where: { $0.label == "user2" }) == nil)
     }
 
+    /// A locked code isn't suggested in QuickType, which would show its site and account without unlocking it.
+    @Test
+    func sync_lockedOTPItem_removesFromStore() async throws {
+        let spy = CredentialIdentityStoreMock()
+        let sut = makeSUT(store: spy)
+        let id = UUID()
+
+        try await sut.sync(
+            id: id,
+            item: anyItemWrite(.otpCode(anyOTPAuthCode()), lockState: .lockedWithNativeSecurity),
+        )
+
+        #expect(spy.saveCredentialIdentitiesCallCount == 0)
+        #expect(spy.removeCredentialIdentitiesCallCount == 1)
+        let identities = try #require(spy.removeCredentialIdentitiesArgValues.first)
+        let identity = try #require(identities.first as? ASOneTimeCodeCredentialIdentity)
+        #expect(identity.recordIdentifier == id.uuidString)
+    }
+
+    @Test
+    func syncAll_excludesLockedItems() async throws {
+        let spy = CredentialIdentityStoreMock()
+        let sut = makeSUT(store: spy)
+        let unlocked = uniqueVaultItem(item: .otpCode(anyOTPAuthCode(accountName: "user1", issuerName: "example.com")))
+        let locked = uniqueVaultItem(
+            item: .otpCode(anyOTPAuthCode(accountName: "user2", issuerName: "test.com")),
+            lockState: .lockedWithNativeSecurity,
+        )
+
+        try await sut.syncAll(items: [unlocked, locked])
+
+        let identities = try #require(spy.saveCredentialIdentitiesArgValues.first)
+        let otpIdentities = identities.compactMap { $0 as? ASOneTimeCodeCredentialIdentity }
+        #expect(otpIdentities.map(\.recordIdentifier) == [unlocked.id.rawValue.uuidString])
+    }
+
+    @Test
+    func syncAll_onlyLockedItems_clearsStore() async throws {
+        let spy = CredentialIdentityStoreMock()
+        let sut = makeSUT(store: spy)
+        let locked = uniqueVaultItem(lockState: .lockedWithNativeSecurity)
+
+        try await sut.syncAll(items: [locked])
+
+        #expect(spy.removeAllCredentialIdentitiesCallCount == 1)
+        #expect(spy.saveCredentialIdentitiesCallCount == 0)
+    }
+
     @Test
     func sync_otpItemWithShowInQuickTypeFalse_removesFromStore() async throws {
         let spy = CredentialIdentityStoreMock()
@@ -302,10 +332,7 @@ struct VaultOTPAutofillStoreImplTests {
 
         try await sut.sync(
             id: id,
-            item: .otpCode(code),
-            visibility: .always,
-            searchableLevel: .full,
-            showInQuickType: false,
+            item: anyItemWrite(.otpCode(code), showInQuickType: false),
         )
 
         // Should remove from autofill store, not save

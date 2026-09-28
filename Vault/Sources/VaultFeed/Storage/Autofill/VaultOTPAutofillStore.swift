@@ -17,20 +17,14 @@ import VaultCore
 ///
 /// @mockable
 public protocol VaultOTPAutofillStore: Sendable {
-    /// Syncs a VaultItem to the autofill store.
+    /// Syncs a VaultItem to the autofill store, as it's written.
     /// If the item is an OTP code, it will be added/updated. Otherwise, this is a no-op.
-    /// Items hidden with passphrase (requiresSearchPassphrase) will not be added to autofill.
-    func sync(
-        id: UUID,
-        item: VaultItem.Payload,
-        visibility: VaultItemVisibility,
-        searchableLevel: VaultItemSearchableLevel,
-        showInQuickType: Bool,
-    ) async throws
+    /// Items hidden with passphrase (requiresSearchPassphrase) and locked items will not be added to autofill.
+    func sync(id: UUID, item: VaultItem.Write) async throws
 
     /// Syncs all vault items to the autofill store.
     /// Removes all existing items and repopulates with all OTP items from the vault.
-    /// Items hidden with passphrase (requiresSearchPassphrase) will not be added to autofill.
+    /// Items hidden with passphrase (requiresSearchPassphrase) and locked items will not be added to autofill.
     func syncAll(items: [VaultItem]) async throws
 
     /// Removes a specific OTP credential identity by VaultItem UUID.
@@ -58,29 +52,29 @@ public final class VaultOTPAutofillStoreImpl: VaultOTPAutofillStore {
         self.store = store
     }
 
-    public func sync(
-        id: UUID,
-        item: VaultItem.Payload,
-        visibility: VaultItemVisibility,
-        searchableLevel: VaultItemSearchableLevel,
-        showInQuickType: Bool,
-    ) async throws {
-        guard let otpCode = item.otpCode else {
+    public func sync(id: UUID, item: VaultItem.Write) async throws {
+        guard let otpCode = item.item.otpCode else {
             // Not an OTP item, remove from autofill store if present
             try await remove(id: id, code: nil)
             return
         }
 
         // Check if item is hidden with passphrase
-        let viewConfig = VaultItemViewConfiguration(visibility: visibility, searchableLevel: searchableLevel)
+        let viewConfig = VaultItemViewConfiguration(visibility: item.visibility, searchableLevel: item.searchableLevel)
         if viewConfig == .requiresSearchPassphrase {
             // Hidden items should not appear in autofill, remove if present
             try await remove(id: id, code: otpCode)
             return
         }
 
+        // Locked items aren't suggested either: their site and account stay behind the lock, as in the feed.
+        if item.lockState.isLocked {
+            try await remove(id: id, code: otpCode)
+            return
+        }
+
         // Check if item has QuickType disabled
-        if !showInQuickType {
+        if !item.showInQuickType {
             try await remove(id: id, code: otpCode)
             return
         }
@@ -115,6 +109,11 @@ public final class VaultOTPAutofillStoreImpl: VaultOTPAutofillStore {
             )
             if viewConfig == .requiresSearchPassphrase {
                 // Hidden items should not appear in autofill
+                return nil
+            }
+
+            // Locked items aren't suggested either
+            if item.metadata.lockState.isLocked {
                 return nil
             }
 

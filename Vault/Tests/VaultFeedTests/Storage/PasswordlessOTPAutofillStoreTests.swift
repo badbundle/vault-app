@@ -109,6 +109,16 @@ struct PasswordlessOTPAutofillStoreTests {
 
         #expect(identityStore.removeAllCredentialIdentitiesCallCount == 1)
     }
+
+    @Test
+    func sync_lockedCode_isNotSuggested() async throws {
+        let (sut, identityStore, _) = makeSUT(opensWithoutPassword: true)
+
+        try await syncOne(with: sut, lockState: .lockedWithNativeSecurity)
+
+        #expect(identityStore.saveCredentialIdentitiesCallCount == 0)
+        #expect(identityStore.removeCredentialIdentitiesCallCount == 1)
+    }
 }
 
 // MARK: - Helpers
@@ -126,13 +136,13 @@ extension PasswordlessOTPAutofillStoreTests {
         return (sut, identityStore, isPlain)
     }
 
-    private func syncOne(with sut: PasswordlessOTPAutofillStore) async throws {
+    private func syncOne(
+        with sut: PasswordlessOTPAutofillStore,
+        lockState: VaultItemLockState = .notLocked,
+    ) async throws {
         try await sut.sync(
             id: UUID(),
-            item: .otpCode(anyOTPAuthCode()),
-            visibility: .always,
-            searchableLevel: .full,
-            showInQuickType: true,
+            item: anyItemWrite(.otpCode(anyOTPAuthCode()), lockState: lockState),
         )
     }
 }

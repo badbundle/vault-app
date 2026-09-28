@@ -61,6 +61,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Text being edited offers only Cut, Copy, Paste, Select, Select All and Delete in its edit menu, without Share, Look Up, Translate or Search Web, and can't be dragged into another app. A recovery phrase's words can't be cut or copied while they're typed either
 - Copied codes are cleared from the clipboard after 1 minute by default. Anyone who chose Never keeps it
 - New codes are no longer offered in QuickType unless Show New Codes in QuickType is on
+- QuickType no longer suggests locked codes
 - Settings has a heading and short footer for every section, with icons colored by section, and Universal Clipboard opens its own sheet
 - The App Lock Password shows the lock screen's vault door wherever it's set, changed or managed, so it's plainly the password the lock screen asks for. The backup password has a shield wherever it's set, entered or changed
 - The Danger Zone is a sheet that says what deleting removes and what's kept, and asks you to confirm before it deletes anything. Deleting all data also deletes the backup password, so restoring an old backup afterwards needs its password

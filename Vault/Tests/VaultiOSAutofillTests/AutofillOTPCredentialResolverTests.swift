@@ -44,16 +44,51 @@ struct AutofillOTPCredentialResolverTests {
         #expect(outcome == .notFound)
     }
 
-    @Test
-    func resolve_authRequiredItem_returnsUserInteractionRequired() async {
-        // The security gate: an item whose copy action demands device
-        // authentication must never be served without interaction.
-        let item = makeOTPItem(type: .totp())
-        let sut = makeSUT(items: [item], requiresAuthenticationToCopy: true)
+    /// A locked code is never served without the extension's UI, whatever the copy handler has cached. In the
+    /// QuickType process it has cached nothing, as no preview is ever drawn there.
+    @Test(arguments: [nil, CachedCopyAction.notRequiringAuthentication])
+    func resolve_lockedItem_returnsUserInteractionRequired(cached: CachedCopyAction?) async {
+        let item = makeOTPItem(type: .totp(), lockState: .lockedWithNativeSecurity)
+        let sut = makeSUT(items: [item], cached: cached)
 
         let outcome = await sut.resolve(recordIdentifier: item.id.rawValue.uuidString)
 
         #expect(outcome == .userInteractionRequired)
+    }
+
+    @Test
+    func resolve_lockedHOTPItem_returnsUserInteractionRequired() async {
+        let item = makeOTPItem(type: .hotp(), lockState: .lockedWithNativeSecurity)
+        let sut = makeSUT(items: [item])
+
+        let outcome = await sut.resolve(recordIdentifier: item.id.rawValue.uuidString)
+
+        #expect(outcome == .userInteractionRequired)
+    }
+
+    @Test
+    func resolve_authRequiredCopyAction_returnsUserInteractionRequired() async {
+        // An item whose copy action demands device authentication must never be served without interaction either.
+        let item = makeOTPItem(type: .totp())
+        let sut = makeSUT(items: [item], cached: .requiringAuthentication)
+
+        let outcome = await sut.resolve(recordIdentifier: item.id.rawValue.uuidString)
+
+        #expect(outcome == .userInteractionRequired)
+    }
+
+    /// An unlocked code is served with nothing cached, as in the QuickType process.
+    @Test
+    func resolve_unlockedTOTPItemWithNothingCached_returnsTheCode() async {
+        let item = makeOTPItem(type: .totp())
+        let sut = makeSUT(items: [item], cached: nil)
+
+        let outcome = await sut.resolve(recordIdentifier: item.id.rawValue.uuidString)
+
+        guard case .code = outcome else {
+            Issue.record("Expected a code, got \(outcome)")
+            return
+        }
     }
 
     @Test
@@ -179,35 +214,35 @@ extension AutofillOTPCredentialResolverTests {
 extension AutofillOTPCredentialResolverTests {
     private func makeSUT(
         items: [VaultItem] = [],
-        requiresAuthenticationToCopy: Bool = false,
+        cached: CachedCopyAction? = .notRequiringAuthentication,
         clock: EpochClockMock = EpochClockMock(currentTime: 100),
     ) -> AutofillOTPCredentialResolver {
         makeSUT(
             retrieveItems: { .init(items: items) },
-            requiresAuthenticationToCopy: requiresAuthenticationToCopy,
+            cached: cached,
             clock: clock,
         )
     }
 
     private func makeSUT(
         retrieveItems: @escaping () async throws -> VaultRetrievalResult<VaultItem>,
-        requiresAuthenticationToCopy: Bool = false,
+        cached: CachedCopyAction? = .notRequiringAuthentication,
         clock: EpochClockMock = EpochClockMock(currentTime: 100),
         isAppLockEnabled: Bool = false,
         accessMode: VaultAccessMode = .plain,
     ) -> AutofillOTPCredentialResolver {
         AutofillOTPCredentialResolver(
             retrieveItems: retrieveItems,
-            copyActionHandler: CopyActionHandlerStub(requiresAuthenticationToCopy: requiresAuthenticationToCopy),
+            copyActionHandler: CopyActionHandlerStub(cached: cached),
             clock: clock,
             isAppLockEnabled: isAppLockEnabled,
             accessMode: accessMode,
         )
     }
 
-    private func makeOTPItem(type: OTPAuthType) -> VaultItem {
+    private func makeOTPItem(type: OTPAuthType, lockState: VaultItemLockState = .notLocked) -> VaultItem {
         VaultItem(
-            metadata: anyVaultItemMetadata(),
+            metadata: anyVaultItemMetadata(lockState: lockState),
             item: .otpCode(OTPAuthCode(
                 type: type,
                 data: makeOTPData(),
@@ -226,13 +261,21 @@ extension AutofillOTPCredentialResolverTests {
         )
     }
 
+    /// What the copy handler has cached for an item, from a preview drawn in this process.
+    enum CachedCopyAction {
+        case notRequiringAuthentication
+        case requiringAuthentication
+    }
+
     private struct CopyActionHandlerStub: VaultItemCopyActionHandler {
-        let requiresAuthenticationToCopy: Bool
+        /// `nil` for nothing cached, as in the QuickType process.
+        let cached: CachedCopyAction?
 
         func textToCopyForVaultItem(id _: Identifier<VaultItem>) -> VaultTextCopyAction? {
-            VaultTextCopyAction(
+            guard let cached else { return nil }
+            return VaultTextCopyAction(
                 text: "123456",
-                requiresAuthenticationToCopy: requiresAuthenticationToCopy,
+                requiresAuthenticationToCopy: cached == .requiringAuthentication,
                 contentType: .otp,
             )
         }
