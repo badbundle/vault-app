@@ -98,7 +98,9 @@ These are facts from the code and from the prototypes described in the [appendix
   VAULT-55, the store runs `VACUUM` and `wal_checkpoint(TRUNCATE)` on a second connection straight after a
   deletion (killphrase, single item, delete all, override import) or a killphrase or search passphrase change,
   and again at launch if there are freed pages (`PersistedStoreScrubber`). Edits still leave the old version on
-  freed pages until the next launch.
+  freed pages until the next launch. Each scrub, at launch too, first deletes the history SwiftData keeps of every
+  save in Core Data's `ATRANSACTION` and `ACHANGE` tables (which item was saved, which of its fields changed, and
+  when), which nothing in the app reads.
 - **Device backups.** The App Group container is included in iCloud and Finder device backups, so the plaintext
   store is too. Without Advanced Data Protection, iCloud Backup is readable by Apple.
 - **Readable flags.** Non-null `killphraseDigest` and `searchPassphraseDigest` columns show which items have a
@@ -568,7 +570,11 @@ At launch:
 - Journal `migrating`, or `plain` with a stray slot file: the SQLite store was never touched and is still the
   truth. Delete the slot file and any temp files. The UI never said the password was set. If the SQLite store
   isn't there, something else has gone wrong (a lost state file, say), and the slot file might be the only copy of
-  the vault, so nothing is deleted and the app shows its failure screen.
+  the vault, so nothing is deleted and the app shows its failure screen. With no journal at all, the SQLite store
+  must also hold items, counted through a read-only connection, before the slot file goes: a store made empty
+  beside it since the state file went missing isn't the vault. Until the app has recovered, the extensions treat
+  a slot file with no state file as unavailable (`VaultStorageStateFile.readWithoutRecovering()`), and never open
+  or make the SQLite store.
 - Journal `encrypted(password), cleanup: plain`: finish deleting the SQLite files. This is idempotent.
 
 **As built** (`VaultEncryptionConverter`, `VaultStorageRecovery`, VAULT-47), the steps above run in a slightly
@@ -1077,8 +1083,10 @@ and resets the counter.
   says where its backups are: once a new backup password is set, auto-backup would write there, and its retention
   clean-up delete the erased vault's backups. The auto-backup service and the data model read them at launch, so a
   hook makes them forget their copies too, and the providers their folders. It turns off erasing after failed
-  passwords, which only means anything with a password. It also removes the pending rehash files and backup PDFs
-  left in the temporary directory. The storage state goes last, when the journal is cleared.
+  passwords, which only means anything with a password. It also removes the pending rehash files, backup PDFs
+  left in the temporary directory, and `app-lock-password-attempts.lock`, which the attempt count takes its lock on:
+  step 2 makes it again if it isn't there, and nothing else does until a password is set. The storage state goes
+  last, when the journal is cleared.
 - **Step 4** tries the QuickType store a few times, and then carries on without it: while the password is on it's kept
   empty already, and a store that's stuck mustn't leave the vaults half erased.
 - **Step 5** creates the store without the plain store's failed-open recovery, so it never sets a copy aside, then

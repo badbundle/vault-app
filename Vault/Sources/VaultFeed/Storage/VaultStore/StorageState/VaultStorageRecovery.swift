@@ -8,7 +8,9 @@ import Foundation
 ///
 /// - **Encrypting**, or plain with a stray encrypted file: the plain store was never touched and is still the vault.
 ///   It deletes the encrypted file and any temp files, and goes back to plain. The user was never told the password
-///   was set.
+///   was set. With no journal, only if the plain store holds items: otherwise the state file may be what's missing,
+///   and the encrypted file the vault, so it touches nothing and throws `.encryptedFileWithoutPlainStore`. The
+///   extensions treat that case as unavailable (`VaultStorageStateFile.readWithoutRecovering()`).
 /// - **Deleting the plain store**: the encrypted vault has committed. It finishes deleting the plain store's files,
 ///   its pending rehash files and the confirmed archives. That's safe to repeat.
 /// - **Clearing the system surfaces**: the app then clears QuickType and reloads the widgets
@@ -35,8 +37,9 @@ import Foundation
 /// `docs/on-device-encryption.md`.
 public struct VaultStorageRecovery: Sendable {
     public enum Failure: Error, Equatable, Sendable {
-        /// The state says plain, but there's an encrypted file and no plain store: deleting the encrypted file might
-        /// delete the only copy of the vault, so nothing is deleted.
+        /// The state says plain, but there's an encrypted file and no plain store, or, with no journal, no plain store
+        /// that holds any items: deleting the encrypted file might delete the only copy of the vault, so nothing is
+        /// deleted.
         case encryptedFileWithoutPlainStore
         /// The state says the conversion committed, but there's no encrypted file the size of one: deleting the
         /// plain store might delete the only copy of the vault, so nothing is deleted.
@@ -123,7 +126,7 @@ public struct VaultStorageRecovery: Sendable {
             }
             switch state.mode {
             case .plain:
-                try removeEncryptedFiles()
+                try removeEncryptedFiles(isJournaled: state.transition == .encrypting)
                 state = .plain
             case .password:
                 if case let .deletingPlainStore(archives) = state.transition {
@@ -304,7 +307,12 @@ public struct VaultStorageRecovery: Sendable {
     }
 
     /// Deletes the encrypted file and its temp files, if the plain store is there to be the vault.
-    func removeEncryptedFiles() throws {
+    ///
+    /// - Parameter isJournaled: Whether the journal says a conversion was underway, which shows the plain store is
+    ///   the vault, even an empty one. Without it, the encrypted file is only deleted if the plain store holds items:
+    ///   a state file that's gone missing leaves the encrypted file looking like a stray, and a plain store could have
+    ///   been made empty beside it since.
+    func removeEncryptedFiles(isJournaled: Bool) throws {
         let contents = try fileSystem.contentsOfDirectory(at: directory)
         let encryptedFiles = contents.filter {
             $0.lastPathComponent == EncryptedVaultFile.fileName
@@ -314,6 +322,13 @@ public struct VaultStorageRecovery: Sendable {
         let plainStoreFile = PersistedLocalVaultStoreFactory.storeFileURLs(storageDirectory: directory)[0]
         guard contents.contains(where: { $0.lastPathComponent == plainStoreFile.lastPathComponent }) else {
             throw Failure.encryptedFileWithoutPlainStore
+        }
+        let hasEncryptedFile = encryptedFiles.contains { $0.lastPathComponent == EncryptedVaultFile.fileName }
+        if hasEncryptedFile, !isJournaled {
+            // Read-only, and only counted: nothing is written to the store, or made if it isn't a store at all. If it
+            // can't be read, as before the device is first unlocked, nothing is deleted either.
+            let itemCount = PersistedLocalVaultStoreFactory.storedItemCount(storageDirectory: directory) ?? 0
+            guard itemCount > 0 else { throw Failure.encryptedFileWithoutPlainStore }
         }
         for url in encryptedFiles {
             try fileSystem.removeItem(at: url)

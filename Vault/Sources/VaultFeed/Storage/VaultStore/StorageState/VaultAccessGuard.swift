@@ -35,6 +35,6 @@ extension VaultAccessMode {
         fileSystem: any SlotFileSystem = LiveSlotFileSystem(),
     ) -> @Sendable () -> VaultAccessMode {
         let stateFile = VaultStorageStateFile(directory: directory, fileSystem: fileSystem)
-        return { VaultAccessMode(state: try? stateFile.read()) }
+        return { VaultAccessMode(state: (try? stateFile.readWithoutRecovering()) ?? nil) }
     }
 }

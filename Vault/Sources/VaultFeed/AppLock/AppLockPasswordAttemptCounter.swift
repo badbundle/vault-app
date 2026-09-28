@@ -98,6 +98,13 @@ public actor AppLockPasswordAttemptCounter {
         try storage.remove()
     }
 
+    /// Removes the file the count's lock is taken on, which shows a password was tried on this device. Only an erase
+    /// calls it, after `reset()`, once there's no password left to count attempts at: nothing takes the lock again
+    /// until a password is set, which makes the file again.
+    func removeLockFile() throws {
+        try storage.removeLockFile()
+    }
+
     // MARK: - Delay
 
     /// How long the user has to wait after `attempts` wrong attempts in a row before they can try again.

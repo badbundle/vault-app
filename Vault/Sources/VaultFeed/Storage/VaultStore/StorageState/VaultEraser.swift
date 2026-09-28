@@ -32,8 +32,9 @@ import VaultCore
 /// 5. Clears the vault's settings still kept on the device: the last backup event, the auto-backup configuration,
 ///    which says where the backups are, and the PDF backup's hint. Then whatever holds them in memory forgets them
 ///    too (a hook). It turns off erasing after failed passwords too, which only means anything with a password.
-/// 6. Removes the plain store's pending rehash files, which hold phrases in plaintext, and backup PDFs left in the
-///    app's temporary directory.
+/// 6. Removes the plain store's pending rehash files, which hold phrases in plaintext, backup PDFs left in the app's
+///    temporary directory, and the file the count of attempts at the App Lock Password takes its lock on, which step
+///    4 makes if it isn't there. Nothing makes that file again until a password is set.
 /// 7. Clears the QuickType identity store, trying a few times, and reloads the widgets' timelines. If QuickType still
 ///    can't be cleared, the erase carries on: while the password is on, the store is kept empty already, and a store
 ///    that's stuck mustn't leave the vaults half erased.
@@ -206,6 +207,7 @@ extension VaultEraser {
         appLockSettings.erasesAfterFailedPasswords = false
         await hooks.forgetVaultSettings()
         try removeFilesLeftBehind(stateFile: stateFile)
+        try await attemptCounter.removeLockFile()
         await clearCredentialIdentities()
         await hooks.reloadWidgets()
         try await removeEveryVault(includingThePlainStore: false)

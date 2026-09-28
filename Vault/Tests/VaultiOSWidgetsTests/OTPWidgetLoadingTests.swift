@@ -341,6 +341,32 @@ struct OTPWidgetLoadingTests {
         #expect(opens.value == 0)
     }
 
+    /// With no state file but an encrypted file, it isn't known which is the vault until the app has launched and
+    /// looked, so the widget shows the vault locked, and never opens or makes the plain store.
+    @Test
+    func noStateFileWithAnEncryptedFile_isLockedAndOpensNothing() async throws {
+        let directory = URL.temporaryDirectory.appending(path: "widget-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // The encrypted vault file.
+        try Data("encrypted".utf8).write(to: directory.appending(path: "vault-slots.v1"))
+        let opens = SharedMutex(0)
+        let loader = try WidgetVaultLoader(
+            appLockSettings: appLockOff(),
+            accessMode: { VaultAccessMode.current(inDirectory: directory) },
+        ) { _ in
+            opens.modify { $0 += 1 }
+            return FakeVaultStoreReader(results: [.success(.init(items: [makeOTPVaultItem()]))])
+        }
+
+        let entities = try await OTPWidgetItemEntityQuery(loader: loader).suggestedEntities()
+
+        #expect(loader.isLocked)
+        #expect(entities.isEmpty)
+        #expect(try await loader.eligibleItems().isEmpty)
+        #expect(opens.value == 0)
+    }
+
     @Test
     func providerTimeline_isUnavailableWhenSelectedItemFailsToLoad() async {
         let entity = OTPWidgetItemEntity(id: UUID(), issuer: "issuer", accountName: "account")

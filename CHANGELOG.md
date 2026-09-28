@@ -37,7 +37,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Removing a tag from an item didn't stick: the tag came back once the item was saved
 - Restoring a backup turned QuickType back on for every code and reset every note's preview. Backups now keep both choices, and older backups restore as before
 - A restore over the vault (Import & Override) that failed part way could leave the vault empty or half replaced. Now it leaves the vault untouched
-- Deleted items, killphrases and search passphrases could linger in the vault's database files. Vault now scrubs them out after deleting or changing them, and again at launch
+- Deleted items, killphrases and search passphrases could linger in the vault's database files. Vault now scrubs them out after deleting or changing them, and again at launch, along with the database's own history of changes
 - The Backups page could stop showing that a backup password was set when you came back to it
 - Copying a PDF backup from its share sheet counted as saving it, and put the backup on the clipboard. Copy and Markup are gone from that share sheet, and backup PDFs no longer stay behind in temporary files
 - The editor's Tags, Encryption and Password rows needed a second tap to open their sheets
@@ -69,6 +69,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Tapping + opens one sheet that starts with choosing the kind of item and slides straight into its editor
 - The Backups, Auto-Backup and Restore pages open with headers, and Backups leads with when you last backed up. Restore asks for Face ID or the passcode before it imports anything, even with no backup password set
 - On a device with no passcode, Restore, the Backup Password sheet, the Danger Zone and deleting a set-aside vault say to set up a passcode, instead of asking to authenticate and failing
+- When the vault can't be opened, its screen suggests restoring a backup of your iPhone or getting in touch, and says to keep Vault installed, since deleting the app deletes its data
 - Auto-backup's cleanup only deletes backups it recorded making, instead of any auto-backup PDF in the folder. Existing setups are seeded once with the files the old cleanup would have deleted, so they carry on being cleaned up
 - The text in a code's timer bar is smaller and readable on every bar color
 - Images in Markdown notes aren't loaded, so opening a note never goes online

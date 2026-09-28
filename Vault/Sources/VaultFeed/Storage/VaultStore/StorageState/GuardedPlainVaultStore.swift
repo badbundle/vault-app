@@ -28,9 +28,10 @@ public final class GuardedPlainVaultStore: Sendable {
         encryptedFile = EncryptedVaultFile(directory: directory, fileSystem: fileSystem)
     }
 
-    /// Whether the vault is in the plain store, with nothing underway. A state that can't be read counts as no.
+    /// Whether the vault is in the plain store, with nothing underway. A state that can't be read, or isn't known
+    /// (`VaultStorageStateFile.readWithoutRecovering()`), counts as no.
     private var isPlain: Bool {
-        (try? stateFile.read().isPlain) ?? false
+        ((try? stateFile.readWithoutRecovering()) ?? nil)?.isPlain ?? false
     }
 
     /// Runs the write holding the conversion's lock, if the vault is still plain once it has it.

@@ -109,6 +109,20 @@ struct VaultStorageStateFile: Sendable {
         return try JSONDecoder().decode(VaultStorageState.self, from: data)
     }
 
+    /// The state, for a process that mustn't recover from an interrupted change: the AutoFill and widget extensions.
+    ///
+    /// As `read()`, except when there's no file but there is an encrypted file. That never happens while the app
+    /// runs as it should: it journals before it makes the encrypted file, and removes the file before the journal. So
+    /// the state is unknown then, and `nil`: only the app's launch recovery decides which is the vault
+    /// (`VaultStorageRecovery`), and until it has, nothing opens the plain store, or makes one.
+    func readWithoutRecovering() throws -> VaultStorageState? {
+        guard let data = try fileSystem.contents(of: url) else {
+            let encryptedFile = directory.appending(path: EncryptedVaultFile.fileName)
+            return try fileSystem.fileSize(of: encryptedFile) == nil ? .plain : nil
+        }
+        return try JSONDecoder().decode(VaultStorageState.self, from: data)
+    }
+
     /// Replaces the state, or removes the file for `.plain`.
     func write(_ state: VaultStorageState) throws {
         guard state != .plain else {
@@ -221,8 +235,8 @@ extension VaultStorageState {
     }
 
     /// The state as it is now, for a process that mustn't recover from an interrupted change: the AutoFill and widget
-    /// extensions. `nil` if it can't be read.
+    /// extensions. `nil` if it can't be read, or isn't known (`VaultStorageStateFile.readWithoutRecovering()`).
     public static func current(inDirectory directory: URL) -> VaultStorageState? {
-        try? VaultStorageStateFile(directory: directory).read()
+        (try? VaultStorageStateFile(directory: directory).readWithoutRecovering()) ?? nil
     }
 }
