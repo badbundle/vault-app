@@ -353,11 +353,23 @@ struct AppLockPasswordFormViewModelTests {
     private static let duressPassword = "plausible decoy"
 
     @Test
-    func setDuress_asksForANewPasswordOnly() async throws {
+    func setDuress_asksForTheCurrentPasswordAndANewOne() async throws {
         let (sut, _, _) = try await makeSUT(purpose: .setDuress)
 
-        #expect(!sut.needsCurrentPassword)
+        #expect(sut.needsCurrentPassword)
         #expect(sut.needsNewPassword)
+    }
+
+    @Test
+    func setDuress_withoutTheCurrentPassword_cannotBeSubmitted() async throws {
+        let (sut, _, _) = try await makeSUT(purpose: .setDuress)
+
+        sut.newPassword = Self.duressPassword
+        sut.confirmation = Self.duressPassword
+
+        #expect(!sut.canSubmit)
+        sut.currentPassword = Self.password
+        #expect(sut.canSubmit)
     }
 
     @Test(arguments: weakPasswords)
@@ -367,6 +379,7 @@ struct AppLockPasswordFormViewModelTests {
     ) async throws {
         let (sut, _, _) = try await makeSUT(purpose: .setDuress)
 
+        sut.currentPassword = Self.password
         sut.newPassword = password
         sut.confirmation = password
 
@@ -378,6 +391,7 @@ struct AppLockPasswordFormViewModelTests {
     func setDuress_confirmationDoesNotMatch_cannotBeSubmitted() async throws {
         let (sut, _, _) = try await makeSUT(purpose: .setDuress)
 
+        sut.currentPassword = Self.password
         sut.newPassword = Self.duressPassword
         sut.confirmation = Self.duressPassword + "!"
 
@@ -386,11 +400,13 @@ struct AppLockPasswordFormViewModelTests {
         #expect(!sut.canSubmit)
     }
 
-    /// The form leaves comparing it with the App Lock Password to the password service, so it can be submitted.
+    /// The form leaves comparing it with the App Lock Password to the password service, which does once the current
+    /// password is shown to be right, so it can be submitted.
     @Test
     func setDuress_appLockPassword_canBeSubmitted() async throws {
         let (sut, _, _) = try await makeSUT(purpose: .setDuress)
 
+        sut.currentPassword = Self.password
         sut.newPassword = Self.password
         sut.confirmation = Self.password
 
@@ -401,12 +417,14 @@ struct AppLockPasswordFormViewModelTests {
     @Test
     func submit_setDuress_makesAVaultThePasswordOpens() async throws {
         let (sut, service, _) = try await makeSUT(purpose: .setDuress)
+        sut.currentPassword = Self.password
         sut.newPassword = Self.duressPassword
         sut.confirmation = Self.duressPassword
 
         await sut.submit()
 
         #expect(sut.state == .done)
+        #expect(sut.currentPassword.isEmpty)
         #expect(sut.newPassword.isEmpty)
         #expect(sut.confirmation.isEmpty)
         #expect(try await service.unlock(password: Self.duressPassword) == .accepted)
@@ -429,6 +447,7 @@ struct AppLockPasswordFormViewModelTests {
     @Test
     func submit_setDuress_appLockPassword_isRefusedAndForgotten() async throws {
         let (sut, service, _) = try await makeSUT(purpose: .setDuress)
+        sut.currentPassword = Self.password
         sut.newPassword = Self.password
         sut.confirmation = Self.password
 
@@ -436,7 +455,9 @@ struct AppLockPasswordFormViewModelTests {
 
         #expect(sut.state == .editing)
         #expect(sut.isNewPasswordRefused)
+        #expect(!sut.isCurrentPasswordWrong)
         #expect(sut.refusedPasswordCount == 1)
+        #expect(sut.currentPassword.isEmpty)
         #expect(sut.newPassword.isEmpty)
         #expect(sut.confirmation.isEmpty)
         #expect(!sut.canSubmit)
@@ -454,6 +475,35 @@ struct AppLockPasswordFormViewModelTests {
         #expect(sut.refusedPasswordCount == 1)
     }
 
+    /// A wrong current password counts as a wrong attempt, as on the lock screen, and nothing is made.
+    @Test
+    func submit_setDuress_wrongCurrentPassword_saysSoAndMakesNothing() async throws {
+        let (sut, service, _) = try await makeSUT(purpose: .setDuress)
+
+        await submitDuressPassword(Self.duressPassword, current: "wrong", with: sut)
+
+        #expect(sut.state == .editing)
+        #expect(sut.isCurrentPasswordWrong)
+        #expect(sut.wrongPasswordCount == 1)
+        #expect(!sut.isNewPasswordRefused)
+        #expect(sut.currentPassword.isEmpty)
+        #expect(try await service.unlock(password: Self.duressPassword) == .wrong)
+    }
+
+    @Test
+    func submit_setDuress_fifthWrongCurrentPassword_waitsAMinute() async throws {
+        let clock = FakeAppLockClock()
+        let (sut, _, _) = try await makeSUT(purpose: .setDuress, clock: clock)
+
+        for _ in 1 ... 5 {
+            await submitDuressPassword(Self.duressPassword, current: "wrong", with: sut)
+        }
+
+        #expect(sut.wrongPasswordCount == 5)
+        #expect(sut.retryAt == clock.now.advanced(by: .seconds(60)))
+    }
+
+    /// The current password was right, so the refusal isn't a wrong attempt.
     @Test
     func submit_setDuress_refused_isNotAWrongAttempt() async throws {
         let clock = FakeAppLockClock()
@@ -511,7 +561,7 @@ struct AppLockPasswordFormViewModelTests {
     func setDuress_looksTheSameWhetherOrNotOneWasMade() async throws {
         let (fresh, _, _) = try await makeSUT(purpose: .setDuress)
         let (replacing, service, _) = try await makeSUT(purpose: .setDuress)
-        try await service.makeDuressVault(password: "earlier decoy")
+        #expect(try await service.makeDuressVault(current: Self.password, password: "earlier decoy") == .accepted)
 
         #expect(Screen(fresh) == Screen(replacing))
 
@@ -532,13 +582,13 @@ struct AppLockPasswordFormViewModelTests {
         #expect(Screen(real) == Screen(inDuress))
 
         await submitDuressPassword(Self.password, with: real)
-        await submitDuressPassword(Self.duressPassword, with: inDuress)
+        await submitDuressPassword(Self.duressPassword, current: Self.duressPassword, with: inDuress)
 
         #expect(real.isNewPasswordRefused)
         #expect(Screen(real) == Screen(inDuress))
 
         await submitDuressPassword("nested decoy", with: real)
-        await submitDuressPassword("nested decoy", with: inDuress)
+        await submitDuressPassword("nested decoy", current: Self.duressPassword, with: inDuress)
 
         #expect(real.state == .done)
         #expect(Screen(real) == Screen(inDuress))
@@ -549,7 +599,7 @@ struct AppLockPasswordFormViewModelTests {
     func submit_setDuress_inADuressVault_realPasswordIsAcceptedWithoutAWord() async throws {
         let (sut, _, _) = try await makeSUTInADuressVault(purpose: .setDuress)
 
-        await submitDuressPassword(Self.password, with: sut)
+        await submitDuressPassword(Self.password, current: Self.duressPassword, with: sut)
 
         #expect(sut.state == .done)
         #expect(!sut.isNewPasswordRefused)
@@ -753,7 +803,7 @@ extension AppLockPasswordFormViewModelTests {
             password: Self.password,
             erasesAfterFailedPasswords: erasesAfterFailedPasswords,
         )
-        try await service.makeDuressVault(password: Self.duressPassword)
+        #expect(try await service.makeDuressVault(current: Self.password, password: Self.duressPassword) == .accepted)
         let appLock = try makeAppLock(policy: .alwaysAllow, service: service, clock: FakeAppLockClock())
         await appLock.unlock()
         await appLock.unlock(password: Self.duressPassword)
@@ -761,7 +811,14 @@ extension AppLockPasswordFormViewModelTests {
         return (AppLockPasswordFormViewModel(purpose: purpose, appLock: appLock), service, appLock)
     }
 
-    private func submitDuressPassword(_ password: String, with viewModel: AppLockPasswordFormViewModel) async {
+    /// Submits `password` as the duress password, with `current` as the current password: the real vault's unless
+    /// it's given.
+    private func submitDuressPassword(
+        _ password: String,
+        current: String = Self.password,
+        with viewModel: AppLockPasswordFormViewModel,
+    ) async {
+        viewModel.currentPassword = current
         viewModel.newPassword = password
         viewModel.confirmation = password
         await viewModel.submit()

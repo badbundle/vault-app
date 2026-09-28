@@ -180,8 +180,8 @@ final class FakeAutofillVaultService: AutofillVaultUnlocking {
         try await base.turnOffPassword(current: current)
     }
 
-    func makeDuressVault(password: String) async throws {
-        try await base.makeDuressVault(password: password)
+    func makeDuressVault(current: String, password: String) async throws -> AppLockPasswordResult {
+        try await base.makeDuressVault(current: current, password: password)
     }
 
     func setErasesAfterFailedPasswords(_ erases: Bool, current: String) async throws -> AppLockPasswordResult {

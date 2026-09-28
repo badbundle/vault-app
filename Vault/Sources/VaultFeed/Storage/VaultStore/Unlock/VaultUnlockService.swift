@@ -17,7 +17,7 @@ import os
 ///    a decoy instead, a random slot's body with a throwaway key, which fails.
 /// 6. Drops `K_pw` and every wrap key but the opened slot's. They're `SymmetricKey`s, which are zeroed when released.
 ///    The opened slot's wrap key and data key stay with its store until the vault locks.
-/// 7. Waits for the deadline. Then it resets the count, moves the wrap stamp on
+/// 7. Waits for the deadline. Then it notes the right attempt with the counter, moves the wrap stamp on
 ///    (`VaultDeviceWrapStamper.noteUse(ofVaultWrappedAt:)`), and switches the store session to the vault, or reports
 ///    a wrong password.
 ///
@@ -72,8 +72,8 @@ public actor VaultUnlockService {
     /// How the vault can be opened now, which an app extension checks before it opens the vault, and on every call to
     /// it once it has (`VaultAccessGuard`). `nil` in the app.
     private let currentAccessMode: (@Sendable () -> VaultAccessMode)?
-    /// Keeps the app running until an attempt has finished, so it isn't suspended with the attempt counted and the
-    /// count not yet reset for a right password.
+    /// Keeps the app running until an attempt has finished, so it isn't suspended with the attempt counted and not
+    /// yet noted as right.
     private let backgroundTime: VaultBackgroundTime
 
     private var isUnlocking = false
@@ -81,7 +81,7 @@ public actor VaultUnlockService {
     /// - Parameters:
     ///   - directory: The directory the encrypted vault file is in.
     ///   - session: The store session the app reads and writes the vault through.
-    ///   - attemptCounter: Counts every attempt before it's tried, and is reset when one opens a vault.
+    ///   - attemptCounter: Counts every attempt before it's tried, and notes each one that opens a vault.
     ///   - purgeVaultContents: Forgets everything the app read from the vault. Called every time it locks.
     ///   - backgroundTime: Keeps the app running until an attempt has finished: `.application` in the app.
     public init(
@@ -227,7 +227,7 @@ extension VaultUnlockService {
     ///   (`VaultUnlockError.stoppedBeforeEraseThreshold`). The AutoFill extension does.
     /// - Throws: `VaultUnlockError`, an error counting the attempt or reading the file, or `CancellationError` if the
     ///   vault locked, or the task was cancelled, while the attempt was underway. Its result is thrown away then, but
-    ///   if the password opened a vault, the count is still reset first.
+    ///   if the password opened a vault, the attempt is still noted as right first.
     public func unlock(
         password: String,
         stoppingBeforeEraseThreshold: Bool = false,
@@ -269,7 +269,7 @@ extension VaultUnlockService {
         case .success(nil):
             return .wrongPassword(reachesEraseThreshold: attempt.reachesEraseThreshold)
         case let .success(opened?):
-            try await attemptCounter.reset()
+            try await attemptCounter.noteRightAttempt()
             // Moves the stamp on to now, as every unlock does, so it shows when the device was last used rather than
             // when a key was last wrapped, and so a wrap made from now on follows this vault's even on a device that's
             // lost its stamp.
@@ -297,9 +297,9 @@ extension VaultUnlockService {
     /// Checks the password against the open vault, to change it or turn it off (`VaultPasswordChangeService`).
     ///
     /// It's an attempt like unlocking, finishing at the same deadline: counted first, the same derivation and a trial
-    /// of every slot, and the count reset if it's right. It opens no body. Right means it opens `index`, the open
-    /// vault's slot: a password that opens another vault is as wrong as any other, so this never shows that another
-    /// vault exists.
+    /// of every slot, and noted with the counter if it's right. It opens no body. Right means it opens `index`, the
+    /// open vault's slot: a password that opens another vault is as wrong as any other, so this never shows that
+    /// another vault exists.
     ///
     /// It never tries an attempt that would make `AppLockPasswordAttemptCounter.eraseThreshold` or more wrong ones in
     /// a row, erasing on or off (`.stoppedBeforeEraseThreshold`). That one is only ever tried at the lock screen, where
@@ -344,7 +344,7 @@ extension VaultUnlockService {
             guard attempt.openedSlots.contains(index) else {
                 return .wrong(reachesEraseThreshold: attempt.reachesEraseThreshold)
             }
-            try await attemptCounter.reset()
+            try await attemptCounter.noteRightAttempt()
             return .right
         }
     }
@@ -359,7 +359,7 @@ extension VaultUnlockService {
     /// work called for it.
     ///
     /// Throws `CancellationError` if the vault locked, or the task was cancelled, meanwhile. If the attempt `isRight`,
-    /// the count is reset first, as it would be if the attempt had been wanted: left counted, a right tenth attempt
+    /// it's noted as right first, as it would be if the attempt had been wanted: left counted, a right tenth attempt
     /// would make the next one erase every vault (VAULT-34). That shows nothing an attempt that was wanted wouldn't,
     /// and it's the same for a real password and a duress one.
     private func attemptPassword(
@@ -412,7 +412,7 @@ extension VaultUnlockService {
         try? await clock.sleep(until: start.advanced(by: heldUntil))
         guard await isStillWanted(since: lockEpoch) else {
             if isRight(attempt) {
-                try await attemptCounter.reset()
+                try await attemptCounter.noteRightAttempt()
             }
             throw CancellationError()
         }

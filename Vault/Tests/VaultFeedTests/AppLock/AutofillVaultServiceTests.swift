@@ -68,7 +68,7 @@ struct AutofillVaultServiceTests {
             try await service.turnOffPassword(current: Self.password)
         }
         await #expect(throws: AppLockPasswordUnavailableError.self) {
-            try await service.makeDuressVault(password: "battery staple")
+            try await service.makeDuressVault(current: Self.password, password: "battery staple")
         }
     }
 

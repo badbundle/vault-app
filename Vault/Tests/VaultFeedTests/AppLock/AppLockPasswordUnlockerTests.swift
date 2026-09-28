@@ -120,7 +120,8 @@ struct AppLockPasswordUnlockerTests {
         #expect(sut.log.value == ["count the attempt", "reset the count"])
     }
 
-    /// The real password and a duress one alike: the vault opens, the count goes back to zero, and nothing is erased.
+    /// The real password and a duress one alike: the vault opens, the count in a row goes back to zero, and nothing is
+    /// erased.
     @Test(arguments: [false, true])
     func unlock_rightPasswordAtTheLastAttempt_opensAVaultAndResetsTheCount(isDuress: Bool) async throws {
         let sut = try makeSUT(erasesAfterFailedPasswords: true, wrongAttempts: Self.lastAttempt)
@@ -130,7 +131,32 @@ struct AppLockPasswordUnlockerTests {
         #expect(result == .accepted)
         #expect(await !sut.session.isLocked)
         #expect(sut.log.value == ["count the attempt", "reset the count"])
-        #expect(try sut.attemptStorage.load() == nil)
+        #expect(try sut.attemptStorage.load()?.count == .zero)
+    }
+
+    /// A duress password between wrong ones starts the count towards erasing again, as any password that opens a vault
+    /// does, but the waits keep growing: four wrong, the duress password, and four more wrong wait as eight wrong ones
+    /// would, where four in a row wouldn't wait at all.
+    @Test
+    func unlock_wrongPasswordsInterleavedWithADuressPassword_stillEscalate() async throws {
+        let sut = try makeSUT(erasesAfterFailedPasswords: true)
+        var results = [AppLockPasswordResult]()
+        for _ in 1 ... 4 {
+            try await results.append(sut.unlocker.unlock(password: "wrong"))
+        }
+        try await results.append(sut.unlocker.unlock(password: Self.duressPassword))
+        await sut.unlockService.lock()
+
+        for _ in 1 ... 4 {
+            try sut.attemptClock.advance(by: await sut.attemptCounter.remainingDelay())
+            try await results.append(sut.unlocker.unlock(password: "wrong"))
+        }
+
+        #expect(results == Array(repeating: .wrong, count: 4) + [.accepted] + Array(repeating: .wrong, count: 4))
+        #expect(try await sut.attemptCounter.remainingDelay() == .seconds(15 * 60))
+        #expect(try await sut.unlocker.unlock(password: Self.password) == .delayed(.seconds(15 * 60)))
+        #expect(try await !sut.attemptCounter.hasReachedEraseThreshold())
+        #expect(!sut.log.value.contains("erase"))
     }
 
     /// The blocker from review: the right password at the last attempt, whose result is thrown away because the app
@@ -216,8 +242,11 @@ extension AppLockPasswordUnlockerTests {
     private struct SUT {
         let unlocker: AppLockPasswordUnlocker
         let unlockService: VaultUnlockService
+        let attemptCounter: AppLockPasswordAttemptCounter
         let session: VaultStoreSession
         let clock: ManualUnlockClock
+        /// The attempt counter's clock, which the waits run on.
+        let attemptClock: FakeAppLockClock
         let settings: AppLockSettingsStore
         /// What the attempt counter and the erase did, in order.
         let log: SharedMutex<[String]>
@@ -311,8 +340,10 @@ extension AppLockPasswordUnlockerTests {
         return SUT(
             unlocker: unlocker,
             unlockService: unlockService,
+            attemptCounter: attemptCounter,
             session: session,
             clock: clock,
+            attemptClock: counterClock,
             settings: settings,
             log: log,
             attemptStorage: attemptStorage,

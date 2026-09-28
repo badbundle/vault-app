@@ -41,7 +41,8 @@ struct EncryptedVaultPasswordServiceTests {
             #expect(try await sut.itemIDs() == [item])
 
             // Make a duress vault, which its password opens, empty.
-            #expect(try await sut.appLock.makeDuressVault(password: Self.duressPassword))
+            #expect(try await sut.appLock
+                .makeDuressVault(current: Self.password, password: Self.duressPassword) == .accepted)
             try await sut.unlockAgain(with: Self.duressPassword)
             #expect(try await sut.itemIDs().isEmpty)
 
@@ -83,7 +84,8 @@ struct EncryptedVaultPasswordServiceTests {
             let sut = try await SUT(directory: directory)
             _ = try await sut.insertItem()
             #expect(try await sut.appLock.setPassword(Self.password))
-            #expect(try await sut.appLock.makeDuressVault(password: Self.duressPassword))
+            #expect(try await sut.appLock
+                .makeDuressVault(current: Self.password, password: Self.duressPassword) == .accepted)
             #expect(!sut.appLock.erasesAfterFailedPasswords)
             #expect(try await sut.appLock.setErasesAfterFailedPasswords(true, current: Self.password) == .accepted)
             #expect(sut.appLock.erasesAfterFailedPasswords)
@@ -176,6 +178,7 @@ struct EncryptedVaultPasswordServiceTests {
             #expect(try await before.appLock.setPassword(Self.password))
             #expect(try await before.appLock.turnOffPassword(current: Self.password) == .accepted)
             try await before.lock()
+            let attempts = try keychain.attempts.load()
 
             let sut = try await SUT(directory: directory, keychain: keychain, mode: .password)
             await sut.appLock.unlock()
@@ -184,7 +187,7 @@ struct EncryptedVaultPasswordServiceTests {
             #expect(sut.appLock.state == .unlocked)
             #expect(!sut.appLock.isPasswordSet)
             #expect(sut.service.mode == .deviceKey)
-            #expect(try keychain.attempts.load() == nil)
+            #expect(try keychain.attempts.load() == attempts)
         }
     }
 
@@ -269,6 +272,7 @@ struct EncryptedVaultPasswordServiceTests {
             state.mode = .password
             state.transition = .turningOff
             try stateFile.write(state)
+            let attempts = try keychain.attempts.load()
 
             let sut = try await SUT(directory: directory, keychain: keychain, mode: .password)
             #expect(sut.appLock.isPasswordSet)
@@ -279,7 +283,7 @@ struct EncryptedVaultPasswordServiceTests {
             #expect(!sut.appLock.isPasswordSet)
             #expect(sut.service.mode == .deviceKey)
             #expect(try stateFile.read() == VaultStorageState(mode: .deviceKey, unlockDeadline: .seconds(1)))
-            #expect(try keychain.attempts.load() == nil)
+            #expect(try keychain.attempts.load() == attempts)
         }
     }
 

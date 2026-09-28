@@ -1,6 +1,6 @@
 A duress password opens a separate vault instead of your real one. If someone makes you unlock Vault, you can give them the duress password, and they see that vault, not your real one.
 
-To set one, turn on the App Lock Password in Settings, open it, and choose **Set Duress Password**.
+To set one, turn on the App Lock Password in Settings, open it, choose **Set Duress Password**, and enter the password you unlocked Vault with, along with the new duress password.
 
 ## Can anyone tell there's another vault?
 
@@ -15,6 +15,12 @@ Some things can still give it away:
 ## Can I have more than one?
 
 Each vault has one duress vault: setting a new duress password replaces the one before. A duress vault can have its own duress vault, set up the same way from inside it, so you can have several, one after another, each with its own password.
+
+## What happens after wrong passwords?
+
+Vault makes you wait longer after each wrong App Lock Password, and if you turn on **Erase Vault After 10 Failed Passwords**, it erases every vault after 10 wrong ones in a row.
+
+Any vault's password, your real one or a duress one, starts the count towards erasing again. The waits don't start again: they keep growing with each wrong password, whichever vault opens in between, and only get shorter with time, by one wrong password for every hour that passes.
 
 ## How do I start a duress vault again?
 

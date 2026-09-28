@@ -3,7 +3,8 @@ import Foundation
 /// Stands in for the App Lock Password's storage in previews and tests, until the real one is wired in.
 ///
 /// It keeps its vaults' passwords in memory, and treats wrong passwords as the real one does: each is counted before
-/// it's checked, the same delays follow, and every check takes `deadline`, right or wrong. Duress vaults behave as the
+/// it's checked, the same delays follow wrong ones in a row, and every check takes `deadline`, right or wrong. It
+/// doesn't keep the real counter's recent count, which a right password doesn't clear. Duress vaults behave as the
 /// real ones do: each vault replaces the one it made last, a password opens the most recently made vault it matches,
 /// and changing the password only changes the open vault's.
 ///
@@ -122,16 +123,20 @@ public final class FakeAppLockPasswordService: AppLockPasswordService {
         }
     }
 
-    public func makeDuressVault(password: String) async throws {
+    public func makeDuressVault(current: String, password: String) async throws -> AppLockPasswordResult {
         try failIfNeeded()
-        try await Task.sleep(for: deadline)
         guard vaults.indices.contains(openVault) else { throw VaultDuressVaultError.notEncrypted }
-        guard vaults[openVault].password != password else { throw VaultDuressVaultError.matchesAppLockPassword }
+        let result = try await checkInSettings(current) { _ in }
+        guard result == .accepted else { return result }
+        guard current.precomposedStringWithCanonicalMapping != password.precomposedStringWithCanonicalMapping else {
+            throw VaultDuressVaultError.matchesAppLockPassword
+        }
         if let replaced = vaults[openVault].duressVault {
             vaults[replaced].password = nil
         }
         vaults.append(Vault(password: password))
         vaults[openVault].duressVault = vaults.count - 1
+        return .accepted
     }
 
     public func setErasesAfterFailedPasswords(_ erases: Bool, current: String) async throws -> AppLockPasswordResult {

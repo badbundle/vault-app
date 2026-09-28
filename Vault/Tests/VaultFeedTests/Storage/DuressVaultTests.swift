@@ -126,45 +126,18 @@ extension DuressVaultTests {
 // MARK: - Passwords
 
 extension DuressVaultTests {
+    /// The store tries the new password against no key box, its own vault's included, so nothing it does depends on
+    /// what any slot holds. Refusing this vault's own password is the caller's, once it has checked the current
+    /// password as an attempt (`VaultPasswordChangeService.makeDuressVault(current:password:)`).
     @Test
-    func makeDuressVault_withThisVaultsOwnPassword_isRefusedAndChangesNothing() async throws {
+    func makeDuressVault_triesThePasswordAgainstNoSlot() async throws {
         let fixture = try DuressFixture(realSlot: realSlot)
-        let real = try fixture.open(slot: realSlot, password: "real")
-        let bytesBefore = try fixture.contents().bytes
+        let spied = try fixture.openSpied(slot: realSlot, password: "real")
 
-        await #expect(throws: VaultDuressVaultError.matchesAppLockPassword) {
-            try await real.makeDuressVault(password: "real")
-        }
+        try await spied.store.makeDuressVault(password: "duress")
 
-        #expect(try fixture.contents().bytes == bytesBefore)
-    }
-
-    /// The check is the same in every vault: a duress vault refuses its own password too.
-    @Test
-    func makeDuressVault_fromADuressVaultWithItsOwnPassword_isRefused() async throws {
-        let fixture = try DuressFixture(realSlot: realSlot)
-        let real = try fixture.open(slot: realSlot, password: "real")
-        let first = await real.records.state.vault.duressSlots[0]
-        try await real.makeDuressVault(password: "first")
-        let duress = try fixture.open(slot: first, password: "first")
-        let bytesBefore = try fixture.contents().bytes
-
-        await #expect(throws: VaultDuressVaultError.matchesAppLockPassword) {
-            try await duress.makeDuressVault(password: "first")
-        }
-
-        #expect(try fixture.contents().bytes == bytesBefore)
-    }
-
-    /// Keyboards can compose accented letters either way, and both are the same password.
-    @Test
-    func makeDuressVault_withThisVaultsPasswordComposedAnotherWay_isRefused() async throws {
-        let fixture = try DuressFixture(realSlot: realSlot, realPassword: "caf\u{E9}")
-        let real = try fixture.open(slot: realSlot, password: "caf\u{E9}")
-
-        await #expect(throws: VaultDuressVaultError.matchesAppLockPassword) {
-            try await real.makeDuressVault(password: "cafe\u{301}")
-        }
+        #expect(spied.log.value.contains("derive"))
+        #expect(!spied.log.value.contains { $0.hasPrefix("try slot") })
     }
 
     /// A password that opens another vault is accepted without a word: refusing it would tell someone inside the
@@ -291,8 +264,7 @@ extension DuressVaultTests {
     }
 
     /// Making one takes the same steps whichever vault it's made from, in the same order: the header read to derive
-    /// the key, the derivation, then, under the file's lock, the file read, the vault's own slot tried against the new
-    /// password, the wrap stamped, and the file replaced.
+    /// the key, the derivation, then, under the file's lock, the file read, the wrap stamped, and the file replaced.
     @Test
     func makeDuressVault_takesTheSameStepsFromTheRealVaultAndADuressVault() async throws {
         let fixture = try DuressFixture(realSlot: realSlot, items: [uniqueVaultItem(), uniqueVaultItem()])
@@ -305,7 +277,7 @@ extension DuressVaultTests {
         for (slot, password) in [(first, "first"), (realSlot, "real")] {
             let spied = try fixture.openSpied(slot: slot, password: password)
             try await spied.store.makeDuressVault(password: "made from \(password)")
-            steps.append(spied.log.value.map { $0.hasPrefix("try slot") ? "try its own slot" : $0 })
+            steps.append(spied.log.value)
         }
 
         let expected = [
@@ -313,7 +285,6 @@ extension DuressVaultTests {
             "derive",
             "lock vault-slots.lock",
             "read vault-slots.v1",
-            "try its own slot",
             "stamp the wrap",
         ]
             + EncryptedVaultStoreTests.stepsOfASave.dropFirst(2) + ["unlock"]
@@ -565,40 +536,6 @@ extension DuressVaultTests {
         }
 
         #expect(try fixture.contents().bytes == bytesBefore)
-    }
-}
-
-// MARK: - Store session
-
-extension DuressVaultTests {
-    @Test
-    func session_unlocked_makesTheDuressVault() async throws {
-        let fixture = try DuressFixture(realSlot: realSlot)
-        let real = try fixture.open(slot: realSlot, password: "real")
-        let target = await real.records.state.vault.duressSlots[0]
-        let sut = VaultStoreSession(target: .unlocked(real))
-
-        try await sut.makeDuressVault(password: "duress")
-
-        #expect(try fixture.slotsOpened(by: "duress") == [target])
-    }
-
-    @Test
-    func session_plain_throwsNotEncrypted() async throws {
-        let sut = VaultStoreSession(target: .plain(GatedVaultStore()))
-
-        await #expect(throws: VaultDuressVaultError.notEncrypted) {
-            try await sut.makeDuressVault(password: "duress")
-        }
-    }
-
-    @Test
-    func session_locked_throwsLocked() async throws {
-        let sut = VaultStoreSession(target: .locked)
-
-        await #expect(throws: VaultStoreSessionError.locked) {
-            try await sut.makeDuressVault(password: "duress")
-        }
     }
 }
 

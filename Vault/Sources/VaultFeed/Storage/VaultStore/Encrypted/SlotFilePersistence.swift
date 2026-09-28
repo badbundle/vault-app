@@ -174,17 +174,16 @@ extension SlotFilePersistence {
     ///
     /// Derives the password's key as unlocking does, then, holding the file's lock:
     ///
-    /// 1. Refuses the password if it opens this vault's own slot: it's this vault's App Lock Password. That's the one
-    ///    slot it tries. Refusing a password that opens any other slot would tell whoever holds this vault's password
-    ///    that another vault exists, and would let them test guesses at it here, without the unlock delay.
-    /// 2. Creates the new vault, empty, in `placement.slot`, with a new data key wrapped by the password's key at a
+    /// 1. Creates the new vault, empty, in `placement.slot`, with a new data key wrapped by the password's key at a
     ///    time `wrapStamper` gives it after this vault's own wrap time, and the duress slots `placement` gives it.
     ///    Whatever was in that slot is gone.
-    /// 3. Replaces the file as a save does, verifying first that it opens the new vault and that this vault's slot is
+    /// 2. Replaces the file as a save does, verifying first that it opens the new vault and that this vault's slot is
     ///    as it was.
     ///
-    /// This vault's slot isn't written, so it keeps working with its password, and the file shows no change in it.
-    /// The steps are the same whichever vault this is.
+    /// It tries the password against no key box, this vault's included: the caller has checked this vault's own
+    /// password as an attempt, and refused a new password equal to it. This vault's slot isn't written, so it keeps
+    /// working with its password, and the file shows no change in it. The steps are the same whichever vault this is,
+    /// and whatever the password.
     func makeDuressVault(
         password: String,
         placement: VaultDuressSlots.Placement,
@@ -211,9 +210,6 @@ extension SlotFilePersistence {
                 current = try contents.reopen(slot)
             } catch {
                 throw EncryptedVaultStoreError.slotLost
-            }
-            guard work.openKeyBox(current.index, in: contents, with: key) == nil else {
-                throw VaultDuressVaultError.matchesAppLockPassword
             }
             // Later than every wrap this device has made, and than this vault's own, whatever the clock says:
             // otherwise setting the clock back would make the new vault older than one a shared password also opens.

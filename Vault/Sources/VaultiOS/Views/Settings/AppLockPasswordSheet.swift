@@ -97,7 +97,7 @@ struct AppLockPasswordManageView: View {
                     }
                 }
             } footer: {
-                Text("Changing the password or turning it off needs the current one.")
+                Text("Changing the password, turning it off or setting a duress password needs the current one.")
             }
 
             eraseSection
@@ -138,7 +138,7 @@ struct AppLockPasswordManageView: View {
             }
         } footer: {
             Text(
-                "When it's on, \(AppLockPasswordAttemptCounter.eraseThreshold) wrong App Lock Passwords in a row erase every vault on this iPhone, including any duress vault. The only way back is a backup.",
+                "When it's on, \(AppLockPasswordAttemptCounter.eraseThreshold) wrong App Lock Passwords in a row erase every vault on this iPhone. The right password starts the count again. The only way back is a backup.",
             )
         }
     }
