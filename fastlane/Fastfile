@@ -103,6 +103,10 @@ platform :ios do
     upload_to_app_store(
       username: "badbundlelimited@gmail.com",
       team_id: "442P244AFS",
+      # Replace the version's screenshots with exactly those in fastlane/screenshots. Without this,
+      # deliver adds any changed image next to the old one, and a set that reaches Apple's limit of
+      # ten skips the rest.
+      overwrite_screenshots: true,
       # Skip the Preview.html confirmation of metadata and screenshots so the lane runs non-interactively.
       force: true
     )
