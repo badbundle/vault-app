@@ -11,7 +11,7 @@ Anyone trying to guess your password from a leaked backup has to go through the 
 
 No. The key stays on this device and isn't synced anywhere. Each device you make backups from has its own backup password, and they don't have to match.
 
-To restore a backup on another device, you enter the password that backup was made with, and Vault prepares the key there.
+To restore a backup, on this device or another, you enter the password that backup was made with, and Vault prepares the key from it. Vault asks for it every time, even for a backup made with the password set now: the key it keeps is only used to make backups, never to open them.
 
 ## Choosing a password
 

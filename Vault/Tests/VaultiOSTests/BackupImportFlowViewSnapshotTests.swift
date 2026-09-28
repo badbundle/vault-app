@@ -31,11 +31,6 @@ final class BackupImportFlowViewSnapshotTests {
 
 extension BackupImportFlowViewSnapshotTests {
     private func makeViewModel(context: BackupImportContext) -> BackupImportFlowViewModel {
-        BackupImportFlowViewModel(
-            importContext: context,
-            dataModel: anyVaultDataModel(),
-            existingBackupPassword: nil,
-            encryptedVaultDecoder: EncryptedVaultDecoderMock(),
-        )
+        BackupImportFlowViewModel(importContext: context, dataModel: anyVaultDataModel())
     }
 }

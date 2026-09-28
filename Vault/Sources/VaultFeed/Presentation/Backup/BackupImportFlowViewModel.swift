@@ -43,24 +43,19 @@ public final class BackupImportFlowViewModel {
     public let importContext: BackupImportContext
 
     private let dataModel: VaultDataModel
-    /// The backup password the user already has on their device.
-    /// If the imported backup was encrypted with this same password, we don't need to prompt the user.
-    private let existingBackupPassword: DerivedEncryptionKey?
-    private let encryptedVaultDecoder: any EncryptedVaultDecoder<KeyData<32>>
     private let backupPDFDetatcher: any VaultBackupPDFDetatcher
     private var importPDFTask: Task<Void, any Error>?
 
+    /// Every backup is opened with the password the user types for it (`BackupKeyDecryptorViewModel`). The backup
+    /// password this device keeps only makes backups, so opening one always needs the password itself, even one made
+    /// with the password set now.
     public init(
         importContext: BackupImportContext,
         dataModel: VaultDataModel,
-        existingBackupPassword: DerivedEncryptionKey?,
-        encryptedVaultDecoder: any EncryptedVaultDecoder<KeyData<32>>,
         backupPDFDetatcher: any VaultBackupPDFDetatcher = VaultBackupPDFDetatcherImpl(),
     ) {
         self.importContext = importContext
         self.dataModel = dataModel
-        self.existingBackupPassword = existingBackupPassword
-        self.encryptedVaultDecoder = encryptedVaultDecoder
         self.backupPDFDetatcher = backupPDFDetatcher
     }
 
@@ -93,19 +88,7 @@ public final class BackupImportFlowViewModel {
             defer { isImporting = false }
 
             let encryptedVault = try getEncryptedVault()
-            let flowState = BackupImportFlowState(
-                encryptedVault: encryptedVault,
-                encryptedVaultDecoder: encryptedVaultDecoder,
-            )
-            let action = flowState.passwordProvided(password: existingBackupPassword)
-            switch action {
-            case .promptForDifferentPassword:
-                payloadState = .needsPasswordEntry(encryptedVault)
-            case let .backupDataError(error):
-                throw error
-            case let .readyToImport(applicationPayload):
-                payloadState = .ready(applicationPayload, UUID())
-            }
+            payloadState = .needsPasswordEntry(encryptedVault)
         } catch let error as any LocalizedError {
             payloadState = .error(.init(localizedError: error))
         } catch {

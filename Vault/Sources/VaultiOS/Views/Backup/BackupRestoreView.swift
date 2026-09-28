@@ -1,7 +1,6 @@
 import Foundation
 import SwiftUI
 import VaultFeed
-import VaultKeygen
 
 /// Screen for restoring from a backup: a PDF, or QR codes from another device.
 ///
@@ -11,15 +10,14 @@ import VaultKeygen
 @MainActor
 struct BackupRestoreView: View {
     @Environment(VaultDataModel.self) var dataModel
-    @Environment(VaultInjector.self) var injector
     @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: BackupRestoreViewModel
     @State private var modal: Modal?
 
     enum Modal: IdentifiableSelf {
-        case importToCurrentlyEmpty(DerivedEncryptionKey?)
-        case importAndMerge(DerivedEncryptionKey?)
-        case importAndOverride(DerivedEncryptionKey?)
+        case importToCurrentlyEmpty
+        case importAndMerge
+        case importAndOverride
     }
 
     init(viewModel: BackupRestoreViewModel) {
@@ -64,27 +62,12 @@ struct BackupRestoreView: View {
         // An import reloads the items for whatever search is set, so read again what the feed shows without one.
         .sheet(item: $modal, onDismiss: reloadHasVisibleItems) { sheet in
             switch sheet {
-            case let .importToCurrentlyEmpty(backupPassword):
-                BackupImportFlowView(viewModel: .init(
-                    importContext: .toEmptyVault,
-                    dataModel: dataModel,
-                    existingBackupPassword: backupPassword,
-                    encryptedVaultDecoder: injector.encryptedVaultDecoder,
-                ))
-            case let .importAndMerge(backupPassword):
-                BackupImportFlowView(viewModel: .init(
-                    importContext: .merge,
-                    dataModel: dataModel,
-                    existingBackupPassword: backupPassword,
-                    encryptedVaultDecoder: injector.encryptedVaultDecoder,
-                ))
-            case let .importAndOverride(backupPassword):
-                BackupImportFlowView(viewModel: .init(
-                    importContext: .override,
-                    dataModel: dataModel,
-                    existingBackupPassword: backupPassword,
-                    encryptedVaultDecoder: injector.encryptedVaultDecoder,
-                ))
+            case .importToCurrentlyEmpty:
+                BackupImportFlowView(viewModel: .init(importContext: .toEmptyVault, dataModel: dataModel))
+            case .importAndMerge:
+                BackupImportFlowView(viewModel: .init(importContext: .merge, dataModel: dataModel))
+            case .importAndOverride:
+                BackupImportFlowView(viewModel: .init(importContext: .override, dataModel: dataModel))
             }
         }
     }
@@ -133,7 +116,7 @@ extension BackupRestoreView {
                 title: "Import Backup",
                 icon: "square.and.arrow.down",
             ) {
-                modal = .importToCurrentlyEmpty(dataModel.backupPassword.fetchedPassword)
+                modal = .importToCurrentlyEmpty
             }
         } footer: {
             Text("Import data from a Vault backup using a PDF file or by scanning QR codes from another device.")
@@ -146,7 +129,7 @@ extension BackupRestoreView {
                 title: "Import & Merge",
                 icon: "square.and.arrow.down.on.square",
             ) {
-                modal = .importAndMerge(dataModel.backupPassword.fetchedPassword)
+                modal = .importAndMerge
             }
         } header: {
             Text("Recommended")
@@ -164,7 +147,7 @@ extension BackupRestoreView {
                 icon: "exclamationmark.triangle.fill",
                 isDestructive: true,
             ) {
-                modal = .importAndOverride(dataModel.backupPassword.fetchedPassword)
+                modal = .importAndOverride
             }
         } footer: {
             Text(
@@ -175,8 +158,8 @@ extension BackupRestoreView {
 
     /// A single import action row.
     ///
-    /// Every import path needs the backup password loaded before the sheet can be presented, so that
-    /// is done here rather than repeated at each call site.
+    /// The import asks for the backup's own password, whatever backup password this device has, so nothing is loaded
+    /// first.
     private func importButton(
         title: String,
         icon: String,
@@ -184,7 +167,6 @@ extension BackupRestoreView {
         presentModal: @escaping () -> Void,
     ) -> some View {
         ProminentActionButton(title, systemImage: icon, role: isDestructive ? .destructive : nil) {
-            await dataModel.loadBackupPassword()
             presentModal()
         }
     }

@@ -76,6 +76,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Widgets on the Lock Screen and in StandBy hide their codes, sites and accounts until the iPhone is unlocked, and copying a code from a widget asks for the iPhone to be unlocked first
 - The Restore page offers Import & Merge and Import & Override only when the feed shows items. When it shows none, it offers Import Backup, which keeps anything already in the vault
 - The AutoFill sheet locks when the iPhone does, as Vault does: with App Lock on, locking the iPhone with the sheet open hides the codes until the sheet is unlocked again
+- Restoring a backup always asks for the password it was made with, even when it's the backup password set now. The backup password kept on the device only makes backups
 
 ### Removed
 

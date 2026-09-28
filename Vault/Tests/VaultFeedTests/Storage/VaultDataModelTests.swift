@@ -1382,7 +1382,7 @@ final class VaultDataModelTests {
         #expect(vaultDeletedCount == 0)
     }
 
-    /// Kept, it would restore any backup of what was deleted without anyone typing it (VAULT-60).
+    /// It's the key to every backup of what was deleted, so it goes with the data (VAULT-60).
     @Test
     func deleteVault_removesTheBackupPassword() async throws {
         let store = BackupPasswordStoreMock()
