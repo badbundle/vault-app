@@ -117,7 +117,7 @@ public final class AutofillVaultService: AppLockPasswordService {
     }
 
     nonisolated static func needsPassword(stateFile: VaultStorageStateFile) -> Bool {
-        !VaultAccessMode(state: try? stateFile.read()).opensWithoutPassword
+        !VaultAccessMode(state: (try? stateFile.readWithoutRecovering()) ?? nil).opensWithoutPassword
     }
 
     public var erasesAfterFailedPasswords: Bool {

@@ -32,15 +32,66 @@ struct VaultStorageRecoveryTests {
         }
     }
 
+    /// With no journal, the encrypted file goes only once the plain store is shown to hold the vault: it has items.
     @Test
     func recover_plainWithAStrayEncryptedFile_deletesIt() async throws {
         try await withTemporaryDirectory { directory in
-            try Self.makePlainStore(in: directory)
+            try await Self.makeRealPlainStore(in: directory, itemCount: 1)
             try Self.makeEncryptedFiles(in: directory)
 
             #expect(try VaultStorageRecovery(directory: directory).recoverAtLaunch() == .plain)
 
-            #expect(try Self.fileNames(in: directory) == Self.plainStoreNames)
+            #expect(try !Self.fileNames(in: directory).contains(EncryptedVaultFile.fileName))
+            #expect(try Self.fileNames(in: directory).isSubset(of: Self.plainStoreNames))
+            #expect(PersistedLocalVaultStoreFactory.storedItemCount(storageDirectory: directory) == 1)
+        }
+    }
+
+    /// The state file has gone missing, and a plain store has been made empty beside the encrypted file since, or
+    /// what's there isn't a store at all. The encrypted file might be the only copy of the vault, so nothing is
+    /// deleted.
+    @Test(arguments: [PlainStoreStandIn.emptyStore, .notAStore])
+    func recover_noStateFileWithAnEncryptedFileAndNoItemsInThePlainStore_deletesNothing(
+        plainStore: PlainStoreStandIn,
+    ) async throws {
+        try await withTemporaryDirectory { directory in
+            switch plainStore {
+            case .emptyStore: try await Self.makeRealPlainStore(in: directory, itemCount: 0)
+            case .notAStore: try Self.makePlainStore(in: directory)
+            }
+            try Self.makeEncryptedFiles(in: directory)
+            let encryptedFile = try Data(contentsOf: directory.appending(path: EncryptedVaultFile.fileName))
+
+            #expect(throws: VaultStorageRecovery.Failure.encryptedFileWithoutPlainStore) {
+                try VaultStorageRecovery(directory: directory).recoverAtLaunch()
+            }
+
+            #expect(try Data(contentsOf: directory.appending(path: EncryptedVaultFile.fileName)) == encryptedFile)
+            #expect(try Self.fileNames(in: directory).contains(EncryptedVaultFile.temporaryFilePrefix + "a"))
+            #expect(!FileManager.default.fileExists(
+                atPath: directory.appending(path: VaultStorageStateFile.fileName).path(percentEncoded: false),
+            ))
+        }
+    }
+
+    /// Counting the plain store's items only reads it: with no store, none is made.
+    @Test
+    func storedItemCount_withNoStore_isNilAndMakesNone() async throws {
+        try await withTemporaryDirectory { directory in
+            let count = PersistedLocalVaultStoreFactory.storedItemCount(storageDirectory: directory)
+            let names = try Self.fileNames(in: directory)
+
+            #expect(count == nil)
+            #expect(names.isEmpty)
+        }
+    }
+
+    @Test
+    func storedItemCount_countsTheItemsInTheStore() async throws {
+        try await withTemporaryDirectory { directory in
+            try await Self.makeRealPlainStore(in: directory, itemCount: 3)
+
+            #expect(PersistedLocalVaultStoreFactory.storedItemCount(storageDirectory: directory) == 3)
         }
     }
 
@@ -767,6 +818,22 @@ extension VaultStorageRecoveryTests {
             #expect(!VaultStorageState.isPlain(inDirectory: directory))
         }
     }
+
+    /// With no state file but an encrypted file, it isn't known which is the vault until the app's launch recovery has
+    /// looked, so the extensions treat the vault as unavailable, and open no plain store.
+    @Test
+    func extensions_noStateFileWithAnEncryptedFile_isUnavailable() async throws {
+        try await withTemporaryDirectory { directory in
+            try await Self.makeRealPlainStore(in: directory, itemCount: 1)
+            try Self.makeEncryptedFiles(in: directory, temporary: false)
+
+            #expect(!VaultStorageState.isPlain(inDirectory: directory))
+            #expect(VaultStorageState.current(inDirectory: directory) == nil)
+            #expect(VaultAccessMode.current(inDirectory: directory) == .unavailable)
+            // The app's own read is unchanged: launch recovery decides.
+            #expect(try Self.read(in: directory) == .plain)
+        }
+    }
 }
 
 // MARK: - Helpers
@@ -778,7 +845,24 @@ extension VaultStorageRecoveryTests {
         "vault-primary.sqlite-shm",
     ]
 
-    /// Stand-ins for the plain store's files: recovery only looks at their names.
+    /// What's where the plain store should be.
+    enum PlainStoreStandIn: Sendable {
+        /// A real store, with no items.
+        case emptyStore
+        /// Files with the plain store's names that aren't a store at all.
+        case notAStore
+    }
+
+    /// A real plain store, as the app opens it, holding `itemCount` codes.
+    static func makeRealPlainStore(in directory: URL, itemCount: Int) async throws {
+        let store = try PersistedLocalVaultStoreFactory(storageDirectory: directory, recoveryMode: .openOnly)
+            .makeVaultStoreOrThrow()
+        for _ in 0 ..< itemCount {
+            try await store.insert(item: uniqueVaultItem().makeWritable())
+        }
+    }
+
+    /// Stand-ins for the plain store's files: where recovery only looks at their names.
     static func makePlainStore(in directory: URL) throws {
         for name in plainStoreNames {
             try Data("plain".utf8).write(to: directory.appending(path: name))

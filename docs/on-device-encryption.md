@@ -568,7 +568,11 @@ At launch:
 - Journal `migrating`, or `plain` with a stray slot file: the SQLite store was never touched and is still the
   truth. Delete the slot file and any temp files. The UI never said the password was set. If the SQLite store
   isn't there, something else has gone wrong (a lost state file, say), and the slot file might be the only copy of
-  the vault, so nothing is deleted and the app shows its failure screen.
+  the vault, so nothing is deleted and the app shows its failure screen. With no journal at all, the SQLite store
+  must also hold items, counted through a read-only connection, before the slot file goes: a store made empty
+  beside it since the state file went missing isn't the vault. Until the app has recovered, the extensions treat
+  a slot file with no state file as unavailable (`VaultStorageStateFile.readWithoutRecovering()`), and never open
+  or make the SQLite store.
 - Journal `encrypted(password), cleanup: plain`: finish deleting the SQLite files. This is idempotent.
 
 **As built** (`VaultEncryptionConverter`, `VaultStorageRecovery`, VAULT-47), the steps above run in a slightly

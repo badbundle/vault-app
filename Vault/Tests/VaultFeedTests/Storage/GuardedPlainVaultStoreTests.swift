@@ -40,6 +40,26 @@ struct GuardedPlainVaultStoreTests {
         #expect(try await store.retrieve(query: .init()).items == [item])
     }
 
+    /// With no state file but an encrypted file beside it, which is the vault isn't known until the app's launch
+    /// recovery has looked, so an extension reads and writes nothing.
+    @Test
+    func withNoStateFileButAnEncryptedFile_readsNothingAndWritesNothing() async throws {
+        let (sut, store, stateFile) = try makeSUT()
+        let item = uniqueVaultItem()
+        try await store.importAndOverrideVault(payload: .init(userDescription: "", items: [item], tags: []))
+        try stateFile.fileSystem.createFile(
+            at: stateFile.directory.appending(path: EncryptedVaultFile.fileName),
+            contents: Data("encrypted".utf8),
+        )
+
+        #expect(try await sut.retrieve(query: .init()) == .empty())
+        #expect(try await !sut.hasAnyItems)
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await sut.insert(item: uniqueVaultItem().makeWritable())
+        }
+        #expect(try await store.retrieve(query: .init()).items == [item])
+    }
+
     /// A write that started while the vault was plain waits for a conversion holding the lock, then finds the
     /// conversion underway and writes nothing: a counter advanced then would be lost from the snapshot.
     @Test
