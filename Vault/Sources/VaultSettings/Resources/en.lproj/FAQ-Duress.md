@@ -23,11 +23,11 @@ Your real vault is never touched by duress vaults up to eleven deep. Beyond that
 
 ## What happens after wrong passwords?
 
-Vault makes you wait longer after each wrong App Lock Password, and if you turn on **Erase Vault After 10 Failed Passwords**, it erases every vault after 10 wrong ones in a row.
+After 5 wrong App Lock Passwords in a row, Vault makes you wait before you try again, and longer after each one. If you turn on **Erase Vault After 10 Failed Passwords**, it erases every vault after 10 wrong ones in a row.
 
-Any vault's password, your real one or a duress one, starts the count towards erasing again, and can turn erasing off for this iPhone. The waits don't start again: they keep growing with each wrong password, whichever vault opens in between, and only get shorter with time, by one wrong password for every hour that passes.
+Any vault's password, your real one or a duress one, starts the count again, so the next wrong password has no wait. It can also turn erasing off for this iPhone.
 
-So someone who has your duress password is held back by the waits, not by erasing. What keeps your real vault safe is a long App Lock Password that nobody can guess.
+So neither the waits nor erasing hold back someone who has your duress password: they can try 4 passwords, open the duress vault, and try 4 more, as often as they like. What keeps your real vault safe is a long App Lock Password that nobody can guess.
 
 ## How do I start a duress vault again?
 

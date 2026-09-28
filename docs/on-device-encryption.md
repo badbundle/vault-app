@@ -626,9 +626,9 @@ different order:
 `VaultPasswordChangeService` (VAULT-48) changes the password, turns it off, and turns it back on.
 
 **Checking the current password** is an unlock attempt (`VaultUnlockService.checkPassword(_:opensSlot:)`):
-counted before deriving, the same derivation and sixteen trials, held to the deadline, and noted as right with the
-counter only if it is (see [Erasing after failed attempts](#erasing-after-failed-attempts-vault-34)). It opens no
-body, whatever the password. Right means it opens **the open vault's** slot, so a password that opens another vault
+counted before deriving, the same derivation and sixteen trials, held to the deadline, and the counter reset only if
+it's right (see [Erasing after failed attempts](#erasing-after-failed-attempts-vault-34)). It opens no body, whatever
+the password. Right means it opens **the open vault's** slot, so a password that opens another vault
 is as wrong as any other, and the check never shows another vault is there.
 
 **Changing the password** checks the current one, refuses a new one equal to it once both are in Unicode's
@@ -646,15 +646,15 @@ neither. A new password that happens to open another slot is accepted silently (
    happened, and the journal is cleared.
 
 **Turning it back on**, from `encrypted(deviceKey)`, needs no current password: device authentication opened the
-vault. It clears the attempt counter's count in a row, derives the new password's key with the file's salt, journals
-`turningOn`, rekeys the slot, and settles the mode the same way: `encrypted(password)`, and `D`, which opens nothing
-any more, is deleted.
+vault. It resets the attempt counter, derives the new password's key with the file's salt, journals `turningOn`,
+rekeys the slot, and settles the mode the same way: `encrypted(password)`, and `D`, which opens nothing any more, is
+deleted.
 
-Clearing the count in a row on device authentication alone is accepted, and doesn't conflict with MANIFESTO C4: with
-the password off, device authentication opens the vault anyway, so the count guards nothing a coercer couldn't
-already open, and a count left from before mustn't carry over to the new password. No deniability feature is removed.
-The counter's recent count, which the waits follow, stays, so turning the password off and on again doesn't shorten
-the waits. Only setting a password where there was none, and the erase, clear it.
+Resetting the counter on device authentication alone is accepted, and doesn't conflict with MANIFESTO C4: with the
+password off, device authentication opens the vault anyway, so the count guards nothing a coercer couldn't already
+open, and a count left from before mustn't carry over to the new password. No deniability feature is removed. It
+clears nothing that turning the password off hadn't already: that needed the current password, which reset the
+counter too.
 
 **In the `deviceKey` mode** the app unlocks with device authentication only (`unlockWithDeviceKey()`): no
 password, no attempt to count, no deadline. It opens the slot `D` opens, and moves the wrap stamp on as a password
@@ -725,9 +725,9 @@ downgrade and back), the app offers to merge its items into the open vault inste
 **Unlock, when a password is set.** The lock screen is VAULT-22's. The storage side is `VaultUnlockService`
 (VAULT-46):
 
-1. Count the attempt with the persistent attempt counter (VAULT-22 and VAULT-34) **before** deriving: in its count
-   in a row and its recent count (see [Erasing after failed attempts](#erasing-after-failed-attempts-vault-34)).
-   Force-quitting then can't skip a wrong attempt. If the user still has to wait after earlier wrong attempts, say
+1. Count the attempt with the persistent attempt counter (VAULT-22 and VAULT-34) **before** deriving (see
+   [Erasing after failed attempts](#erasing-after-failed-attempts-vault-34)). Force-quitting then can't skip a wrong
+   attempt. If the user still has to wait after earlier wrong attempts, say
    how long and try nothing.
 2. Start the device's fixed unlock deadline, set during calibration (see [Key derivation](#key-derivation)).
 3. Derive `K_pw` off the main actor, from the password's UTF-8 in Unicode's composed form (NFC), so it derives
@@ -738,7 +738,7 @@ downgrade and back), the app offers to merge its items into the open vault inste
    a throwaway key, which fails), so every attempt opens exactly one body.
 6. Drop `K_pw` and every `W_i`. They're CryptoKit `SymmetricKey`s, whose storage is zeroed on release. The
    Argon2 working memory is `memset_s`'d before it's freed.
-7. Wait for the deadline. Then note the right attempt with the counter and show the vault, or show the error.
+7. Wait for the deadline. Then reset the counter and show the vault, or show the error.
 
 Wrong, real and duress passwords all run the same derivation, the same sixteen trials and one body, and finish at
 the same deadline. What differs afterwards is decoding time, which is proportional to what the vault shows anyway.
@@ -758,8 +758,8 @@ the same deadline. What differs afterwards is decoding time, which is proportion
   so real and duress unlocks do the same work, and the stamp shows when the device was last used, not when a key was
   last wrapped. Later wraps on this device also follow the opened vault even where the stamp was lost.
 - **Failures after counting** (a vault that opens but can't be read, say) are reported at the deadline as well.
-- **The count in a row is only reset when a vault opens.** If resetting it fails, the vault stays locked and the
-  error is shown, rather than opening with a count that would carry on.
+- **The counter is only reset when a vault opens.** If resetting it fails, the vault stays locked and the error is
+  shown, rather than opening with a count that would carry on.
 - **An attempt underway when the app locks** is thrown away, and the vault stays locked. The session only
   switches to the vault if it hasn't locked since the attempt began, checked on the session itself
   (`switchTo(_:unlessLockedSince:)`), so a lock can't slip in between the check and the switch.
@@ -1053,24 +1053,21 @@ Honest limits:
 - Those remnants are ciphertext under the password-derived key. Erasing stops guessing **on the device**. Guessing
   against a copy taken earlier is what the KDF, and the password's strength, are for.
 
-The counter is per device and shared by all vaults (`AppLockPasswordAttemptCounter`). It keeps two counts, in one
-keychain record on this device only:
+The counter is per device and shared by all vaults (`AppLockPasswordAttemptCounter`). It counts attempts in a row,
+since one last opened a vault, in one keychain record on this device only. The duress password is a correct
+password: it opens a slot and resets the counter, as the real one does, and every vault does exactly the same to it
+(MANIFESTO C2). The count decides the waits, which follow iOS's schedule, when to erase, and where Settings and
+AutoFill stop. A reset removes the record, so the next attempt can be made at once, and a wrong one after it waits
+no longer than the first wrong one did. Setting a password where there was none, turning it back on, and the erase
+reset it too.
 
-- **In a row:** attempts since one last opened a vault. The duress password is a correct password: it opens a slot
-  and starts this count again, as the real one does. It decides when to erase, and where Settings and AutoFill
-  stop.
-- **Recent:** wrong attempts, whichever vaults opened in between. Every attempt adds one, an attempt that opens a
-  vault takes only itself back off, and the count goes down by one for every hour that passes, with what's left of an
-  hour carried over. The hours are measured on the waits' clock, which counts from when the device started: when it's
-  found to have gone back, after a restart, no time is credited from before.
-
-The wait after a wrong attempt is iOS's schedule for whichever count is larger. After an attempt that opened a vault
-there's none, so the next can be made at once, but a wrong one after it waits as long as it would have without the
-right one. So opening a vault between wrong passwords starts the count towards erasing again, but not the waits:
-guessing on the device is held to about one guess an hour once nine or so wrong ones have been made, whichever vault
-opens in between. Every vault does exactly the same to both counts (MANIFESTO C2). Turning the password back on
-clears only the count in a row; setting a password where there was none, and the erase, clear both. A record saved
-before the recent count was kept reads as one whose attempts in a row are all recent.
+So someone who knows a duress password can make four wrong guesses at another vault's password with no wait, open
+the duress vault, and do it again, as often as they like: neither the waits nor the erase limit their guessing on
+the device, only the key derivation, about half a second a guess (VAULT-93). That's accepted. The counter can't
+tell the real password from a duress one (C2), and keeping the waits growing across a right password (a separate
+count of recent wrong ones, going down by one an hour) was tried and dropped: it made a user who'd got their own
+password wrong a few times wait after a single slip, hours after they'd unlocked. A record saved while that count was
+kept has `recentWrong` and `recentWrongAt` as well, which are ignored, so it reads as its attempts in a row.
 
 **As built** (`VaultEraser`, VAULT-52):
 
@@ -1149,12 +1146,12 @@ opens the fresh, empty plain vault with no password, as after a new install, wit
 record that an erase happened (C6). Anything that was waiting to open an item is dropped, even if the erase finishes
 after the app has locked again. The app lock stays on, asking for device authentication only: it's a choice the user
 made for the device, not something of the vaults the erase removed. Before the tenth, a right or duress password
-never erases, and starts the count in a row again. If the erase fails once it's journaled, no vault can open, and the
+never erases, and resets the count. If the erase fails once it's journaled, no vault can open, and the
 next attempt, whatever the password, finishes it; so does the next launch.
 
 **A right attempt that's thrown away still resets the count.** If the app locks, or the task is cancelled, while an
-attempt is waiting out the deadline, its result is thrown away; but if the password opened a vault, it's noted as
-right first, as it would have been, the same for a real and a duress password. Otherwise a right tenth attempt
+attempt is waiting out the deadline, its result is thrown away; but if the password opened a vault, the count is reset
+first, as it would have been, the same for a real and a duress password. Otherwise a right tenth attempt
 interrupted by a phone call would leave ten counted, and the next attempt would erase. Every attempt holds background
 time (`VaultBackgroundTime`) until it's finished, so the app isn't suspended in between. An attempt the app is
 stopped in the middle of, by force-quitting it, stays counted, as a wrong one would.
@@ -1453,10 +1450,9 @@ configuration, which the app can't edit. Turning on the password should tell use
 9. No app downgrade after the password has been set.
 10. Users who never set a password are unaffected.
 11. Erasing after failed passwords (VAULT-34) is a setting of the device, and any vault's own App Lock Password turns
-    it off, a duress vault's included. So someone who has the duress password can turn it off, and guessing on the
-    device is then limited by the escalating waits. They follow the counter's recent count of wrong passwords, which
-    opening a vault, the duress vault included, doesn't clear, and which goes down by one an hour: about one guess an
-    hour once nine or so wrong ones have been made (see
+    it off, a duress vault's included. The duress password also resets the counter, and with it the waits. So someone
+    who has the duress password can guess at another vault's password on the device limited only by the key
+    derivation: four wrong guesses, the duress password, and four more, as often as they like (see
     [Erasing after failed attempts](#erasing-after-failed-attempts-vault-34)). That's accepted. Erasing only ever
     stopped guessing on the device: someone who can copy the file guesses offline regardless, and that's what the key
     derivation and the password's strength are for. Letting only the vault that turned it on turn it off for real was

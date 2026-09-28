@@ -439,10 +439,9 @@ extension VaultPasswordChangeServiceTests {
         #expect(try sut.contents().header.salt == before.header.salt)
     }
 
-    /// Only the count in a row. The recent count, which the waits follow, stays, so turning the password off and on
-    /// again doesn't shorten them.
+    /// A count left from before doesn't carry over to the new password.
     @Test
-    func turnOnPassword_resetsTheCountInARowFirstAndKeepsTheRecentCount() async throws {
+    func turnOnPassword_resetsTheCounterFirst() async throws {
         let sut = try await makeSUT(mode: .deviceKey)
         sut.attemptStorage.setRecord(count: 3, latestAt: sut.attemptClock.now)
         sut.log.modify { $0.removeAll() }
@@ -450,9 +449,7 @@ extension VaultPasswordChangeServiceTests {
         try await sut.service.turnOnPassword("new")
 
         #expect(sut.log.value == ["reset the count"])
-        let record = try #require(try sut.attemptStorage.load())
-        #expect(record.count == .zero)
-        #expect(record.recentWrong == 3)
+        #expect(try sut.attemptStorage.load() == nil)
     }
 
     @Test

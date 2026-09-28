@@ -168,10 +168,10 @@ extension VaultUnlockServiceTests {
         #expect(log.last == "reset the count")
     }
 
-    /// Whichever vault opens, the counter is left the same: none in a row, and only the attempt that opened it taken
-    /// off the recent count, which the waits follow (MANIFESTO.md C2).
+    /// Whichever vault opens, the counter is left the same: reset, with no attempts and no wait (MANIFESTO.md C2,
+    /// VAULT-93).
     @Test(arguments: ["real", "duress"])
-    func unlock_withAnyVaultsPassword_clearsTheCountInARowAndKeepsTheRecentCount(password: String) async throws {
+    func unlock_withAnyVaultsPassword_resetsTheCounter(password: String) async throws {
         let sut = try makeSUT(vaults: [
             .init(password: "real", slot: realSlot, items: [uniqueVaultItem()]),
             .init(password: "duress", slot: duressSlot, items: []),
@@ -180,9 +180,7 @@ extension VaultUnlockServiceTests {
 
         #expect(try await sut.service.unlock(password: password) == .unlocked)
 
-        let record = try #require(try sut.attemptStorage.load())
-        #expect(record.count == .zero)
-        #expect(record.recentWrong == 4)
+        #expect(try sut.attemptStorage.load() == nil)
     }
 
     /// The tenth wrong attempt in a row says so, for the erase after too many (VAULT-34). The ninth doesn't.
@@ -514,7 +512,7 @@ extension VaultUnlockServiceTests {
         }
         #expect(await sut.session.isLocked)
         #expect(sut.log.value.contains("reset the count") == resets)
-        #expect(try (sut.attemptStorage.load()?.count == .zero) == resets)
+        #expect(try (sut.attemptStorage.load() == nil) == resets)
     }
 
     @Test
