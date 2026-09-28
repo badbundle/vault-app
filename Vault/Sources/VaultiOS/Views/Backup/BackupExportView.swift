@@ -152,7 +152,7 @@ struct BackupExportView: View {
     /// A backup to keep: a file that outlasts this device.
     private func pdfBackupSection(password: DerivedEncryptionKey) -> some View {
         Section {
-            exportOption(
+            BackupOptionRow(
                 title: "PDF Backup",
                 detail: "An encrypted file you can save or print.",
                 systemImage: "doc.text.fill",
@@ -174,7 +174,7 @@ struct BackupExportView: View {
     /// A move, not a backup: the codes only exist while this screen shows them.
     private func deviceTransferSection(password: DerivedEncryptionKey) -> some View {
         Section {
-            exportOption(
+            BackupOptionRow(
                 title: "Transfer with QR Codes",
                 detail: "Show codes for another device to scan, without saving a file.",
                 systemImage: "qrcode",
@@ -189,30 +189,5 @@ struct BackupExportView: View {
                 "On the other device, open Backups, choose Restore and scan the codes. Keep both devices nearby until it's done.",
             )
         }
-    }
-
-    // MARK: - Export Option
-
-    /// One way to export, as a row that says what it makes, in the style of the rows on the Backups screen.
-    private func exportOption(
-        title: String,
-        detail: String,
-        systemImage: String,
-        color: Color,
-        action: @escaping () -> Void,
-    ) -> some View {
-        Button(action: action) {
-            FormRow(image: Image(systemName: systemImage), color: color) {
-                HStack {
-                    TextAndSubtitle(title: title, subtitle: detail)
-                    Spacer(minLength: 8)
-                    Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.tertiary)
-                        .accessibilityHidden(true)
-                }
-            }
-        }
-        .tint(.primary)
     }
 }

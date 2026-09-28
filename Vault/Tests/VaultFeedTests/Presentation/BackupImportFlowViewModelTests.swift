@@ -68,6 +68,29 @@ struct BackupImportFlowViewModelTests {
     }
 
     @Test
+    func clearError_goesBackToAskingForABackup() async {
+        let sut = makeSUT()
+        await sut.handleImport(fromPDF: .failure(TestError()))
+        #expect(sut.payloadState.isError)
+
+        sut.clearError()
+
+        // Cleared as the user chooses again, so the same error for the next backup is a change the UI sees.
+        #expect(sut.payloadState == .none)
+    }
+
+    @Test
+    func clearError_leavesAPendingPasswordPromptAlone() async {
+        let sut = makeSUT(existingBackupPassword: nil)
+        let encryptedVault = anyEncryptedVault()
+        await sut.handleImport(fromEncryptedVault: encryptedVault)
+
+        sut.clearError()
+
+        #expect(sut.payloadState == .needsPasswordEntry(encryptedVault))
+    }
+
+    @Test
     func handleImportFromPDF_errorUpdatesPresentationError() async {
         let sut = makeSUT()
 
