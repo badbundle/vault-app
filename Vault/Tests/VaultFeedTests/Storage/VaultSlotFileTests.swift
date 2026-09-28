@@ -1,6 +1,7 @@
 import CryptoEngine
 import CryptoKit
 import Foundation
+import FoundationExtensions
 import Testing
 @testable import VaultFeed
 
@@ -990,6 +991,34 @@ extension VaultSlotFileTests {
     }
 }
 
+// MARK: - Wiping
+
+extension VaultSlotFileTests {
+    /// The compression scratch buffer holds chunks of the payload, compressed and not, so it's wiped before it's
+    /// freed. (The key box and body plaintexts, the compressed payload and the JSON are `Data`, which Foundation
+    /// frees, so no test can see them then: see "Residual limits" in `docs/on-device-encryption.md`.)
+    @Test
+    func compression_wipesTheScratchBufferBeforeFreeingIt() throws {
+        let log = ScratchMemoryLog()
+        let payload = Data(String(repeating: "a line of a secret note, ", count: 10000).utf8)
+
+        let compressed = try StreamingCompression.compress(payload, scratch: log.memory)
+        let decompressed = try StreamingCompression.decompress(
+            compressed,
+            maximumLength: payload.count,
+            scratch: log.memory,
+        )
+
+        let records = log.records
+        let everyBufferWasWiped = records.allSatisfy(\.wasWiped)
+        #expect(decompressed == payload)
+        #expect(payload.count > 3 * StreamingCompression.chunkSize, "Fills the buffer more than once")
+        // One buffer to compress, and one for each of decompressing's two passes.
+        #expect(records.map(\.count) == Array(repeating: StreamingCompression.chunkSize, count: 3))
+        #expect(everyBufferWasWiped)
+    }
+}
+
 // MARK: - Helpers
 
 extension VaultSlotFileTests {
@@ -1110,5 +1139,35 @@ extension VaultSlotFileTests {
         }
         let expected = bytes.count / 256
         return counts.allSatisfy { abs($0 - expected) <= expected / 10 }
+    }
+}
+
+/// Allocates and frees the compression scratch buffer, recording whether each was wiped by the time it was freed.
+private final class ScratchMemoryLog: Sendable {
+    struct Record {
+        var count: Int
+        var wasWiped: Bool
+    }
+
+    private let recorded = SharedMutex<[Record]>([])
+
+    var records: [Record] {
+        recorded.get { $0 }
+    }
+
+    /// Fills each buffer with a pattern, so one that's freed all zeros was wiped rather than never written.
+    var memory: StreamingCompression.ScratchMemory {
+        StreamingCompression.ScratchMemory(
+            allocate: { count in
+                let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+                buffer.initialize(repeating: 0xAA, count: count)
+                return buffer
+            },
+            free: { [recorded] buffer, count in
+                let wasWiped = UnsafeBufferPointer(start: buffer, count: count).allSatisfy { $0 == 0 }
+                recorded.modify { $0.append(Record(count: count, wasWiped: wasWiped)) }
+                buffer.deallocate()
+            },
+        )
     }
 }

@@ -121,6 +121,11 @@ let package = Package(
             name: "VaultBackupTests",
             dependencies: ["VaultBackup", "TestHelpers", "CryptoEngine"],
             exclude: ["__Snapshots__"],
+            resources: [
+                // Golden fixtures: backups as the app saves them, kept so the format can't change under them. See
+                // the README there.
+                .copy("Fixtures"),
+            ],
             swiftSettings: swiftSettings,
             plugins: testTargetPlugins,
         ),
@@ -264,6 +269,11 @@ let package = Package(
         .testTarget(
             name: "VaultFeedTests",
             dependencies: ["VaultFeed", "VaultBackup", "VaultCore", "FoundationExtensions", "TestHelpers"],
+            resources: [
+                // Golden fixtures: an encrypted vault file and encrypted items as the app stores them, kept so the
+                // formats can't change under them. See the README there.
+                .copy("Fixtures"),
+            ],
             swiftSettings: swiftSettings,
             plugins: testTargetPlugins,
         ),

@@ -6,7 +6,8 @@ import Testing
 struct PresentationLocalizationTests {
     @Test
     func localizedStrings_haveKeysAndValuesForAllSupportedLocalizations() {
-        expectLocalizedKeyAndValuesExist(in: .module, "VaultFeed")
+        // Not `.module`: this test target has a bundle of its own, for its fixtures.
+        expectLocalizedKeyAndValuesExist(in: VaultFeedAssets.bundle, "VaultFeed")
     }
 
     @Test
