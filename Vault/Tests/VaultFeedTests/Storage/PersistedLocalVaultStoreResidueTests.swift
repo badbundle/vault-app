@@ -1,5 +1,6 @@
 import Foundation
 import FoundationExtensions
+import SQLite3
 import SwiftData
 import Testing
 @testable import VaultFeed
@@ -126,6 +127,43 @@ struct PersistedLocalVaultStoreResidueTests {
         try expectTraces(of: [oldDigest.digest, oldDigest.salt], in: storeURL, found: false)
     }
 
+    /// SwiftData records every save in Core Data's history tables, `ATRANSACTION` and `ACHANGE`: which item was saved,
+    /// which of its fields changed, and when. After a deletion, or a changed killphrase, none of it is left.
+    @Test(arguments: SQLiteStoreSetup.allCases)
+    func deletingAndEditing_leaveNoHistory(setup: SQLiteStoreSetup) async throws {
+        let (store, storeURL) = try await setup.makeStore()
+        defer { SQLiteStoreSetup.removeStore(at: storeURL) }
+        let item = note(title: "title", contents: "contents", killphrase: killDigester.makeDigest(phrase: "old"))
+        let id = try await store.insert(item: item.makeWritable())
+        let doomed = try await insertDoomedNotes(into: store)
+        #expect(try historyRowCount(in: storeURL) > 0, "saving should record history")
+
+        var changed = item.makeWritable()
+        changed.killphraseUpdate = .set(killDigester.makeDigest(phrase: "new"))
+        try await store.update(id: id, item: changed)
+        #expect(try historyRowCount(in: storeURL) == 0, "after changing the killphrase")
+
+        try await store.delete(id: doomed[0])
+        #expect(try historyRowCount(in: storeURL) == 0, "after deleting an item")
+
+        try await insertDoomedNotes(into: store, killphrase: "kill me")
+        #expect(await store.deleteItems(matchingKillphrase: "kill me", using: killDigester))
+        #expect(try historyRowCount(in: storeURL) == 0, "after a killphrase deleted items")
+    }
+
+    /// History an earlier session left is cleared at the next launch.
+    @Test(arguments: SQLiteStoreSetup.allCases)
+    func scrubContentLeftByEarlierSessions_clearsHistory(setup: SQLiteStoreSetup) async throws {
+        let (store, storeURL) = try await setup.makeStore()
+        defer { SQLiteStoreSetup.removeStore(at: storeURL) }
+        try await store.insert(item: note(title: "title", contents: "contents").makeWritable())
+        #expect(try historyRowCount(in: storeURL) > 0, "saving should record history")
+
+        await store.scrubContentLeftByEarlierSessions()
+
+        #expect(try historyRowCount(in: storeURL) == 0)
+    }
+
     /// Rebuilding the database and truncating the log underneath SwiftData must leave it working as before.
     @Test(arguments: SQLiteStoreSetup.allCases)
     func storeKeepsWorkingAfterScrubbing(setup: SQLiteStoreSetup) async throws {
@@ -222,6 +260,30 @@ extension PersistedLocalVaultStoreResidueTests {
             killphrase: killphrase,
         )
     }
+
+    /// The rows in Core Data's history tables, read through a connection of its own. None if there are no tables.
+    private func historyRowCount(in storeURL: URL) throws -> Int {
+        var connection: OpaquePointer?
+        guard sqlite3_open_v2(storeURL.path(percentEncoded: false), &connection, SQLITE_OPEN_READONLY, nil)
+            == SQLITE_OK, let connection
+        else {
+            sqlite3_close_v2(connection)
+            throw StoreReadError()
+        }
+        defer { sqlite3_close_v2(connection) }
+        var total = 0
+        for table in ["ATRANSACTION", "ACHANGE"] {
+            var statement: OpaquePointer?
+            guard sqlite3_prepare_v2(connection, "SELECT COUNT(*) FROM \(table);", -1, &statement, nil) == SQLITE_OK
+            else { continue }
+            defer { sqlite3_finalize(statement) }
+            guard sqlite3_step(statement) == SQLITE_ROW else { throw StoreReadError() }
+            total += Int(sqlite3_column_int64(statement, 0))
+        }
+        return total
+    }
+
+    private struct StoreReadError: Error {}
 
     private func expectTraces(
         of needles: [Data],

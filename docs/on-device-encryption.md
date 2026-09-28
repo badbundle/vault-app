@@ -98,7 +98,9 @@ These are facts from the code and from the prototypes described in the [appendix
   VAULT-55, the store runs `VACUUM` and `wal_checkpoint(TRUNCATE)` on a second connection straight after a
   deletion (killphrase, single item, delete all, override import) or a killphrase or search passphrase change,
   and again at launch if there are freed pages (`PersistedStoreScrubber`). Edits still leave the old version on
-  freed pages until the next launch.
+  freed pages until the next launch. Each scrub, at launch too, first deletes the history SwiftData keeps of every
+  save in Core Data's `ATRANSACTION` and `ACHANGE` tables (which item was saved, which of its fields changed, and
+  when), which nothing in the app reads.
 - **Device backups.** The App Group container is included in iCloud and Finder device backups, so the plaintext
   store is too. Without Advanced Data Protection, iCloud Backup is readable by Apple.
 - **Readable flags.** Non-null `killphraseDigest` and `searchPassphraseDigest` columns show which items have a

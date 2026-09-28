@@ -666,7 +666,8 @@ extension PersistedLocalVaultStore {
         scrubDeletedContent(vacuum: .ifPagesWereFreed)
     }
 
-    /// Clears content left behind by deletions from the store's files, as `PersistedStoreScrubber` describes.
+    /// Clears content left behind by deletions from the store's files, as `PersistedStoreScrubber` describes,
+    /// and the history of saves SwiftData keeps.
     ///
     /// The store calls this itself straight after anything is deleted: an item, the whole vault, the vault
     /// replaced by an import, or an item's killphrase or search passphrase.
@@ -675,7 +676,16 @@ extension PersistedLocalVaultStore {
     @discardableResult
     func scrubDeletedContent(vacuum: PersistedStoreScrubber.Vacuum = .always) -> PersistedStoreScrubber.Outcome {
         guard let storeURL else { return .noStore }
+        deleteHistory()
         return PersistedStoreScrubber(storeURL: storeURL).scrub(vacuum: vacuum)
+    }
+
+    /// Deletes the history SwiftData keeps of every save, in Core Data's `ATRANSACTION` and `ACHANGE` tables: which
+    /// item was saved, which of its fields changed, and when. Nothing in Vault reads it, and after a deletion or a
+    /// changed killphrase or search passphrase it would be a record of what was done (MANIFESTO C6). Before the
+    /// scrub, so the scrub clears the rows it deletes from the files too.
+    private func deleteHistory() {
+        try? modelContext.deleteHistory(HistoryDescriptor<DefaultHistoryTransaction>())
     }
 
     /// The store's SQLite file, or `nil` for a store in memory.
