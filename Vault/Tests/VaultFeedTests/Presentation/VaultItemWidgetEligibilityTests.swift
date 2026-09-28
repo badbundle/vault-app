@@ -41,10 +41,11 @@ struct VaultItemWidgetEligibilityTests {
         #expect(!VaultItemWidgetEligibility.isEligible(item))
     }
 
+    /// As in Spotlight, a code with a killphrase shows like any other visible code (MANIFESTO C5).
     @Test
-    func ineligible_whenKillphraseIsSet() {
+    func eligible_whenKillphraseIsSet() {
         let item = uniqueVaultItem(killphrase: "any-phrase")
-        #expect(!VaultItemWidgetEligibility.isEligible(item))
+        #expect(VaultItemWidgetEligibility.isEligible(item))
     }
 
     @Test

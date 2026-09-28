@@ -9,7 +9,7 @@ import VaultFeed
 /// Covers the two code-producing paths the widget's `AppIntent`s call.
 ///
 /// The eligibility gate matters most here: an intent fires from a widget the
-/// user tapped, outside any auth prompt, so an ineligible item must yield no
+/// user tapped, without opening Vault, so an ineligible item must yield no
 /// code and — for HOTP — must not advance the counter.
 struct WidgetVaultLoaderCodeActionTests {
     // MARK: - HOTP
@@ -124,16 +124,17 @@ struct WidgetVaultLoaderCodeActionTests {
         #expect(await store.incrementedIDs.isEmpty)
     }
 
+    /// A code with a killphrase is eligible like any other visible code (MANIFESTO C5).
     @Test
-    func incrementAndRenderHOTPCode_killphraseItemDoesNotIncrement() async throws {
+    func incrementAndRenderHOTPCode_killphraseItemIncrements() async throws {
         let item = makeHOTPVaultItem(counter: 1, killphrase: .init(salt: Data([1]), digest: Data([2])))
         let store = IncrementingFakeStore(items: [item])
         let loader = WidgetVaultLoader(store: store)
 
         let code = try await loader.incrementAndRenderHOTPCode(id: item.id.rawValue)
 
-        #expect(code == nil)
-        #expect(await store.incrementedIDs.isEmpty)
+        #expect(code != nil)
+        #expect(await store.incrementedIDs == [item.id])
     }
 
     @Test

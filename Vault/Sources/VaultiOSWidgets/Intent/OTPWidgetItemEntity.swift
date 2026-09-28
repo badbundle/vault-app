@@ -6,8 +6,7 @@ import VaultFeed
 ///
 /// The list of entities exposed by `Query` is **filtered to eligible items
 /// only** (see `VaultItemWidgetEligibility`). Items that the user has marked
-/// hidden, locked, killphrase-protected, or search-passphrase-gated never
-/// appear here.
+/// hidden, locked, or search-passphrase-gated never appear here.
 public struct OTPWidgetItemEntity: AppEntity, Identifiable, Hashable {
     public var id: UUID
     public var issuer: String
