@@ -171,6 +171,44 @@ struct WidgetVaultLoaderCodeActionTests {
         #expect(code != nil)
     }
 
+    /// A code is rendered with its own period: at 120 seconds, a 60 second code is the RFC 4226 value for counter 2,
+    /// not the value for counter 4 that a 30 second period would give.
+    @Test
+    func currentTOTPCode_usesTheCodesPeriod() async throws {
+        let item = makeTOTPVaultItem(period: 60, data: rfcData())
+        let loader = WidgetVaultLoader(store: IncrementingFakeStore(items: [item]))
+
+        let code = try await loader.currentTOTPCode(id: item.id.rawValue, date: Date(timeIntervalSince1970: 120))
+
+        #expect(code == "359152")
+    }
+
+    /// Both of the widget's entries show the code for their own 60 second period.
+    @Test
+    func providerTimeline_totp_usesTheCodesPeriod() async throws {
+        let item = makeTOTPVaultItem(period: 60, data: rfcData())
+        let loader = try WidgetVaultLoader(
+            store: IncrementingFakeStore(items: [item]),
+            appLockSettings: AppLockSettingsStore(userDefaults: .nonPersistent()),
+        )
+        let entity = OTPWidgetItemEntity(id: item.id.rawValue, issuer: "issuer", accountName: "account")
+
+        let timeline = await OTPWidgetProvider(loader: loader).makeTimeline(for: .init(item: entity))
+
+        let entries = timeline.entries.compactMap { entry -> OTPWidgetSnapshot.TOTP? in
+            guard case let .totp(totp) = entry.snapshot else { return nil }
+            return totp
+        }
+        #expect(entries.count == 2)
+        for totp in entries {
+            let periodStart = UInt64(totp.periodStart.timeIntervalSince1970)
+            #expect(totp.periodEnd.timeIntervalSince(totp.periodStart) == 60)
+            #expect(periodStart % 60 == 0)
+            let expected = try HOTPAuthCode(counter: periodStart / 60, data: rfcData()).renderCode()
+            #expect(totp.code == expected)
+        }
+    }
+
     @Test
     func currentTOTPCode_ineligibleItemReturnsNil() async throws {
         let item = makeTOTPVaultItem(visibility: .onlySearch)
@@ -269,9 +307,22 @@ private func makeHOTPVaultItem(
     )
 }
 
-private func makeTOTPVaultItem(visibility: VaultItemVisibility = .always) -> VaultItem {
+/// The RFC 4226 test secret, whose codes for each counter are known.
+private func rfcData() -> OTPAuthCodeData {
+    .init(
+        secret: .init(data: Data("12345678901234567890".utf8), format: .base32),
+        accountName: "account",
+        issuer: "Issuer",
+    )
+}
+
+private func makeTOTPVaultItem(
+    period: UInt64 = 30,
+    data: OTPAuthCodeData = hotpData(),
+    visibility: VaultItemVisibility = .always,
+) -> VaultItem {
     makeItem(
-        payload: .otpCode(.init(type: .totp(), data: hotpData())),
+        payload: .otpCode(.init(type: .totp(period: period), data: data)),
         visibility: visibility,
         killphrase: nil,
         lockState: .notLocked,

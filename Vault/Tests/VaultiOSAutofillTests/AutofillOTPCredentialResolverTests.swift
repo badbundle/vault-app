@@ -81,6 +81,32 @@ struct AutofillOTPCredentialResolverTests {
         #expect(outcome == .code(expected))
     }
 
+    /// A code is rendered with its own period. At 120 seconds, a 60 second code is the RFC 4226 value for counter 2,
+    /// and a 30 second code the value for counter 4.
+    @Test(arguments: [(60, "359152"), (30, "338314")] as [(UInt64, String)])
+    func resolve_totpItem_usesTheCodesPeriod(period: UInt64, expected: String) async {
+        let code = OTPAuthCode(
+            type: .totp(period: period),
+            data: .init(secret: .init(data: Data("12345678901234567890".utf8), format: .base32), accountName: "any"),
+        )
+        let item = VaultItem(metadata: anyVaultItemMetadata(), item: .otpCode(code))
+        let sut = makeSUT(items: [item], clock: EpochClockMock(currentTime: 120))
+
+        let outcome = await sut.resolve(recordIdentifier: item.id.rawValue.uuidString)
+
+        #expect(outcome == .code(expected))
+    }
+
+    @Test
+    func resolve_zeroPeriod_returnsFailure() async {
+        let item = VaultItem(metadata: anyVaultItemMetadata(), item: .otpCode(makeTOTPCode(period: 0)))
+        let sut = makeSUT(items: [item])
+
+        let outcome = await sut.resolve(recordIdentifier: item.id.rawValue.uuidString)
+
+        #expect(outcome == .failure)
+    }
+
     @Test
     func resolve_retrievalError_returnsFailure() async {
         struct RetrievalError: Error {}
