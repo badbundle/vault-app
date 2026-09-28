@@ -4,8 +4,9 @@ import FoundationExtensions
 import SwiftUI
 import TestHelpers
 import Testing
-import VaultFeed
+import UIKit
 import VaultSettings
+@testable import VaultFeed
 @testable import VaultiOSAutofill
 
 @MainActor
@@ -370,6 +371,81 @@ extension VaultAutofillViewModelTests {
         #expect(service.lockCount == 1)
     }
 
+    // MARK: - The device locking
+
+    /// Password on: the device locking with the sheet open locks the sheet and the vault, and hides the codes, even if
+    /// the sheet never hears it's left the screen. It takes device authentication and the password to show them again.
+    @Test
+    func passwordOn_deviceLocks_locksTheSheetAndTheVault() async throws {
+        let service = FakeAutofillVaultService()
+        let sut = try makeSUT(storage: .password, vaultService: service)
+        await sut.prepareToUnlock()
+        await sut.appLock.unlock()
+        await sut.appLock.unlock(password: "correct horse")
+        await sut.getVaultReadyToShow()
+        #expect(sut.isVaultReady)
+        let lockCount = service.lockCount
+        let notificationCenter = NotificationCenter()
+        let observer = sut.lockWhenTheDeviceLocks(notificationCenter: notificationCenter)
+        defer { notificationCenter.removeObserver(observer) }
+
+        notificationCenter.post(name: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil)
+        try await waitUntil { sut.appLock.isLocked }
+        await sut.appLock.vaultLock?.value
+
+        #expect(!sut.isVaultReady)
+        #expect(service.lockCount > lockCount)
+        #expect(sut.appLock.state == .locked(.init(step: .deviceAuthentication)))
+        await sut.appLock.unlock()
+        await sut.getVaultReadyToShow()
+        #expect(sut.appLock.state == .locked(.init(step: .password)))
+        #expect(!sut.isVaultReady)
+    }
+
+    /// Password off, with App Lock on: the sheet locks as it does leaving the screen, and the vault with it.
+    @Test
+    func passwordOff_appLockOn_deviceLocks_locksTheSheetAndTheVault() async throws {
+        let service = FakeAutofillVaultService()
+        let sut = try makeSUT(storage: .deviceKey, vaultService: service, isAppLockEnabled: true)
+        await sut.prepareToUnlock()
+        await sut.appLock.unlock()
+        await sut.getVaultReadyToShow()
+        #expect(sut.isVaultReady)
+        let lockCount = sut.lockCount
+        let notificationCenter = NotificationCenter()
+        let observer = sut.lockWhenTheDeviceLocks(notificationCenter: notificationCenter)
+        defer { notificationCenter.removeObserver(observer) }
+
+        notificationCenter.post(name: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil)
+        try await waitUntil { sut.appLock.isLocked }
+
+        #expect(!sut.isVaultReady)
+        #expect(sut.lockCount == lockCount + 1)
+        await sut.endRequest()
+        #expect(service.log == ["lock", "open with the device key", "lock", "lock"])
+    }
+
+    /// Password off, with App Lock off: nothing locks, as in the app, where only the password's keys are taken out of
+    /// memory as the device locks.
+    @Test
+    func passwordOff_appLockOff_deviceLocks_leavesTheSheetAsItIs() async throws {
+        let service = FakeAutofillVaultService()
+        let sut = try makeSUT(storage: .deviceKey, vaultService: service)
+        await sut.prepareToUnlock()
+        await sut.getVaultReadyToShow()
+        #expect(sut.isVaultReady)
+        let notificationCenter = NotificationCenter()
+        let observer = sut.lockWhenTheDeviceLocks(notificationCenter: notificationCenter)
+        defer { notificationCenter.removeObserver(observer) }
+
+        notificationCenter.post(name: UIApplication.protectedDataWillBecomeUnavailableNotification, object: nil)
+        try await Task.sleep(for: .milliseconds(100))
+
+        #expect(sut.isVaultReady)
+        #expect(sut.appLock.state == .unlocked)
+        #expect(service.lockCount == 1, "Only the lock as the sheet got ready")
+    }
+
     /// Whatever delay the user chose for the app, the extension locks as soon as it leaves the screen.
     @Test
     func appLock_locksStraightAway() throws {
@@ -424,6 +500,18 @@ extension VaultAutofillViewModelTests {
             authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
             purgeVaultContents: { purges.increment() },
         )
+    }
+
+    /// Waits for a notification delivered on the main queue, up to a couple of seconds.
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !condition() {
+            guard ContinuousClock.now < deadline else {
+                Issue.record("Timed out waiting")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
     }
 
     private static func accessMode(for storage: AutofillVaultStorage) -> VaultAccessMode {

@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import SwiftUI
+import UIKit
 import VaultFeed
 import VaultSettings
 
@@ -189,6 +190,31 @@ final class VaultAutofillViewModel {
             lockTheVault()
         default:
             break
+        }
+    }
+
+    /// The device is locking, and the sheet mightn't hear that it's left the screen. It locks as the app does
+    /// (`AppLockService.deviceWillLock()`): with the App Lock Password set, the sheet's lock and the vault lock, and
+    /// the
+    /// codes hide. Without it, the sheet locks if its lock is on, as it would leaving the screen.
+    func deviceWillLock() {
+        if appLock.isPasswordSet {
+            appLock.deviceWillLock()
+        } else {
+            appLock.scenePhaseDidChange(to: .background)
+        }
+    }
+
+    /// Calls `deviceWillLock()` as the device locks, until the observer this returns is removed.
+    func lockWhenTheDeviceLocks(notificationCenter: NotificationCenter = .default) -> any NSObjectProtocol {
+        notificationCenter.addObserver(
+            forName: UIApplication.protectedDataWillBecomeUnavailableNotification,
+            object: nil,
+            queue: .main,
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.deviceWillLock()
+            }
         }
     }
 
