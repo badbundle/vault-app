@@ -4,8 +4,8 @@ import Testing
 /// The golden fixtures in `Fixtures/`: files in the formats the app stores, made once by the app's own code and kept
 /// as they are, so a change to a format that old files can't survive fails a test. See `Fixtures/README.md`.
 ///
-/// Tests read them from the test bundle. Only `GoldenFixtureRecorder`, which runs when `VAULT_RECORD_FIXTURES` is set,
-/// writes them, into the source tree, and never over one that's there.
+/// Tests read them from the test bundle. Only the recorders, `GoldenFixtureRecorder` and `BackupCorpusRecorder`, which
+/// run when `VAULT_RECORD_FIXTURES` is set, write them, into the source tree, and never over one that's there.
 enum GoldenFixture {
     struct AlreadyRecorded: Error, CustomStringConvertible {
         var name: String
@@ -20,12 +20,9 @@ enum GoldenFixture {
         ProcessInfo.processInfo.environment["VAULT_RECORD_FIXTURES"] != nil
     }
 
-    /// A fixture's bytes, from the test bundle.
+    /// A fixture's bytes, from the test bundle. `name` is its path in `Fixtures/`, such as `Backups/auto-backup.pdf`.
     static func data(named name: String) throws -> Data {
-        let url = try #require(
-            Bundle.module.url(forResource: name, withExtension: nil, subdirectory: "Fixtures"),
-            "\(name) isn't in the test bundle",
-        )
+        let url = try #require(Bundle.module.resourceURL).appending(path: "Fixtures/\(name)")
         return try Data(contentsOf: url)
     }
 

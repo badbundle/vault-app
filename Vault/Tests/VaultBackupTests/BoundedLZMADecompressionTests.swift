@@ -42,6 +42,18 @@ struct BoundedLZMADecompressionTests {
         }
     }
 
+    @Test
+    func decompress_dataAfterTheStream_throws() throws {
+        let compressed = try (Data(repeating: 0x41, count: 1000) as NSData).compressed(using: .lzma) as Data
+
+        #expect(throws: BoundedLZMADecompression.Error.invalidData) {
+            try BoundedLZMADecompression.decompress(compressed + compressed)
+        }
+        #expect(throws: BoundedLZMADecompression.Error.invalidData) {
+            try BoundedLZMADecompression.decompress(compressed + Data([0]))
+        }
+    }
+
     @Test(arguments: [Data(), Data([1, 2, 3, 4]), Data(repeating: 0xFF, count: 100)])
     func decompress_dataThatIsntLZMA_throws(data: Data) {
         #expect(throws: BoundedLZMADecompression.Error.self) {

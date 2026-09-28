@@ -9,7 +9,8 @@ every vault, note and backup saved before it stops opening. A fixture saved befo
 test fails.
 
 The backups have fixtures of their own, in
-[`../../VaultBackupTests/Fixtures`](../../VaultBackupTests/Fixtures).
+[`../../VaultBackupTests/Fixtures`](../../VaultBackupTests/Fixtures). Whole backups, in every format the app still
+restores, are in [`Backups`](./Backups), with a README of their own: the tests restore each of them end to end.
 
 ## The rule
 
