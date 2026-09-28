@@ -1,5 +1,6 @@
 import CryptoEngine
 import Foundation
+import FoundationExtensions
 
 /// A complete manifest of the users data.
 ///
@@ -8,11 +9,26 @@ public struct VaultApplicationPayload: Sendable, Equatable, Hashable {
     public var userDescription: String
     public var items: [VaultItem]
     public var tags: [VaultItemTag]
+    /// The keys the items' killphrase digests can have been made with: every key on the keyring of the device the
+    /// vault was exported from, its own first (`VaultDataModel.makeExport(userDescription:)`). They go with the vault,
+    /// so its killphrases still work wherever it's restored. Empty straight from a store, and from a backup made
+    /// before they were included.
+    public var killphraseKeys: [KeyData<32>]
+    /// The keys the items' search passphrase digests can have been made with, as `killphraseKeys`.
+    public var searchPassphraseKeys: [KeyData<32>]
 
-    public init(userDescription: String, items: [VaultItem], tags: [VaultItemTag]) {
+    public init(
+        userDescription: String,
+        items: [VaultItem],
+        tags: [VaultItemTag],
+        killphraseKeys: [KeyData<32>] = [],
+        searchPassphraseKeys: [KeyData<32>] = [],
+    ) {
         self.userDescription = userDescription
         self.items = items
         self.tags = tags
+        self.killphraseKeys = killphraseKeys
+        self.searchPassphraseKeys = searchPassphraseKeys
     }
 }
 

@@ -2,12 +2,13 @@ import Foundation
 import FoundationExtensions
 import VaultCore
 
-/// Loads (or generates and stores) the 256-bit HMAC key used by
-/// `SearchPassphraseDigester`.
+/// Loads (or generates and stores) the 256-bit HMAC keys used by
+/// `SearchPassphraseDigester`: this device's own key, and the keys restored
+/// backups brought with them (see `HMACKeyring`).
 ///
-/// The key is held in the device keychain with `.whenUnlocked` access (no
+/// The keys are held in the device keychain with `.whenUnlocked` access (no
 /// biometric prompt) so the search-passphrase match path works as soon as
-/// the device is unlocked, mirroring the killphrase key.
+/// the device is unlocked, mirroring the killphrase keys.
 ///
 /// `loadOrCreate` is idempotent: on first call after install/upgrade, it
 /// generates a random key and stores it; on every subsequent call it
@@ -16,26 +17,42 @@ import VaultCore
 /// @mockable(typealias: Key = KeyData<32>)
 public protocol SearchPassphraseKeyStore<Key>: Sendable {
     associatedtype Key: Sendable
+    /// This device's own key, which every new digest is made with.
     func loadOrCreate() async throws -> Key
+    /// The keys restored backups brought, which their search passphrases were digested with elsewhere, or before an
+    /// erase. Never this device's own key.
+    func loadKeysFromBackups() async throws -> [Key]
+    /// Adds the keys a restored backup brought, skipping any already on the keyring.
+    func addKeysFromBackup(_ keys: [Key]) async throws
+}
+
+extension SearchPassphraseKeyStore {
+    /// Every key on the keyring: this device's own first, then those from backups. A backup carries them all.
+    public func loadKeyring() async throws -> [Key] {
+        try await [loadOrCreate()] + loadKeysFromBackups()
+    }
 }
 
 public struct SearchPassphraseKeyStoreImpl: SearchPassphraseKeyStore {
-    private let secureStorage: any SecureStorage
+    private let keyring: HMACKeyring
 
     public init(secureStorage: any SecureStorage) {
-        self.secureStorage = secureStorage
+        keyring = HMACKeyring(
+            secureStorage: secureStorage,
+            ownKeyItem: .searchPassphraseKey,
+            backupKeysItem: .searchPassphraseBackupKeys,
+        )
     }
 
     public func loadOrCreate() async throws -> KeyData<32> {
-        if let existing = try await secureStorage.retrieveSilent(key: KeychainKey.searchPassphraseKey) {
-            return try KeyData<32>(data: existing)
-        }
-        let fresh = KeyData<32>.random()
-        try await secureStorage.storeSilent(data: fresh.data, forKey: KeychainKey.searchPassphraseKey)
-        return fresh
+        try await keyring.loadOrCreateOwnKey()
     }
 
-    private enum KeychainKey {
-        static let searchPassphraseKey = VaultIdentifiers.SecureStorageKey.searchPassphraseKey.rawValue
+    public func loadKeysFromBackups() async throws -> [KeyData<32>] {
+        try await keyring.loadKeysFromBackups()
+    }
+
+    public func addKeysFromBackup(_ keys: [KeyData<32>]) async throws {
+        try await keyring.addKeysFromBackup(keys)
     }
 }

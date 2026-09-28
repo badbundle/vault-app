@@ -12,6 +12,12 @@ To move items to another device, you create a backup on one device and restore i
     - Print the backup as a paper copy and **scan the QR code** on the new device.
 3. On the new device, open the backup from the Backups screen and enter the password you chose. Use **Import & Override** to replace anything already there with the backup's contents.
 
+## Do killphrases and passphrases still work after restoring?
+
+Yes, for backups made with this version of Vault or later. A backup carries the keys Vault checks killphrases and search passphrases with, inside its encryption, so they keep working on the device you restore it to, and on this one after it's been erased.
+
+A backup made with an earlier version doesn't carry them. Restored on another device, or after an erase, its killphrases won't delete anything, and items that only show for their passphrase can't be found. If the device that made it still has its vault, make a new backup there and restore that one instead.
+
 ## Can I automate this with iCloud Drive?
 
 Partially. Vault supports **automatic backups to iCloud Drive** — you point Vault at a folder in your iCloud Drive once, and it will keep a fresh backup there for you.

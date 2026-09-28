@@ -39,6 +39,12 @@ struct StubKillphraseKeyStore: KillphraseKeyStore {
     func loadOrCreate() async throws -> KeyData<32> {
         .zero()
     }
+
+    func loadKeysFromBackups() async throws -> [KeyData<32>] {
+        []
+    }
+
+    func addKeysFromBackup(_: [KeyData<32>]) async throws {}
 }
 
 /// No-op key store for autofill snapshot tests that don't exercise the
@@ -47,6 +53,12 @@ struct StubSearchPassphraseKeyStore: SearchPassphraseKeyStore {
     func loadOrCreate() async throws -> KeyData<32> {
         .zero()
     }
+
+    func loadKeysFromBackups() async throws -> [KeyData<32>] {
+        []
+    }
+
+    func addKeysFromBackup(_: [KeyData<32>]) async throws {}
 }
 
 /// How the AutoFill extension opens the encrypted vault, with the password kept in memory. It counts how often the

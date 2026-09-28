@@ -13,18 +13,26 @@ import FoundationExtensions
 ///
 /// The case fold preserves the case-insensitive search behavior that the
 /// prior plaintext `caseInsensitiveCompare` predicate provided.
+///
+/// New digests are always made with this device's own key. Matching also
+/// tries the keys restored backups brought (`HMACKeyring`), which their
+/// items' digests were made with.
 public struct SearchPassphraseDigester: SearchPassphraseMatcher, Sendable {
     /// Random salt length, in bytes, generated per item.
     public static let saltLength = 16
 
     private let key: SymmetricKey
+    /// This device's own key, then the keys from backups.
+    private let keyring: [SymmetricKey]
 
-    public init(key: KeyData<32>) {
+    public init(key: KeyData<32>, keysFromBackups: [KeyData<32>] = []) {
         self.key = SymmetricKey(data: key.data)
+        keyring = [self.key] + keysFromBackups.map { SymmetricKey(data: $0.data) }
     }
 
     init(key: SymmetricKey) {
         self.key = key
+        keyring = [key]
     }
 
     /// Produce a digest for the given plaintext phrase, using a fresh random salt.
@@ -34,18 +42,15 @@ public struct SearchPassphraseDigester: SearchPassphraseMatcher, Sendable {
         return SearchPassphraseDigest(salt: salt, digest: digest)
     }
 
-    /// Returns `true` iff `HMAC(K, salt || fold(query))` equals `digest`.
+    /// Returns `true` iff `HMAC(K, salt || fold(query))` equals `digest` for
+    /// any key `K` on the keyring.
     ///
-    /// Uses CryptoKit's `isValidAuthenticationCode` for constant-time
-    /// comparison.
+    /// Every key is tried with CryptoKit's `isValidAuthenticationCode`, for
+    /// constant-time comparison, whichever matches.
     public func matches(query: String, salt: Data, digest: Data) -> Bool {
         var message = salt
         message.append(Data(Self.fold(query).utf8))
-        return HMAC<SHA256>.isValidAuthenticationCode(
-            digest,
-            authenticating: message,
-            using: key,
-        )
+        return HMACKeyring.anyKey(of: keyring, authenticates: digest, message: message)
     }
 
     /// Canonicalize then case-fold. Both sides of the comparison must

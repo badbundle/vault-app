@@ -18,6 +18,16 @@ public struct VaultBackupPayload: Codable, Equatable {
     public var tags: [VaultBackupTag]
     /// The individual items from the vault.
     public var items: [VaultBackupItem]
+    /// The HMAC keys the items' killphrase digests can have been made with: every key on the keyring of the device
+    /// the backup was made on, its own key first. They go with the backup so its killphrases still work once it's
+    /// restored, on another device or after an erase.
+    ///
+    /// `nil` in backups made before they were included. Builds from before then ignore them.
+    public var killphraseKeys: [Data]?
+    /// The HMAC keys the items' search passphrase digests can have been made with, as `killphraseKeys`.
+    ///
+    /// `nil` in backups made before they were included. Builds from before then ignore them.
+    public var searchPassphraseKeys: [Data]?
     /// Arbitrary padding used to disguise the actual size of the payload.
     /// This is a security requirement as users may have hidden items in their vault.
     ///

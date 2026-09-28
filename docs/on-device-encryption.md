@@ -1021,7 +1021,7 @@ What's left:
 order, idempotently, and journaled so a crash mid-erase finishes at next launch:
 
 1. Unlink `vault-slots.v1`, the temp files and the lock file.
-2. Delete the keychain items: device key, killphrase and search passphrase HMAC keys, backup password and its
+2. Delete the keychain items: device key, killphrase and search passphrase HMAC keyrings, backup password and its
    record, attempt counter, wrap stamp.
 3. Clear the storage state and the per-device settings Delete All Data clears.
 4. Clear the QuickType store and reload widgets.
@@ -1066,11 +1066,12 @@ and resets the counter.
   it can, so a save underway in the AutoFill extension can't put the file back: a save reads the file under the lock,
   and fails if there isn't one. Before the journal is cleared, it checks again, holding the lock, that a writer that
   had stalled hasn't put the file back.
-- **Step 2** deletes every keychain item: the killphrase and search passphrase HMAC keys, the backup password and
-  its record, the attempt count, the wrap stamp (VAULT-51), which shows a password vault was used and about when,
-  and the device key (VAULT-48), which opens the vault while the password is off, and would show it had been turned
-  off. `VaultIdentifiers.SecureStorageKey` lists every item, however it's stored, and the erase switches over all of
-  them, so a new one doesn't build until it's decided what an erase does with it.
+- **Step 2** deletes every keychain item: the killphrase and search passphrase HMAC keyrings, this device's own keys
+  and those restored backups brought, the backup password and its record, the attempt count, the wrap stamp
+  (VAULT-51), which shows a password vault was used and about when, and the device key (VAULT-48), which opens the
+  vault while the password is off, and would show it had been turned off. `VaultIdentifiers.SecureStorageKey` lists
+  every item, however it's stored, and the erase switches over all of them, so a new one doesn't build until it's
+  decided what an erase does with it.
 - **Step 3** clears the vault's settings still kept on the device: the last backup event, the auto-backup
   configuration, and the PDF backup's hint. They'd show a vault had been erased, and the auto-backup configuration
   says where its backups are: once a new backup password is set, auto-backup would write there, and its retention
@@ -1182,7 +1183,27 @@ configuration, which the app can't edit. Turning on the password should tell use
   delete.
 - **Search passphrases.** Matched in memory with the same digester.
 - **HMAC keys.** The killphrase and search passphrase keys stay device-wide keychain items. Per-item salts make
-  sharing them across vaults harmless.
+  sharing them across vaults harmless. Each is a keyring (`HMACKeyring`): this device's own key, which makes every
+  new digest, and the keys that restored backups brought, which are only matched against. Every match tries every
+  key, each with a constant-time comparison (`isValidAuthenticationCode`), and none is skipped once one matches, so
+  a match behaves the same on no match and on failure as it always has (C2).
+- **HMAC keys in backups.** Every backup, auto-backup and move to another device carries every key on both
+  keyrings, inside its encryption (`killphraseKeys` and `searchPassphraseKeys` in the payload). Restoring one adds
+  the keys this device doesn't have, never synced and with the same access as its own, so the backup's killphrases
+  still delete and its passphrase-hidden items can still be found, on another iPhone or after an erase. That's the
+  only way they can: a digest can't be made again without its phrase, and a restored vault whose phrases never match
+  has items no search can reach.
+  - **Accepted:** anyone who can decrypt a backup can test guesses at its killphrases and search passphrases offline,
+    at the speed of HMAC-SHA256. They can already read every item in it, passphrase-hidden ones included, and see
+    which items have a killphrase. What the keys add is the phrases themselves, so a phrase shouldn't be a password
+    used anywhere else.
+  - The keyrings are the same whichever vault is open, so a duress vault's backup carries the same keys as the real
+    vault's. How many keys there are shows how many other devices' backups, or backups from before an erase, have
+    been restored here.
+  - Backups made before the keys went with them bring none. Their phrases only match on a device that still has the
+    keys they were digested with, which the FAQ says.
+  - Older builds ignore the two fields: the payload's version is unchanged, and its default `Codable` skips keys it
+    doesn't know.
 - **Rehash stores.** Only meaningful in `plain` mode. They must be empty before migrating, and they're deleted by
   it.
 - **Payload hash** (`currentPayloadHash`). Unchanged; computed from the export.
@@ -1380,6 +1401,10 @@ configuration, which the app can't edit. Turning on the password should tell use
     turned it on turn it off for real was tried, and dropped: a vault showing it off while it stayed on would show
     another vault had turned it on, and a vault that owned it could be replaced by making a new duress vault, leaving
     no vault able to turn it off.
+12. A backup carries the killphrase and search passphrase keys, so anyone who can decrypt it can test guesses at its
+    phrases offline. That's accepted: it's the only way the phrases keep working once the backup is restored, and
+    the backup already holds every item in full (see
+    [Backups, killphrases and everything else](#backups-killphrases-and-everything-else)).
 
 ## Sub-issues
 

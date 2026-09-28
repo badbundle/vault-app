@@ -61,6 +61,72 @@ struct EncryptedVaultDecoderTests {
     }
 
     @Test
+    func decryptAndDecode_carriesTheKillphraseAndSearchPassphraseKeys() throws {
+        let password = DerivedEncryptionKey(key: .random(), salt: .random(count: 32), keyDervier: .testing)
+        let killphraseKeys: [KeyData<32>] = [.repeating(byte: 0x01), .repeating(byte: 0x02)]
+        let searchPassphraseKeys: [KeyData<32>] = [.repeating(byte: 0x03)]
+        let encryptedBackup = try EncryptedVaultEncoder(
+            clock: EpochClockMock(currentTime: 100),
+            backupPassword: password,
+        )
+        .encryptAndEncode(payload: VaultApplicationPayload(
+            userDescription: "any",
+            items: [],
+            tags: [],
+            killphraseKeys: killphraseKeys,
+            searchPassphraseKeys: searchPassphraseKeys,
+        ))
+        let sut = makeSUT()
+
+        let decoded = try sut.decryptAndDecode(key: password.key, encryptedVault: encryptedBackup)
+
+        #expect(decoded.killphraseKeys == killphraseKeys)
+        #expect(decoded.searchPassphraseKeys == searchPassphraseKeys)
+    }
+
+    /// A backup made before the keys went with it restores with none.
+    @Test
+    func decryptAndDecode_backupWithoutKeys_hasNone() throws {
+        let password = DerivedEncryptionKey(key: .random(), salt: .random(count: 32), keyDervier: .testing)
+        let encryptedBackup = try VaultBackupEncryptor(
+            clock: EpochClockMock(currentTime: 100),
+            key: password.newVaultKeyWithRandomIV(),
+            keygenSalt: password.salt,
+            keygenSignature: password.keyDervier.rawValue,
+        ).encryptBackupPayload(items: [], tags: [], userDescription: "any")
+        let sut = makeSUT()
+
+        let decoded = try sut.decryptAndDecode(key: password.key, encryptedVault: encryptedBackup)
+
+        #expect(decoded.killphraseKeys == [])
+        #expect(decoded.searchPassphraseKeys == [])
+    }
+
+    /// A key that isn't 32 bytes is left out, rather than failing the restore.
+    @Test
+    func decryptAndDecode_leavesOutKeysOfTheWrongLength() throws {
+        let password = DerivedEncryptionKey(key: .random(), salt: .random(count: 32), keyDervier: .testing)
+        let encryptedBackup = try VaultBackupEncryptor(
+            clock: EpochClockMock(currentTime: 100),
+            key: password.newVaultKeyWithRandomIV(),
+            keygenSalt: password.salt,
+            keygenSignature: password.keyDervier.rawValue,
+        ).encryptBackupPayload(
+            items: [],
+            tags: [],
+            userDescription: "any",
+            killphraseKeys: [Data(repeating: 0x01, count: 31), Data(repeating: 0x02, count: 32)],
+            searchPassphraseKeys: [Data(repeating: 0x03, count: 33)],
+        )
+        let sut = makeSUT()
+
+        let decoded = try sut.decryptAndDecode(key: password.key, encryptedVault: encryptedBackup)
+
+        #expect(decoded.killphraseKeys == [.repeating(byte: 0x02)])
+        #expect(decoded.searchPassphraseKeys == [])
+    }
+
+    @Test
     func decryptAndDecode_throwsDecryptionErrorIfFailed() throws {
         let password = DerivedEncryptionKey(key: .random(), salt: .random(count: 32), keyDervier: .testing)
         let encryptedBackup = try makeEncryptedVault(password: password, description: "my backup", items: [], tags: [])

@@ -246,8 +246,7 @@ public final class VaultDataModel {
             return
         }
         do {
-            let key = try await killphraseKeyStore.loadOrCreate()
-            let digester = KillphraseDigester(key: key)
+            let digester = try await makeKillphraseDigester()
             killphraseDigester = digester
             // Phase B of the V1 → V2 killphrase migration. Idempotent;
             // does nothing if there are no pending entries. Best-effort —
@@ -269,14 +268,29 @@ public final class VaultDataModel {
             return
         }
         do {
-            let key = try await searchPassphraseKeyStore.loadOrCreate()
-            let digester = SearchPassphraseDigester(key: key)
+            let digester = try await makeSearchPassphraseDigester()
             searchPassphraseDigester = digester
             // Phase B of the V2 → V3 search-passphrase migration.
             await searchPassphraseRehashService?.run(using: digester)
         } catch {
             // Silent failure per MANIFESTO C3.
         }
+    }
+
+    /// A digester that makes digests with this device's own key, and matches with every key on the keyring. The keys
+    /// from backups are only needed to match what was restored, so failing to read them doesn't stop the device's own
+    /// killphrases working.
+    private func makeKillphraseDigester() async throws -> KillphraseDigester {
+        let key = try await killphraseKeyStore.loadOrCreate()
+        let keysFromBackups = (try? await killphraseKeyStore.loadKeysFromBackups()) ?? []
+        return KillphraseDigester(key: key, keysFromBackups: keysFromBackups)
+    }
+
+    /// As `makeKillphraseDigester()`, for search passphrases.
+    private func makeSearchPassphraseDigester() async throws -> SearchPassphraseDigester {
+        let key = try await searchPassphraseKeyStore.loadOrCreate()
+        let keysFromBackups = (try? await searchPassphraseKeyStore.loadKeysFromBackups()) ?? []
+        return SearchPassphraseDigester(key: key, keysFromBackups: keysFromBackups)
     }
 
     /// Forgets everything held from the vaults an erase has just removed (`VaultEraser`): what `purgeVaultContents()`
@@ -676,6 +690,7 @@ extension VaultDataModel: VaultStoreHOTPIncrementer {
 
 extension VaultDataModel {
     public func importMerge(payload: VaultApplicationPayload) async throws {
+        try await addKeysFromBackup(of: payload)
         try await vaultImporter.importAndMergeVault(payload: payload)
         await reloadItems()
         await reloadTags()
@@ -685,6 +700,7 @@ extension VaultDataModel {
     }
 
     public func importOverride(payload: VaultApplicationPayload) async throws {
+        try await addKeysFromBackup(of: payload)
         try await vaultImporter.importAndOverrideVault(payload: payload)
         await reloadItems()
         await reloadTags()
@@ -692,14 +708,37 @@ extension VaultDataModel {
         try? await syncAllToOTPAutofillStore()
         onDataChanged?()
     }
+
+    /// Adds the keys a backup brought to this device's keyrings, before its items are imported, and makes the
+    /// digesters again with them, so its killphrases and search passphrases match here as they did where it was made.
+    /// If the keys can't be added, nothing's imported.
+    ///
+    /// A backup made before the keys went with it brings none. Its phrases only match on a device that still has the
+    /// keys they were digested with.
+    private func addKeysFromBackup(of payload: VaultApplicationPayload) async throws {
+        guard payload.killphraseKeys.isNotEmpty || payload.searchPassphraseKeys.isNotEmpty else { return }
+        try await killphraseKeyStore.addKeysFromBackup(payload.killphraseKeys)
+        try await searchPassphraseKeyStore.addKeysFromBackup(payload.searchPassphraseKeys)
+        if let digester = try? await makeKillphraseDigester() {
+            killphraseDigester = digester
+        }
+        if let digester = try? await makeSearchPassphraseDigester() {
+            searchPassphraseDigester = digester
+        }
+    }
 }
 
 // MARK: - Export
 
 extension VaultDataModel {
+    /// The open vault, for a backup or a move to another device, with every key on this device's killphrase and
+    /// search passphrase keyrings. The keys go with the vault so its phrases still work wherever it's restored.
     public func makeExport(userDescription: String) async throws -> VaultApplicationPayload {
         // No need to refetch items, this export is pulled directly from the store.
-        try await vaultStore.exportVault(userDescription: userDescription)
+        var payload = try await vaultStore.exportVault(userDescription: userDescription)
+        payload.killphraseKeys = try await killphraseKeyStore.loadKeyring()
+        payload.searchPassphraseKeys = try await searchPassphraseKeyStore.loadKeyring()
+        return payload
     }
 }
 

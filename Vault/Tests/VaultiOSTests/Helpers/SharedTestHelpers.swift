@@ -44,6 +44,12 @@ struct StubKillphraseKeyStore: KillphraseKeyStore {
     func loadOrCreate() async throws -> KeyData<32> {
         .zero()
     }
+
+    func loadKeysFromBackups() async throws -> [KeyData<32>] {
+        []
+    }
+
+    func addKeysFromBackup(_: [KeyData<32>]) async throws {}
 }
 
 /// Default no-op key store for VaultDataModel tests that don't exercise
@@ -52,6 +58,12 @@ struct StubSearchPassphraseKeyStore: SearchPassphraseKeyStore {
     func loadOrCreate() async throws -> KeyData<32> {
         .zero()
     }
+
+    func loadKeysFromBackups() async throws -> [KeyData<32>] {
+        []
+    }
+
+    func addKeysFromBackup(_: [KeyData<32>]) async throws {}
 }
 
 @MainActor

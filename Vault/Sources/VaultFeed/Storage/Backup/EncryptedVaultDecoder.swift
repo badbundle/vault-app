@@ -43,8 +43,16 @@ public final class EncryptedVaultDecoderImpl: EncryptedVaultDecoder, Sendable {
                 tags: payload.tags.map {
                     try tagDecoder.decode(tag: $0)
                 },
+                killphraseKeys: Self.keys(payload.killphraseKeys),
+                searchPassphraseKeys: Self.keys(payload.searchPassphraseKeys),
             )
         }
+    }
+
+    /// A backup's HMAC keys: none from a backup made before they were included, and any that isn't a whole key is
+    /// left out.
+    private static func keys(_ keys: [Data]?) -> [KeyData<32>] {
+        (keys ?? []).compactMap { try? KeyData<32>(data: $0) }
     }
 
     private func rethrowing<T>(from body: () throws -> T) throws -> T {

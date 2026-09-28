@@ -105,6 +105,52 @@ struct SearchPassphraseDigesterTests {
 }
 
 extension SearchPassphraseDigesterTests {
+    /// A restored backup's items keep the digests they were made with elsewhere, which match through the keys the
+    /// backup brought.
+    @Test
+    func matches_digestMadeWithAKeyFromABackup() {
+        let backupKey = KeyData<32>.repeating(byte: 0xB0)
+        let digest = SearchPassphraseDigester(key: backupKey).makeDigest(phrase: "find me")
+        let sut = SearchPassphraseDigester(
+            key: .repeating(byte: 0xD0),
+            keysFromBackups: [.repeating(byte: 0xC0), backupKey],
+        )
+
+        #expect(sut.matches(query: "find me", salt: digest.salt, digest: digest.digest))
+        #expect(sut.matches(query: "not it", salt: digest.salt, digest: digest.digest) == false)
+    }
+
+    @Test
+    func matches_digestMadeWithAKeyNotOnTheKeyring_isFalse() {
+        let digest = SearchPassphraseDigester(key: .repeating(byte: 0xE0)).makeDigest(phrase: "find me")
+        let sut = SearchPassphraseDigester(key: .repeating(byte: 0xD0), keysFromBackups: [.repeating(byte: 0xC0)])
+
+        #expect(sut.matches(query: "find me", salt: digest.salt, digest: digest.digest) == false)
+    }
+
+    /// A phrase set on this device is always digested with its own key, never one a backup brought.
+    @Test
+    func makeDigest_usesTheDevicesOwnKey() {
+        let ownKey = KeyData<32>.repeating(byte: 0xD0)
+        let backupKey = KeyData<32>.repeating(byte: 0xB0)
+        let sut = SearchPassphraseDigester(key: ownKey, keysFromBackups: [backupKey])
+
+        let digest = sut.makeDigest(phrase: "find me")
+
+        #expect(SearchPassphraseDigester(key: ownKey).matches(
+            query: "find me",
+            salt: digest.salt,
+            digest: digest.digest,
+        ))
+        #expect(SearchPassphraseDigester(key: backupKey).matches(
+            query: "find me",
+            salt: digest.salt,
+            digest: digest.digest,
+        ) == false)
+    }
+}
+
+extension SearchPassphraseDigesterTests {
     private func makeSUT() -> SearchPassphraseDigester {
         SearchPassphraseDigester(key: testKey())
     }

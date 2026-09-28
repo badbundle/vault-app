@@ -9,18 +9,26 @@ import FoundationExtensions
 /// that lives in the device keychain (see `KillphraseKeyStore`). The same
 /// `K` is reused across every item; per-item randomness comes from `salt`,
 /// which is regenerated on every set.
+///
+/// New digests are always made with this device's own key. Matching also
+/// tries the keys restored backups brought (`HMACKeyring`), which their
+/// items' digests were made with.
 public struct KillphraseDigester: KillphraseMatcher, Sendable {
     /// Random salt length, in bytes, generated per item.
     public static let saltLength = 16
 
     private let key: SymmetricKey
+    /// This device's own key, then the keys from backups.
+    private let keyring: [SymmetricKey]
 
-    public init(key: KeyData<32>) {
+    public init(key: KeyData<32>, keysFromBackups: [KeyData<32>] = []) {
         self.key = SymmetricKey(data: key.data)
+        keyring = [self.key] + keysFromBackups.map { SymmetricKey(data: $0.data) }
     }
 
     init(key: SymmetricKey) {
         self.key = key
+        keyring = [key]
     }
 
     /// Produce a digest for the given plaintext phrase, using a fresh random salt.
@@ -30,19 +38,17 @@ public struct KillphraseDigester: KillphraseMatcher, Sendable {
         return KillphraseDigest(salt: salt, digest: digest)
     }
 
-    /// Returns `true` iff `HMAC(K, salt || normalize(query))` equals `digest`.
+    /// Returns `true` iff `HMAC(K, salt || normalize(query))` equals `digest`
+    /// for any key `K` on the keyring.
     ///
-    /// Uses CryptoKit's `isValidAuthenticationCode` which performs a
-    /// constant-time comparison. Callers must not branch on this result in
-    /// any externally observable way beyond performing the deletion itself.
+    /// Every key is tried with CryptoKit's `isValidAuthenticationCode`, which
+    /// performs a constant-time comparison, whichever matches. Callers must
+    /// not branch on this result in any externally observable way beyond
+    /// performing the deletion itself.
     public func matches(query: String, salt: Data, digest: Data) -> Bool {
         var message = salt
         message.append(Data(Self.normalize(query).utf8))
-        return HMAC<SHA256>.isValidAuthenticationCode(
-            digest,
-            authenticating: message,
-            using: key,
-        )
+        return HMACKeyring.anyKey(of: keyring, authenticates: digest, message: message)
     }
 
     /// Both sides of the comparison must apply the same normalization or
