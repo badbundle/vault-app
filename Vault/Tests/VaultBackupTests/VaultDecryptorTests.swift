@@ -1,3 +1,4 @@
+import CryptoEngine
 import Foundation
 import TestHelpers
 import Testing
@@ -5,13 +6,16 @@ import Testing
 
 struct VaultDecryptorTests {
     @Test
-    func decrypt_emptyDataDecryptsToEmpty() throws {
-        let sut = try makeSUT(key: anyVaultKey())
+    func decrypt_emptyDataWithItsTagDecryptsToEmpty() throws {
+        let key = Data(repeating: 0x31, count: 32)
+        let iv = Data(repeating: 0x32, count: 32)
+        let sut = try makeSUT(key: key)
+        let sealed = try AESGCMEncryptor(key: key).encrypt(plaintext: Data(), iv: iv)
         let vault = EncryptedVault(
             version: "1.0.0",
             data: Data(),
-            authentication: Data(),
-            encryptionIV: Data(),
+            authentication: sealed.authenticationTag,
+            encryptionIV: iv,
             keygenSalt: Data(),
             keygenSignature: "signature",
         )
@@ -19,6 +23,23 @@ struct VaultDecryptorTests {
         let decrypted = try sut.decrypt(encryptedVault: vault)
 
         #expect(decrypted.data == Data())
+    }
+
+    @Test(arguments: [Data(), Data(repeating: 0, count: 16)])
+    func decrypt_emptyDataWithoutItsTagFails(authentication: Data) throws {
+        let sut = try makeSUT(key: Data(repeating: 0x31, count: 32))
+        let vault = EncryptedVault(
+            version: "1.0.0",
+            data: Data(),
+            authentication: authentication,
+            encryptionIV: Data(repeating: 0x32, count: 32),
+            keygenSalt: Data(),
+            keygenSignature: "signature",
+        )
+
+        #expect(throws: (any Error).self) {
+            try sut.decrypt(encryptedVault: vault)
+        }
     }
 
     @Test
