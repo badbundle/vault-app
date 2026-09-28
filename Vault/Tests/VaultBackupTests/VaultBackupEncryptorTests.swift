@@ -90,6 +90,26 @@ struct VaultBackupEncryptorTests {
         #expect(fixedSizeWindow(32 * 1024).contains(encryptedVault.data.count))
     }
 
+    /// It lands within the tolerance every time, not just usually. The padding is random, and so are these vaults, of
+    /// a random number of items with random contents that fill the minimum or twice it, so every run tries more.
+    @Test(arguments: 0 ..< 32)
+    func encodeFillingFixedSize_landsWithinTheToleranceEveryTime(run: Int) throws {
+        let itemCount = [0, 1, 10, 30, 60][run % 5]
+        let payload = VaultBackupPayload(
+            version: "1.0.0",
+            created: Date(timeIntervalSince1970: 1234),
+            userDescription: "hello world",
+            tags: [],
+            items: (0 ..< itemCount).map { _ in anyBackupItem(contentLength: .random(in: 50 ... 1000)) },
+            obfuscationPadding: Data(),
+        )
+
+        let encoded = try VaultBackupEncryptor.encodeFillingFixedSize(payload, minimum: 32 * 1024)
+
+        let size = VaultBackupEncryptor.fixedSize(fitting: encoded.data.count, minimum: 32 * 1024)
+        #expect(fixedSizeWindow(size).contains(encoded.data.count), "\(itemCount) items")
+    }
+
     /// One that doesn't fit the minimum fills the next power of two, so it shows only roughly how large it is.
     @Test
     func encryptBackupPayload_toFixedSize_largerThanTheMinimum_fillsTheNextPowerOfTwo() throws {

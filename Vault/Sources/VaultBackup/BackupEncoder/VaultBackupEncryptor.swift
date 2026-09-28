@@ -77,9 +77,16 @@ public final class VaultBackupEncryptor {
     /// Encodes `payload` with as much random padding as brings the compressed encoding, which is what's encrypted, to
     /// within `fixedSizeTolerance` bytes under the smallest fixed size it fits (`fixedSize(fitting:minimum:)`).
     ///
-    /// Compression can't shrink random bytes, so each byte of padding adds about a byte. It aims for the middle of the
-    /// tolerance from that estimate and corrects by how far each try missed, which usually lands within two tries. It
-    /// keeps the largest encoding that fits, in case it doesn't get within the tolerance.
+    /// The padding is always a prefix of the same random bytes, and only its length is searched for. Compression can't
+    /// shrink random bytes, so each byte of padding adds about a byte, and one byte more or less changes the encoding
+    /// by a few bytes at most. So between a length that fits and one that doesn't, there's always a length that lands
+    /// within the tolerance. (Fresh random bytes of the same length compress to lengths tens of bytes apart, more than
+    /// the tolerance, which is why each try doesn't draw new ones.)
+    ///
+    /// It keeps the longest length it knows fits and the shortest it knows doesn't, and tries the length between them
+    /// that the two suggest. The first try, from the estimate alone, usually overshoots a little, and the second, from
+    /// the two, lands within the tolerance, or now and then the third. It keeps the largest encoding that fits, in case
+    /// it doesn't get within the tolerance.
     static func encodeFillingFixedSize(
         _ payload: VaultBackupPayload,
         minimum: Int,
@@ -90,16 +97,37 @@ public final class VaultBackupEncryptor {
         let unpadded = try encoder.encode(vaultBackup: payload)
         let size = fixedSize(fitting: unpadded.data.count, minimum: minimum)
         let aim = size - fixedSizeTolerance / 2
+        // Enough for any length the search tries: this many random bytes alone encode to more than `size`.
+        let randomBytes = Data.random(count: size)
         var best = unpadded
-        var paddingLength = aim - unpadded.data.count
-        for _ in 0 ..< 16 {
-            guard size - best.data.count > fixedSizeTolerance, paddingLength > 0 else { break }
-            payload.obfuscationPadding = Data.random(count: paddingLength)
-            let padded = try encoder.encode(vaultBackup: payload)
-            if padded.data.count <= size, padded.data.count > best.data.count {
-                best = padded
+        var fits = (paddingLength: 0, length: unpadded.data.count)
+        var doesNotFit: (paddingLength: Int, length: Int)?
+        for _ in 0 ..< 32 {
+            guard size - best.data.count > fixedSizeTolerance else { break }
+            let paddingLength: Int
+            if let doesNotFit {
+                guard doesNotFit.paddingLength - fits.paddingLength > 1 else { break }
+                // Where the aim falls on the line between the two.
+                let paddingPerByte = Double(doesNotFit.paddingLength - fits.paddingLength)
+                    / Double(doesNotFit.length - fits.length)
+                let estimate = fits.paddingLength + Int(Double(aim - fits.length) * paddingPerByte)
+                paddingLength = min(max(estimate, fits.paddingLength + 1), doesNotFit.paddingLength - 1)
+            } else {
+                // Each byte of padding adds about a byte.
+                guard fits.paddingLength < randomBytes.count else { break }
+                let estimate = fits.paddingLength + aim - fits.length
+                paddingLength = min(max(estimate, fits.paddingLength + 1), randomBytes.count)
             }
-            paddingLength += aim - padded.data.count
+            payload.obfuscationPadding = randomBytes.prefix(paddingLength)
+            let padded = try encoder.encode(vaultBackup: payload)
+            if padded.data.count <= size {
+                fits = (paddingLength, padded.data.count)
+                if padded.data.count > best.data.count {
+                    best = padded
+                }
+            } else {
+                doesNotFit = (paddingLength, padded.data.count)
+            }
         }
         return best
     }
