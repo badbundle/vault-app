@@ -143,6 +143,8 @@ struct RecoveryPhraseWordsStep: View {
             .secretTextInput(SecretTextInput(capitalization: .never, isASCIIOnly: usesASCIIKeyboard))
             .privacySensitive()
             .focused($focusedField, equals: .word(index))
+            // The words are never copied, even while they're typed: Cut and Copy do nothing here.
+            .editedTextCopying(.nothing, isFocused: focusedField == .word(index))
             .submitLabel(index == viewModel.editingModel.detail.wordCount - 1 ? .done : .next)
             .onSubmit {
                 focusedField = nextField(after: index)

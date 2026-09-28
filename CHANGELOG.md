@@ -55,6 +55,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Search lives in the feed's bottom bar: the status bar sits bottom left and a search button bottom right, which opens the search field beneath the status bar. While searching, the status bar counts the matches alongside any tag filter
 - The feed's bottom bar uses clear Liquid Glass with a scroll edge effect, and its tag filters and buttons have larger tap targets
 - Everything copied from Vault follows the clipboard settings: text copied from notes and descriptions, text cut or copied while editing, a backup key's ID and codes copied from a widget are cleared after the Clear Clipboard time, and only reach other devices if Universal Clipboard allows it, which gains a Notes switch. The edit menu on notes and descriptions offers only Copy. Dragging a code out of the feed no longer drops it into another app, and still reorders the feed
+- Text being edited offers only Cut, Copy, Paste, Select, Select All and Delete in its edit menu, without Share, Look Up, Translate or Search Web, and can't be dragged into another app. A recovery phrase's words can't be cut or copied while they're typed either
 - Copied codes are cleared from the clipboard after 1 minute by default. Anyone who chose Never keeps it
 - New codes are no longer offered in QuickType unless Show New Codes in QuickType is on
 - Settings has a heading and short footer for every section, with icons colored by section, and Universal Clipboard opens its own sheet

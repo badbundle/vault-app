@@ -13,7 +13,7 @@ struct SecureNoteContentStep: View {
                 text: $viewModel.editingModel.detail.contents,
                 prompt: "The first line is the note's title",
                 kind: .multiline(minLines: 12),
-                copyingAs: .note,
+                copying: .text(.note),
             )
             .secretTextInput(.prose)
             .font(.subheadline)
