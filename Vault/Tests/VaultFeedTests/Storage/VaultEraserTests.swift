@@ -54,6 +54,39 @@ struct VaultEraserTests {
         }
     }
 
+    /// The killphrase and search passphrase keyrings go whole: this device's own keys, and the keys restored backups
+    /// brought. Afterwards there's a new key of its own, and none from backups.
+    @Test
+    func erase_removesTheKillphraseAndSearchPassphraseKeyrings() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try await VaultEraseHarness.encryptedDevice(in: directory)
+            for key in [VaultIdentifiers.SecureStorageKey.killphraseKey, .searchPassphraseKey] {
+                await harness.keychain.storeSilent(data: KeyData<32>.random().data, forKey: key.rawValue)
+            }
+            let killphraseKeys = KillphraseKeyStoreImpl(secureStorage: harness.keychain)
+            let searchPassphraseKeys = SearchPassphraseKeyStoreImpl(secureStorage: harness.keychain)
+            try await killphraseKeys.addKeysFromBackup([.repeating(byte: 0x01)])
+            try await searchPassphraseKeys.addKeysFromBackup([.repeating(byte: 0x02)])
+            let ownKillphraseKey = try await killphraseKeys.loadOrCreate()
+            let ownSearchPassphraseKey = try await searchPassphraseKeys.loadOrCreate()
+
+            try await harness.erase()
+
+            for key in [
+                VaultIdentifiers.SecureStorageKey.killphraseKey,
+                .searchPassphraseKey,
+                .killphraseBackupKeys,
+                .searchPassphraseBackupKeys,
+            ] {
+                #expect(await !harness.isStored(key), "\(key)")
+            }
+            #expect(try await killphraseKeys.loadKeysFromBackups().isEmpty)
+            #expect(try await searchPassphraseKeys.loadKeysFromBackups().isEmpty)
+            #expect(try await killphraseKeys.loadOrCreate() != ownKillphraseKey)
+            #expect(try await searchPassphraseKeys.loadOrCreate() != ownSearchPassphraseKey)
+        }
+    }
+
     /// The encrypted file goes before anything else an erase removes: that alone makes every vault unreadable.
     @Test
     func erase_removesTheEncryptedFileFirst() async throws {
@@ -494,7 +527,8 @@ struct VaultEraseHarness {
     func seedDevice() async throws {
         for key in VaultIdentifiers.SecureStorageKey.allCases {
             switch key {
-            case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey:
+            case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey,
+                 .killphraseBackupKeys, .searchPassphraseBackupKeys:
                 await keychain.store(data: Data(key.rawValue.utf8), forKey: key.rawValue)
             case .appLockPasswordAttempts:
                 attemptStorage.setCount(AppLockPasswordAttemptCounter.eraseThreshold)
@@ -614,7 +648,8 @@ struct VaultEraseHarness {
     /// Whether the keychain item is there, wherever it's kept.
     func isStored(_ key: VaultIdentifiers.SecureStorageKey) async -> Bool {
         switch key {
-        case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey:
+        case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey,
+             .killphraseBackupKeys, .searchPassphraseBackupKeys:
             await keychain.keys().contains(key.rawValue)
         case .appLockPasswordAttempts:
             attemptStorage.hasRecord
@@ -728,6 +763,8 @@ actor FaultInjectingSecureStorage: SecureStorage {
         switch VaultIdentifiers.SecureStorageKey(rawValue: key) {
         case .killphraseKey: "the killphrase key"
         case .searchPassphraseKey: "the search passphrase key"
+        case .killphraseBackupKeys: "the killphrase keys from backups"
+        case .searchPassphraseBackupKeys: "the search passphrase keys from backups"
         case .backupPassword: "the backup password"
         case .backupPasswordMetadata: "the backup password's record"
         case .appLockPasswordAttempts, .vaultWrapStamp, .vaultDeviceKey, nil: key

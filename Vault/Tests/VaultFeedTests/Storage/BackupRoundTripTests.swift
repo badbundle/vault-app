@@ -68,6 +68,79 @@ struct BackupRoundTripTests {
         #expect(afterKill.items.map(\.id).contains(armedItem.id) == false)
     }
 
+    /// Restored on a device whose own keys differ, as another iPhone's do, or this one's after an erase, a backup's
+    /// killphrases still delete and its passphrase-hidden items still show: it carries the keys they were digested
+    /// with, and restoring adds them to the device's keyrings.
+    @MainActor
+    @Test(arguments: [false, true])
+    func pdfRoundTrip_phrasesMatchOnADeviceWithOtherKeys(override: Bool) async throws {
+        let sourceStore = try makeInMemoryStore()
+        let source = makeDataModel(store: sourceStore, secureStorage: InMemorySecureStorage())
+        await source.setup()
+        let armedItem = try anySecureNote(title: "armed").wrapInAnyVaultItem(
+            killphrase: #require(source.killphraseDigester).makeDigest(phrase: "kill me"),
+        )
+        let hiddenItem = try anySecureNote(title: "hidden").wrapInAnyVaultItem(
+            visibility: .onlySearch,
+            searchableLevel: .onlyPassphrase,
+            searchPassphrase: #require(source.searchPassphraseDigester).makeDigest(phrase: "find me"),
+        )
+        let keptItem = anySecureNote(title: "kept").wrapInAnyVaultItem()
+        try await sourceStore.importAndOverrideVault(payload: .init(
+            userDescription: "",
+            items: [armedItem, hiddenItem, keptItem],
+            tags: [],
+        ))
+
+        let restored = try await roundTripThroughPDF(payload: source.makeExport(userDescription: "Backup"))
+        let destinationStorage = InMemorySecureStorage()
+        let destinationStore = try makeInMemoryStore()
+        let destination = makeDataModel(store: destinationStore, secureStorage: destinationStorage)
+        await destination.setup()
+        let destinationKey = try await KillphraseKeyStoreImpl(secureStorage: destinationStorage).loadOrCreate()
+        #expect(restored.killphraseKeys.isNotEmpty)
+        #expect(!restored.killphraseKeys.contains(destinationKey))
+        if override {
+            try await destination.importOverride(payload: restored)
+        } else {
+            try await destination.importMerge(payload: restored)
+        }
+
+        destination.itemsSearchQuery = "find me"
+        await destination.reloadItems()
+        #expect(destination.items.map(\.id) == [hiddenItem.id])
+
+        destination.itemsSearchQuery = "kill me"
+        await destination.reloadItems()
+        // Every item, including the one only its passphrase shows.
+        let remaining = try await destinationStore.exportVault(userDescription: "").items.map(\.id)
+        #expect(Set(remaining) == [hiddenItem.id, keptItem.id])
+    }
+
+    /// A backup made before the keys went with it brings none, so on a device with other keys its phrases don't match.
+    @MainActor
+    @Test
+    func pdfRoundTrip_withoutKeys_phrasesDoNotMatchOnADeviceWithOtherKeys() async throws {
+        let sourceStore = try makeInMemoryStore()
+        let source = makeDataModel(store: sourceStore, secureStorage: InMemorySecureStorage())
+        await source.setup()
+        let armedItem = try anySecureNote(title: "armed").wrapInAnyVaultItem(
+            killphrase: #require(source.killphraseDigester).makeDigest(phrase: "kill me"),
+        )
+        try await sourceStore.importAndOverrideVault(payload: .init(userDescription: "", items: [armedItem], tags: []))
+
+        let restored = try await roundTripThroughPDF(payload: sourceStore.exportVault(userDescription: "Backup"))
+        let destinationStore = try makeInMemoryStore()
+        let destination = makeDataModel(store: destinationStore, secureStorage: InMemorySecureStorage())
+        await destination.setup()
+        try await destination.importMerge(payload: restored)
+
+        destination.itemsSearchQuery = "kill me"
+        await destination.reloadItems()
+        #expect(restored.killphraseKeys.isEmpty)
+        #expect(try await destinationStore.retrieve(query: .init()).items.map(\.id) == [armedItem.id])
+    }
+
     @Test
     func pdfRoundTrip_override_replacesExistingVault() async throws {
         let source = try makeInMemoryStore()
@@ -158,8 +231,11 @@ extension BackupRoundTripTests {
     /// `PDFDocument(data:)` → detach → decrypt. The serialize/reparse
     /// step keeps the trip honest about PDF serialization.
     private func roundTripThroughPDF(source: PersistedLocalVaultStore) async throws -> VaultApplicationPayload {
+        try await roundTripThroughPDF(payload: source.exportVault(userDescription: "Backup"))
+    }
+
+    private func roundTripThroughPDF(payload: VaultApplicationPayload) throws -> VaultApplicationPayload {
         let backupPassword = anyBackupPassword()
-        let payload = try await source.exportVault(userDescription: "Backup")
         let pdfData = try makePDFData(payload: payload, backupPassword: backupPassword)
 
         let reparsedPDF = try #require(PDFDocument(data: pdfData))
@@ -190,6 +266,24 @@ extension BackupRoundTripTests {
         )
         let pdf = try generator.makePDF(payload: exportPayload)
         return try #require(pdf.dataRepresentation())
+    }
+
+    /// A data model on the store, with killphrase and search passphrase keyrings in `secureStorage`, which stands in
+    /// for a device's keychain.
+    @MainActor
+    private func makeDataModel(
+        store: PersistedLocalVaultStore,
+        secureStorage: InMemorySecureStorage,
+    ) -> VaultDataModel {
+        anyVaultDataModel(
+            vaultStore: store,
+            vaultTagStore: store,
+            vaultImporter: store,
+            vaultDeleter: store,
+            vaultKillphraseDeleter: store,
+            killphraseKeyStore: KillphraseKeyStoreImpl(secureStorage: secureStorage),
+            searchPassphraseKeyStore: SearchPassphraseKeyStoreImpl(secureStorage: secureStorage),
+        )
     }
 
     private func anyBackupPassword() -> DerivedEncryptionKey {

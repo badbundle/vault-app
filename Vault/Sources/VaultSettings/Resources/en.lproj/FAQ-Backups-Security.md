@@ -17,3 +17,8 @@ Once you have chosen a sufficiently secure password, it should be infeasible tha
 
 Please follow best-practices for creating strong passwords when choosing a backup password, it is the single point of failure for the security of your backups.
 It should be of similar complexity to a master password for a password manager.
+
+## What else is in a backup?
+
+Everything in your vault, and the keys Vault checks killphrases and search passphrases with, so they still work once the backup is restored.
+That means someone who knows a backup's password could also try guesses at its killphrases and passphrases, so don't use a password from anywhere else as one.

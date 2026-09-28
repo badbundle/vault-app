@@ -43,10 +43,18 @@ public final class VaultBackupEncryptor {
     }
 
     /// Encodes and encrypts a vault providing a payload.
+    ///
+    /// - Parameters:
+    ///   - killphraseKeys: The HMAC keys the items' killphrase digests can have been made with. Left out of the
+    ///     backup when empty.
+    ///   - searchPassphraseKeys: The HMAC keys the items' search passphrase digests can have been made with. Left out
+    ///     of the backup when empty.
     public func encryptBackupPayload(
         items: [VaultBackupItem],
         tags: [VaultBackupTag],
         userDescription: String,
+        killphraseKeys: [Data] = [],
+        searchPassphraseKeys: [Data] = [],
     ) throws -> EncryptedVault {
         let payload = VaultBackupPayload(
             version: "1.0.0",
@@ -54,6 +62,8 @@ public final class VaultBackupEncryptor {
             userDescription: userDescription,
             tags: tags,
             items: items,
+            killphraseKeys: killphraseKeys.isEmpty ? nil : killphraseKeys,
+            searchPassphraseKeys: searchPassphraseKeys.isEmpty ? nil : searchPassphraseKeys,
             obfuscationPadding: makePadding(itemsCount: items.count),
         )
         let intermediateEncoding = switch paddingMode {

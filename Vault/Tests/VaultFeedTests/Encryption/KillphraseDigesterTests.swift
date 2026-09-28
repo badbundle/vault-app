@@ -125,6 +125,42 @@ struct KillphraseDigesterTests {
 }
 
 extension KillphraseDigesterTests {
+    /// A restored backup's items keep the digests they were made with elsewhere, which match through the keys the
+    /// backup brought.
+    @Test
+    func matches_digestMadeWithAKeyFromABackup() {
+        let backupKey = KeyData<32>.repeating(byte: 0xB0)
+        let digest = KillphraseDigester(key: backupKey).makeDigest(phrase: "kill me")
+        let sut = KillphraseDigester(key: .repeating(byte: 0xD0), keysFromBackups: [.repeating(byte: 0xC0), backupKey])
+
+        #expect(sut.matches(query: "kill me", salt: digest.salt, digest: digest.digest))
+        #expect(sut.matches(query: "not it", salt: digest.salt, digest: digest.digest) == false)
+    }
+
+    @Test
+    func matches_digestMadeWithAKeyNotOnTheKeyring_isFalse() {
+        let digest = KillphraseDigester(key: .repeating(byte: 0xE0)).makeDigest(phrase: "kill me")
+        let sut = KillphraseDigester(key: .repeating(byte: 0xD0), keysFromBackups: [.repeating(byte: 0xC0)])
+
+        #expect(sut.matches(query: "kill me", salt: digest.salt, digest: digest.digest) == false)
+    }
+
+    /// A phrase set on this device is always digested with its own key, never one a backup brought.
+    @Test
+    func makeDigest_usesTheDevicesOwnKey() {
+        let ownKey = KeyData<32>.repeating(byte: 0xD0)
+        let backupKey = KeyData<32>.repeating(byte: 0xB0)
+        let sut = KillphraseDigester(key: ownKey, keysFromBackups: [backupKey])
+
+        let digest = sut.makeDigest(phrase: "kill me")
+
+        #expect(KillphraseDigester(key: ownKey).matches(query: "kill me", salt: digest.salt, digest: digest.digest))
+        #expect(KillphraseDigester(key: backupKey)
+            .matches(query: "kill me", salt: digest.salt, digest: digest.digest) == false)
+    }
+}
+
+extension KillphraseDigesterTests {
     private func makeSUT() -> KillphraseDigester {
         KillphraseDigester(key: testKey())
     }

@@ -25,7 +25,8 @@ import VaultCore
 ///    can open a vault from here on. It holds the encrypted file's lock while it does, if it can, so a save underway
 ///    in an extension can't put the file back: a save reads the file under the lock, and fails if there isn't one.
 /// 4. Deletes every keychain item (`VaultIdentifiers.SecureStorageKey`): the killphrase and search passphrase HMAC
-///    keys, the backup password and its record, the count of attempts at the App Lock Password, the wrap stamp,
+///    keyrings, this device's own keys and those restored backups brought, the backup password and its record, the
+/// count of attempts at the App Lock Password, the wrap stamp,
 ///    which shows a password vault was used and about when, and the device key, which opens the vault while the
 ///    password is off.
 /// 5. Clears the vault's settings still kept on the device: the last backup event, the auto-backup configuration,
@@ -299,6 +300,10 @@ extension VaultEraser {
     private func delete(_ key: VaultIdentifiers.SecureStorageKey) async throws {
         switch key {
         case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey:
+            try await secureStorage.remove(key: key.rawValue)
+        case .killphraseBackupKeys, .searchPassphraseBackupKeys:
+            // The rest of the keyrings, the keys restored backups brought: they check the erased vaults' phrases, and
+            // show backups were restored here.
             try await secureStorage.remove(key: key.rawValue)
         case .appLockPasswordAttempts:
             try await attemptCounter.reset()

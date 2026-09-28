@@ -183,6 +183,62 @@ struct IntermediateEncodedVaultDecoderTests {
         #expect(item.previewMode == nil)
     }
 
+    /// Backups made before they carried the killphrase and search passphrase keys must still restore, with none.
+    @Test
+    func decodeVault_decodesPayloadWithoutKeys() throws {
+        let json = """
+        {
+          "created" : 12345000,
+          "items" : [],
+          "obfuscation_padding" : "q6urCg==",
+          "tags" : [],
+          "user_description" : "Example vault made before keys were included",
+          "version" : "1.0.0"
+        }
+        """
+        let compressed = try (Data(json.utf8) as NSData).compressed(using: .lzma) as Data
+
+        let decoded = try sut.decode(encodedVault: IntermediateEncodedVault(data: compressed))
+
+        #expect(decoded.killphraseKeys == nil)
+        #expect(decoded.searchPassphraseKeys == nil)
+        #expect(decoded.userDescription == "Example vault made before keys were included")
+    }
+
+    @Test
+    func decodeVault_decodesKeysFromJSON() throws {
+        let json = """
+        {
+          "created" : 12345000,
+          "items" : [],
+          "killphrase_keys" : ["AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=", "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="],
+          "obfuscation_padding" : "q6urCg==",
+          "search_passphrase_keys" : ["AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="],
+          "tags" : [],
+          "user_description" : "",
+          "version" : "1.0.0"
+        }
+        """
+        let compressed = try (Data(json.utf8) as NSData).compressed(using: .lzma) as Data
+
+        let decoded = try sut.decode(encodedVault: IntermediateEncodedVault(data: compressed))
+
+        #expect(decoded.killphraseKeys == [Data(repeating: 0x01, count: 32), Data(repeating: 0x02, count: 32)])
+        #expect(decoded.searchPassphraseKeys == [Data(repeating: 0x03, count: 32)])
+    }
+
+    @Test
+    func decodeVault_decodesKeys() throws {
+        var input = anyBackupPayload(created: Date(timeIntervalSince1970: 12345))
+        input.killphraseKeys = [Data(repeating: 0x01, count: 32), Data(repeating: 0x02, count: 32)]
+        input.searchPassphraseKeys = [Data(repeating: 0x03, count: 32)]
+        let encoder = IntermediateEncodedVaultEncoder()
+
+        let decoded = try sut.decode(encodedVault: encoder.encode(vaultBackup: input))
+
+        #expect(decoded == input, "Decoded backup differs from input")
+    }
+
     @Test
     func decodeVault_decodesQuickTypeAndPreviewModeFromJSON() throws {
         let json = """

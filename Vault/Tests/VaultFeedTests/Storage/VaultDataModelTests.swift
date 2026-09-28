@@ -806,9 +806,42 @@ final class VaultDataModelTests {
         store.exportVaultHandler = { _ in payload }
         let exported = try await sut.makeExport(userDescription: "desc")
 
-        #expect(exported == payload)
+        var expected = payload
+        expected.killphraseKeys = [.zero()]
+        expected.searchPassphraseKeys = [.zero()]
+        #expect(exported == expected)
         #expect(store.calledMethods == [.export])
         #expect(tagStore.calledMethods == [])
+    }
+
+    /// Every export carries every key on both keyrings, the device's own first, so a backup's phrases still work
+    /// wherever it's restored.
+    @Test
+    func makeExport_carriesEveryKeyOnTheKeyrings() async throws {
+        let killphraseKeyStore = KillphraseKeyStoreMock()
+        killphraseKeyStore.loadOrCreateHandler = { .repeating(byte: 0x01) }
+        killphraseKeyStore.loadKeysFromBackupsHandler = { [.repeating(byte: 0x02), .repeating(byte: 0x03)] }
+        let searchPassphraseKeyStore = SearchPassphraseKeyStoreMock()
+        searchPassphraseKeyStore.loadOrCreateHandler = { .repeating(byte: 0x04) }
+        searchPassphraseKeyStore.loadKeysFromBackupsHandler = { [.repeating(byte: 0x05)] }
+        let sut = makeSUT(killphraseKeyStore: killphraseKeyStore, searchPassphraseKeyStore: searchPassphraseKeyStore)
+
+        let exported = try await sut.makeExport(userDescription: "desc")
+
+        #expect(exported.killphraseKeys == [.repeating(byte: 0x01), .repeating(byte: 0x02), .repeating(byte: 0x03)])
+        #expect(exported.searchPassphraseKeys == [.repeating(byte: 0x04), .repeating(byte: 0x05)])
+    }
+
+    /// An export that can't carry the keys isn't made: restored, its phrases would never match.
+    @Test
+    func makeExport_keysCantBeRead_throws() async throws {
+        let killphraseKeyStore = KillphraseKeyStoreMock()
+        killphraseKeyStore.loadOrCreateHandler = { throw TestError() }
+        let sut = makeSUT(killphraseKeyStore: killphraseKeyStore)
+
+        await #expect(throws: TestError.self) {
+            try await sut.makeExport(userDescription: "desc")
+        }
     }
 
     @Test
@@ -1596,6 +1629,95 @@ final class VaultDataModelTests {
         ])
         #expect(vaultTagStore.calledMethods == [.retrieveTags])
         #expect(vaultOtpAutofillStore.syncAllCallCount == 1)
+    }
+
+    /// A backup's keys join the keyrings before its items are imported, and the digesters are made again with them,
+    /// so its phrases match at once.
+    @Test(arguments: [false, true])
+    func import_addsTheBackupsKeysBeforeItsItems(override: Bool) async throws {
+        let backupKillphraseKey = KeyData<32>.repeating(byte: 0xB1)
+        let backupSearchKey = KeyData<32>.repeating(byte: 0xB2)
+        let killphraseKeyStore = KillphraseKeyStoreMock()
+        killphraseKeyStore.loadOrCreateHandler = { .repeating(byte: 0x01) }
+        killphraseKeyStore.loadKeysFromBackupsHandler = { [backupKillphraseKey] }
+        let searchPassphraseKeyStore = SearchPassphraseKeyStoreMock()
+        searchPassphraseKeyStore.loadOrCreateHandler = { .repeating(byte: 0x02) }
+        searchPassphraseKeyStore.loadKeysFromBackupsHandler = { [backupSearchKey] }
+        let importer = VaultStoreImporterMock()
+        let keysAddedBeforeImport = SharedMutex<Bool?>(nil)
+        let recordKeysAdded: @Sendable (VaultApplicationPayload) -> Void = { _ in
+            keysAddedBeforeImport.modify {
+                $0 = killphraseKeyStore.addKeysFromBackupCallCount == 1
+                    && searchPassphraseKeyStore.addKeysFromBackupCallCount == 1
+            }
+        }
+        importer.importAndMergeVaultHandler = recordKeysAdded
+        importer.importAndOverrideVaultHandler = recordKeysAdded
+        let sut = makeSUT(
+            vaultImporter: importer,
+            killphraseKeyStore: killphraseKeyStore,
+            searchPassphraseKeyStore: searchPassphraseKeyStore,
+        )
+        let payload = VaultApplicationPayload(
+            userDescription: "any",
+            items: [],
+            tags: [],
+            killphraseKeys: [.repeating(byte: 0xA1), backupKillphraseKey],
+            searchPassphraseKeys: [backupSearchKey],
+        )
+
+        if override {
+            try await sut.importOverride(payload: payload)
+        } else {
+            try await sut.importMerge(payload: payload)
+        }
+
+        #expect(keysAddedBeforeImport.value == true)
+        #expect(killphraseKeyStore.addKeysFromBackupArgValues == [[.repeating(byte: 0xA1), backupKillphraseKey]])
+        #expect(searchPassphraseKeyStore.addKeysFromBackupArgValues == [[backupSearchKey]])
+        let killphrase = KillphraseDigester(key: backupKillphraseKey).makeDigest(phrase: "kill me")
+        let passphrase = SearchPassphraseDigester(key: backupSearchKey).makeDigest(phrase: "find me")
+        let killphraseDigester = try #require(sut.killphraseDigester)
+        let searchPassphraseDigester = try #require(sut.searchPassphraseDigester)
+        #expect(killphraseDigester.matches(query: "kill me", salt: killphrase.salt, digest: killphrase.digest))
+        #expect(searchPassphraseDigester.matches(query: "find me", salt: passphrase.salt, digest: passphrase.digest))
+    }
+
+    /// If the backup's keys can't be added, nothing's imported: its phrases would never match.
+    @Test
+    func import_keysCantBeAdded_importsNothing() async throws {
+        let killphraseKeyStore = KillphraseKeyStoreMock()
+        killphraseKeyStore.addKeysFromBackupHandler = { _ in throw TestError() }
+        let importer = VaultStoreImporterMock()
+        let sut = makeSUT(vaultImporter: importer, killphraseKeyStore: killphraseKeyStore)
+        let payload = VaultApplicationPayload(
+            userDescription: "any",
+            items: [],
+            tags: [],
+            killphraseKeys: [.repeating(byte: 0xA1)],
+        )
+
+        await #expect(throws: TestError.self) {
+            try await sut.importMerge(payload: payload)
+        }
+        await #expect(throws: TestError.self) {
+            try await sut.importOverride(payload: payload)
+        }
+        #expect(importer.importAndMergeVaultCallCount == 0)
+        #expect(importer.importAndOverrideVaultCallCount == 0)
+    }
+
+    /// A backup made before the keys went with it has none to add.
+    @Test
+    func import_backupWithoutKeys_addsNone() async throws {
+        let killphraseKeyStore = KillphraseKeyStoreMock()
+        let searchPassphraseKeyStore = SearchPassphraseKeyStoreMock()
+        let sut = makeSUT(killphraseKeyStore: killphraseKeyStore, searchPassphraseKeyStore: searchPassphraseKeyStore)
+
+        try await sut.importMerge(payload: anyApplicationPayload())
+
+        #expect(killphraseKeyStore.addKeysFromBackupCallCount == 0)
+        #expect(searchPassphraseKeyStore.addKeysFromBackupCallCount == 0)
     }
 
     @Test

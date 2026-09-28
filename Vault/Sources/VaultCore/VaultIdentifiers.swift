@@ -26,6 +26,12 @@ public enum VaultIdentifiers {
         /// class as `killphraseKey` so the case-folded match works the
         /// moment the device is unlocked.
         case searchPassphraseKey = "vault.secure-storage.search-passphrase-key.v1"
+        /// Killphrase HMAC keys that restored backups brought with them, one after another, which their items'
+        /// digests were made with on another device, or on this one before an erase. Only ever matched against. Same
+        /// access class as `killphraseKey`.
+        case killphraseBackupKeys = "vault.secure-storage.killphrase-backup-keys.v1"
+        /// Search passphrase HMAC keys that restored backups brought with them, as `killphraseBackupKeys`.
+        case searchPassphraseBackupKeys = "vault.secure-storage.search-passphrase-backup-keys.v1"
         /// Wrong attempts at the app lock password, and when the latest was made. Kept on this device only, and
         /// readable only while it's unlocked, with no biometric prompt.
         case appLockPasswordAttempts = "vault.secure-storage.app-lock-password-attempts.v1"

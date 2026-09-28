@@ -48,6 +48,8 @@ public final class EncryptedVaultEncoder {
                 tagEncoder.encode(tag: $0)
             },
             userDescription: payload.userDescription,
+            killphraseKeys: payload.killphraseKeys.map(\.data),
+            searchPassphraseKeys: payload.searchPassphraseKeys.map(\.data),
         )
     }
 
