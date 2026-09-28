@@ -25,27 +25,13 @@ public final class BackupKeyDecryptorViewModel {
             case .none, .validDecryptionKey: false
             }
         }
-
-        public var title: String {
-            switch self {
-            case .validDecryptionKey: "Decrypted"
-            case let .error(error): error.userTitle
-            case .none: "Encrypted"
-            }
-        }
-
-        public var description: String? {
-            switch self {
-            case .validDecryptionKey: "Your vault has been decrypted."
-            case let .error(error): error.userDescription
-            case .none: "Your password is needed to decrypt the encrypted vault. Make sure this matches the original password used at the time this backup was created."
-            }
-        }
     }
 
     public var enteredPassword = ""
     public private(set) var decryptionKeyState: DecryptionKeyState = .none
     public private(set) var isDecrypting = false
+    /// Counts the attempts that failed, so each one is a change the UI sees, even with the same error as the last.
+    public private(set) var failedAttemptCount = 0
     private let decryptedVaultSubject: PassthroughSubject<VaultApplicationPayload, Never>
 
     private let encryptedVault: EncryptedVault
@@ -81,6 +67,7 @@ public final class BackupKeyDecryptorViewModel {
     public func attemptDecryption() async {
         do {
             guard enteredPassword.isNotEmpty else { throw MissingPasswordError() }
+            decryptionKeyState = .none
             isDecrypting = true
             defer { isDecrypting = false }
             let signature = try VaultKeyDeriver.Signature(tryFromString: encryptedVault.keygenSignature)
@@ -90,20 +77,28 @@ public final class BackupKeyDecryptorViewModel {
             let generatedKey = try await Task.background {
                 try keyDeriver.recreateEncryptionKey(password: password, salt: salt)
             }
+            // Cancelling only stops the key deriver between its stages, so a cancelled attempt can still finish
+            // deriving the key. Drop it here, before it decrypts the backup or reaches the import.
+            try Task.checkCancellation()
             let vaultApplicationPayload = try encryptedVaultDecoder.decryptAndDecode(
                 key: generatedKey.key,
                 encryptedVault: encryptedVault,
             )
             decryptionKeyState = .validDecryptionKey
             decryptedVaultSubject.send(vaultApplicationPayload)
+        } catch is CancellationError {
+            // The user cancelled, so there's nothing to say.
+            decryptionKeyState = .none
         } catch let error as any LocalizedError {
             decryptionKeyState = .error(.init(localizedError: error))
+            failedAttemptCount += 1
         } catch {
             decryptionKeyState = .error(PresentationError(
                 userTitle: "Password Generation Error",
                 userDescription: "Please try again.",
                 debugDescription: error.localizedDescription,
             ))
+            failedAttemptCount += 1
         }
     }
 }

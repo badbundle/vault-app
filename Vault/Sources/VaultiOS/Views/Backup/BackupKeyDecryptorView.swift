@@ -2,11 +2,17 @@ import Foundation
 import SwiftUI
 import VaultFeed
 
-/// View for generating an encryption key while decrypting a backup.
+/// Asks for the password a backup was made with, and recreates its key to decrypt it.
+///
+/// Recreating the key is deliberately slow, so Cancel stays enabled while it runs: with interactive dismissal
+/// disabled, it's the way out.
 @MainActor
 struct BackupKeyDecryptorView: View {
     @State private var viewModel: BackupKeyDecryptorViewModel
+    @State private var decryptionTask: Task<Void, Never>?
+    @FocusState private var isPasswordFocused: Bool
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(viewModel: BackupKeyDecryptorViewModel) {
         self.viewModel = viewModel
@@ -14,45 +20,79 @@ struct BackupKeyDecryptorView: View {
 
     var body: some View {
         Form {
-            informationSection
-            entrySection
+            headerSection
+            passwordSection
             decryptSection
         }
         .navigationTitle(Text("Decrypt Backup"))
-        .interactiveDismissDisabled(viewModel.isDecrypting)
-        .onChange(of: viewModel.decryptionKeyState) { _, newValue in
-            if newValue.isSuccess {
-                dismiss()
+        .navigationBarTitleDisplayMode(.inline)
+        .interactiveDismissDisabled(viewModel.isDecrypting || isDecrypted)
+        .animation(.snappy, value: viewModel.isDecrypting)
+        .animation(.snappy, value: viewModel.decryptionKeyState)
+        .sensoryFeedback(.success, trigger: isDecrypted) { _, newValue in
+            newValue
+        }
+        .task {
+            // The password is the one thing to enter here, so start typing straight away.
+            isPasswordFocused = true
+        }
+        .task(id: isDecrypted) {
+            guard isDecrypted else { return }
+            // Long enough to see the lock open. With Reduce Motion, there's nothing to wait for.
+            if !reduceMotion {
+                try? await Task.sleep(for: .milliseconds(600))
+                guard !Task.isCancelled else { return }
             }
+            dismiss()
+        }
+        .onChange(of: viewModel.failedAttemptCount) {
+            if case let .error(error) = viewModel.decryptionKeyState {
+                AccessibilityNotification.Announcement(error.userTitle).post()
+            }
+            isPasswordFocused = true
+        }
+        .onDisappear {
+            decryptionTask?.cancel()
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
+                // Deliberately enabled while the key is recreated: with interactive dismissal disabled, this is
+                // the only way out of the up-to-3-minute derivation.
                 Button {
+                    decryptionTask?.cancel()
                     dismiss()
                 } label: {
                     Text("Cancel")
                 }
                 .tint(.red)
-                .disabled(viewModel.isDecrypting)
+                .disabled(isDecrypted)
             }
         }
     }
 
-    private var informationSection: some View {
+    private var isDecrypted: Bool {
+        viewModel.decryptionKeyState.isSuccess
+    }
+
+    // MARK: - Header Section
+
+    /// The backup password's shield, as on the screen that sets it, which opens once the backup is decrypted.
+    private var headerSection: some View {
         Section {
-            PlaceholderView(
-                // The backup password's shield, as on the screen that set it.
-                systemIcon: "lock.shield.fill",
-                title: viewModel.decryptionKeyState.title,
-                subtitle: viewModel.decryptionKeyState.description,
+            BackupHeroHeader(
+                title: "Enter Backup Password",
+                subtitle: "Use the password this backup was made with.",
+                systemImage: isDecrypted ? "lock.open.fill" : "lock.shield.fill",
+                color: isDecrypted ? .green : .accentColor,
+                iconSize: 56,
             )
-            .padding()
-            .containerRelativeFrame(.horizontal)
-            .foregroundStyle(viewModel.decryptionKeyState.isError ? .red : .primary)
+            .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
         }
     }
 
-    private var entrySection: some View {
+    // MARK: - Password Section
+
+    private var passwordSection: some View {
         Section {
             LabeledTextField(
                 "Backup Password",
@@ -61,17 +101,46 @@ struct BackupKeyDecryptorView: View {
                 status: viewModel.decryptionKeyState.isError ? .error() : .none,
             )
             .secretTextInput(.verbatim)
-            .disabled(viewModel.isDecrypting)
+            .focused($isPasswordFocused)
+            .submitLabel(.done)
+            .onSubmit(decrypt)
+            .disabled(viewModel.isDecrypting || isDecrypted)
+            .wrongPasswordFeedback(trigger: viewModel.failedAttemptCount)
         }
     }
+
+    // MARK: - Decrypt Section
 
     private var decryptSection: some View {
         Section {
             ProminentActionButton("Decrypt", systemImage: "lock.open.fill") {
-                await viewModel.attemptDecryption()
+                decrypt()
             }
-            .disabled(!viewModel.canAttemptDecryption || viewModel.isDecrypting)
+            .disabled(!viewModel.canAttemptDecryption || viewModel.isDecrypting || isDecrypted)
+        } footer: {
+            decryptionStatus
         }
-        .animation(.snappy, value: viewModel.canAttemptDecryption)
+    }
+
+    @ViewBuilder
+    private var decryptionStatus: some View {
+        if viewModel.isDecrypting {
+            HStack(alignment: .center, spacing: 4) {
+                ProgressView()
+                Text("Decrypting the backup. This can take up to 3 minutes.")
+            }
+        } else if case let .error(error) = viewModel.decryptionKeyState {
+            Label(error.userTitle, systemImage: "xmark.octagon.fill")
+                .foregroundStyle(.red)
+        }
+    }
+
+    private func decrypt() {
+        guard viewModel.canAttemptDecryption, !viewModel.isDecrypting, !isDecrypted else { return }
+        isPasswordFocused = false
+        decryptionTask?.cancel()
+        decryptionTask = Task {
+            await viewModel.attemptDecryption()
+        }
     }
 }
