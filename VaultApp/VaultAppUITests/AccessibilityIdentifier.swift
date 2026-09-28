@@ -10,6 +10,7 @@ enum AccessibilityIdentifier {
     /// The cards in the feed, named by the kind of item.
     enum Feed {
         static let otpCode = "feed.item.otp-code"
+        static let secureNote = "feed.item.secure-note"
         static let encryptedItem = "feed.item.encrypted-item"
     }
 
@@ -27,6 +28,19 @@ enum AccessibilityIdentifier {
     enum SecureNote {
         static let contents = "secure-note.contents"
     }
+
+    enum AppLock {
+        static let unlock = "app-lock.unlock"
+        static let password = "app-lock.password"
+        static let privacyCover = "app-lock.privacy-cover"
+        /// The lock screen's message, named by the problem it shows.
+        static let failedMessage = "app-lock.message.failed"
+        static let unavailableMessage = "app-lock.message.unavailable"
+        static let wrongPasswordMessage = "app-lock.message.wrong-password"
+    }
+
+    /// What the app shows once it's prepared a `TestVault`.
+    static let testVaultPrepared = "ui-test-vault.prepared"
 
     enum Settings {
         static let list = "settings"

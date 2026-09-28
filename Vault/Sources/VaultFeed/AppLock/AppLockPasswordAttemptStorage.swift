@@ -185,7 +185,7 @@ struct AppLockPasswordAttemptKeychainStorage: AppLockPasswordAttemptStorage {
     static func itemQuery(accessGroup: String?) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: VaultIdentifiers.SecureStorageKey.appLockPasswordAttempts.rawValue,
+            kSecAttrService as String: VaultIdentifiers.SecureStorageKey.appLockPasswordAttempts.keychainService,
             kSecAttrSynchronizable as String: false,
             // Makes macOS use the same keychain as iOS.
             kSecUseDataProtectionKeychain as String: true,

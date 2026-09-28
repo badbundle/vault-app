@@ -45,6 +45,7 @@ public final class EncryptedVaultPasswordService: AppLockPasswordService {
     ///   - plainStore: The plain store while the vault is in it, and whether it opened without being set aside this
     ///     launch. Asked each time the password is set, so a fresh store after an erase is the one converted.
     ///   - backgroundTime: Keeps the app running until an unlock, a conversion or a rekey has finished.
+    ///   - calibration: The key derivation's parameters for a password set here, if not calibrated on this device.
     public convenience init(
         directory: URL,
         mode: VaultStorageState.Mode,
@@ -58,6 +59,7 @@ public final class EncryptedVaultPasswordService: AppLockPasswordService {
         passwordHooks: VaultPasswordChangeService.Hooks,
         plainStore: @escaping @MainActor () -> (store: PersistedLocalVaultStore, openedNormally: Bool)?,
         backgroundTime: VaultBackgroundTime,
+        calibration: AppLockKeyDerivationCalibration? = nil,
     ) {
         let attemptCounter = AppLockPasswordAttemptCounter()
         let unlockService = VaultUnlockService(
@@ -98,6 +100,7 @@ public final class EncryptedVaultPasswordService: AppLockPasswordService {
                     deviceBackupSettings: deviceBackupSettings,
                     hooks: conversionHooks,
                     backgroundTime: backgroundTime,
+                    calibration: calibration,
                 )
             },
         )

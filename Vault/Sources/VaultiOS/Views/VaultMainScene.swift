@@ -52,6 +52,10 @@ public struct VaultMainScene: Scene {
                             // Keeps the vault off screen until the demo data is in,
                             // so the navigation view's own setup sees the seeded vault.
                             Color.clear.task { await seedScreenshotVault() }
+                        } else if let preset = UITestVault.preset {
+                            // A launch that only prepares a vault for a UI test,
+                            // which opens it in a launch of its own.
+                            UITestVaultPreparationView(preset: preset)
                         } else {
                             mainNavigationView
                         }

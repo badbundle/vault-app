@@ -12,7 +12,7 @@ Use the simulator configuration specified in `README.md` for all builds and test
 
 ### UI Tests
 
-The UI tests are in `VaultApp/VaultAppUITests`, a target of the app's Xcode project, as a Swift package can't hold UI tests. They launch the app on the in-memory demo vault (`-screenshot-scene feed`, see `ScreenshotMode`), so they never touch the simulator's own vault, and find elements by accessibility identifier rather than by text. To run only them, from the root of the repo: `xcodebuild test -workspace Vault.xcworkspace -scheme VaultAppUITests -destination 'id=<simulator UDID>' -skipMacroValidation -skipPackagePluginValidation`.
+The UI tests are in `VaultApp/VaultAppUITests`, a target of the app's Xcode project, as a Swift package can't hold UI tests. They launch the app on the in-memory demo vault (`-screenshot-scene feed`, see `ScreenshotMode`), or, for the lock, on a vault the app prepares in a directory, defaults and keychain items of its own (`-ui-test-vault`, see `UITestVault`), so they never touch the simulator's own vault. They find elements by accessibility identifier rather than by text. To run only them, from the root of the repo: `xcodebuild test -workspace Vault.xcworkspace -scheme VaultAppUITests -destination 'id=<simulator UDID>' -skipMacroValidation -skipPackagePluginValidation`.
 
 ## Committing
 

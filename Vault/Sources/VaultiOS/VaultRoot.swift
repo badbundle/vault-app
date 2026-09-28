@@ -22,6 +22,10 @@ public enum VaultRoot {
         if ScreenshotMode.isEnabled {
             return ScreenshotMode.makeDefaults()
         }
+        // Likewise UI tests, whose defaults are kept with their vault.
+        if let uiTestVault = UITestVaultStorage.current {
+            return .init(userDefaults: uiTestVault.defaults)
+        }
         #endif
         return .init(userDefaults: .standard)
     }()
@@ -418,7 +422,15 @@ public enum VaultRoot {
     static let encryptedVaultDecoder: some EncryptedVaultDecoder<KeyData<32>> = EncryptedVaultDecoderImpl()
 
     @MainActor
-    public static let deviceAuthenticationService: DeviceAuthenticationService = .init(policy: .default)
+    public static let deviceAuthenticationService: DeviceAuthenticationService = {
+        #if DEBUG
+        // UI tests answer device authentication themselves.
+        if let policy = UITestVault.authenticationPolicy {
+            return .init(policy: policy)
+        }
+        #endif
+        return .init(policy: .default)
+    }()
 
     // MARK: - App Lock
 
@@ -431,7 +443,14 @@ public enum VaultRoot {
             return ScreenshotMode.makeAppLockSettingsStore()
         }
         #endif
-        return .shared()
+        let settings = AppLockSettingsStore.shared()
+        #if DEBUG
+        // UI tests set how soon the app locks as they launch it.
+        if let delay = UITestVault.appLockDelay {
+            settings.delay = delay
+        }
+        #endif
+        return settings
     }()
 
     @MainActor
@@ -497,7 +516,19 @@ public enum VaultRoot {
                 plainVaultStore.map { ($0, plainVaultStoreOpenedNormally) }
             },
             backgroundTime: .application,
+            calibration: keyDerivationCalibration,
         )
+    }()
+
+    /// The key derivation's parameters for an App Lock Password set here, or `nil` to calibrate them on this device
+    /// as it's set.
+    private static let keyDerivationCalibration: AppLockKeyDerivationCalibration? = {
+        #if DEBUG
+        // UI tests' vaults open in moments.
+        return UITestVault.keyDerivationCalibration
+        #else
+        return nil
+        #endif
     }()
 
     /// Clears what a locked app shouldn't be holding: everything read from

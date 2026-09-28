@@ -93,7 +93,19 @@ struct AppLockView: View {
         .multilineTextAlignment(.center)
         .padding(.horizontal, 32)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(messageIdentifier)
         .animation(.snappy, value: state.failure)
+    }
+
+    /// Names the message by the problem it shows, if any, for the UI tests.
+    private var messageIdentifier: String {
+        switch state.failure {
+        case .none, .cancelled: "app-lock.message"
+        case .failed: "app-lock.message.failed"
+        case .unavailable: "app-lock.message.unavailable"
+        case .wrongPassword: "app-lock.message.wrong-password"
+        case .needsTheApp: "app-lock.message.needs-the-app"
+        }
     }
 
     private func actions(passwordWait: Duration?) -> some View {
@@ -110,6 +122,7 @@ struct AppLockView: View {
             .secretTextInput(.verbatim)
             // SwiftUI doesn't give VoiceOver a secure field's own label.
             .accessibilityLabel("App Lock Password")
+            .accessibilityIdentifier("app-lock.password")
             .focused($isPasswordFocused)
             .submitLabel(.go)
             .onSubmit(submitPassword)
@@ -139,6 +152,7 @@ struct AppLockView: View {
         // Stays in its colors while busy, for the spinner to show up on: `unlock` ignores a second tap anyway.
         .allowsHitTesting(!isBusy)
         .accessibilityLabel(state.isInProgress ? "Unlocking" : "Unlock")
+        .accessibilityIdentifier("app-lock.unlock")
     }
 
     private func submitPassword() {
@@ -200,6 +214,9 @@ struct AppLockView: View {
 struct AppPrivacyCoverView: View {
     var body: some View {
         AppLockBackdrop()
+            // Nothing in it for VoiceOver, but the UI tests look for it.
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("app-lock.privacy-cover")
     }
 }
 

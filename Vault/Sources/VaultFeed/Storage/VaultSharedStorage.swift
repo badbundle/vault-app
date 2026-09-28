@@ -17,6 +17,11 @@ public enum VaultSharedStorage {
     /// missing — there is no meaningful fallback because the vault cannot be
     /// reached without it.
     public static func directory(fileManager: FileManager = .default) -> URL {
+        #if DEBUG
+        if let uiTestVault = UITestVaultStorage.current {
+            return uiTestVault.directory
+        }
+        #endif
         guard let url = fileManager.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) else {
             fatalError("Unable to access App Group container '\(appGroupID)'")
         }
@@ -26,9 +31,27 @@ public enum VaultSharedStorage {
     /// The App Group's defaults, for settings the extensions read too. Crashes if the entitlement is missing, for
     /// the same reason as `directory(fileManager:)`.
     public static func userDefaults() -> UserDefaults {
+        #if DEBUG
+        if let uiTestVault = UITestVaultStorage.current {
+            return uiTestVault.sharedDefaults
+        }
+        #endif
         guard let userDefaults = UserDefaults(suiteName: appGroupID) else {
             fatalError("Unable to access the defaults of App Group '\(appGroupID)'")
         }
         return userDefaults
+    }
+}
+
+extension VaultIdentifiers.SecureStorageKey {
+    /// The service the item is kept under in the keychain, by the app and every extension. It's `rawValue`, except
+    /// while UI tests run the app, whose items are kept apart (`UITestVaultStorage`).
+    public var keychainService: String {
+        #if DEBUG
+        if let uiTestVault = UITestVaultStorage.current {
+            return uiTestVault.keychainServicePrefix + rawValue
+        }
+        #endif
+        return rawValue
     }
 }
