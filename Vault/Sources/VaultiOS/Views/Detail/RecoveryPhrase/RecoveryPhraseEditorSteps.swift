@@ -349,7 +349,7 @@ struct RecoveryPhraseSecurityStep: View {
             passphrase: $viewModel.editingModel.detail.searchPassphrase,
             passphraseValidation: detail.$searchPassphrase,
             hasExistingPassphrase: detail.hasExistingSearchPassphrase,
-            explanation: "A hidden recovery phrase stays out of the feed. It only appears when you search for its passphrase exactly.",
+            explanation: "A hidden recovery phrase stays out of the feed. It only appears while the whole search is its passphrase, in any capitals.",
             hiddenWarning: viewModel.strings.passphraseSubtitle,
         )
 
@@ -364,7 +364,7 @@ struct RecoveryPhraseSecurityStep: View {
             newKillphrase: $viewModel.editingModel.detail.newKillphrase,
             isValid: detail.isKillphraseValid,
             hasExistingKillphrase: viewModel.editingModel.initialDetail.killphraseEnabled,
-            explanation: "A killphrase deletes this recovery phrase, immediately and quietly, when you search for it exactly. With a passphrase too, it can be deleted without it ever being shown.",
+            explanation: "A killphrase deletes this recovery phrase, immediately and quietly, as soon as the search is exactly the phrase, even partway through typing something longer. With a passphrase too, it can be deleted without it ever being shown.",
             enabledWarning: viewModel.strings.killphraseSubtitle,
         )
     }

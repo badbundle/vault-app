@@ -50,7 +50,7 @@ struct AppLockPasswordManageView: View {
             Section {
                 BackupHeroHeader(
                     title: "App Lock Password",
-                    subtitle: "Vault asks for it every time it unlocks, after Face ID, Touch ID or your passcode. It's a different password from your backup password.",
+                    subtitle: "Vault asks for it every time it unlocks, after Face ID, Touch ID or your passcode. It's separate from your backup password, so use a different one.",
                     icon: .appLockPassword,
                     iconSize: 56,
                 ) {

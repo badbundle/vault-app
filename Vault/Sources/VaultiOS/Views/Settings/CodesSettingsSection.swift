@@ -64,9 +64,9 @@ struct CodesSettingsSection: View {
 
     private var spotlightFooter: String {
         if isAppLockOn {
-            "Show in Spotlight can't be on while App Lock is, because Spotlight shows codes without Vault being unlocked."
+            "Show in Spotlight can't be on while App Lock is, because Spotlight shows your codes' site names without Vault being unlocked."
         } else {
-            "Show in Spotlight lets you find a code by its site's name in Spotlight and Apple Intelligence, without opening Vault. Account names never show, nor do locked or hidden codes. Turning on App Lock turns it off."
+            "Show in Spotlight lets you find a code by its site's name in Spotlight and Apple Intelligence, without opening Vault. Only site names are added, never the codes themselves or account names, and nothing of locked or hidden codes. Turning on App Lock turns it off."
         }
     }
 }

@@ -153,6 +153,18 @@ public final class AutoBackupViewModel {
         await service.setRetention(retention)
     }
 
+    /// Whether choosing `retention` is confirmed first: a shorter time deletes older auto-backups as soon as it's
+    /// chosen.
+    public func needsConfirmation(toKeepBackupsFor retention: AutoBackupRetention) -> Bool {
+        retention.keepsLess(than: configuration.retentionDays)
+    }
+
+    /// What confirming a shorter time says it does.
+    public func confirmationMessage(toKeepBackupsFor retention: AutoBackupRetention) -> String {
+        let time = retention.localizedTitle
+        return "Auto-backups older than \(time) are deleted as soon as you choose this, and after each new backup."
+    }
+
     public func backupNow() async {
         await service.forceBackup()
     }

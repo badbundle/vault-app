@@ -52,6 +52,26 @@ public struct OTPAuthSecret: Equatable, Hashable, Sendable {
     }
 }
 
+// MARK: - Redaction
+
+// A code's secret must never end up in a log, crash report or test failure message via string interpolation or
+// reflection (`Data`'s own mirror lists its bytes), so all textual representations leave it out, as `RecoveryPhrase`'s
+// do.
+
+extension OTPAuthSecret: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public var description: String {
+        "OTPAuthSecret(<redacted>, \(format))"
+    }
+
+    public var debugDescription: String {
+        description
+    }
+
+    public var customMirror: Mirror {
+        Mirror(self, children: ["format": format], displayStyle: .struct)
+    }
+}
+
 public struct OTPAuthDigits: Equatable, Hashable, CustomStringConvertible, Sendable {
     public var value: UInt16
 
