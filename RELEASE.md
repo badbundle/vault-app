@@ -79,7 +79,10 @@ The release lane:
 - requires a clean Git working tree
 - queries App Store Connect/TestFlight for the latest uploaded build number
 - builds with `CURRENT_PROJECT_VERSION=<next global build number>`
-- uploads the build to App Store Connect
+- uploads the build to App Store Connect, with the listing in
+  `fastlane/metadata/` and the screenshots in `fastlane/screenshots/en-US/`;
+  the screenshots replace the version's, so one that changed, was renamed or
+  was removed doesn't stay behind in App Store Connect
 - does not commit build-number changes
 - does not create or push Git tags
 
