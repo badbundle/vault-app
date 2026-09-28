@@ -38,11 +38,4 @@ extension VaultItemLockState {
         case .lockedWithNativeSecurity: localized(key: "vaultItemLockState.lockedWithNativeSecurity.title")
         }
     }
-
-    public var localizedSubtitle: String {
-        switch self {
-        case .notLocked: localized(key: "vaultItemLockState.notLocked.subtitle")
-        case .lockedWithNativeSecurity: localized(key: "vaultItemLockState.lockedWithNativeSecurity.subtitle")
-        }
-    }
 }

@@ -39,7 +39,6 @@ struct PresentationValueCoverageTests {
         for value in VaultItemLockState.allCases {
             #expect(value.systemIconName.isEmpty == false)
             #expect(value.localizedTitle.isEmpty == false)
-            #expect(value.localizedSubtitle.isEmpty == false)
         }
     }
 
@@ -73,7 +72,6 @@ struct PresentationValueCoverageTests {
         for value in VaultItemViewConfiguration.allCases {
             #expect(value.systemIconName.isEmpty == false)
             #expect(value.localizedTitle.isEmpty == false)
-            #expect(value.localizedSubtitle.isEmpty == false)
         }
     }
 

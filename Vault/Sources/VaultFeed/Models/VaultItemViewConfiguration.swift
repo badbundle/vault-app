@@ -67,13 +67,4 @@ extension VaultItemViewConfiguration {
             )
         }
     }
-
-    public var localizedSubtitle: String {
-        switch self {
-        case .alwaysVisible: localized(key: "vaultItemViewConfiguration.alwaysVisible.subtitle")
-        case .requiresSearchPassphrase: localized(
-                key: "vaultItemViewConfiguration.requiresSearchPassphrase.subtitle",
-            )
-        }
-    }
 }

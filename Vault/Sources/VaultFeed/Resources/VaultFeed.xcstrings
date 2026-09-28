@@ -1544,17 +1544,6 @@
         }
       }
     },
-    "vaultItemLockState.lockedWithNativeSecurity.subtitle" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Locked by your device's password or biometrics."
-          }
-        }
-      }
-    },
     "vaultItemLockState.lockedWithNativeSecurity.title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1562,17 +1551,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Locked"
-          }
-        }
-      }
-    },
-    "vaultItemLockState.notLocked.subtitle" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This item is not locked or protected."
           }
         }
       }
@@ -1588,17 +1566,6 @@
         }
       }
     },
-    "vaultItemViewConfiguration.alwaysVisible.subtitle" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This item is always visible in the feed and during searches."
-          }
-        }
-      }
-    },
     "vaultItemViewConfiguration.alwaysVisible.title" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1606,17 +1573,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Always visible"
-          }
-        }
-      }
-    },
-    "vaultItemViewConfiguration.requiresSearchPassphrase.subtitle" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This item can only be found when searching for the passphrase assigned to this item. It's useful for hiding items with plausible deniability."
           }
         }
       }
