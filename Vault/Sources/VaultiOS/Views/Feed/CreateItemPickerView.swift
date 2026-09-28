@@ -3,9 +3,10 @@ import SwiftUI
 
 /// The first step of the new-item sheet: choosing what kind of item to make.
 ///
-/// Laid out like the editor's steps that follow it in the same sheet, with a step header and the choices as cards on
-/// the sheet's glass, and sized to fit, so choosing one slides on to that item's first step like the next step. It
-/// has no progress bar, since how many steps follow depends on what's chosen.
+/// Laid out like the editor's steps that follow it in the same sheet, with the choices as cards on the sheet's glass,
+/// and sized to fit, so choosing one slides on to that item's first step like the next step. It has no step header,
+/// since the "New Item" title and the cards say enough, and no progress bar, since how many steps follow depends on
+/// what's chosen.
 @MainActor
 struct CreateItemPickerView: View {
     var onSelect: (CreatingItem) -> Void
@@ -14,16 +15,6 @@ struct CreateItemPickerView: View {
 
     var body: some View {
         Form {
-            Section {
-                DetailEditorStepHeader(
-                    systemImage: "plus",
-                    title: "Type",
-                    subtitle: "Choose what kind of item to add to your vault.",
-                )
-            }
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
-
             option(
                 .otpCode,
                 title: "Code",

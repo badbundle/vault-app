@@ -69,7 +69,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Decrypting a backup asks for its password under the backup password's shield, with the field ready to type in and Return to decrypt. While it works, it says it can take up to 3 minutes, and Cancel stops it. A wrong password shakes the field, and the right one opens the lock
 - The Danger Zone is a sheet that says what deleting removes and what's kept, and asks you to confirm before it deletes anything. Deleting all data also deletes the backup password, so restoring an old backup afterwards needs its password
 - Item pages look like the editor: the item's badge at the top and cards beneath it, with a larger live code on a code's page
-- Tapping + opens one sheet that starts with choosing the kind of item and slides straight into its editor
+- Tapping + opens one sheet that starts with the kinds of item to choose from, under its New Item title, and slides straight into the editor for the one chosen
 - The Backups, Auto-Backup and Restore pages open with headers, and Backups leads with when you last backed up. Restore asks for Face ID or the passcode before it imports anything, even with no backup password set
 - Auto-backup always keeps the newest backup it made, however long ago, so a shorter Keep Backups For time, or a vault that hasn't changed in a while, still leaves one
 - Restore's import sheet opens with a header saying what's about to happen, with the symbol of the Restore row that opened it: importing, merging, or replacing the vault, in red. Choosing a PDF and scanning QR codes are rows beneath it. A file that isn't a backup says so in the header, with an error haptic, instead of in a red card
