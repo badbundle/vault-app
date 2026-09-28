@@ -589,7 +589,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This item will be immediately deleted when this text is entered exactly in the search bar. Be careful not to search for this text unless you intend to delete this item."
+            "value" : "Capitals count, but spaces at either end don't. It works in Vault's own search, not in AutoFill. Don't search for the phrase, or anything that starts with it, unless you mean to delete this item."
           }
         }
       }
@@ -611,7 +611,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This item will be hidden in the main feed. You must search exactly for this passphrase to find this item. Don't forget it!\n\nNote: Hidden OTP codes will not appear in autofill."
+            "value" : "This item is hidden from the feed. To find it, search for the whole passphrase: capitals and spaces at either end don't matter. Don't forget it!\n\nHidden codes aren't offered in AutoFill."
           }
         }
       }
