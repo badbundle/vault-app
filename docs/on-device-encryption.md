@@ -1361,6 +1361,10 @@ configuration, which the app can't edit. Turning on the password should tell use
   - A populated backup padded to 32 KiB, and the same backup padded by a random amount, as every backup was before
     VAULT-75. Each decrypts to the backup it was made from, and the encryptor, given the fixture's salt, IV and
     padding, writes it again byte for byte.
+  - A backup in every format the app still restores (VAULT-87), each restored end to end: a PDF into the import
+    flow, its password into the password screen, and what it decrypts into a plain vault, an encrypted one or a
+    duress vault, which changes only its own slot. A device transfer's QR codes are read back from the transfer
+    screen's images and scanned out of order.
   - A format change adds a fixture and keeps every old one. Each fixtures folder's README says how its fixtures were
     made, and how to add one.
 - **Semantics.**
