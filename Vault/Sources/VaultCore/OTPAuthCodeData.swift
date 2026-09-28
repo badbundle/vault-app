@@ -104,11 +104,25 @@ public enum OTPAuthType: Equatable, Hashable, Sendable {
         public static var defaultPeriod: UInt64 {
             30
         }
+
+        /// The periods a code can have, in seconds: at least one, and small enough for the `Int64` the vault stores.
+        public static let validPeriods: ClosedRange<UInt64> = 1 ... UInt64(Int64.max)
     }
 
     public enum HOTP {
         public static var defaultCounter: UInt64 {
             0
+        }
+
+        /// The counters a code can have: small enough for the `Int64` the vault stores.
+        public static let validCounters: ClosedRange<UInt64> = 0 ... UInt64(Int64.max)
+    }
+
+    /// Whether the vault can store this period or counter, and make codes with it.
+    public var isValid: Bool {
+        switch self {
+        case let .totp(period): TOTP.validPeriods.contains(period)
+        case let .hotp(counter): HOTP.validCounters.contains(counter)
         }
     }
 

@@ -13,7 +13,10 @@ public struct OTPCodeTimerState: Equatable, Sendable {
     }
 
     /// Create a state based on the current time and the repeating period.
+    ///
+    /// A period of 0, which a code can't be saved with, is treated as 1 rather than dividing by zero.
     public init(currentTime: Double, period: UInt64) {
+        let period = max(period, 1)
         let currentCodeNumber = UInt64(currentTime) / period
         let nextCodeNumber = currentCodeNumber + 1
         startTime = Double(currentCodeNumber * period)

@@ -400,6 +400,37 @@ final class VaultBackupItemDecoderTests {
         }
     }
 
+    @Test(arguments: [0, UInt64(Int64.max) + 1, .max])
+    func decodeOTP_failsToDecodeTOTPWithAPeriodTheVaultCantUse(period: UInt64) throws {
+        let otp = anyOTPItem(type: "totp", period: period)
+        let sut = makeSUT()
+
+        #expect(throws: VaultBackupItemDecoder.TOTPDecodeError.invalidPeriod) {
+            try sut.decode(backupItem: otp)
+        }
+    }
+
+    @Test(arguments: [UInt64(Int64.max) + 1, .max])
+    func decodeOTP_failsToDecodeHOTPWithACounterTheVaultCantStore(counter: UInt64) throws {
+        let otp = anyOTPItem(type: "hotp", counter: counter)
+        let sut = makeSUT()
+
+        #expect(throws: VaultBackupItemDecoder.HOTPDecodeError.invalidCounter) {
+            try sut.decode(backupItem: otp)
+        }
+    }
+
+    @Test
+    func decodeOTP_decodesTheLargestPeriodAndCounterTheVaultStores() throws {
+        let sut = makeSUT()
+
+        let totp = try sut.decode(backupItem: anyOTPItem(type: "totp", period: UInt64(Int64.max)))
+        let hotp = try sut.decode(backupItem: anyOTPItem(type: "hotp", counter: UInt64(Int64.max)))
+
+        #expect(totp.item.otpCode?.type == .totp(period: UInt64(Int64.max)))
+        #expect(hotp.item.otpCode?.type == .hotp(counter: UInt64(Int64.max)))
+    }
+
     @Test
     func decodeOTP_failsToDecodeInvalidSecretFormat() throws {
         let otp = anyOTPItem(secretFormat: "inv")

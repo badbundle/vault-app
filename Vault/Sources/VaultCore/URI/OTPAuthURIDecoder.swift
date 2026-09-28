@@ -92,12 +92,14 @@ extension OTPAuthURIDecoder {
         switch host {
         case "totp":
             if let periodString = uri.otpParameter(.period), let period = UInt64(periodString) {
+                guard OTPAuthType.TOTP.validPeriods.contains(period) else { throw URIDecodingError.invalidValue }
                 return .totp(period: period)
             } else {
                 return .totp()
             }
         case "hotp":
             if let counterStr = uri.otpParameter(.counter), let count = UInt64(counterStr) {
+                guard OTPAuthType.HOTP.validCounters.contains(count) else { throw URIDecodingError.invalidValue }
                 return .hotp(counter: count)
             } else {
                 return .hotp()

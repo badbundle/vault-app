@@ -1638,6 +1638,22 @@ struct VaultStoreContractTests {
     }
 
     @Test(arguments: VaultStoreEngine.allCases)
+    func incrementCounter_atTheLargestCounter_throwsAndLeavesItAlone(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
+        let largest = UInt64(Int64.max)
+        let code = anyOTPAuthCode(type: .hotp(counter: largest)).wrapInAnyVaultItem().makeWritable()
+        let id1 = try await sut.insert(item: code)
+
+        await #expect(throws: (any Error).self) {
+            try await sut.incrementCounter(id: id1)
+        }
+
+        let all = try await sut.retrieve(query: .init())
+        let item = try #require(all.items.first)
+        #expect(item.item.otpCode?.type == .hotp(counter: largest))
+    }
+
+    @Test(arguments: VaultStoreEngine.allCases)
     func importAndMergeVault_importsEmptyToEmptyVault(engine: VaultStoreEngine) async throws {
         let sut = try await engine.makeStore()
         let payload = VaultApplicationPayload(userDescription: "", items: [], tags: [])

@@ -32,6 +32,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 ### Fixed
 
+- A scanned or imported code whose period or counter Vault can't work with is refused with an error, instead of being saved
 - Backups containing an encrypted item (such as an encrypted note) couldn't be restored: the encryption IV's key didn't survive the backup's key encoding. The backup format is unchanged, so backups made before the fix restore too
 - Removing a tag from an item didn't stick: the tag came back once the item was saved
 - Restoring a backup turned QuickType back on for every code and reset every note's preview. Backups now keep both choices, and older backups restore as before

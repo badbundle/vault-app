@@ -267,6 +267,9 @@ extension RecordVaultStore: VaultStoreHOTPIncrementer {
             guard var otp = state.items[index].otpDetails else {
                 throw Error.invalidItem
             }
+            if otp.counter == .max {
+                throw Error.invalidItem
+            }
             otp.counter = otp.counter.map { $0 + 1 }
             state.items[index].otpDetails = otp
         }

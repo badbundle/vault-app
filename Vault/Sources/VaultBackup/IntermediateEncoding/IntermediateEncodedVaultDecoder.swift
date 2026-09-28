@@ -5,7 +5,7 @@ final class IntermediateEncodedVaultDecoder {
     init() {}
 
     func decode(encodedVault: IntermediateEncodedVault) throws -> VaultBackupPayload {
-        let decompressed = try (encodedVault.data as NSData).decompressed(using: .lzma) as Data
+        let decompressed = try BoundedLZMADecompression.decompress(encodedVault.data)
         return try makeDecoder().decode(VaultBackupPayload.self, from: decompressed)
     }
 
