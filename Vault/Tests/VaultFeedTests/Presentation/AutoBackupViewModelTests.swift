@@ -337,13 +337,13 @@ struct AutoBackupViewModelTests {
     }
 
     @Test
-    func confirmationMessage_saysEveryBackupCanGo() {
+    func confirmationMessage_saysOlderBackupsAreDeleted() {
         let sut = makeSUT(service: AutoBackupServiceMock(status: .idle, configuration: enabledConfiguration()))
 
         let message = sut.confirmationMessage(toKeepBackupsFor: .days7)
 
         #expect(message.contains("older than 7 days are deleted as soon as you choose this"))
-        #expect(message.contains("every one of them"))
+        #expect(message.contains("after each new backup"))
     }
 
     @Test

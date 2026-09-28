@@ -154,8 +154,7 @@ public final class AutoBackupViewModel {
     }
 
     /// Whether choosing `retention` is confirmed first: a shorter time deletes older auto-backups as soon as it's
-    /// chosen, which is every one of them if the vault hasn't changed in that time, as a backup is only made after a
-    /// change.
+    /// chosen.
     public func needsConfirmation(toKeepBackupsFor retention: AutoBackupRetention) -> Bool {
         retention.keepsLess(than: configuration.retentionDays)
     }
@@ -163,7 +162,7 @@ public final class AutoBackupViewModel {
     /// What confirming a shorter time says it does.
     public func confirmationMessage(toKeepBackupsFor retention: AutoBackupRetention) -> String {
         let time = retention.localizedTitle
-        return "Auto-backups older than \(time) are deleted as soon as you choose this, and after each new backup. If your vault hasn't changed in \(time), that's every one of them."
+        return "Auto-backups older than \(time) are deleted as soon as you choose this, and after each new backup."
     }
 
     public func backupNow() async {
