@@ -62,6 +62,36 @@ struct KeyDataTests {
         #expect(zero.data.map(\.self) == Array(repeating: 0, count: 32))
     }
 
+    @Test
+    func description_leavesOutTheBytes() throws {
+        let sut = try KeyData<32>(data: Data(repeating: 0xAB, count: 32))
+
+        let representations = [
+            String(describing: sut),
+            String(reflecting: sut),
+            "\(sut)",
+            String(describing: [sut]),
+            String(describing: Optional(sut) as Any),
+            dumped(sut),
+        ]
+        for representation in representations {
+            #expect(!representation.lowercased().contains("abab"))
+            #expect(!representation.contains("171"), "The key's bytes, in decimal")
+            #expect(representation.contains("redacted"))
+        }
+    }
+
+    @Test
+    func mirror_hasNoChildren() {
+        #expect(Mirror(reflecting: KeyData<32>.random()).children.isEmpty)
+    }
+
+    private func dumped(_ value: some Any) -> String {
+        var output = ""
+        dump(value, to: &output)
+        return output
+    }
+
     struct Coding {
         @Test
         func encodesToString() throws {
