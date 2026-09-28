@@ -1235,6 +1235,13 @@ configuration, which the app can't edit. Turning on the password should tell use
    - Restoring the file onto a slower iPhone makes unlocking proportionally slower. The 32-pass ceiling bounds
      it.
 6. **Memory.** Decrypted items can't be reliably zeroed after locking (see above).
+
+   Nor can a test show that every buffer the storage code zeroes is zeroed. Where the code allocates the memory
+   itself, tests check it's zeroed by the time it's freed: the Argon2 working memory, the copy of the password it's
+   given, and the compression scratch buffer. The key box and body plaintexts, the compressed payload and the JSON are
+   `Data`, which Foundation allocates and frees. They're `memset_s`'d where the storage code is done with them, but no
+   test sees them freed, so a copy made on write, such as one a slice kept alive would cause, would leave the original
+   unwiped without failing anything.
 7. **Rollback.** Someone who can write the app's files can put back an older copy of the file. Local storage
    can't prevent this.
 8. **Surfaces outside storage.** Configured widget entities, keyboard learning, item dates inside a duress
@@ -1270,7 +1277,8 @@ configuration, which the app can't edit. Turning on the password should tell use
   - The fastest of three runs is used.
   - The deadline is computed and only ever raised.
   - The header carries exactly the chosen parameters.
-  - A file created with one set of parameters opens on a "device" that would have calibrated differently.
+  - A file created with one set of parameters opens on a "device" that would have calibrated differently: the slot
+    file fixture, below.
 - **Format.**
   - Round-trip every field.
   - Wrong password, wrong slot and wrong header all fail closed.
@@ -1278,6 +1286,22 @@ configuration, which the app can't edit. Turning on the password should tell use
   - Growth preserves other slots, and they still open.
   - Every slot has identical length.
   - Plaintext markers seeded into items never appear in the file bytes.
+  - The compression scratch buffer is zeroed before it's freed, checked as the KDF's working memory is.
+- **Golden fixtures** (VAULT-86). Files in the stored formats, made once by the app's own code and never made
+  again, in `Vault/Tests/VaultFeedTests/Fixtures/` and `Vault/Tests/VaultBackupTests/Fixtures/`. A round trip can't
+  catch a change made to the writer and the reader together, such as the AAD layout, the key box layout, a renamed
+  payload field or a change to the padding, which would stop every existing vault opening. These can.
+  - A whole `vault-slots.v1` file, with cheap Argon2id parameters in its header: a real vault, a duress vault made
+    from it, and random slots. It's stored as its header and the two slots that hold vaults, and the test rebuilds the
+    random slots around them. Each password opens only its own slot, to exactly its items, tags and settings, and a
+    wrong one opens nothing. It also unlocks on a device that would calibrate differently.
+  - An encrypted note and a recovery phrase, each as a payload stores it. Each decrypts to its text with its
+    password.
+  - A populated backup padded to 32 KiB, and the same backup padded by a random amount, as every backup was before
+    VAULT-75. Each decrypts to the backup it was made from, and the encryptor, given the fixture's salt, IV and
+    padding, writes it again byte for byte.
+  - A format change adds a fixture and keeps every old one. Each fixtures folder's README says how its fixtures were
+    made, and how to add one.
 - **Semantics.**
   - The existing `PersistedLocalVaultStoreTests` become a contract suite, parameterized over the SwiftData
     store and `RecordVaultStore`.
