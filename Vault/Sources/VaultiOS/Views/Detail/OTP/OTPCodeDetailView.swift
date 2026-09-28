@@ -39,6 +39,11 @@ struct OTPCodeDetailView<PreviewGenerator: VaultItemPreviewViewGenerator<VaultIt
         if openInEditMode {
             viewModel.startEditing()
         }
+        #if DEBUG
+        if ScreenshotMode.scene == .editor {
+            ScreenshotMode.showEditorScene(in: viewModel)
+        }
+        #endif
     }
 
     /// A new code, starting from scanning or entering its key, and locked and offered in QuickType as

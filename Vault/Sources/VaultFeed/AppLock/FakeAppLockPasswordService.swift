@@ -1,6 +1,6 @@
 import Foundation
 
-/// Stands in for the App Lock Password's storage in previews and tests, until the real one is wired in.
+/// Stands in for the App Lock Password's storage in previews, tests and the app's marketing screenshots.
 ///
 /// It keeps its vaults' passwords in memory, and treats wrong passwords as the real one does: each is counted before
 /// it's checked, the same delays follow wrong ones in a row, and every check takes `deadline`, right or wrong. It

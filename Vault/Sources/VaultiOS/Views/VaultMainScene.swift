@@ -78,6 +78,12 @@ public struct VaultMainScene: Scene {
                         pendingOpenItemDetail = itemID
                     }
                 }
+                #if DEBUG
+                // A screenshot scene behind the App Lock Password gets past it as someone would, by entering it.
+                .onChange(of: appLockService.state, initial: true) { _, state in
+                    ScreenshotMode.enterAppLockPasswordIfAsked(state, appLock: appLockService)
+                }
+                #endif
             }
         }
     }
@@ -115,8 +121,13 @@ public struct VaultMainScene: Scene {
                 dataModel: vaultDataModel,
                 backupEventLogger: injector.backupEventLogger,
             )
-            if ScreenshotMode.scene == .detail {
+            switch ScreenshotMode.scene {
+            case .detail, .editor:
                 pendingOpenItemDetail = detailItemID
+            case .search:
+                vaultDataModel.itemsSearchQuery = ScreenshotMode.hiddenItemsPassphrase
+            default:
+                break
             }
             isSeedingScreenshotVault = false
         } catch {
