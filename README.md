@@ -4,7 +4,7 @@ A secret storage manager (2FA codes, secret notes) with built-in encrypted backu
 It can create encrypted backups to a portable PDF document that you can print (as a hard copy) or save anywhere to restore from later.
 
 It has advanced security features which promote plausible deniability (killcodes and hidden items) and can be used as an ultimate offline backup for storing all your secret data.
-There is purposely no automatic or online backup, so you never need to worry about where your data might be going.
+There are no servers and no sync. Every backup Vault makes is encrypted and goes only where you choose to put it, including the optional automatic backups to a folder such as one in iCloud Drive.
 
 ## How to use Vault
 
@@ -33,6 +33,7 @@ There's a few ways that you can use Vault to store your data:
 - [x] Item tags
 - [x] Instant item search
 - [x] Paper backups
+- [x] Automatic encrypted backups to a folder of your choice, like iCloud Drive
 - [x] Fully offline, no servers at all
 - [x] Plausible deniability of item existance with killcodes and hidden items
 

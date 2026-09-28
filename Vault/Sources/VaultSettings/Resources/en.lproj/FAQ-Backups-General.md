@@ -7,11 +7,12 @@ I can't stress enough how important it is that you make regular backups.
 ## Where is my data stored?
 
 Any items you create in Vault are stored locally on your device and nowhere else by default.
-**They will not be sent anywhere automatically**, including to your other devices.
-Data is not sent to any server or stored in any cloud service, so it is your responsibility to keep your data safe.
+**They are never synced**, including to your other devices, and never sent to any server, so it is your responsibility to keep your data safe.
 
 If you choose to, you can create backups and store them wherever you like to ensure that your data is safe.
 You can create as many backups as you like.
+
+You can also turn on **automatic backups**. Vault will then save an encrypted backup to a folder you choose, such as one in iCloud Drive, whenever your items change.
 
 To protect yourself from data loss, you should try to keep at least one paper copy of your data off-site.
 This method ensures that you have a tangible copy of your data that is immune to digital threats & disasters, such as losing access to _all_ your online accounts and your house burning down.
