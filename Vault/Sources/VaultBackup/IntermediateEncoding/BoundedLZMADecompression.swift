@@ -62,7 +62,8 @@ enum BoundedLZMADecompression {
                 try receive(UnsafeBufferPointer(start: buffer, count: produced))
                 switch status {
                 case COMPRESSION_STATUS_END:
-                    return true
+                    // A payload is one stream: anything after it isn't part of the backup.
+                    return stream.pointee.src_size == 0
                 case COMPRESSION_STATUS_OK:
                     // Decoding a truncated stream stops making progress without an error.
                     if produced == 0, stream.pointee.src_size == remaining {

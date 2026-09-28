@@ -111,7 +111,7 @@ extension BackupImportMalformedInputTests {
         let handler = BackupImportScanningHandler()
 
         let first = handler.decode(data: shardText(group: 7, number: 0, total: 3))
-        let second = handler.decode(data: shardText(group: 7, number: 1, total: 1))
+        let second = handler.decode(data: shardText(group: 7, number: 2, total: 4))
 
         #expect(first == .continueScanning(.success))
         #expect(second == .continueScanning(.ignore))
