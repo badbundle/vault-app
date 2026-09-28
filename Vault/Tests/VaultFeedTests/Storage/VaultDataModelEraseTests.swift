@@ -63,7 +63,7 @@ struct VaultDataModelEraseTests {
         await sut.resetAfterErase()
 
         #expect(sut.items.isEmpty)
-        #expect(!sut.hasAnyItems)
+        #expect(!sut.hasVisibleItems)
         #expect(sut.allTags.isEmpty)
         #expect(sut.itemsSearchQuery.isEmpty)
         #expect(sut.itemsFilteringByTags.isEmpty)

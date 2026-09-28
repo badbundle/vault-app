@@ -13,6 +13,7 @@ opt_in_rules:
   - no_nsLocalizedString
   - no_NSRegularExpression
   - no_direct_standard_out_logs
+  - no_logging
   - no_unchecked_sendable
   - no_preconcurrency
   - no_xctest
@@ -65,8 +66,16 @@ custom_rules:
     regex: "(\\bprint|\\bdebugPrint|\\bdump|Swift\\.print|Swift\\.debugPrint|Swift\\.dump)\\s*\\("
     match_kinds:
       - identifier
-    message: "Don't commit `print(…)`, `debugPrint(…)`, or `dump(…)` as they write to standard out in release. Either log to a dedicated logging system or silence this warning in debug-only scenarios explicitly using `// swiftlint:disable:next no_direct_standard_out_logs`"
+    message: "Don't commit `print(…)`, `debugPrint(…)`, or `dump(…)` as they write to standard out in release, and Vault logs nothing (MANIFESTO C3). Silence this warning in debug-only scenarios explicitly using `// swiftlint:disable:next no_direct_standard_out_logs`"
     severity: warning
+  no_logging:
+    name: "Logging is disallowed"
+    regex: "(\\bLogger\\s*\\(|\\bos_log\\b|\\bNSLog\\b|\\bOSLog\\b)"
+    match_kinds:
+      - identifier
+      - typeidentifier
+    message: "Vault logs nothing (MANIFESTO C3): don't use `Logger`, `os_log`, `NSLog` or `OSLog`, which write to the system log"
+    severity: error
   no_unchecked_sendable:
     name: "`@unchecked Sendable` is discouraged."
     regex: "@unchecked Sendable"

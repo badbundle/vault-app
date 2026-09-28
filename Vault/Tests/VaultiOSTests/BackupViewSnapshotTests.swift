@@ -228,6 +228,20 @@ struct BackupViewSnapshotTests {
         assertSnapshot(of: sut, as: .image)
     }
 
+    /// A vault holding only items that a search shows gets the same sections as an empty one: it matches
+    /// `backupRestore_unlockedEmptyVault`'s reference.
+    @Test
+    func backupRestore_unlockedWithOnlyItemsASearchShows_isTheSameAsAnEmptyVault() async {
+        let viewModel = restoreViewModel(policy: .alwaysAllow)
+        await viewModel.authenticate()
+        let sut = makeBackupRestoreSUT(
+            dataModel: await restoreDataModel(hasItems: false, hasHiddenItems: true),
+            viewModel: viewModel,
+        )
+
+        assertSnapshot(of: sut, as: .image, named: "1", testName: "backupRestore_unlockedEmptyVault()")
+    }
+
     @Test
     func backupRestore_unlockedWithItems() async {
         let viewModel = restoreViewModel(policy: .alwaysAllow)
@@ -300,9 +314,15 @@ extension BackupViewSnapshotTests {
         .framedForTest()
     }
 
-    private func restoreDataModel(hasItems: Bool) async -> VaultDataModel {
+    /// A data model over a store with items that show in the feed, if `hasItems`, and items that only a search
+    /// shows, if `hasHiddenItems`.
+    private func restoreDataModel(hasItems: Bool, hasHiddenItems: Bool = false) async -> VaultDataModel {
         let vaultStore = VaultStoreStub()
-        vaultStore.hasAnyItemsHandler = { hasItems }
+        vaultStore.hasAnyItemsHandler = { hasItems || hasHiddenItems }
+        vaultStore.retrieveHandler = { query in
+            let shows = query.filterText == nil ? hasItems : hasHiddenItems
+            return .init(items: shows ? [uniqueVaultItem()] : [])
+        }
         let dataModel = anyVaultDataModel(vaultStore: vaultStore)
         await dataModel.reloadData()
         return dataModel

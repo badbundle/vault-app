@@ -73,7 +73,13 @@ public final class VaultDataModel {
     // MARK: Items
 
     public var items = [VaultItem]()
-    public private(set) var hasAnyItems = false
+    /// Whether the feed shows any item with no search or tag filter. An item that only a search shows, such as one
+    /// behind a search passphrase, doesn't count, so a vault that holds only those looks empty here, as it does in the
+    /// feed.
+    ///
+    /// `reloadItems()` updates it while there's no search or tag filter, and `reloadHasVisibleItems()` whatever there
+    /// is.
+    public private(set) var hasVisibleItems = false
     public private(set) var itemErrors = [VaultRetrievalResult<VaultItem>.Error]()
     public private(set) var itemsState: State = .base
     public private(set) var itemsRetrievalError: PresentationError?
@@ -360,7 +366,7 @@ extension VaultDataModel {
         itemsFilteringByTags = []
         items = []
         itemErrors = []
-        hasAnyItems = false
+        hasVisibleItems = false
         itemsState = .base
         itemsRetrievalError = nil
         allTags = []
@@ -505,13 +511,14 @@ extension VaultDataModel {
                 query: query,
                 searchPassphraseMatcher: searchPassphraseDigester,
             )
-            let hasAnyItems = try await vaultStore.hasAnyItems
             // Purged for a lock while this was reading: what it read stays unseen.
             if generation == contentsGeneration {
                 items = result.items
                 itemErrors = result.errors
                 itemsRetrievalError = nil
-                self.hasAnyItems = hasAnyItems
+                if query == VaultStoreQuery() {
+                    hasVisibleItems = Self.showsAnyItems(result)
+                }
             }
 
             // If killphrase deletion occurred, sync OTP autofill store to remove deleted items
@@ -534,6 +541,22 @@ extension VaultDataModel {
                 debugDescription: error.localizedDescription,
             )
         }
+    }
+
+    /// Reads again whether the feed shows any item with no search or tag filter (`hasVisibleItems`), whatever search
+    /// or filter is set. It deletes nothing and changes no other state.
+    public func reloadHasVisibleItems() async {
+        let generation = contentsGeneration
+        guard let result = try? await vaultStore.retrieve(query: VaultStoreQuery()) else { return }
+        // Purged for a lock while this was reading: what it read stays unseen.
+        guard generation == contentsGeneration else { return }
+        hasVisibleItems = Self.showsAnyItems(result)
+    }
+
+    /// Whether the feed would show anything for `result`, read with no search or tag filter. An item that couldn't be
+    /// read counts, as one that shows.
+    private static func showsAnyItems(_ result: VaultRetrievalResult<VaultItem>) -> Bool {
+        result.totalItems > 0
     }
 
     /// Reloads only the tags of the model.

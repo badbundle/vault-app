@@ -71,6 +71,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - The text in a code's timer bar is smaller and readable on every bar color
 - Images in Markdown notes aren't loaded, so opening a note never goes online
 - Widgets on the Lock Screen and in StandBy hide their codes, sites and accounts until the iPhone is unlocked, and copying a code from a widget asks for the iPhone to be unlocked first
+- The Restore page offers Import & Merge and Import & Override only when the feed shows items. When it shows none, it offers Import Backup, which keeps anything already in the vault
 
 ### Removed
 
