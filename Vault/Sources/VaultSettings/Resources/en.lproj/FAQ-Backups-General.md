@@ -13,6 +13,7 @@ If you choose to, you can create backups and store them wherever you like to ens
 You can create as many backups as you like.
 
 You can also turn on **automatic backups**. Vault will then save an encrypted backup to a folder you choose, such as one in iCloud Drive, whenever your items change.
+If you choose how long to keep them for, older automatic backups are deleted, but the newest one is always kept, however old it is.
 
 To protect yourself from data loss, you should try to keep at least one paper copy of your data off-site.
 This method ensures that you have a tangible copy of your data that is immune to digital threats & disasters, such as losing access to _all_ your online accounts and your house burning down.

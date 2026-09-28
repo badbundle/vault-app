@@ -990,7 +990,8 @@ payloads.
 - **Backup files.** A provider never replaces a file, including one that's only in iCloud for now. If the name is
   taken, perhaps by another vault's backup made in the same second, the backup is written as `-2`, `-3` and so on.
   - Cleaning up deletes only files the vault's own auto-backup wrote. It never deletes another vault's, or one the
-    user put in the folder.
+    user put in the folder. It always keeps the newest of its own, however old: a backup is only made after the vault
+    changes, so a shorter retention, or a vault left unchanged for long enough, would otherwise leave none.
   - It forgets a file once it has deleted it, or once the provider says the file is gone. A file that's only in the
     cloud, or that one listing missed, is still there.
   - It forgets files that are gone even when backups are kept forever, so the list doesn't grow for them.

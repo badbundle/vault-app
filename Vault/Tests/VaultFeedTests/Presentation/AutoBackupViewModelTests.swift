@@ -310,7 +310,7 @@ struct AutoBackupViewModelTests {
         configuration.retentionDays = .days7
         let sut = makeSUT(service: AutoBackupServiceMock(status: .idle, configuration: configuration))
 
-        #expect(sut.scheduleSummary.hasSuffix("Backups older than 7 days are deleted."))
+        #expect(sut.scheduleSummary.hasSuffix("Backups older than 7 days are deleted, apart from the newest."))
     }
 
     @Test
