@@ -1263,8 +1263,12 @@ configuration, which the app can't edit. Turning on the password should tell use
 
 ## Test strategy
 
-- **KDF.** RFC 9106 Argon2id test vectors and the reference repository's known-answer tests. Determinism,
-  cancellation, zeroing of working memory, and a memory high-water check.
+- **KDF.** RFC 9106 Argon2id test vectors and the reference repository's known-answer tests. Determinism, zeroing
+  of working memory, and a memory high-water check: with the App Lock Password's 64 MiB, a derivation holds that one
+  block and nothing more. A derivation can't be cancelled once it has started, as it's one call into the reference
+  implementation: an unlock cancelled while it waits for its deadline throws its result away instead.
+- **The shipped parameters.** One test sets a password with 64 MiB and passes calibrated on the machine it runs on,
+  then unlocks and refuses a wrong password. Every other test uses cheap parameters.
 - **Calibration**, with an injected timer:
   - Floor and ceiling clamping.
   - The fastest of three runs is used.
@@ -1314,6 +1318,17 @@ configuration, which the app can't edit. Turning on the password should tell use
   - The AutoFill headroom check refuses to derive when available memory is short.
   - Snapshots for the new locked states.
 - **Performance guards.** Save and load at 1,000 items inside a budget, so the numbers above don't regress.
+- **The app lock, over the real vault.**
+  - Every `LocalAuthentication` error the lock tells apart. With no device passcode, the lock stops at device
+    authentication, never asks for the password, and counts nothing; once a passcode is set up again, the password
+    opens the vault.
+  - Opening the duress vault after the real one, and the other way round, leaves nothing of the first in the data
+    model.
+  - Erasing: the data model forgets the erased vaults and their keys, and carries on with the fresh one.
+  - Each launch recovery failure leads to the failure screen that says what to do.
+  - The lock screen's countdown, on an injected clock, gives the password field back once the wait is over.
+  - Real Face ID and passcode prompts can't run in the tests, so they're checked on a device before each release
+    (`RELEASE.md`).
 
 ## Consequences to accept
 

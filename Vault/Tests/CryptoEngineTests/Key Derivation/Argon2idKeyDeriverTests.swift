@@ -4,6 +4,8 @@ import TestHelpers
 import Testing
 @testable import CryptoEngine
 
+/// Serialized, as the tests that watch the working memory share one log of it.
+@Suite(.serialized)
 struct Argon2idKeyDeriverTests {
     /// RFC 9106, section 5.3: Argon2id with a secret and associated data, over 4 lanes.
     @Test
@@ -173,6 +175,30 @@ extension Argon2idKeyDeriverTests {
         #expect(everyBlockWasWiped)
         // The memory really was used: the key matches the reference's known answer for these parameters.
         #expect(key == Data(hex: "9dfeb910e80bad0311fee20f9c0e2b12c17987b4cac90c2ef54d5b3021c68bfe"))
+    }
+
+    /// The most working memory a derivation holds with the App Lock Password's parameters
+    /// (`AppLockKeyDerivation.memoryKiB`): the 64 MiB it asks for, in one block, wiped before it's freed, and nothing
+    /// more. The AutoFill extension checks it has that much to spare before it derives
+    /// (`VaultUnlockService.hasMemoryHeadroomToUnlock()`). One pass, as the passes don't change the memory.
+    @Test
+    func hash_withTheAppLockPasswordsMemory_holdsJustThatMuch() throws {
+        let parameters = Argon2idParameters(memoryKiB: 64 * 1024, iterations: 1, parallelism: 1)
+        WorkingMemoryLog.records.modify { $0.removeAll() }
+
+        _ = try Argon2id.hash(
+            password: Data("password".utf8),
+            salt: Data("somesalt".utf8),
+            parameters: parameters,
+            length: 32,
+            allocate: WorkingMemoryLog.allocate,
+            free: WorkingMemoryLog.free,
+        )
+
+        let records = WorkingMemoryLog.records.get { $0 }
+        let everyBlockWasWiped = records.allSatisfy(\.wasWiped)
+        #expect(records.map(\.size) == [64 * 1024 * 1024])
+        #expect(everyBlockWasWiped)
     }
 }
 
