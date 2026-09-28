@@ -2,53 +2,111 @@
   "outputDirectory": "../../fastlane/screenshots/en-US",
   "output": { "width": 1320, "height": 2868, "format": "png" },
   "mode": "inset",
-  "frameColor": "Deep Blue",
-  "background": { "colors": ["#0F172A", "#1E40AF"], "angle": 160 },
+  "frameColor": "Silver",
+  "background": { "colors": ["#04060D", "#081226", "#13337F", "#3E7BFA"], "locations": [0, 0.42, 0.82, 1], "angle": 180 },
   "text": {
     "position": "top",
     "title": { "font": "system", "size": 96, "weight": "bold", "color": "#FFFFFF" },
-    "subtitle": { "font": "system", "size": 52, "weight": "regular", "color": "#FFFFFFCC" },
-    "spacing": 24
+    "subtitle": { "font": "system", "size": 52, "weight": "regular", "color": "#FFFFFFB3" },
+    "spacing": 24,
+    "maxScale": 1.25
   },
   "padding": 96,
-  "gap": 64,
-  "deviceScale": 1.0,
+  "gap": 72,
+  "shadow": { "color": "#00000099", "radius": 80, "offsetY": 32 },
   "screenshots": [
     {
-      "path": "../.build/screenshots/raw/iphone/01-feed.png",
-      "output": "iphone-01-feed",
+      "output": "iphone-01-codes",
       "title": "Every code.\nEvery secret.",
-      "subtitle": "2FA codes and encrypted notes, together."
+      "subtitle": "Two-factor codes and private notes,\nkept on your iPhone.",
+      "devices": [
+        { "path": "../.build/screenshots/raw/iphone/01-feed.png", "x": 0.55, "y": 0.84, "width": 1.02, "rotation": -8 }
+      ]
     },
     {
+      "output": "iphone-02",
+      "pages": [
+        { "title": "Locked with\na password", "subtitle": "Face ID, then an App Lock Password\nthat encrypts the whole vault." },
+        { "title": "Forced to\nunlock it?", "subtitle": "A duress password opens a separate\nvault instead of your real one." },
+        { "title": "Erase after 10\nwrong passwords", "subtitle": "If you turn it on, 10 wrong passwords\nin a row erase every vault." }
+      ],
+      "devices": [
+        { "path": "../.build/screenshots/raw/iphone/05-lock-dark.png", "x": 0.5, "y": 0.87, "width": 0.86, "rotation": -5 },
+        { "path": "../.build/screenshots/raw/iphone/06-app-lock-password.png", "x": 1.56, "y": 0.72, "width": 0.78, "rotation": 5 },
+        {
+          "path": "../.build/screenshots/raw/iphone/06-app-lock-password-dark.png",
+          "x": 2.46,
+          "y": 0.74,
+          "width": 0.78,
+          "rotation": -5,
+          "frameColor": "Deep Blue"
+        }
+      ],
+      "callouts": [
+        { "device": 1, "region": { "x": 60, "y": 1636, "width": 1200, "height": 176 }, "x": 1.44, "y": 0.88, "scale": 1.3, "rotation": -3 },
+        { "device": 2, "region": { "x": 60, "y": 2030, "width": 1200, "height": 216 }, "x": 2.54, "y": 0.8, "scale": 1.2, "rotation": 2 }
+      ]
+    },
+    {
+      "output": "iphone-03-hidden",
+      "title": "Hidden until\nyou search",
+      "subtitle": "Some items only show when the\nwhole search is their passphrase.",
+      "devices": [
+        { "path": "../.build/screenshots/raw/iphone/01-feed.png", "x": 0.27, "y": 0.76, "width": 0.56, "rotation": -8 },
+        { "path": "../.build/screenshots/raw/iphone/03-search.png", "x": 0.63, "y": 0.7, "width": 0.72, "rotation": 5 }
+      ],
+      "callouts": [
+        { "device": 1, "region": { "x": 40, "y": 2600, "width": 1240, "height": 160 }, "x": 0.6, "y": 0.8, "scale": 1.3, "rotation": -2 }
+      ]
+    },
+    {
+      "output": "iphone-04-killphrase",
+      "path": "../.build/screenshots/raw/iphone/04-editor.png",
+      "title": "One search\ndeletes it",
+      "subtitle": "Search for an item's killphrase, and\nit's quietly deleted from this vault.",
+      "devices": [
+        { "x": 0.55, "y": 0.8, "width": 0.84, "rotation": 4 }
+      ],
+      "callouts": [
+        { "region": { "x": 60, "y": 2300, "width": 1200, "height": 400 }, "x": 0.46, "y": 0.86, "scale": 1.2, "rotation": -3 }
+      ]
+    },
+    {
+      "output": "iphone-05-copy",
       "path": "../.build/screenshots/raw/iphone/02-detail.png",
-      "output": "iphone-02-detail",
-      "title": "Tap. Copy. Done.",
-      "subtitle": "Codes ready to paste the moment you need them."
+      "title": "Tap to copy",
+      "subtitle": "By default, copies stay on this iPhone\nand clear after a minute.",
+      "devices": [
+        { "x": 0.52, "y": 0.76, "width": 0.84, "rotation": -4 }
+      ],
+      "callouts": [
+        { "region": { "x": 48, "y": 820, "width": 1224, "height": 500 }, "x": 0.5, "y": 0.84, "scale": 1.2, "rotation": 3 }
+      ]
     },
     {
-      "path": "../.build/screenshots/raw/iphone/03-tags.png",
-      "output": "iphone-03-tags",
-      "title": "Tidy by design",
-      "subtitle": "Tag items to find them fast."
+      "output": "iphone-06-backups",
+      "path": "../.build/screenshots/raw/iphone/07-backups.png",
+      "title": "Backups you\ncan hold",
+      "subtitle": "Print to paper or save an encrypted file.",
+      "devices": [
+        { "x": 0.5, "y": 0.76, "width": 0.8, "rotation": -3 }
+      ]
     },
     {
-      "path": "../.build/screenshots/raw/iphone/04-backups.png",
-      "output": "iphone-04-backups",
-      "title": "Backups you can hold",
-      "subtitle": "Print to paper or save an encrypted file."
-    },
-    {
-      "path": "../.build/screenshots/raw/iphone/05-settings.png",
-      "output": "iphone-05-settings",
-      "title": "Private by default",
-      "subtitle": "No account needed. Fully open source."
-    },
-    {
-      "path": "../.build/screenshots/raw/iphone/01-feed-dark.png",
-      "output": "iphone-06-feed-dark",
-      "title": "Easy on the eyes",
-      "subtitle": "Looks right in light and dark."
+      "output": "iphone-07-private",
+      "title": "Private\nby design",
+      "subtitle": "Fully offline, with no accounts\nor tracking. Open source.",
+      "devices": [
+        {
+          "path": "../.build/screenshots/raw/iphone/08-settings-dark.png",
+          "x": 0.66,
+          "y": 0.64,
+          "width": 0.62,
+          "rotation": 7,
+          "frameColor": "Deep Blue"
+        },
+        { "path": "../.build/screenshots/raw/iphone/08-settings.png", "x": 0.35, "y": 0.71, "width": 0.62, "rotation": -6 }
+      ]
     }
   ]
 }
