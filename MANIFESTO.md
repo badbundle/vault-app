@@ -30,7 +30,7 @@ The killphrase, search passphrase, and lock-state fields are edited per-item onl
 
 ### C2. No oracle channels around duress-protected operations.
 
-Operations on killphrase or related fields must be indistinguishable across success, no-match, and internal failure. Errors are never thrown, logged, or measured in a way that confirms phrase validity. See commit 5fb920f0 (killphrase oracle in vault-store deletion) for the canonical fix and the reasoning preserved in `VaultStoreKillphraseDeleter`'s documentation.
+Operations on killphrase or related fields must not reveal anything beyond their intended effect. No match and an internal failure are indistinguishable, and a match shows nothing but the deletion itself. Errors are never thrown, logged, or measured in a way that confirms phrase validity. See commit 5fb920f0 (killphrase oracle in vault-store deletion) for the canonical fix and the reasoning preserved in `VaultStoreKillphraseDeleter`'s documentation.
 
 ### C3. No telemetry on duress features.
 
@@ -46,11 +46,11 @@ The app does not present a list of "items with a killphrase," a badge on protect
 
 ### C6. Destructive deniability changes have no undo and no in-app audit log.
 
-Undo creates a recovery path that an attacker can demand. An in-app audit log creates a re-discovery oracle ("you cleared three killphrases two minutes ago — which items?"). Once a killphrase or item is gone from the device, the device has no memory that it ever existed.
+Undo creates a recovery path that an attacker can demand. An in-app audit log creates a re-discovery oracle ("you cleared three killphrases two minutes ago — which items?"). Once a killphrase or item is gone from the device, the device has no memory that it ever existed. Backups made before the deletion are the one exception: they still hold what they held, encrypted, and restoring one always needs its backup password, never just device authentication (C4).
 
 ### C7. Blast-radius-reducing protections default to on.
 
-When a setting reduces the data exposed by a single mistake — clipboard scoping, autofill restrictions, screenshot prevention — the default is the protective value. Opt-out is allowed; opt-in is not. See commit e930b05a (Universal Clipboard restriction) for an example of this in practice.
+When a setting reduces the data exposed by a single mistake — clipboard scoping, autofill restrictions, hiding the app while the screen is recorded — the default is the protective value. Opt-out is allowed; opt-in is not. See commit e930b05a (Universal Clipboard restriction) for an example of this in practice.
 
 ### C8. Per-item friction is intentional, not a bug to be smoothed.
 
