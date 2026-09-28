@@ -439,7 +439,9 @@ public enum VaultRoot {
         settings: appLockSettingsStore,
         authenticationService: deviceAuthenticationService,
         passwordService: vaultPasswordService,
-        purgeSensitiveData: purgeSensitiveDataForAppLock,
+        purgeSensitiveData: {
+            purgeSensitiveDataForAppLock(vaultDataModel)
+        },
         didChangeSettings: reloadWidgetTimelines,
     )
 
@@ -501,12 +503,15 @@ public enum VaultRoot {
     /// Clears what a locked app shouldn't be holding: everything read from
     /// the vault, and the search, which might be a search passphrase. The
     /// feed reads the vault again once the app is unlocked.
+    ///
+    /// - Returns: The task that forgets what was read from the vault, for tests to wait for.
     @MainActor
-    private static func purgeSensitiveDataForAppLock() {
+    @discardableResult
+    static func purgeSensitiveDataForAppLock(_ dataModel: VaultDataModel) -> Task<Void, Never> {
         // Straight away, before the task below has had a chance to run.
-        vaultDataModel.purgeSensitiveData()
-        Task {
-            await vaultDataModel.purgeVaultContents()
+        dataModel.purgeSensitiveData()
+        return Task {
+            await dataModel.purgeVaultContents()
         }
     }
 
@@ -641,17 +646,7 @@ public enum VaultRoot {
                 await interruptedErase.finish()
             }
         }
-        // While the password is set, the vault locks as the device does,
-        // whatever the delay, so its keys aren't in memory while it's locked.
-        NotificationCenter.default.addObserver(
-            forName: UIApplication.protectedDataWillBecomeUnavailableNotification,
-            object: nil,
-            queue: .main,
-        ) { _ in
-            MainActor.assumeIsolated {
-                appLockService.deviceWillLock()
-            }
-        }
+        lockWhenTheDeviceLocks(appLockService)
         // With the password off after being on, the vault is encrypted with a
         // key on this device. With the app lock off too, nothing asks the user
         // to unlock, so it opens now, as the plain store always has. Links from
@@ -721,6 +716,25 @@ public enum VaultRoot {
             }
         case .plain, .erasing:
             break
+        }
+    }
+
+    /// While the password is set, the vault locks as the device does, whatever the delay, so its keys aren't in memory
+    /// while it's locked.
+    @MainActor
+    @discardableResult
+    static func lockWhenTheDeviceLocks(
+        _ appLock: AppLockService,
+        notificationCenter: NotificationCenter = .default,
+    ) -> any NSObjectProtocol {
+        notificationCenter.addObserver(
+            forName: UIApplication.protectedDataWillBecomeUnavailableNotification,
+            object: nil,
+            queue: .main,
+        ) { _ in
+            MainActor.assumeIsolated {
+                appLock.deviceWillLock()
+            }
         }
     }
 

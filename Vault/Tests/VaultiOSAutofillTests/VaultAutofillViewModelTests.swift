@@ -446,6 +446,68 @@ extension VaultAutofillViewModelTests {
         #expect(service.lockCount == 1, "Only the lock as the sheet got ready")
     }
 
+    /// Password on: the sheet leaving the screen, as it does when the device locks with it open, locks the vault and
+    /// hides the codes. Back on the screen, it takes device authentication and the password again.
+    @Test
+    func passwordOn_sheetLeavesTheScreen_locksTheVaultAndAsksForThePasswordAgain() async throws {
+        let service = FakeAutofillVaultService()
+        let sut = try makeSUT(storage: .password, vaultService: service)
+        await sut.prepareToUnlock()
+        await sut.appLock.unlock()
+        await sut.appLock.unlock(password: "correct horse")
+        await sut.getVaultReadyToShow()
+        #expect(sut.isVaultReady)
+        let lockCount = service.lockCount
+
+        // As SwiftUI tells the sheet, and its lock (`AppLockGate`).
+        sut.scenePhaseDidChange(to: .background)
+        sut.appLock.scenePhaseDidChange(to: .background)
+        await sut.appLock.vaultLock?.value
+
+        #expect(!sut.isVaultReady)
+        #expect(service.lockCount > lockCount)
+        #expect(sut.appLock.state == .locked(.init(step: .deviceAuthentication)))
+
+        sut.scenePhaseDidChange(to: .active)
+        sut.appLock.scenePhaseDidChange(to: .active)
+        await sut.appLock.automaticUnlock?.value
+        await sut.getVaultReadyToShow()
+
+        #expect(sut.appLock.state == .locked(.init(step: .password)))
+        #expect(!sut.isVaultReady)
+        await sut.appLock.unlock(password: "correct horse")
+        await sut.getVaultReadyToShow()
+        #expect(sut.isVaultReady)
+    }
+
+    /// A sheet dismissed and opened again starts locked, asking for device authentication and the password: nothing
+    /// carries over from the last request, whose vault was locked as it went.
+    @Test
+    func passwordOn_sheetDismissedAndOpenedAgain_asksForThePasswordAgain() async throws {
+        let service = FakeAutofillVaultService()
+        let first = try makeSUT(storage: .password, vaultService: service)
+        await first.prepareToUnlock()
+        await first.appLock.unlock()
+        await first.appLock.unlock(password: "correct horse")
+        await first.getVaultReadyToShow()
+        #expect(first.isVaultReady)
+
+        // Dismissed, as `viewDidDisappear` has it.
+        await first.endRequest()
+        #expect(service.log.last == "lock")
+        let lockCount = service.lockCount
+
+        let second = try makeSUT(storage: .password, vaultService: service)
+        #expect(second.appLock.state == .locked(.init(step: .deviceAuthentication)))
+        await second.prepareToUnlock()
+        #expect(service.lockCount == lockCount + 1)
+        await second.appLock.unlock()
+        await second.getVaultReadyToShow()
+
+        #expect(second.appLock.state == .locked(.init(step: .password)))
+        #expect(!second.isVaultReady)
+    }
+
     /// Whatever delay the user chose for the app, the extension locks as soon as it leaves the screen.
     @Test
     func appLock_locksStraightAway() throws {
