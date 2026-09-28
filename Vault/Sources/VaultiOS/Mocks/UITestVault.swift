@@ -145,7 +145,9 @@ enum UITestVault {
             fatalError("UI tests need the App Lock Password")
         }
         try await passwordService.setPassword(password, deletingSetAsideVaults: false)
-        try await passwordService.makeDuressVault(password: duressPassword)
+        guard try await passwordService.makeDuressVault(current: password, password: duressPassword) == .accepted else {
+            fatalError("The duress password wasn't set")
+        }
         // A duress vault starts empty, so its password opens it to put its items in.
         await passwordService.lockVault()
         guard try await passwordService.unlock(password: duressPassword) == .accepted else {
