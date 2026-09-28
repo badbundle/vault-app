@@ -66,6 +66,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - On a device with no passcode, Restore, the Backup Password sheet, the Danger Zone and deleting a set-aside vault say to set up a passcode, instead of asking to authenticate and failing
 - Auto-backup's cleanup only deletes backups it recorded making, instead of any auto-backup PDF in the folder. Existing setups are seeded once with the files the old cleanup would have deleted, so they carry on being cleaned up
 - The text in a code's timer bar is smaller and readable on every bar color
+- Images in Markdown notes aren't loaded, so opening a note never goes online
 
 ### Removed
 
