@@ -100,6 +100,21 @@ bundle exec fastlane ios upload
 
 The upload lane does not build, bump, commit, or tag anything.
 
+## Updating the screenshots
+
+`make screenshots` in `Vault/` makes the App Store screenshots (see
+[`Vault/Screenshots/README.md`](Vault/Screenshots/README.md)), and the next
+release uploads them. To put them on the App Store without a release, once
+they're merged:
+
+```sh
+bundle exec fastlane ios upload_screenshots
+```
+
+It replaces the screenshots of the version App Store Connect is editing with
+exactly those in `fastlane/screenshots/en-US/`, as the release lane does. It
+doesn't build, upload a binary, change the listing's text or submit anything.
+
 ## Tagging a shipped build
 
 After App Store Connect has the uploaded build, tag the shipped commit:

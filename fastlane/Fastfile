@@ -123,6 +123,25 @@ platform :ios do
     )
   end
 
+  desc "Replace the App Store screenshots with fastlane/screenshots (no build, no listing)"
+  lane :upload_screenshots do
+    upload_to_app_store(
+      username: "badbundlelimited@gmail.com",
+      team_id: "442P244AFS",
+      # There's no IPA to read it from.
+      app_identifier: "com.badbundle.vault",
+      skip_binary_upload: true,
+      skip_metadata: true,
+      # Upload to the version App Store Connect is editing. Without this, a VaultApp.ipa left by a release would
+      # have deliver create or change the version to match it.
+      skip_app_version_update: true,
+      # As in the release lane: the version's screenshots become exactly those in fastlane/screenshots.
+      overwrite_screenshots: true,
+      # Skip the Preview.html confirmation so the lane runs non-interactively.
+      force: true
+    )
+  end
+
   desc "Tag and push the current commit for an uploaded App Store build"
   lane :tag_release do |options|
     ensure_git_status_clean
