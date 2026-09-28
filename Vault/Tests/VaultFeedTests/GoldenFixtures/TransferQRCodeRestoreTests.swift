@@ -90,7 +90,6 @@ enum TransferQRCodes {
             backupPassword: backupPassword,
             dataModel: source.dataModel,
             clock: clock,
-            backupEventLogger: BackupEventLoggerMock(),
             intervalTimer: timer,
         )
         await screen.generateShards()
