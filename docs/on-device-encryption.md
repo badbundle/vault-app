@@ -58,7 +58,7 @@ Recorded after review. They supersede anything in the first draft that differs.
    [Residual limits](#residual-limits).
 5. **Sub-issue 11 is in scope.** Turning the password off must bring widgets, AutoFill and QuickType back.
    Otherwise it would be a lasting compromise.
-6. **Separate tickets**, outside this chain:
+6. **Separate tickets**, outside this chain, all done since:
    - The backup fields: VAULT-53.
    - Keyboard learning: VAULT-54.
    - Plaintext residue in today's store (WAL, failed-open archives, rehash files): VAULT-55.
@@ -216,8 +216,8 @@ involved.
 - **Reusing the backup format as-is.** The pipeline shape (JSON, compress, AEAD) is right, but the format itself
   doesn't fit:
   - It drops `showInQuickType` and `previewMode`. `VaultBackupItemDecoder` resets them to `true` and
-    `.titleAndFirstLine`. This is also a live bug: restoring a backup turns QuickType back on for items the user
-    opted out, which C7 cares about. That's now VAULT-53.
+    `.titleAndFirstLine`. This was also a bug: restoring a backup turned QuickType back on for items the user
+    opted out, which C7 cares about. VAULT-53 fixed it, and backups now keep both.
   - It goes through domain decoding, so an item that fails to decode can't be carried.
   - It uses lzma: 105 ms at 1,000 typical items, 546 ms with heavy notes.
   - It uses CryptoSwift's AES-GCM: about 30 ms per MiB, against about 0.1 ms for CryptoKit.
@@ -1251,21 +1251,27 @@ configuration, which the app can't edit. Turning on the password should tell use
 | Vault store | Everything, plus old versions of edited items until the next launch | The header (format, slot count, slot size bucket, KDF parameters, salt). Nothing per vault. |
 | Device backups (iCloud, Finder) | The plaintext store | Ciphertext, open to offline guessing of the password |
 | QuickType identity store | Issuer, account and UUID per visible, unlocked OTP | Empty |
-| Widget timelines | Issuer, account, codes | Locked placeholder |
+| Widget timelines | Issuer, account, codes. Lock Screen and StandBy widgets hide them while the iPhone is locked | Locked placeholder |
 | Configured widget entities | Issuer, account | Unchanged until the user removes the widget (residual) |
 | Pending rehash files | Plaintext phrases (old-schema upgrades) | Removed; precondition of migration |
 | Failed-open archives | Plaintext copies of the vault | Removed, with confirmation |
 | `UserDefaults` and keychain settings | Dates, a payload hash, auto-backup configuration, the PDF hint, the backup key | No backup settings: each vault's are in its payload (VAULT-70). App preferences stay. |
 | Wrap stamp (keychain, this device only) | Not there | When the device was last unlocked, or a key last wrapped: the same as the file's modification time |
 | Erasing after failed passwords (shared `UserDefaults`, VAULT-34) | Not there | Whether it's on, stored only while it is. Nothing about which vault turned it on or off. In device backups too. |
-| Keyboard learning from note editors | Words typed with autocorrection on | Same. Outside storage; separate ticket VAULT-54. |
+| Keyboard learning | Nothing from Apple's keyboard: every field turns off autocorrection and Writing Tools (VAULT-54). A third-party keyboard sees what's typed outside secure fields | Same |
+| Spotlight index | Site names of visible, unlocked codes, only while Show in Spotlight is on and App Lock is off. Readable only while the device is unlocked | Empty: App Lock turns it off |
+| App switcher snapshot | The screen as it was, while App Lock is off | The vault door cover |
+| Killphrase and search passphrase keyrings (keychain) | Random keys. With the store's digests, they check a phrase as Vault does | Same keys. The digests are only inside the encrypted file |
+| Auto-backup folder | Encrypted backups padded to a fixed size (VAULT-75). Their file names show when each was made, so when the vault changed | Same, for each vault that has auto-backup on |
+| PDF backups, in plain text | That it's a Vault backup, when it was made, its page and QR code counts, and the hint if one was written | Same |
 
 ## Residual limits
 
 1. **Offline guessing.** The password is only as strong as its entropy. With derivation calibrated to about
    0.5 s, an attacker with the file can make, as a rough upper bound, a few guesses per second per CPU core and
    hundreds per second per GPU. A 6-digit PIN falls in about half an hour on one GPU. A random 4-word passphrase
-   takes more than 10,000 GPU-years. VAULT-22 should require a real password and say why. A device-bound secret
+   takes more than 10,000 GPU-years. VAULT-22 requires at least 8 characters, not only numbers, and says why
+   (`AppLockPasswordRules`). That rules out a PIN, not a common word. A device-bound secret
    would remove this, at the cost of restoring to a new iPhone; it's rejected above.
 2. **Multiple snapshots.** Two copies of the file from different times, for example two iCloud backups or a
    seized phone plus an older backup, show which slot's bytes changed. Combined with a coerced duress password,
@@ -1301,7 +1307,7 @@ configuration, which the app can't edit. Turning on the password should tell use
    unwiped without failing anything.
 7. **Rollback.** Someone who can write the app's files can put back an older copy of the file. Local storage
    can't prevent this.
-8. **Surfaces outside storage.** Configured widget entities, keyboard learning, item dates inside a duress
+8. **Surfaces outside storage.** Configured widget entities, third-party keyboards, item dates inside a duress
    vault, auto-backups from more than one vault to the same folder, and the folder picker's last folder.
 9. **A vault's own key box.** Anyone with a vault's password can read when its key was last wrapped, which for a
    duress vault is when it was made, as its item dates show anyway. Its generation doesn't help: it starts at a
@@ -1415,13 +1421,26 @@ configuration, which the app can't edit. Turning on the password should tell use
   - Real Face ID and passcode prompts can't run in the tests, so they're checked on a device before each release
     (`RELEASE.md`).
 
+**As built**, the suite covers this plan, with these differences:
+
+- Every header, nonce and key box byte is flipped, but only a sample of the body's (the first and last 64 bytes,
+  and every 4,099th).
+- The plaintext marker test seeds a payload directly, not items saved through a store.
+- Failing and crashing at every step are tested for a save, a password change, turning the password off and on,
+  the conversion and an erase. Making a duress vault is tested for failing at every step, not crashing. Slot
+  growth has no fault injection of its own.
+
+[`security-model.md`](./security-model.md) names the test that pins each promise, or says there's none.
+
 ## Consequences to accept
 
 1. While the password is on, widgets show a locked placeholder and QuickType suggestions are gone. AutoFill
    asks for the app lock password in its sheet every time. Face ID alone can't unlock (C4).
 2. A forgotten password means erasing and restoring from a backup. Setting the password should say so, and show
    the last backup date.
-3. Offline guessing is bounded only by the password's strength. VAULT-22 needs a minimum strength.
+3. Offline guessing is bounded only by the password's strength. As built, an App Lock Password, a duress password
+   and a new backup password need at least 8 characters, and not only numbers (`AppLockPasswordRules`). That rules
+   out a PIN, not a common word, so the screens that set one say to use a long password.
 4. Unlocking adds the derivation, calibrated to about 0.5 s on the device that set the password, and finishes at
    a fixed deadline of about 0.75 s. That's on top of device authentication.
 5. The encrypted file is at least 16 MiB. Every change rewrites it: about 19 ms at 1,000 items on the M5 Max,
@@ -1516,14 +1535,16 @@ These are in implementation order. Each is one PR with its own tests. Keys and o
     - A journaled erase back to a fresh plain store.
     - Depends on 8 and VAULT-22's attempt counter.
 
-Separate tickets, outside this chain:
+Separate tickets, outside this chain, all done since:
 
-- **VAULT-53: backups drop `showInQuickType` and `previewMode`.** A restore turns QuickType back on for
-  opted-out items (C7) and resets note previews.
-- **VAULT-54: keyboard learning in free-text fields.** Note bodies and similar fields use autocorrection, which
-  feeds the system keyboard's learned words.
-- **VAULT-55: plaintext residue in today's plain store.** Killphrased items stay in the SQLite file until a WAL
-  checkpoint, and failed-open archives and the pending rehash files hold plaintext.
+- **VAULT-53: backups drop `showInQuickType` and `previewMode`.** A restore turned QuickType back on for
+  opted-out items (C7) and reset note previews. Backups now keep both.
+- **VAULT-54: keyboard learning in free-text fields.** Note bodies and similar fields used autocorrection, which
+  fed the system keyboard's learned words. Every field now turns it off.
+- **VAULT-55: plaintext residue in today's plain store.** Killphrased items stayed in the SQLite file until a WAL
+  checkpoint, and failed-open archives and the pending rehash files held plaintext. The store is now scrubbed after
+  a deletion and at launch, the Backups page offers to delete set-aside copies, and deleting all data deletes them
+  and the rehash files.
 
 **Dependencies:**
 

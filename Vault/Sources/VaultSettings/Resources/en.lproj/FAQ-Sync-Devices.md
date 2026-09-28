@@ -1,5 +1,5 @@
 Vault does **not** automatically sync your items between devices, and this is by design.
-Keeping your data on a single device, under your control, is what allows Vault to make the privacy guarantees it does — nothing is ever uploaded to a server, and there is no account to compromise.
+Keeping your data on a single device, under your control, is what allows Vault to make the privacy guarantees it does — Vault never uploads your data to a server of its own, and there is no account to compromise.
 
 To move items to another device, you create a backup on one device and restore it on the other.
 
@@ -24,7 +24,8 @@ Partially. Vault supports **automatic backups to iCloud Drive** — you point Va
 
 This is **not sync**. It's still a backup-and-restore flow: your other device sees the backup file appear in iCloud Drive, and you import it from there. Items don't appear automatically and edits don't propagate.
 
-For most people this is still more friction than it's worth — it's usually easier to pick one device as the "primary" and keep the other as a backup destination only. But if you do want the two devices to stay roughly in step, auto-backup to iCloud Drive plus **Import & Merge** on the other device is the closest you can get. Merging keeps the most recent edit for each item, so it's safe in both directions.
+For most people this is still more friction than it's worth — it's usually easier to pick one device as the "primary" and keep the other as a backup destination only. But if you do want the two devices to stay roughly in step, auto-backup to iCloud Drive plus **Import & Merge** on the other device is the closest you can get. Merging keeps the most recent edit for each item, and adds any item this device doesn't have.
+It doesn't pass on deletions: an item you've deleted, with a killphrase too, comes back if you merge a backup that still has it.
 
 ## Why isn't there a true sync option?
 

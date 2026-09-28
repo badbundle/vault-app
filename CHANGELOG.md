@@ -13,7 +13,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 ### Added
 
 - Initial release
-- Minimum deployment target is iOS 17.4
+- Minimum deployment target is iOS 26 (iOS 26.5 for the widgets)
 - Storage for secure notes
 - Storage for 2FA codes (TOTP, HOTP)
 - Backup export
@@ -21,8 +21,8 @@ Only app binary versions >2.0 should be used in production for this reason.
 - App icon generated from a SwiftUI view (`VaultAppIcon`) with light, dark and tinted variants, via `make app-icon`
 - Locked items show the vault door from the app icon, which spins open when the item is unlocked. Turning the lock on and saving locks the item on the spot, door shutting and wheel spinning, so the lock is seen to work
 - Recovery phrases (crypto wallet seed words) as a new item type. They're always encrypted with a password and locked with the device passcode, shown as a numbered list, and checked against the wordlist and checksum of BIP39 (all 10 languages), SLIP-39, Electrum and Monero phrases, with any unrecognized words highlighted, plus an optional description that's encrypted along with the words. Even once unlocked, the words stay masked until tapped. They're hidden while the app is in the background or the screen is being recorded, and there's no way to copy them
-- App Lock, in a new Security section of Settings and off by default: Vault stays behind Face ID, Touch ID or the passcode, starting locked and locking again in the background, straight away or after 1, 5 or 15 minutes (Require Unlock). The app switcher and Control Center only ever see a cover with the vault door
-- An App Lock Password, set from App Lock in Settings, that encrypts the vault on this device and is asked for after Face ID or the passcode. It can't be reset, so the screen that sets it says so and shows when you last backed up. Wrong passwords wait longer each time, as iOS does, and the password can be changed or turned off. While it's on, widgets, QuickType and AutoFill show nothing from the vault
+- App Lock, in a new Security section of Settings and off by default: Vault stays behind Face ID, Touch ID or the passcode, starting locked and locking again in the background, straight away or after 1, 5 or 15 minutes (Require Unlock). While it's on, the app switcher and Control Center only ever see a cover with the vault door
+- An App Lock Password, set from App Lock in Settings, that encrypts the vault on this device and is asked for after Face ID or the passcode. It can't be reset, so the screen that sets it says so and shows when you last backed up. Wrong passwords wait longer each time, as iOS does, and the password can be changed or turned off. While it's on, widgets show Vault as locked, QuickType offers nothing, and AutoFill asks for the password before it shows any codes
 - A duress password, set from the App Lock Password screen, that opens a separate, empty vault instead of the real one, with its own backups. Vault can also erase every vault after 10 wrong App Lock Passwords in a row, if you turn that on. Delete All Data deletes every vault, whichever one it's done from. The FAQ explains duress passwords, and how to start a duress vault again without it
 - Hide While Recording, on by default: a cover hides the whole app, and the AutoFill sheet, while the screen is recorded, mirrored or shared, and it works without App Lock
 - New Items settings: whether new codes and notes start locked, and whether new codes start out offered in QuickType
@@ -39,7 +39,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - A restore over the vault (Import & Override) that failed part way could leave the vault empty or half replaced. Now it leaves the vault untouched
 - Deleted items, killphrases and search passphrases could linger in the vault's database files. Vault now scrubs them out after deleting or changing them, and again at launch, along with the database's own history of changes
 - The Backups page could stop showing that a backup password was set when you came back to it
-- Copying a PDF backup from its share sheet counted as saving it, and put the backup on the clipboard. Copy and Markup are gone from that share sheet, and backup PDFs no longer stay behind in temporary files
+- Copying a PDF backup from its share sheet counted as saving it, and put the backup on the clipboard. Copy and Markup are gone from that share sheet, and a backup PDF's file only lasts while its share sheet is open, or until the Backups page next opens if Vault closed with the sheet open
 - The editor's Tags, Encryption and Password rows needed a second tap to open their sheets
 - VoiceOver read the editor's text fields and recovery phrase words without their names
 - Killphrases didn't delete anything, and items that only show for their passphrase couldn't be found, after restoring a backup on another iPhone or after an erase. Backups now carry the keys that check them, and restoring one adds them to this device. Backups made before this don't carry them, so their phrases only work on the device that made them
@@ -49,12 +49,12 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 ### Changed
 
-- The keyboard no longer learns from anything typed into Vault: every text field, from note bodies and descriptions to passphrases, killphrases, searches and tag names, has autocorrection, predictive text and Writing Tools turned off, so none of it can turn up as a keyboard suggestion in another app. Fields written like sentences still capitalize them
+- The keyboard no longer learns from anything typed into Vault: every text field, from note bodies and descriptions to passphrases, killphrases, searches and tag names, has autocorrection, predictive text and Writing Tools turned off, so none of it can turn up as a suggestion from Apple's keyboard in another app. Fields written like sentences still capitalize them. A third-party keyboard still sees what's typed outside password fields
 - App icon refreshed: the same door and wheel, drawn flat in black on a white background (silver in the dark icon). A locked or encrypted item's door and the lock screen match
 - The export page explains itself: a header says every export is the whole vault encrypted with your backup password, then the two options sit under "Keep a Backup" (a PDF to save or print) and "Move to Another Device" (QR codes for another device to scan, with no file saved), each saying what it makes and how to restore it
 - Scanning a backup's QR codes says what to scan under the camera, then counts the codes as they come in. Each new code ticks off its tile with a light tap, and the last one plays the success haptic
-- PDF backups and auto-backups are padded to a fixed size, at least 32 KB and then doubling, so a backup doesn't show how much its vault holds. A small vault's PDF backup has more QR codes as a result. Moving to another device isn't padded this way, so it stays quick
-- A PDF backup's Password Hint starts empty, so nothing is printed on it in plain text unless you write a hint. It used to start with a sample description
+- The vault inside a PDF backup or auto-backup is padded to a fixed size, at least 32 KB and then doubling, so a backup doesn't show how much its vault holds. A small vault's PDF backup has more QR codes as a result. Moving to another device isn't padded this way, so it stays quick
+- A PDF backup's Password Hint starts empty, so all it shows in plain text is that it's a Vault backup, when it was made and how many pages and QR codes it has, unless you write a hint. It used to start with a sample description
 - Decrypting an encrypted item plays its own take on the vault door: the wheel works a combination, turning one way, back the other and round to seat, then the door swings wide and the item opens. A wrong password floods the header red from the door, which rattles in its frame, and the error turns white as the red reaches it
 - The feed's bottom bar minimizes while scrolling down, to a capsule showing the item count and active filter beside the search button (or the current search), and returns on scrolling up, at the top, or with a tap. It keeps its space while minimized, so the feed doesn't jump and still bounces at the bottom
 - Search lives in the feed's bottom bar: the status bar sits bottom left and a search button bottom right, which opens the search field beneath the status bar. While searching, the status bar counts the matches alongside any tag filter
@@ -88,6 +88,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - The Backups FAQ explains that deleted items, including those a killphrase deleted, stay in backups made before they were deleted, and in an auto-backup folder until its older backups are cleaned up
 - The wait after wrong App Lock Passwords keeps growing when a password opens Vault in between, and only gets shorter with time, by one wrong password for every hour that passes. A password that opens Vault still starts the count towards erasing after 10 again, and the erasing settings say so
 - Setting a duress password asks for the current App Lock Password, which waits after wrong ones as changing the password does
+- Help and the privacy policy say more exactly where Vault's data goes: the iPhone's own backups include the vault, and Vault has no analytics. The Duress Password page explains killphrases, and what can still give a duress vault away
 
 ### Removed
 

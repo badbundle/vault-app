@@ -3,15 +3,16 @@
 A secret storage manager (2FA codes, secret notes) with built-in encrypted backup.
 It can create encrypted backups to a portable PDF document that you can print (as a hard copy) or save anywhere to restore from later.
 
-It has advanced security features which promote plausible deniability (killcodes and hidden items) and can be used as an ultimate offline backup for storing all your secret data.
+It has security features for when you're forced to unlock it (killphrases, hidden items and a duress password) and can be used as an offline backup for storing all your secret data.
 There are no servers and no sync. Every backup Vault makes is encrypted and goes only where you choose to put it, including the optional automatic backups to a folder such as one in iCloud Drive.
+Your iPhone's own backups, to iCloud or a computer, include Vault's data too, as they do other apps'. Set an App Lock Password to encrypt the vault, on the iPhone and in those backups.
 
 ## How to use Vault
 
 There's a few ways that you can use Vault to store your data:
 
 1. Super secret data
-   - Store data you really don't want to be accessed in encrypted notes, like cryptocurrency private keys. Hide them and add a killcode so, if under duress, you can wipe them with plausible deniability. Restore from a backup when you get home.
+   - Store data you really don't want to be accessed in encrypted notes, like cryptocurrency private keys. Hide them and add a killphrase so, if you're forced to unlock Vault, you can delete them quietly. Restore them from a backup, with its password, when you're safe.
 
 2. Store OTP codes
    - 2FA OTP codes provide a second layer of security for accessing your online accounts and are strongly recommended to setup whereever possible. Vault can store these codes natively and can replace other apps like Google Authenticator. Google Authenticator, in particular, has a far from ideal backup solution (automatic sync to Google's servers) or a manual QR code-based transfer. Neither match the security guarantees of Vault.
@@ -20,7 +21,7 @@ There's a few ways that you can use Vault to store your data:
 
 - [x] **Platform native**: it should look like Apple made this app.
 - [x] **Modern**: we should use modern features and push for fast deprecations.
-- [x] **Open source**: no binary dependencies or obfuscated stuff.
+- [x] **Open source**: no binary code or obfuscated stuff in the app. A few build tools are prebuilt binaries, pinned by checksum.
 - [x] **Robust**: test-driven development, modular PRs/commits.
 - [x] **Duress-resistant**: see [`MANIFESTO.md`](./MANIFESTO.md) for the security principles that govern what Vault will and will not do.
 
@@ -35,7 +36,8 @@ There's a few ways that you can use Vault to store your data:
 - [x] Paper backups
 - [x] Automatic encrypted backups to a folder of your choice, like iCloud Drive
 - [x] Fully offline, no servers at all
-- [x] Plausible deniability of item existance with killcodes and hidden items
+- [x] App Lock, and an App Lock Password that encrypts the vault on the device
+- [x] For when you're forced to unlock it: killphrases, hidden items and a duress password
 
 ### Development Tenets
 
@@ -45,6 +47,13 @@ There's a few ways that you can use Vault to store your data:
 - [x] **Availability**: iPhone & iPad Support
 - [x] **Modular**: Swift Package w/ multiple targets
 - [x] **Resilient**: everything should be versioned, we never need to break old clients, old backups should always be able to be restored
+
+## Security
+
+[`docs/security-model.md`](./docs/security-model.md) lists every security and privacy promise Vault makes, the code that keeps it and the test that pins it, and the limits Vault accepts.
+[`MANIFESTO.md`](./MANIFESTO.md) has the principles behind them, and [`docs/on-device-encryption.md`](./docs/on-device-encryption.md) the design of the encrypted vault.
+
+To report a security problem, see [`SECURITY.md`](./SECURITY.md). Please don't open a public issue.
 
 ## Contributing
 

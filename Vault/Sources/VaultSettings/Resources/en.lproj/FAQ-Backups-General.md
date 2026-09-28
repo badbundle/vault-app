@@ -1,4 +1,4 @@
-Backups are crucial to ensure the safety of your data as, by default, your Vault data is only stored on this device. 
+Backups are crucial to ensure the safety of your data as, by default, Vault keeps your data on this device and syncs it nowhere. 
 If this device is lost, damaged, or stolen, your data will be **irretrievably lost**.
 
 Creating a backup will allow you to restore all your data to a new device and give you peace of mind.
@@ -6,8 +6,11 @@ I can't stress enough how important it is that you make regular backups.
 
 ## Where is my data stored?
 
-Any items you create in Vault are stored locally on your device and nowhere else by default.
-**They are never synced**, including to your other devices, and never sent to any server, so it is your responsibility to keep your data safe.
+Any items you create in Vault are stored on your device.
+**They are never synced**, including to your other devices, and Vault never sends them to a server, so it is your responsibility to keep your data safe.
+
+Your device's own backups, to iCloud or a computer, include Vault's data, as they do other apps'.
+With an App Lock Password, that's the encrypted vault. Without one, anyone who can open that backup can read it.
 
 If you choose to, you can create backups and store them wherever you like to ensure that your data is safe.
 You can create as many backups as you like.
@@ -25,10 +28,15 @@ This can be saved to a safe place like your iCloud drive–or you can print this
 
 You should try to keep any backups safe, but it's not the end of the world if this falls into the wrong hands.
 All backups created by Vault are required to be encrypted, meaning someone cannot retrieve the data from your backup without knowing the password used to encrypt the backup.
+That's why the password needs to be a good one: Vault asks for at least 8 characters, and not only numbers, and a few random words are better still.
+
+The PDF shows that it's a Vault backup, when it was made, how many pages and QR codes it has, and your password hint, if you wrote one.
+Nothing else in it can be read without the password.
 
 ## What happens to items I delete?
 
 They stay in any backup made before you deleted them, including items deleted by a killphrase.
 Automatic backups keep earlier versions of your vault in their folder until Vault cleans them up, after the time you chose in **Keep Backups For**, so a deleted item is still in those files until then.
 Choose how long backups are kept with that in mind, and keep the folder somewhere you trust.
+Files deleted from iCloud Drive stay in its Recently Deleted folder for 30 days.
 

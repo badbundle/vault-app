@@ -2,14 +2,16 @@ Every backup Vault creates is encrypted with your backup password. Without it, n
 
 ## What happens when I set a password?
 
-Your password is turned into an encryption key on this device. Vault keeps that key in the device's keychain, protected by Face ID, Touch ID or your passcode. **The password itself is never stored.**
+Your password is turned into an encryption key on this device, and Vault keeps that key so it can make backups without asking for your password each time. **The password itself is never stored.**
+
+Without an App Lock Password, the key is in the device's keychain, protected by Face ID, Touch ID or your passcode. With one, it's inside your encrypted vault, and a duress vault has its own.
 
 Preparing the key is deliberately slow: it can take up to 3 minutes, even on a fast device.
 Anyone trying to guess your password from a leaked backup has to go through the same slow step for every single guess, which makes guessing a strong password impractical.
 
 ## Is my password shared with my other devices?
 
-No. The key stays on this device and isn't synced anywhere. Each device you make backups from has its own backup password, and they don't have to match.
+No. The key isn't synced to your other devices. Each device you make backups from has its own backup password, and they don't have to match.
 
 To restore a backup, on this device or another, you enter the password that backup was made with, and Vault prepares the key from it. Vault asks for it every time, even for a backup made with the password set now: the key it keeps is only used to make backups, never to open them.
 
