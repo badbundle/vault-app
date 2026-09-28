@@ -139,18 +139,22 @@ public enum VaultRoot {
         }
         #endif
         do {
-            // The factory sets a store it can't open aside and starts an empty one. That one doesn't hold the vault,
-            // so the password can't be set on it until the next launch opens it normally.
+            // In the app, the factory sets a store it can't open aside and starts an empty one. That one doesn't hold
+            // the vault, so the password can't be set on it until the next launch opens it normally.
             let archivesBefore = vaultStoreArchives.archives().count
-            let store = try PersistedLocalVaultStoreFactory(storageDirectory: vaultStorageDirectory)
-                .makeVaultStoreOrThrow()
+            let store = try PersistedLocalVaultStoreFactory(
+                storageDirectory: vaultStorageDirectory,
+                recoveryMode: plainStoreRecoveryMode(isAppExtension: isAppExtension),
+            )
+            .makeVaultStoreOrThrow()
             plainVaultStoreOpenedNormally = vaultStoreArchives.archives().count == archivesBefore
             return store
         } catch {
             // Fall back to an empty in-memory store instead of crashing at
             // launch: the composition graph stays valid for every consumer
-            // and the scene shows a failure screen. The failed store files
-            // were archived beside the store by the factory's recovery.
+            // and the scene shows a failure screen. In the app, the failed
+            // store files were archived beside the store by the factory's
+            // recovery. An extension leaves them where they are.
             vaultStoreLoadFailureMessage = error.localizedDescription
             // It doesn't hold the vault, so it's never encrypted as if it did.
             plainVaultStoreOpenedNormally = false
@@ -163,6 +167,13 @@ public enum VaultRoot {
             }
         }
     }()
+
+    /// How the plain store is opened. Only the app sets aside a store it can't open and starts an empty one. An
+    /// extension only opens it, as the widgets do (#526), and has the empty in-memory store if it can't, so the files
+    /// are left as they are for the app.
+    static func plainStoreRecoveryMode(isAppExtension: Bool) -> PersistedLocalVaultStoreFactory.RecoveryMode {
+        isAppExtension ? .openOnly : .recoverExistingStore
+    }
 
     /// Whether the plain store opened this launch without being set aside
     /// and started again empty. Converting it to an encrypted vault needs
