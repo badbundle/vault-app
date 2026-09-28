@@ -80,7 +80,7 @@ struct VaultRootAppLockTests {
         #expect(dataModel.backupPassword == .notFetched, "Straight away")
         await purge.value
         #expect(dataModel.items.isEmpty)
-        #expect(!dataModel.hasAnyItems)
+        #expect(!dataModel.hasVisibleItems)
         #expect(dataModel.allTags.isEmpty)
         #expect(dataModel.itemsSearchQuery.isEmpty)
         #expect(dataModel.itemsFilteringByTags.isEmpty)
