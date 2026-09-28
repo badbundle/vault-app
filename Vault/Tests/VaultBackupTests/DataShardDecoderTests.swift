@@ -81,6 +81,80 @@ struct DataShardDecoderTests {
     }
 
     @Test
+    mutating func addShardData_throwsIfTotalChangesWithinGroup() throws {
+        let shard1 = try makeShardData(group: .init(id: 10, number: 4, totalNumber: 6))
+        try sut.add(shardData: shard1)
+
+        #expect(throws: DataShardDecoder.AddShardError.inconsistentGroup) {
+            let shard2 = try makeShardData(group: .init(id: 10, number: 5, totalNumber: 7))
+            try sut.add(shardData: shard2)
+        }
+        #expect(sut.state?.total == 6)
+        #expect(sut.state?.collectedIndexes == [4])
+    }
+
+    @Test(arguments: [0, -1, Int.min, DataShardDecoder.maximumShardCount + 1, Int.max])
+    mutating func addShardData_throwsIfTotalIsOutOfRange(total: Int) throws {
+        let shard = try makeShardData(group: .init(id: 10, number: 0, totalNumber: total))
+
+        #expect(throws: DataShardDecoder.AddShardError.totalOutOfRange) {
+            try sut.add(shardData: shard)
+        }
+        #expect(sut.state == nil)
+    }
+
+    @Test(arguments: [-1, 6, 7, Int.min, Int.max])
+    mutating func addShardData_throwsIfNumberIsOutsideTotal(number: Int) throws {
+        let shard = try makeShardData(group: .init(id: 10, number: number, totalNumber: 6))
+
+        #expect(throws: DataShardDecoder.AddShardError.numberOutOfRange) {
+            try sut.add(shardData: shard)
+        }
+        #expect(sut.state == nil)
+    }
+
+    @Test
+    mutating func addShardData_acceptsTheLargestGroup() throws {
+        let total = DataShardDecoder.maximumShardCount
+        let shard = try makeShardData(group: .init(id: 10, number: total - 1, totalNumber: total))
+
+        try sut.add(shardData: shard)
+
+        #expect(sut.state?.total == total)
+        #expect(sut.state?.remainingIndexes.count == total - 1)
+        #expect(sut.state?.collectedIndexes == [total - 1])
+    }
+
+    @Test
+    func addShardError_outOfRangeErrorsCannotBeIgnored() {
+        #expect(DataShardDecoder.AddShardError.totalOutOfRange.canIgnoreError == false)
+        #expect(DataShardDecoder.AddShardError.numberOutOfRange.canIgnoreError == false)
+    }
+
+    @Test
+    mutating func addShardData_rejectedShardsLeaveTheGroupDecodable() throws {
+        let rejected: [DataShard.GroupInfo] = [
+            .init(id: 10, number: 0, totalNumber: 0),
+            .init(id: 10, number: 0, totalNumber: -3),
+            .init(id: 10, number: 3, totalNumber: 3),
+            .init(id: 10, number: -1, totalNumber: 3),
+            .init(id: 10, number: 1, totalNumber: 4),
+            .init(id: 11, number: 1, totalNumber: 3),
+        ]
+        try sut.add(shardData: makeShardData(group: .init(id: 10, number: 0, totalNumber: 3), data: Data([40])))
+        for group in rejected {
+            #expect(throws: DataShardDecoder.AddShardError.self) {
+                try sut.add(shardData: makeShardData(group: group, data: Data([99])))
+            }
+        }
+        try sut.add(shardData: makeShardData(group: .init(id: 10, number: 2, totalNumber: 3), data: Data([42])))
+        try sut.add(shardData: makeShardData(group: .init(id: 10, number: 1, totalNumber: 3), data: Data([41])))
+
+        #expect(sut.state?.total == 3)
+        #expect(try sut.decodeData() == Data([40, 41, 42]))
+    }
+
+    @Test
     func decodeData_noInitialStateThrowsError() {
         #expect(throws: DataShardDecoder.DecoderError.missingShards) {
             try sut.decodeData()
