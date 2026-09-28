@@ -354,12 +354,7 @@ struct RestoreHarness {
 
     /// The import flow, which always asks for the backup's password.
     func makeImportFlow(context: BackupImportContext) -> BackupImportFlowViewModel {
-        BackupImportFlowViewModel(
-            importContext: context,
-            dataModel: dataModel,
-            existingBackupPassword: nil,
-            encryptedVaultDecoder: EncryptedVaultDecoderImpl(),
-        )
+        BackupImportFlowViewModel(importContext: context, dataModel: dataModel)
     }
 
     /// Enters the password when the flow asks for it, then imports what it decrypts.

@@ -107,28 +107,31 @@ extension BackupImportMalformedInputTests {
 
     /// Codes whose totals disagree complete early, and what they join into isn't a backup.
     @Test
-    func codesWithTotalsThatDisagree_endInAnError() throws {
+    func codesWithTotalsThatDisagree_skipTheOneThatDisagrees() throws {
         let handler = BackupImportScanningHandler()
 
         let first = handler.decode(data: shardText(group: 7, number: 0, total: 3))
         let second = handler.decode(data: shardText(group: 7, number: 1, total: 1))
 
         #expect(first == .continueScanning(.success))
-        #expect(second == .endScanning(.unrecoverableError))
+        #expect(second == .continueScanning(.ignore))
+        #expect(handler.shardState?.totalNumberOfShards == 3)
+        #expect(handler.shardState?.collectedShardIndexes == [0])
     }
 
     @Test
-    func codesOfOneBackup_withAPositionPastTheirTotal_neverComplete() throws {
+    func codesWithAPositionOutsideTheirTotal_areInvalidAndLeaveNothingScanned() throws {
         let handler = BackupImportScanningHandler()
 
-        for number in [5, 6, -1] {
-            #expect(handler.decode(data: shardText(group: 7, number: number, total: 2)) == .continueScanning(.success))
+        for number in [5, 6, 2, -1] {
+            #expect(handler
+                .decode(data: shardText(group: 7, number: number, total: 2)) == .continueScanning(.invalidCode))
         }
 
-        #expect(handler.shardState?.remainingShardIndexes == [0, 1])
+        #expect(handler.hasPartialState == false)
     }
 
-    /// Random codes, of a few groups, at any position, with totals up to 64, and some of them not codes at all.
+    /// Random codes, of a few groups, at any position, with totals from -2 up to 64, and some of them not codes at all.
     @Test(.timeLimit(.minutes(1)))
     func codes_fuzzed_neverCrash() throws {
         var generator = SeededRandomNumberGenerator(seed: 2)
@@ -144,7 +147,7 @@ extension BackupImportMalformedInputTests {
                 default: shardText(
                         group: .random(in: 1 ... 3, using: &generator),
                         number: .random(in: -2 ... 66, using: &generator),
-                        total: .random(in: 0 ... 64, using: &generator),
+                        total: .random(in: -2 ... 64, using: &generator),
                         data: bytes(count: .random(in: 0 ... 600, using: &generator), using: &generator),
                     )
                 }
