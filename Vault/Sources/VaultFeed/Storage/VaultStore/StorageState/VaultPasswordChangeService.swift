@@ -188,14 +188,13 @@ extension VaultPasswordChangeService {
     /// Turns the password back on, from the `deviceKey` mode, as `password`. The current vault is open already, and
     /// device authentication opened it, so there's no current password to check.
     ///
-    /// It clears the count of attempts in a row on device authentication alone. That's accepted (MANIFESTO C4): with
-    /// the password off, device authentication opens the vault anyway, so the count guards nothing a coercer couldn't
-    /// already open, and a count left from before mustn't carry over to the new password. The recent count, which the
-    /// delays follow, stays, so turning the password off and on again doesn't shorten them.
+    /// It resets the attempt counter on device authentication alone. That's accepted (MANIFESTO C4): with the password
+    /// off, device authentication opens the vault anyway, so the count guards nothing a coercer couldn't already open,
+    /// and a count left from before mustn't carry over to the new password.
     public func turnOnPassword(_ password: String) async throws {
         try await whileChanging {
             let vault = try await openVault(inMode: .deviceKey, orThrow: .passwordIsNotOff)
-            try await attemptCounter.resetCountInARow()
+            try await attemptCounter.reset()
             let key = try await passwordKey(for: password)
             // Settling deletes the device key, once it's shown to open nothing.
             try await rekey(vault, journaling: .turningOn, becoming: .password) { key }

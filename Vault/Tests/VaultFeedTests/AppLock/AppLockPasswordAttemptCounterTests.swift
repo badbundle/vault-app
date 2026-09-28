@@ -131,62 +131,42 @@ struct AppLockPasswordAttemptCounterTests {
 
     // MARK: - Opening a vault
 
-    /// The record stays, with none in a row and the attempt that opened the vault taken back off the recent count.
+    /// A password that opens a vault, whichever vault it is, resets the counter (VAULT-93). The next attempt can be
+    /// made at once, and if it's wrong, it waits no longer than the first wrong one did.
     @Test
-    func noteRightAttempt_clearsTheCountInARowAndTakesItselfOffTheRecentCount() async throws {
-        let (sut, storage, clock) = makeSUT()
-        try await makeAttempts(6, with: sut, clock: clock)
-        let latestAt = clock.now
+    func reset_theNextWrongAttemptDoesntWait() async throws {
+        let (sut, _, clock) = makeSUT()
+        try await makeAttempts(10, with: sut, clock: clock)
 
-        try await sut.noteRightAttempt()
+        try await sut.reset()
 
-        #expect(storage.record?.count == .zero)
-        #expect(storage.record?.recentWrong == 5)
-        #expect(storage.record?.latestAt == latestAt)
+        #expect(try await sut.countAttempt() == .counted(reachesEraseThreshold: false))
+        #expect(try await sut.remainingDelay() == .zero)
+    }
+
+    /// Opening a vault between wrong attempts, the real one or a duress one, starts the waits and the count towards
+    /// erasing again: four wrong attempts either side of a right one never wait. That's the accepted limit for someone
+    /// who knows a duress password (VAULT-93).
+    @Test
+    func countAttempt_rightAttemptsBetweenWrongOnes_neverWaitOrReachTheEraseThreshold() async throws {
+        let (sut, _, _) = makeSUT()
+
+        var attempts = [AppLockPasswordAttempt]()
+        var delays = [Duration]()
+        for _ in 1 ... 3 {
+            for _ in 1 ... 4 {
+                try await attempts.append(sut.countAttempt())
+                try await delays.append(sut.remainingDelay())
+            }
+            try await sut.reset()
+        }
+
+        #expect(attempts.allSatisfy { $0 == .counted(reachesEraseThreshold: false) })
+        #expect(delays.allSatisfy { $0 == .zero })
         #expect(try await !sut.hasReachedEraseThreshold())
     }
 
-    @Test
-    func noteRightAttempt_noAttempts_doesNothing() async throws {
-        let (sut, storage, _) = makeSUT()
-
-        try await sut.noteRightAttempt()
-
-        #expect(storage.record == nil)
-    }
-
-    /// After an attempt that opened a vault, the next can be made at once, however many wrong ones came before. It
-    /// waits as long after it, if it's wrong, as it would have without the right one.
-    @Test
-    func noteRightAttempt_theNextAttemptNeedntWait() async throws {
-        let (sut, _, clock) = makeSUT()
-        try await makeAttempts(10, with: sut, clock: clock)
-        try await sut.noteRightAttempt()
-
-        #expect(try await sut.remainingDelay() == .zero)
-        #expect(try await sut.countAttempt() == .counted(reachesEraseThreshold: false))
-        #expect(try await sut.remainingDelay() == .seconds(60 * 60))
-    }
-
-    /// Opening a vault between wrong attempts, the real one or a duress one, doesn't stop the delays growing: they
-    /// follow the recent count, which only goes down with time.
-    @Test
-    func countAttempt_wrongAttemptsEitherSideOfARightOne_keepEscalatingTheDelay() async throws {
-        let (sut, _, clock) = makeSUT()
-        try await makeAttempts(5, with: sut, clock: clock)
-        try await sut.noteRightAttempt()
-
-        var delays = [Duration]()
-        for _ in 1 ... 5 {
-            try await makeAttempts(1, with: sut, clock: clock)
-            try delays.append(await sut.remainingDelay())
-        }
-
-        let minutes: [Int64] = [1, 5, 15, 15, 60]
-        #expect(delays == minutes.map { .seconds($0 * 60) })
-    }
-
-    /// The count in a row still starts again whenever a vault opens, so only wrong attempts in a row erase (VAULT-34).
+    /// With waits in between, a right attempt still keeps the count from reaching the erase threshold.
     @Test
     func countAttempt_rightAttemptsBetweenWrongOnes_neverReachTheEraseThreshold() async throws {
         let (sut, _, clock) = makeSUT()
@@ -198,111 +178,44 @@ struct AppLockPasswordAttemptCounterTests {
                 with: sut,
                 clock: clock,
             )
-            try await sut.noteRightAttempt()
+            try await sut.reset()
         }
 
         #expect(attempts.allSatisfy { $0 == .counted(reachesEraseThreshold: false) })
         #expect(try await !sut.hasReachedEraseThreshold())
     }
 
-    // MARK: - The recent count
+    // MARK: - Records from before
 
-    /// It goes down by one for every hour that passes, and what's left of an hour carries over.
-    @Test
-    func recentWrong_goesDownByOneAnHour() async throws {
-        let (sut, storage, clock) = makeSUT()
-        let start = clock.now
-        try await makeAttempts(4, with: sut, clock: clock)
-
-        clock.advance(by: .seconds(150 * 60))
-        try await makeAttempts(1, with: sut, clock: clock)
-
-        #expect(storage.record?.recentWrong == 3)
-        #expect(storage.record?.recentWrongAt == start.advanced(by: .seconds(120 * 60)))
-
-        clock.advance(by: .seconds(30 * 60))
-        try await makeAttempts(1, with: sut, clock: clock)
-
-        #expect(storage.record?.recentWrong == 3)
-        #expect(storage.record?.recentWrongAt == start.advanced(by: .seconds(180 * 60)))
-    }
-
-    /// So the delays shorten with time, whenever the count in a row started again.
-    @Test
-    func countAttempt_hoursAfterWrongAttempts_waitsLess() async throws {
-        let (sut, _, clock) = makeSUT()
-        try await makeAttempts(9, with: sut, clock: clock)
-        try await sut.noteRightAttempt()
-
-        clock.advance(by: .seconds(5 * 60 * 60))
-        try await makeAttempts(1, with: sut, clock: clock)
-
-        #expect(try await sut.remainingDelay() == .zero)
-    }
-
-    /// For the password turned back on after it was off: the count in a row starts again, but the recent count and its
-    /// delays stay.
-    @Test
-    func resetCountInARow_keepsTheRecentCount() async throws {
-        let (sut, storage, clock) = makeSUT()
-        try await makeAttempts(8, with: sut, clock: clock)
-
-        try await sut.resetCountInARow()
-
-        #expect(storage.record?.count == .zero)
-        #expect(storage.record?.recentWrong == 8)
-        try await makeAttempts(1, with: sut, clock: clock)
-        #expect(try await sut.remainingDelay() == .seconds(60 * 60))
-    }
-
-    @Test
-    func resetCountInARow_noAttempts_doesNothing() async throws {
-        let (sut, storage, _) = makeSUT()
-
-        try await sut.resetCountInARow()
-
-        #expect(storage.record == nil)
-    }
-
-    /// A record saved before the recent count was kept has only the count in a row. Every attempt in it reads as
-    /// recent: a record was only kept then until a vault opened.
-    @Test
-    func recordFromBefore_readsWithEveryAttemptRecent() async throws {
-        struct RecordFromBefore: Encodable {
+    /// A record saved while the counter also kept a recent count of wrong attempts reads as its attempts in a row.
+    @Test(arguments: [(count: 0, delay: Duration.zero), (count: 6, delay: .seconds(5 * 60))])
+    func recordWithARecentCount_readsAsItsAttemptsInARow(count: Int, delay: Duration) async throws {
+        struct RecordWithARecentCount: Encodable {
             var count: Int
             var latestAt: ContinuousClock.Instant
+            var recentWrong: Int
+            var recentWrongAt: ContinuousClock.Instant
         }
         let clock = FakeAppLockClock()
-        let data = try JSONEncoder().encode(RecordFromBefore(count: 6, latestAt: clock.now))
+        let data = try JSONEncoder().encode(RecordWithARecentCount(
+            count: count,
+            latestAt: clock.now,
+            recentWrong: 8,
+            recentWrongAt: clock.now,
+        ))
 
         let record = try JSONDecoder().decode(AppLockPasswordAttemptRecord.self, from: data)
 
-        #expect(record == AppLockPasswordAttemptRecord(
-            count: 6,
-            latestAt: clock.now,
-            recentWrong: 6,
-            recentWrongAt: clock.now,
-        ))
+        #expect(record == AppLockPasswordAttemptRecord(count: count, latestAt: clock.now))
         let storage = InMemoryAppLockPasswordAttemptStorage()
         storage.record = record
-        let sut = makeSUT(storage: storage, clock: clock)
-        #expect(try await sut.remainingDelay() == .seconds(5 * 60))
-        clock.advance(by: .seconds(5 * 60))
-        _ = try await sut.countAttempt()
-        try await sut.noteRightAttempt()
-        #expect(storage.record?.count == .zero)
-        #expect(storage.record?.recentWrong == 6)
+        #expect(try await makeSUT(storage: storage, clock: clock).remainingDelay() == delay)
     }
 
     @Test
-    func record_keepsTheRecentCountWhenSaved() throws {
+    func record_survivesBeingSaved() throws {
         let clock = FakeAppLockClock()
-        let record = AppLockPasswordAttemptRecord(
-            count: 2,
-            latestAt: clock.now,
-            recentWrong: 7,
-            recentWrongAt: clock.now.advanced(by: .seconds(-90)),
-        )
+        let record = AppLockPasswordAttemptRecord(count: 7, latestAt: clock.now)
 
         let decoded = try JSONDecoder().decode(AppLockPasswordAttemptRecord.self, from: JSONEncoder().encode(record))
 
@@ -391,27 +304,6 @@ struct AppLockPasswordAttemptCounterTests {
         _ = try await sut.remainingDelay()
 
         #expect(storage.record?.count == 7)
-        #expect(storage.record?.recentWrong == 7)
-    }
-
-    /// However long the device was off, none of it takes the recent count down: it goes down only from when the clock
-    /// was found to have gone back.
-    @Test
-    func clockGoesBack_recentCountGoesDownOnlyFromThen() async throws {
-        let (sut, storage, clock) = makeSUT()
-        try await makeAttempts(4, with: sut, clock: clock)
-        clock.advance(by: .seconds(3 * 60 * 60))
-
-        clock.goBack(by: .seconds(24 * 60 * 60))
-        try await makeAttempts(1, with: sut, clock: clock)
-
-        #expect(storage.record?.recentWrong == 5)
-        #expect(storage.record?.recentWrongAt == clock.now)
-
-        clock.advance(by: .seconds(60 * 60))
-        try await makeAttempts(1, with: sut, clock: clock)
-
-        #expect(storage.record?.recentWrong == 5)
     }
 
     // MARK: - Erase threshold
@@ -458,9 +350,9 @@ struct AppLockPasswordAttemptCounterTests {
         let (sut, storage, clock) = makeSUT()
 
         try await makeAttempts(6, with: sut, clock: clock)
-        try await sut.noteRightAttempt()
+        try await sut.reset()
         try await makeAttempts(1, with: sut, clock: clock)
-        try await sut.resetCountInARow()
+        _ = try await sut.remainingDelay()
         try await sut.reset()
 
         #expect(storage.accessesOutsideExclusiveAccess == 0)
@@ -607,12 +499,6 @@ struct AppLockPasswordAttemptCounterTests {
         }
         await #expect(throws: InMemoryAppLockPasswordAttemptStorage.Failure.self) {
             try await sut.hasReachedEraseThreshold()
-        }
-        await #expect(throws: InMemoryAppLockPasswordAttemptStorage.Failure.self) {
-            try await sut.noteRightAttempt()
-        }
-        await #expect(throws: InMemoryAppLockPasswordAttemptStorage.Failure.self) {
-            try await sut.resetCountInARow()
         }
     }
 }

@@ -3,27 +3,23 @@ import Foundation
 /// Counts attempts at the app lock password, and makes the user wait longer and longer between them once they've
 /// got it wrong a few times, as iOS does for the device passcode.
 ///
-/// The unlock service counts every attempt with `countAttempt()` **before** it derives the key, and calls
-/// `noteRightAttempt()` once the password has opened a vault. Force-quitting the app while the key is being derived
-/// can't take back a wrong attempt: it's already counted. The counter doesn't know about vaults, and behaves the same
-/// however many there are: the real password and a duress one do exactly the same to it, so it never shows which vault
-/// opened (MANIFESTO.md C2).
+/// The unlock service counts every attempt with `countAttempt()` **before** it derives the key, and calls `reset()`
+/// once the password has opened a vault. Force-quitting the app while the key is being derived can't take back a wrong
+/// attempt: it's already counted. The counter doesn't know about vaults, and behaves the same however many there are:
+/// the real password and a duress one do exactly the same to it, so it never shows which vault opened (MANIFESTO.md
+/// C2).
 ///
-/// It keeps two counts:
+/// It counts attempts in a row: since one last opened a vault, whichever vault it was. Any password that opens a vault
+/// starts the count again, and with it the delays (VAULT-93). The count decides when to erase (VAULT-34), and where
+/// Settings and AutoFill stop. So someone who knows a duress password can make four guesses at another vault's
+/// password with no delay, open the duress vault, and do it again: only the key derivation limits their guessing on
+/// the device then. That's accepted, as the counter can't tell the real password from a duress one.
 ///
-/// - **In a row:** attempts since one last opened a vault. Any password that opens a vault starts it again. It decides
-///   when to erase (VAULT-34), and where Settings and AutoFill stop.
-/// - **Recent:** wrong attempts, whichever vaults opened in between. An attempt that opens a vault takes only itself
-///   back off, and the count goes down by one for every hour that passes. So opening a vault between wrong attempts
-///   doesn't shorten the delays.
-///
-/// **The delay** after a wrong attempt is `delay(afterAttempts:)` for whichever count is larger. After an attempt that
-/// opened a vault there's none, so the next attempt can be made at once. The counts, the time of the latest attempt
-/// and where the recent count's next hour runs from are kept in the keychain, so relaunching the app, or reinstalling
-/// it over the top, doesn't end a delay. The time comes from `AppLockClock`, which counts from when the device started:
-/// changing the date and time doesn't move it, either way. It only goes back when the device restarts, and then the
-/// delay starts again in full, and the recent count goes down only from then. So the counter can only ever count less
-/// time than really passed, never more.
+/// **The delay** after a wrong attempt is `delay(afterAttempts:)` for the count. The count and the time of the latest
+/// attempt are kept in the keychain, so relaunching the app, or reinstalling it over the top, doesn't end a delay. The
+/// time comes from `AppLockClock`, which counts from when the device started: changing the date and time doesn't move
+/// it, either way. It only goes back when the device restarts, and then the delay starts again in full. So the counter
+/// can only ever count less time than really passed, never more.
 ///
 /// **What the lock screen shows** is how long the user has to wait (`remainingDelay()`), and nothing else: not how
 /// many attempts they've made, or how many are left before the vault is erased (VAULT-34). Counting down to an erase
@@ -34,8 +30,6 @@ public actor AppLockPasswordAttemptCounter {
     /// How many wrong attempts in a row erase the vault, when the user has turned that on (VAULT-34), as with iOS's
     /// Erase Data.
     public static let eraseThreshold = 10
-    /// How long it takes the recent count of wrong attempts to go down by one.
-    static let recentWrongInterval = Duration.seconds(60 * 60)
 
     private let storage: any AppLockPasswordAttemptStorage
     private let clock: any AppLockClock
@@ -85,13 +79,7 @@ public actor AppLockPasswordAttemptCounter {
             let remaining = Self.remainingDelay(after: previous, now: now)
             guard remaining == .zero else { return .delayed(remaining) }
         }
-        let recent = previous.map { Self.recentWrong(in: $0, now: now) } ?? (count: 0, since: now)
-        try storage.save(AppLockPasswordAttemptRecord(
-            count: count,
-            latestAt: now,
-            recentWrong: recent.count + 1,
-            recentWrongAt: recent.since,
-        ))
+        try storage.save(AppLockPasswordAttemptRecord(count: count, latestAt: now))
         return .counted(reachesEraseThreshold: count >= Self.eraseThreshold)
     }
 
@@ -106,31 +94,15 @@ public actor AppLockPasswordAttemptCounter {
         return try (currentRecord(now: clock.now)?.count ?? 0) >= Self.eraseThreshold
     }
 
-    /// Once a password has opened a vault, whichever vault it was: clears the count in a row, and takes that attempt
-    /// back off the recent count. The recent count's other wrong attempts stay, so the next wrong attempt waits as long
-    /// as it would have without this one, but the next attempt needn't wait at all.
-    public func noteRightAttempt() async throws {
-        let access = try await storage.acquireExclusiveAccess()
-        defer { access.release() }
-        guard var record = try storage.load() else { return }
-        record.count = 0
-        record.recentWrong = max(record.recentWrong - 1, 0)
-        try storage.save(record)
-    }
-
-    /// Clears the count in a row only, and leaves the recent count and its delays: for the password turned back on
-    /// after it was off, which device authentication alone does.
-    public func resetCountInARow() async throws {
-        let access = try await storage.acquireExclusiveAccess()
-        defer { access.release() }
-        guard var record = try storage.load() else { return }
-        record.count = 0
-        try storage.save(record)
-    }
-
-    /// Forgets every attempt: both counts, and any delay. Only for a password set where there wasn't one, so that
-    /// attempts left in the keychain from before, which can outlive even deleting the app, don't carry over to it, and
-    /// for the erase, which deletes the record with everything else.
+    /// Forgets every attempt: the count, and any delay, so the next attempt can be made at once and a wrong one after
+    /// it waits no longer than the first wrong one did.
+    ///
+    /// For:
+    ///
+    /// - a password that has opened a vault, whichever vault it was;
+    /// - a password set where there wasn't one, or turned back on after it was off, so that attempts left in the
+    ///   keychain from before, which can outlive even deleting the app, don't carry over to it;
+    /// - the erase, which deletes the record with everything else.
     public func reset() async throws {
         let access = try await storage.acquireExclusiveAccess()
         defer { access.release() }
@@ -146,8 +118,7 @@ public actor AppLockPasswordAttemptCounter {
 
     // MARK: - Delay
 
-    /// How long the user has to wait after `attempts` wrong attempts before they can try again: the count in a row or
-    /// the recent count, whichever is larger.
+    /// How long the user has to wait after `attempts` wrong attempts in a row before they can try again.
     ///
     /// These are iOS's delays for the device passcode (Apple Platform Security, "Escalating time delays for passcode
     /// attempts"):
@@ -171,38 +142,23 @@ public actor AppLockPasswordAttemptCounter {
         }
     }
 
-    /// The delay left after the latest attempt: none if it opened a vault, which leaves none in a row.
+    /// The delay left after the latest attempt.
     private static func remainingDelay(
         after record: AppLockPasswordAttemptRecord,
         now: ContinuousClock.Instant,
     ) -> Duration {
-        guard record.count > .zero else { return .zero }
         let elapsed = record.latestAt.duration(to: now)
-        return max(delay(afterAttempts: max(record.count, record.recentWrong)) - elapsed, .zero)
-    }
-
-    /// The recent count of wrong attempts now, down by one for every whole hour since `recentWrongAt`, and where its
-    /// next hour runs from. What's left of an hour carries over, so an attempt that opens a vault, which takes itself
-    /// back off, leaves the count exactly as it would have been without it.
-    private static func recentWrong(
-        in record: AppLockPasswordAttemptRecord,
-        now: ContinuousClock.Instant,
-    ) -> (count: Int, since: ContinuousClock.Instant) {
-        let hours = Int(record.recentWrongAt.duration(to: now) / recentWrongInterval)
-        guard hours < record.recentWrong else { return (0, now) }
-        return (record.recentWrong - hours, record.recentWrongAt.advanced(by: recentWrongInterval * hours))
+        return max(delay(afterAttempts: record.count) - elapsed, .zero)
     }
 
     /// The stored record, with the delay started again if the clock is now earlier than the latest attempt.
     ///
     /// That only happens when the device has restarted since, and there's no telling how long it was off. So the
-    /// delay starts again in full from now, and the recent count goes down only from now too. That's saved, so it
-    /// doesn't start again on every launch.
+    /// delay starts again in full from now. That's saved, so it doesn't start again on every launch.
     private func currentRecord(now: ContinuousClock.Instant) throws -> AppLockPasswordAttemptRecord? {
         guard var record = try storage.load() else { return nil }
-        if now < max(record.latestAt, record.recentWrongAt) {
-            record.latestAt = min(record.latestAt, now)
-            record.recentWrongAt = now
+        if now < record.latestAt {
+            record.latestAt = now
             try storage.save(record)
         }
         return record

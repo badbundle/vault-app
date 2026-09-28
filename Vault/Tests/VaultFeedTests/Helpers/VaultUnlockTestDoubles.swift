@@ -175,8 +175,7 @@ final class SpyUnlockWork: VaultUnlockWork {
 /// Where `AppLockPasswordAttemptCounter` keeps its count, in memory: logging into a shared log, and failing when the
 /// test says.
 ///
-/// Counting an attempt saves a record. A right attempt, or turning the password back on, saves one with no attempts
-/// in a row, and a new password or an erase removes it: each of those resets the count.
+/// Counting an attempt saves a record, and resetting the count removes it.
 final class LoggingAttemptStorage: AppLockPasswordAttemptStorage {
     struct Failure: Error {}
 
@@ -194,12 +193,12 @@ final class LoggingAttemptStorage: AppLockPasswordAttemptStorage {
         self.log = log
     }
 
-    /// Runs `action` while the count in a row is being reset, before `save(_:)` or `remove()` returns.
+    /// Runs `action` while the count is being reset, before `remove()` returns.
     func doWhileResetting(_ action: @escaping @Sendable () -> Void) {
         whileResetting.modify { $0 = action }
     }
 
-    /// Makes the counter find `count` wrong attempts in a row, the latest at `latestAt`, all of them recent.
+    /// Makes the counter find `count` wrong attempts in a row, the latest at `latestAt`.
     func setRecord(count: Int, latestAt: ContinuousClock.Instant) {
         state.modify { $0.record = AppLockPasswordAttemptRecord(count: count, latestAt: latestAt) }
     }
@@ -208,7 +207,7 @@ final class LoggingAttemptStorage: AppLockPasswordAttemptStorage {
         state.modify { $0.failsToSave = true }
     }
 
-    /// Fails to reset the count in a row, whether by saving a record with none, or removing the record.
+    /// Fails to reset the count, by removing the record.
     func failToReset() {
         state.modify { $0.failsToReset = true }
     }
@@ -217,18 +216,12 @@ final class LoggingAttemptStorage: AppLockPasswordAttemptStorage {
         state.get { $0.record }
     }
 
-    /// A record with no attempts in a row resets the count, as a right attempt does. Any other counts an attempt.
     func save(_ record: AppLockPasswordAttemptRecord) throws {
-        let resets = record.count == .zero
         try state.modify { state in
-            guard !(resets ? state.failsToReset : state.failsToSave) else { throw Failure() }
+            guard !state.failsToSave else { throw Failure() }
             state.record = record
         }
-        if resets {
-            didReset()
-        } else {
-            log.modify { $0.append("count the attempt") }
-        }
+        log.modify { $0.append("count the attempt") }
     }
 
     func remove() throws {
@@ -236,10 +229,6 @@ final class LoggingAttemptStorage: AppLockPasswordAttemptStorage {
             guard !state.failsToReset else { throw Failure() }
             state.record = nil
         }
-        didReset()
-    }
-
-    private func didReset() {
         log.modify { $0.append("reset the count") }
         whileResetting.get { $0 }?()
     }

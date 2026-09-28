@@ -3,35 +3,16 @@ import Security
 import SwiftSecurity
 
 /// What `AppLockPasswordAttemptCounter` keeps between launches.
+///
+/// A record saved while the counter also kept a recent count of wrong attempts has `recentWrong` and `recentWrongAt`
+/// as well. Decoding ignores them, so it reads as its attempts in a row.
 struct AppLockPasswordAttemptRecord: Codable, Equatable {
     /// Attempts at the password in a row: since one last opened a vault, whichever vault it was. An attempt still
-    /// underway counts, and so does one the app was stopped in the middle of. It decides when to erase (VAULT-34).
+    /// underway counts, and so does one the app was stopped in the middle of. It decides the delay, and when to erase
+    /// (VAULT-34).
     var count: Int
     /// When the latest attempt was counted, by the app lock's clock. The delay before the next one runs from here.
     var latestAt: ContinuousClock.Instant
-    /// Recent wrong attempts, whichever vaults opened in between. Every attempt adds one, one that opens a vault takes
-    /// itself back off, and it goes down by one for every hour that passes. The delay follows this or `count`,
-    /// whichever is larger.
-    var recentWrong: Int
-    /// Where the next hour `recentWrong` goes down by runs from, by the app lock's clock.
-    var recentWrongAt: ContinuousClock.Instant
-}
-
-extension AppLockPasswordAttemptRecord {
-    /// `count` attempts in a row, the latest at `latestAt`, every one of them recent.
-    init(count: Int, latestAt: ContinuousClock.Instant) {
-        self.init(count: count, latestAt: latestAt, recentWrong: count, recentWrongAt: latestAt)
-    }
-
-    /// A record saved before the recent count was kept reads as one whose attempts in a row are all recent: a record
-    /// was only there then until a vault opened.
-    init(from decoder: any Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        count = try container.decode(Int.self, forKey: .count)
-        latestAt = try container.decode(ContinuousClock.Instant.self, forKey: .latestAt)
-        recentWrong = try container.decodeIfPresent(Int.self, forKey: .recentWrong) ?? count
-        recentWrongAt = try container.decodeIfPresent(ContinuousClock.Instant.self, forKey: .recentWrongAt) ?? latestAt
-    }
 }
 
 /// Where `AppLockPasswordAttemptCounter` keeps its record.

@@ -3,10 +3,9 @@ import Foundation
 /// Stands in for the App Lock Password's storage in previews, tests and the app's marketing screenshots.
 ///
 /// It keeps its vaults' passwords in memory, and treats wrong passwords as the real one does: each is counted before
-/// it's checked, the same delays follow wrong ones in a row, and every check takes `deadline`, right or wrong. It
-/// doesn't keep the real counter's recent count, which a right password doesn't clear. Duress vaults behave as the
-/// real ones do: each vault replaces the one it made last, a password opens the most recently made vault it matches,
-/// and changing the password only changes the open vault's.
+/// it's checked, the same delays follow wrong ones in a row, and every check takes `deadline`, right or wrong. Duress
+/// vaults behave as the real ones do: each vault replaces the one it made last, a password opens the most recently
+/// made vault it matches, and changing the password only changes the open vault's.
 ///
 /// Erasing after failed passwords behaves as the real one does too (`AppLockPasswordUnlocker`):
 /// - the threshold's wrong password in a row at the lock screen "erases": there are no vaults and no password any more;
