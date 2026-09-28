@@ -36,6 +36,15 @@ struct TOTPGeneratorTests {
     }
 
     @Test
+    func code_zeroTimeInterval_isTreatedAsOneSecond() throws {
+        let hotp = HOTPGenerator(secret: OTPRFCSecret.sha1, digits: 8, algorithm: .sha1)
+        let sut = TOTPGenerator(generator: hotp, timeInterval: 0)
+
+        #expect(sut.timeInterval == 1)
+        #expect(try sut.code(epochSeconds: 59) == hotp.code(counter: 59))
+    }
+
+    @Test
     func code_rfcSHA1Example() throws {
         let hotp = HOTPGenerator(secret: OTPRFCSecret.sha1, digits: 8, algorithm: .sha1)
         let sut = TOTPGenerator(generator: hotp, timeInterval: 30)

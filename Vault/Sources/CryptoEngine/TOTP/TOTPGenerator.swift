@@ -14,9 +14,10 @@ public struct TOTPGenerator {
         generator.digits
     }
 
+    /// A `timeInterval` of 0 is treated as 1, rather than dividing by zero.
     public init(generator: HOTPGenerator, timeInterval: UInt64 = 30) {
         self.generator = generator
-        self.timeInterval = timeInterval
+        self.timeInterval = max(timeInterval, 1)
     }
 
     /// Generate the TOTP code using the number of seconds since the UNIX epoch.

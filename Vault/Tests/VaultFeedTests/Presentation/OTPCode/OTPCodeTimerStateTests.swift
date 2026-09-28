@@ -21,6 +21,14 @@ struct OTPCodeTimerStateTests {
     }
 
     @Test
+    func init_zeroPeriod_isTreatedAsOneSecond() {
+        let sut = OTPCodeTimerState(currentTime: 91.3, period: 0)
+
+        #expect(sut.startTime == 91)
+        #expect(sut.endTime == 92)
+    }
+
+    @Test
     func init_currentTimePeriod_subsequentRange() {
         let sut = OTPCodeTimerState(currentTime: 91.3, period: 30)
 

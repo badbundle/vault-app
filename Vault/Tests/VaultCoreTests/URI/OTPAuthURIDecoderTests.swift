@@ -70,6 +70,41 @@ struct OTPAuthURIDecoderTests {
     }
 
     @Test
+    func decodeType_throwsErrorForZeroPeriod() throws {
+        let value = "otpauth://totp/any?period=0"
+
+        #expect(throws: OTPAuthURIDecoder.URIDecodingError.invalidValue) {
+            try sut.decode(value)
+        }
+    }
+
+    @Test
+    func decodeType_decodesTheLargestPeriodTheVaultStores() throws {
+        let value = "otpauth://totp/any?period=\(Int64.max)"
+        let code = try sut.decode(value)
+
+        #expect(code.type == .totp(period: UInt64(Int64.max)))
+    }
+
+    @Test(arguments: ["period=9223372036854775808", "period=18446744073709551615"])
+    func decodeType_throwsErrorForPeriodTooLargeToStore(parameter: String) throws {
+        let value = "otpauth://totp/any?\(parameter)"
+
+        #expect(throws: OTPAuthURIDecoder.URIDecodingError.invalidValue) {
+            try sut.decode(value)
+        }
+    }
+
+    @Test(arguments: ["counter=9223372036854775808", "counter=18446744073709551615"])
+    func decodeType_throwsErrorForCounterTooLargeToStore(parameter: String) throws {
+        let value = "otpauth://hotp/any?\(parameter)"
+
+        #expect(throws: OTPAuthURIDecoder.URIDecodingError.invalidValue) {
+            try sut.decode(value)
+        }
+    }
+
+    @Test
     func decodeType_decodesHotpCounter() throws {
         let value = "otpauth://hotp/any?counter=420"
         let code = try sut.decode(value)

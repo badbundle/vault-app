@@ -116,10 +116,12 @@ extension VaultBackupItemDecoder {
 
     enum TOTPDecodeError: Error, Equatable, Hashable {
         case missingPeriod
+        case invalidPeriod
     }
 
     enum HOTPDecodeError: Error, Equatable, Hashable {
         case missingCounter
+        case invalidCounter
     }
 
     private func decodeOTPCode(data: VaultBackupItem.OTP) throws -> OTPAuthCode {
@@ -139,9 +141,11 @@ extension VaultBackupItemDecoder {
         switch data.authType {
         case VaultEncodingConstants.OTPAuthType.totp:
             guard let period = data.period else { throw TOTPDecodeError.missingPeriod }
+            guard OTPAuthType.TOTP.validPeriods.contains(period) else { throw TOTPDecodeError.invalidPeriod }
             return .totp(period: period)
         case VaultEncodingConstants.OTPAuthType.hotp:
             guard let counter = data.counter else { throw HOTPDecodeError.missingCounter }
+            guard OTPAuthType.HOTP.validCounters.contains(counter) else { throw HOTPDecodeError.invalidCounter }
             return .hotp(counter: counter)
         default:
             throw OTPDecodeError.invalidAuthType

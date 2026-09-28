@@ -277,7 +277,7 @@ extension PersistedLocalVaultStore: VaultStoreHOTPIncrementer {
     public func incrementCounter(id: Identifier<VaultItem>) async throws {
         do {
             let existing = try fetchVaultItem(id: id)
-            guard let otpDetails = existing.otpDetails else { throw Error.invalidItem }
+            guard let otpDetails = existing.otpDetails, otpDetails.counter != .max else { throw Error.invalidItem }
             otpDetails.counter.safeIncrement()
             modelContext.insert(otpDetails)
 
