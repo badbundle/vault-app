@@ -9,6 +9,8 @@ import VaultiOS
 open class VaultCredentialProviderViewController: ASCredentialProviderViewController {
     private let vaultAutofillViewModel: VaultAutofillViewModel
     private var cancellables = Set<AnyCancellable>()
+    /// Locks the sheet as the device locks, while it's on the screen.
+    private var deviceLockObserver: (any NSObjectProtocol)?
 
     override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
         // Decided for every request, not once for the process: the app can
@@ -63,9 +65,20 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
         setupBindings()
     }
 
+    override open func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if deviceLockObserver == nil {
+            deviceLockObserver = vaultAutofillViewModel.lockWhenTheDeviceLocks()
+        }
+    }
+
     /// Swiping the sheet away ends the request without completing or cancelling it, so the vault is locked here too.
     override open func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        if let deviceLockObserver {
+            NotificationCenter.default.removeObserver(deviceLockObserver)
+            self.deviceLockObserver = nil
+        }
         Task {
             await vaultAutofillViewModel.endRequest()
         }
