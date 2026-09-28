@@ -6,8 +6,8 @@ They are typically a secondary form of verification, required in addition to you
 Even if someone knows your password, they cannot access your account without the 2FA code. 
 This adds an extra layer of security, making it much harder for unauthorized users to gain access.
 
-Once setup, **only your device** knows how to generate these codes for your account. 
-This means that you need physical access to this device to login to the account. 
+Once set up, only the site and **your device** know the secret that generates these codes for your account, along with your backups of Vault. 
+This means that you need this device, or a backup of it, to log in to the account. 
 The advantage of this is that if your username and password are compromised, a hacker still won't be able to login to your account because they don't have access to this device with your 2FA code.
 
 ## Compatibility

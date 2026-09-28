@@ -10,4 +10,4 @@ Restoring a backup always asks for the password that was set when it was made, e
 
 Yes. Create a new backup straight after changing your password, so your latest copy opens with the password you'll remember.
 
-If you changed your password because the old one might have been exposed, remember that older backups are still protected only by the old password. Consider deleting them from wherever you keep them.
+If you changed your password because the old one might have been exposed, remember that older backups are still protected only by the old password. Consider deleting them from wherever you keep them, including earlier automatic backups in their folder.
