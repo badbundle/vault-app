@@ -66,6 +66,8 @@ let package = Package(
         // marketing screenshots in device frames. Untagged upstream, so tracks
         // its main branch.
         .package(url: "https://github.com/badbundle/device-screenshot-framer", branch: "main"),
+        // Bad Bundle's other apps, which the About page links to. Shared with GPS.
+        .package(url: "https://github.com/badbundle/bad-bundle-apps", exact: "0.1.0"),
     ],
     targets: [
         .target(
@@ -87,6 +89,7 @@ let package = Package(
                 "FoundationExtensions",
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
                 .product(name: "Toasts", package: "swiftui-toasts"),
+                .product(name: "BadBundleApps", package: "bad-bundle-apps"),
             ],
             resources: [
                 .process("Resources/Feed.xcstrings"),
