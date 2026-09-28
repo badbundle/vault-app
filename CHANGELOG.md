@@ -24,7 +24,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - App Lock, in a new Security section of Settings and off by default: Vault stays behind Face ID, Touch ID or the passcode, starting locked and locking again in the background, straight away or after 1, 5 or 15 minutes (Require Unlock). The app switcher and Control Center only ever see a cover with the vault door
 - An App Lock Password, set from App Lock in Settings, that encrypts the vault on this device and is asked for after Face ID or the passcode. It can't be reset, so the screen that sets it says so and shows when you last backed up. Wrong passwords wait longer each time, as iOS does, and the password can be changed or turned off. While it's on, widgets, QuickType and AutoFill show nothing from the vault
 - A duress password, set from the App Lock Password screen, that opens a separate, empty vault instead of the real one, with its own backups. Vault can also erase every vault after 10 wrong App Lock Passwords in a row, if you turn that on. Delete All Data deletes every vault, whichever one it's done from. The FAQ explains duress passwords, and how to start a duress vault again without it
-- Hide While Recording, on by default: a cover hides the whole app while the screen is recorded, mirrored or shared, and it works without App Lock
+- Hide While Recording, on by default: a cover hides the whole app, and the AutoFill sheet, while the screen is recorded, mirrored or shared, and it works without App Lock
 - New Items settings: whether new codes and notes start locked, and whether new codes start out offered in QuickType
 - Tap a Code To, in a new Codes section of Settings: tapping a code copies it (as before) or opens its details. Either way, touch and hold a code for Copy Code and Show Details
 - Show Next Code, off by default: in the last seconds of its countdown, a time-based code shows the next code, smaller, above its timer bar. Copying still takes the current code
@@ -61,6 +61,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Text being edited offers only Cut, Copy, Paste, Select, Select All and Delete in its edit menu, without Share, Look Up, Translate or Search Web, and can't be dragged into another app. A recovery phrase's words can't be cut or copied while they're typed either
 - Copied codes are cleared from the clipboard after 1 minute by default. Anyone who chose Never keeps it
 - New codes are no longer offered in QuickType unless Show New Codes in QuickType is on
+- QuickType no longer suggests locked codes
 - Settings has a heading and short footer for every section, with icons colored by section, and Universal Clipboard opens its own sheet
 - The App Lock Password shows the lock screen's vault door wherever it's set, changed or managed, so it's plainly the password the lock screen asks for. The backup password has a shield wherever it's set, entered or changed
 - The Danger Zone is a sheet that says what deleting removes and what's kept, and asks you to confirm before it deletes anything. Deleting all data also deletes the backup password, so restoring an old backup afterwards needs its password

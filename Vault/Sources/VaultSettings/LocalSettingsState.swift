@@ -14,7 +14,8 @@ public struct LocalSettingsState {
     @DefaultsStored public var allowUniversalClipboardForNotes: Bool
 
     /// When `true`, the whole app is covered while the screen is recorded, mirrored or shared. On by default
-    /// (MANIFESTO C7). Recovery phrases hide then whatever this says.
+    /// (MANIFESTO C7). Recovery phrases hide then whatever this says. Kept in the defaults the app shares with its
+    /// extensions, so the AutoFill sheet is covered too.
     @DefaultsStored public var hidesVaultWhileScreenCaptured: Bool
 
     /// When `true`, new codes and notes start locked. Only read when an item is created.
@@ -35,6 +36,7 @@ public struct LocalSettingsState {
 
     init(defaults: Defaults, sharedDefaults: Defaults) {
         Self.move(PasteTTL.storageKey, from: defaults, to: sharedDefaults)
+        Self.move(Self.hidesVaultWhileScreenCapturedKey, from: defaults, to: sharedDefaults)
         _codeTapAction = DefaultsStored(
             defaults: defaults,
             defaultsKey: .init(VaultIdentifiers.Preferences.General.codeTapAction),
@@ -56,8 +58,8 @@ public struct LocalSettingsState {
             defaultValue: .default,
         )
         _hidesVaultWhileScreenCaptured = DefaultsStored(
-            defaults: defaults,
-            defaultsKey: .init(VaultIdentifiers.Preferences.General.hideWhileScreenCaptured),
+            defaults: sharedDefaults,
+            defaultsKey: Self.hidesVaultWhileScreenCapturedKey,
             defaultValue: true,
         )
         _allowUniversalClipboardForOTPs = DefaultsStored(
@@ -82,6 +84,10 @@ public struct LocalSettingsState {
             defaultValue: false,
         )
     }
+
+    private static let hidesVaultWhileScreenCapturedKey = Key<Bool>(
+        VaultIdentifiers.Preferences.General.hideWhileScreenCaptured,
+    )
 
     /// Moves a value earlier versions kept in the app's own defaults to the shared ones, so a choice the user made
     /// before it moved is kept. Only a choice is ever stored, so there's nothing to move for someone who never made

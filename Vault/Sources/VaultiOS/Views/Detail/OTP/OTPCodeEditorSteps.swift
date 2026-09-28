@@ -184,7 +184,7 @@ struct OTPCodeSecurityStep: View {
                 }
             }
         } footer: {
-            Text("Offers the code above the keyboard when a site asks for it.")
+            Text("Offers the code above the keyboard when a site asks for it, unless the code is locked.")
         }
 
         DetailEditorLockSection(

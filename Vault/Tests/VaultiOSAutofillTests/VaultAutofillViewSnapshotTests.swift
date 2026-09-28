@@ -55,14 +55,38 @@ struct VaultAutofillViewSnapshotTests {
 
         snapshot(viewModel, colorScheme: colorScheme)
     }
+
+    /// While the screen is recorded, mirrored or shared, the app's screen capture cover hides the whole sheet, as it
+    /// hides the app (Hide While Recording).
+    @Test(arguments: [ColorScheme.light, .dark])
+    func screenCaptured_isCovered(colorScheme: ColorScheme) async throws {
+        let viewModel = try makeViewModel(headroom: .enough)
+        await viewModel.prepareToUnlock()
+
+        snapshot(viewModel, colorScheme: colorScheme, isScreenCaptured: true)
+    }
+
+    /// With Hide While Recording turned off, the sheet shows as usual while the screen is recorded.
+    @Test
+    func screenCaptured_hideWhileRecordingOff_isNotCovered() async throws {
+        let localSettings = try LocalSettings(defaults: .nonPersistent())
+        localSettings.state.hidesVaultWhileScreenCaptured = false
+        let viewModel = try makeViewModel(headroom: .enough, localSettings: localSettings)
+        await viewModel.prepareToUnlock()
+
+        snapshot(viewModel, colorScheme: .light, isScreenCaptured: true)
+    }
 }
 
 // MARK: - Helpers
 
 extension VaultAutofillViewSnapshotTests {
-    private func makeViewModel(headroom: FakeAutofillVaultService.Headroom) throws -> VaultAutofillViewModel {
+    private func makeViewModel(
+        headroom: FakeAutofillVaultService.Headroom,
+        localSettings: LocalSettings? = nil,
+    ) throws -> VaultAutofillViewModel {
         let viewModel = try VaultAutofillViewModel(
-            localSettings: LocalSettings(defaults: .nonPersistent()),
+            localSettings: localSettings ?? LocalSettings(defaults: .nonPersistent()),
             storage: .password,
             vaultService: FakeAutofillVaultService(headroom: headroom),
             currentAccessMode: { .password },
@@ -77,6 +101,7 @@ extension VaultAutofillViewSnapshotTests {
     private func snapshot(
         _ viewModel: VaultAutofillViewModel,
         colorScheme: ColorScheme,
+        isScreenCaptured: Bool = false,
         testName: String = #function,
     ) {
         let view = VaultAutofillView(
@@ -86,6 +111,7 @@ extension VaultAutofillViewSnapshotTests {
         )
         // Not yet active, so it doesn't ask for Face ID while it's drawn.
         .environment(\.scenePhase, .inactive)
+        .environment(\.isSceneCaptured, isScreenCaptured)
         .environment(\.drawsGlassSnapshotBackdrop, true)
         .environment(\.colorScheme, colorScheme)
         .framedForTest(height: 844)

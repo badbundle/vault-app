@@ -12,8 +12,9 @@ struct AutofillOTPCredentialResolver {
         /// A rendered TOTP code, safe to return without interaction.
         case code(String)
         /// The app lock is on, only the App Lock Password opens the vault, the
-        /// item is auth-gated, or it's an HOTP code (whose counter must not
-        /// increment without UI). The system shows the extension UI.
+        /// item is locked or otherwise auth-gated, or it's an HOTP code (whose
+        /// counter must not increment without UI). The system shows the
+        /// extension UI.
         case userInteractionRequired
         /// The record identifier is missing, malformed, or matches no
         /// unlocked OTP item.
@@ -65,6 +66,13 @@ struct AutofillOTPCredentialResolver {
                   let otpCode = vaultItem.item.otpCode
             else {
                 return .notFound
+            }
+
+            // A locked code is only ever copied once the user has unlocked it, in the extension's UI. This comes from
+            // the item itself: the copy handler's answer below comes from a cache of previews that QuickType, which
+            // draws none, never fills.
+            guard !vaultItem.metadata.lockState.isLocked else {
+                return .userInteractionRequired
             }
 
             // Check if the item requires authentication to access.

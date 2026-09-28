@@ -204,9 +204,11 @@ struct AppPrivacyCoverView: View {
 }
 
 /// Covers the vault while the screen is recorded, mirrored or shared, so it doesn't show up in the recording or on the
-/// other screen: the lock screen's door, and why the vault has gone.
-struct AppScreenCaptureCoverView: View {
-    var body: some View {
+/// other screen: the lock screen's door, and why the vault has gone. The AutoFill sheet shows it too.
+public struct AppScreenCaptureCoverView: View {
+    public init() {}
+
+    public var body: some View {
         AppLockBackdrop(
             details: {
                 VStack(spacing: 12) {

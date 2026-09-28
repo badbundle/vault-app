@@ -27,21 +27,9 @@ public final class PasswordlessOTPAutofillStore: VaultOTPAutofillStore {
         self.opensWithoutPassword = opensWithoutPassword
     }
 
-    public func sync(
-        id: UUID,
-        item: VaultItem.Payload,
-        visibility: VaultItemVisibility,
-        searchableLevel: VaultItemSearchableLevel,
-        showInQuickType: Bool,
-    ) async throws {
+    public func sync(id: UUID, item: VaultItem.Write) async throws {
         guard opensWithoutPassword() else { return }
-        try await base.sync(
-            id: id,
-            item: item,
-            visibility: visibility,
-            searchableLevel: searchableLevel,
-            showInQuickType: showInQuickType,
-        )
+        try await base.sync(id: id, item: item)
         try await emptyIfThePasswordCameOn()
     }
 
