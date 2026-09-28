@@ -71,7 +71,7 @@ public final class DeviceBackupSettings: DeviceBackupSettingsMoving {
         defaults.clear(Defaults.lastBackupEventKey)
         defaults.clear(Defaults.autoBackupConfigurationKey)
         defaults.clear(Defaults.pdfUserHintKey)
-        try await secureStorage.remove(key: VaultIdentifiers.SecureStorageKey.backupPassword.rawValue)
-        try await secureStorage.remove(key: VaultIdentifiers.SecureStorageKey.backupPasswordMetadata.rawValue)
+        try await secureStorage.remove(key: VaultIdentifiers.SecureStorageKey.backupPassword.keychainService)
+        try await secureStorage.remove(key: VaultIdentifiers.SecureStorageKey.backupPasswordMetadata.keychainService)
     }
 }

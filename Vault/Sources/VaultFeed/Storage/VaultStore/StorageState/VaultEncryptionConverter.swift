@@ -90,6 +90,7 @@ public actor VaultEncryptionConverter {
     ///   - archives: The archives of the plain store, set aside when it failed to open.
     ///   - backgroundTime: Keeps the app running until the conversion has finished: `.application` in the app.
     ///   - deviceBackupSettings: The plain store's backup settings: moved into the real vault, then deleted.
+    ///   - calibration: The key derivation's parameters, if not calibrated on this device as the password is set.
     public init(
         directory: URL,
         plainStore: PersistedLocalVaultStore,
@@ -100,6 +101,7 @@ public actor VaultEncryptionConverter {
         deviceBackupSettings: any DeviceBackupSettingsMoving,
         hooks: Hooks,
         backgroundTime: VaultBackgroundTime,
+        calibration: AppLockKeyDerivationCalibration? = nil,
     ) {
         self.init(
             directory: directory,
@@ -111,7 +113,7 @@ public actor VaultEncryptionConverter {
             attemptCounter: attemptCounter,
             hooks: hooks,
             backgroundTime: backgroundTime,
-            calibrate: { try AppLockKeyDerivationCalibrator().calibrate() },
+            calibrate: { try calibration ?? AppLockKeyDerivationCalibrator().calibrate() },
             wrapStamper: VaultDeviceWrapStamper(),
             deviceBackupSettings: deviceBackupSettings,
         )

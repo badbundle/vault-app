@@ -24,8 +24,8 @@ struct HMACKeyring: Sendable {
         backupKeysItem: VaultIdentifiers.SecureStorageKey,
     ) {
         self.secureStorage = secureStorage
-        self.ownKeyItem = ownKeyItem.rawValue
-        self.backupKeysItem = backupKeysItem.rawValue
+        self.ownKeyItem = ownKeyItem.keychainService
+        self.backupKeysItem = backupKeysItem.keychainService
     }
 
     /// This device's own key, made and stored if there isn't one yet.
