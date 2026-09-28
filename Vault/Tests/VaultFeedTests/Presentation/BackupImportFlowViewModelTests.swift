@@ -81,7 +81,7 @@ struct BackupImportFlowViewModelTests {
 
     @Test
     func clearError_leavesAPendingPasswordPromptAlone() async {
-        let sut = makeSUT(existingBackupPassword: nil)
+        let sut = makeSUT()
         let encryptedVault = anyEncryptedVault()
         await sut.handleImport(fromEncryptedVault: encryptedVault)
 
