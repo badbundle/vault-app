@@ -69,6 +69,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Tapping + opens one sheet that starts with choosing the kind of item and slides straight into its editor
 - The Backups, Auto-Backup and Restore pages open with headers, and Backups leads with when you last backed up. Restore asks for Face ID or the passcode before it imports anything, even with no backup password set
 - On a device with no passcode, Restore, the Backup Password sheet, the Danger Zone and deleting a set-aside vault say to set up a passcode, instead of asking to authenticate and failing
+- When the vault can't be opened, its screen suggests restoring a backup of your iPhone or getting in touch, and says to keep Vault installed, since deleting the app deletes its data
 - Auto-backup's cleanup only deletes backups it recorded making, instead of any auto-backup PDF in the folder. Existing setups are seeded once with the files the old cleanup would have deleted, so they carry on being cleaned up
 - The text in a code's timer bar is smaller and readable on every bar color
 - Images in Markdown notes aren't loaded, so opening a note never goes online

@@ -471,7 +471,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "We can't get your codes for some reason. Please reinstall the app and restore from a backup."
+            "value" : "We can't get your codes right now. Quit and relaunch the app to try again."
           }
         }
       }

@@ -48,17 +48,17 @@ struct VaultStoreFailureView: View {
                 switch reason {
                 case .storeUnreadable:
                     Text(
-                        "Your data was not deleted. The unreadable store files were moved aside, next to the store, so they can be inspected or recovered later.",
+                        "Your data was not deleted. Files Vault couldn't open are kept on this device, some moved aside next to the store, so they can be recovered later.",
                     )
                     Text(
-                        "Quit and relaunch the app to try again. If this keeps happening, reinstall the app and restore from a backup PDF.",
+                        "Quit and relaunch the app to try again. If this keeps happening, restore a backup of your iPhone that includes Vault's data, or get in touch through Vault's page on the App Store. Keep Vault installed meanwhile: deleting the app deletes its data.",
                     )
                 case .deviceKeyMissing:
                     Text(
                         "Your vault was not deleted. With the App Lock Password off, it's opened by a key kept in this device's keychain, and a backup restored onto another iPhone only brings that key with it if the backup is encrypted, or from iCloud.",
                     )
                     Text(
-                        "Restore an encrypted or iCloud backup of your iPhone to get the key back. Otherwise, reinstall the app and restore from a backup PDF.",
+                        "Restore an encrypted or iCloud backup of your iPhone to get the key back, or get in touch through Vault's page on the App Store. Keep Vault installed meanwhile: deleting the app deletes your vault.",
                     )
                 case .vaultMissing:
                     Text(
