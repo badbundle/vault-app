@@ -1,4 +1,6 @@
 Appfile
-metadata/review_information/
+# The reviewer contact details stay out of the public repo. The notes for App Review have nothing personal in them.
+metadata/review_information/*
+!metadata/review_information/notes.txt
 report.xml
 Preview.html

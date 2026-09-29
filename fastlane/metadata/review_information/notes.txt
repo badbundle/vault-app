@@ -1,0 +1,20 @@
+Vault needs no account or sign-in, has no in-app purchases, and makes no network requests. Everything stays on the device, so there's no demo account.
+
+TRYING IT
+- Tap + to add a 2FA code (scan a QR code, or enter a secret such as JBSWY3DPEHPK3PXP), a note, or a crypto recovery phrase.
+- Tap a code to copy it. Touch and hold a code for Copy Code and Show Details.
+
+SECURITY FEATURES (all off by default)
+- Settings > Security > App Lock keeps Vault behind Face ID, Touch ID or the passcode.
+- With App Lock on, App Lock Password sets a password (at least 8 characters, not only numbers) that encrypts the vault on the device. It can't be reset, so please keep a note of the one you set.
+- On the App Lock Password screen, Set Duress Password makes a second, empty vault. Entering the duress password on the lock screen opens that vault instead of the real one.
+- On the App Lock Password screen, Erase Vault After 10 Failed Passwords erases every vault after 10 wrong passwords in a row. Please leave it off while reviewing.
+- When editing an item, the Privacy & Security step has Visibility (a hidden item only appears when its passphrase is typed into search) and Killphrase (typing it into search quietly deletes the item).
+
+BACKUPS
+- Backups > Export saves the whole vault as an encrypted PDF once a backup password is set. Backups > Restore imports it from the file, or by scanning its QR codes.
+
+AUTOFILL
+- In iOS Settings > General > AutoFill & Passwords, turn on Vault to fill one-time codes.
+
+Vault is open source: https://github.com/badbundle/vault-app
