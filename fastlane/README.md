@@ -50,6 +50,14 @@ Upload the existing VaultApp.ipa to App Store Connect (no build, no bump)
 
 Replace the App Store screenshots with fastlane/screenshots (no build, no listing)
 
+### ios upload_metadata
+
+```sh
+[bundle exec] fastlane ios upload_metadata
+```
+
+Upload the App Store listing's text, review notes and privacy answers (no build, no screenshots)
+
 ### ios tag_release
 
 ```sh
