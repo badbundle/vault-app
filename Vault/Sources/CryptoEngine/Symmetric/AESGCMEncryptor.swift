@@ -1,34 +1,29 @@
-internal import CryptoSwift
+import CryptoKit
 import Foundation
 
-/// AES-GCM encryption engine.
+/// AES-GCM encryption engine, using CryptoKit.
 ///
 /// No padding will be used and the authentication tag is always seperate from the ciphertext.
+///
+/// Every kind of encryption in Vault is Apple's, so Vault can tell App Store Connect it uses no encryption that needs
+/// export compliance documentation. Don't encrypt with another library. See `docs/export-compliance.md`.
 public struct AESGCMEncryptor: Encryptor {
     public typealias Message = AESGCMEncryptedMessage
 
-    private let key: Data
-
-    public enum EncryptionError: Error {
-        /// Due to an internal error, a tag was not generated.
-        case noGCMTagGenerated
-    }
+    private let key: SymmetricKey
 
     public init(key: Data) {
-        self.key = key
+        self.key = SymmetricKey(data: key)
     }
 
     /// - Parameter plaintext: the message to be encrypted with AES-GCM.
+    /// - Parameter iv: At least 12 bytes. Vault's are 32: GCM derives the counter block from an IV of any other length,
+    ///   as its specification says, so a longer one encrypts exactly as it always has.
     public func encrypt(plaintext: Data, iv: Data) throws -> AESGCMEncryptedMessage {
-        let gcm = GCM(iv: iv.byteArray, mode: .detached)
-        let aes = try AES(key: key.byteArray, blockMode: gcm, padding: .noPadding)
-        let ciphertextBytes = try aes.encrypt(plaintext.byteArray)
-        guard let authenticationTag = gcm.authenticationTag else {
-            throw EncryptionError.noGCMTagGenerated
-        }
+        let sealed = try AES.GCM.seal(plaintext, using: key, nonce: AES.GCM.Nonce(data: iv))
         return AESGCMEncryptedMessage(
-            ciphertext: Data(ciphertextBytes),
-            authenticationTag: Data(authenticationTag),
+            ciphertext: sealed.ciphertext,
+            authenticationTag: sealed.tag,
         )
     }
 }
