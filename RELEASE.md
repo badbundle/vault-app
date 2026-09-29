@@ -115,6 +115,22 @@ It replaces the screenshots of the version App Store Connect is editing with
 exactly those in `fastlane/screenshots/en-US/`, as the release lane does. It
 doesn't build, upload a binary, change the listing's text or submit anything.
 
+## Updating the listing
+
+The listing's text is in `fastlane/metadata/`: the name, subtitle and keywords
+(the only fields App Store search reads), the description, the promotional
+text and the URLs in `en-US/`, and the notes for App Review in
+`review_information/`. The App Privacy answers are in
+`fastlane/app_privacy_details.json`. The release lane uploads the text with
+every build. To upload it, and publish the privacy answers, without a build:
+
+```sh
+bundle exec fastlane ios upload_metadata
+```
+
+It changes the version App Store Connect is editing. It doesn't build, upload
+a binary or screenshots, or submit anything.
+
 ## Tagging a shipped build
 
 After App Store Connect has the uploaded build, tag the shipped commit:

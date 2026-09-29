@@ -142,6 +142,29 @@ platform :ios do
     )
   end
 
+  desc "Upload the App Store listing's text, review notes and privacy answers (no build, no screenshots)"
+  lane :upload_metadata do
+    upload_to_app_store(
+      username: "badbundlelimited@gmail.com",
+      team_id: "442P244AFS",
+      # There's no IPA to read it from.
+      app_identifier: "com.badbundle.vault",
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      # As in upload_screenshots: the version App Store Connect is editing, whatever a VaultApp.ipa says.
+      skip_app_version_update: true,
+      # Skip the Preview.html confirmation so the lane runs non-interactively.
+      force: true
+    )
+    # The App Privacy answers, which App Store Connect needs published before a submission.
+    upload_app_privacy_details_to_app_store(
+      username: "badbundlelimited@gmail.com",
+      team_id: "442P244AFS",
+      app_identifier: "com.badbundle.vault",
+      json_path: "fastlane/app_privacy_details.json"
+    )
+  end
+
   desc "Tag and push the current commit for an uploaded App Store build"
   lane :tag_release do |options|
     ensure_git_status_clean
