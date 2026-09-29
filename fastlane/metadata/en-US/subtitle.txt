@@ -1,1 +1,1 @@
-2FA & Encrypted Notes
+Secure Notes & Offline Backups

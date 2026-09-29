@@ -1,1 +1,1 @@
-Vault – Open Source Backup
+Vault – 2FA Authenticator

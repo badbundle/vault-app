@@ -1,1 +1,1 @@
-2fa,backup,secure,note,authenticator,totp,authy,paper,pdf,qr,code,encrypted
+otp,totp,mfa,one,time,password,two,step,verification,private,secret,encrypted,hidden,codes,duress
