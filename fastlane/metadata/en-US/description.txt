@@ -1,3 +1,35 @@
-Secure storage for 2FA codes and secret notes.
+Vault keeps the secrets you can't afford to lose: two-factor codes, private notes and crypto recovery phrases. It has no servers, no accounts and no analytics, it makes no network requests, and it's open source.
 
-Backup to a PDF document which you can print or save to your online storage.
+It's also built for the moment someone makes you unlock it.
+
+2FA CODES
+• Add a code by scanning its QR code, or type in its secret. Time-based (TOTP) and counter-based (HOTP) codes both work.
+• Tap a code to copy it. Copies are cleared from the clipboard after a minute by default, and only reach your other devices if you allow it.
+• Fill codes into apps and websites with AutoFill, and see them in widgets on the Home Screen and Lock Screen.
+• Turn on Show in Spotlight to find a code by its site's name.
+
+NOTES AND RECOVERY PHRASES
+• Write notes in plain text or Markdown, tag them, and find anything with instant search.
+• Lock any item behind Face ID, Touch ID or your passcode, and encrypt a note with a password of its own.
+• Recovery phrases for crypto wallets are always encrypted, checked against the BIP39, SLIP-39, Electrum and Monero word lists, masked until you tap them, and can't be copied.
+
+IF YOU'RE MADE TO UNLOCK IT
+• App Lock keeps Vault behind Face ID, Touch ID or your passcode, and hides it in the app switcher.
+• An App Lock Password encrypts the whole vault on your iPhone. Vault asks for it after Face ID or your passcode, and makes you wait longer after each wrong one.
+• A duress password opens a separate vault instead of your real one.
+• Hidden items only appear when you search for their passphrase.
+• A killphrase quietly deletes an item from this vault as soon as it's searched for.
+• If you turn it on, 10 wrong passwords in a row erase every vault on the iPhone.
+
+BACKUPS YOU CONTROL
+• Save an encrypted PDF backup to print or keep wherever you like. Restore it from the file, or by scanning its QR codes.
+• Or have Vault save a fresh encrypted backup whenever your items change, to a folder you choose, such as one in iCloud Drive.
+• Move your vault to another iPhone or iPad by scanning QR codes, with no file saved.
+
+PRIVATE BY DESIGN
+• No servers, no accounts, no sync, no analytics and no network requests.
+• Hide While Recording covers Vault while the screen is recorded, mirrored or shared.
+• Apple's keyboard learns nothing you type in Vault.
+• Open source: the code is on GitHub, with a security model that lists every promise Vault makes, and its limits.
+
+Vault is free, with no ads and no in-app purchases.

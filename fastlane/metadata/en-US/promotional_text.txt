@@ -1,1 +1,1 @@
-Securely store notes & 2FA codes that you cannot afford to lose. Backup to paper which you can print or save to an online drive. Open source and 100% free.
+2FA codes, private notes and recovery phrases, fully offline. A duress password, hidden items and killphrases for when you're made to unlock it. Free and open source.
