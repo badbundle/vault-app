@@ -86,6 +86,12 @@ The release lane:
 - does not commit build-number changes
 - does not create or push Git tags
 
+Every build tells App Store Connect that Vault uses no encryption needing export
+compliance documentation (`ITSAppUsesNonExemptEncryption` is `NO`), so there's
+no export question to answer. That holds only while all of Vault's encryption
+is Apple's CryptoKit: [`docs/export-compliance.md`](docs/export-compliance.md)
+says why, and what to do if that changes.
+
 Record the build number printed by the release lane, for example:
 
 ```text

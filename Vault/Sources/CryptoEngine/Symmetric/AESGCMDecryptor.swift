@@ -1,14 +1,16 @@
-internal import CryptoSwift
+import CryptoKit
 import Foundation
 
-/// AES-GCM decryption engine.
+/// AES-GCM decryption engine, using CryptoKit.
 ///
 /// Ciphertext and the authentication tag are used to decrypt and validate the message.
 /// No padding is used for AES-GCM.
+///
+/// Every kind of encryption in Vault is Apple's. See `docs/export-compliance.md`.
 public struct AESGCMDecryptor: Decryptor {
     public typealias Message = AESGCMEncryptedMessage
 
-    private let key: Data
+    private let key: SymmetricKey
 
     public enum DecryptionError: Error, Equatable {
         /// The authentication tag isn't the full length that `AESGCMEncryptor` makes.
@@ -21,7 +23,7 @@ public struct AESGCMDecryptor: Decryptor {
     public static let authenticationTagLength = 16
 
     public init(key: Data) {
-        self.key = key
+        self.key = SymmetricKey(data: key)
     }
 
     /// - Parameter ciphertext: The encrypted message.
@@ -30,26 +32,16 @@ public struct AESGCMDecryptor: Decryptor {
         guard message.authenticationTag.count == Self.authenticationTagLength else {
             throw DecryptionError.invalidAuthenticationTagLength
         }
-        if message.ciphertext.isEmpty {
-            return try decryptEmpty(message: message, iv: iv)
-        }
-        let gcm = GCM(iv: iv.byteArray, authenticationTag: message.authenticationTag.byteArray, mode: .detached)
-        let aes = try AES(key: key.byteArray, blockMode: gcm, padding: .noPadding)
-        let plaintextBytes = try aes.decrypt(message.ciphertext.byteArray)
-        return Data(plaintextBytes)
-    }
-
-    /// An empty message is authentic when its tag is the one that sealing an empty message under the same key and IV
-    /// makes.
-    private func decryptEmpty(message: Message, iv: Data) throws -> Data {
-        let expected = try AESGCMEncryptor(key: key).encrypt(plaintext: Data(), iv: iv).authenticationTag
-        guard expected.count == message.authenticationTag.count else {
+        let sealed = try AES.GCM.SealedBox(
+            nonce: AES.GCM.Nonce(data: iv),
+            ciphertext: message.ciphertext,
+            tag: message.authenticationTag,
+        )
+        do {
+            // Checks the tag before it returns any plaintext, an empty message's included.
+            return try AES.GCM.open(sealed, using: key)
+        } catch CryptoKitError.authenticationFailure {
             throw DecryptionError.authenticationFailed
         }
-        let difference = zip(expected, message.authenticationTag).reduce(UInt8(0)) { $0 | ($1.0 ^ $1.1) }
-        guard difference == 0 else {
-            throw DecryptionError.authenticationFailed
-        }
-        return Data()
     }
 }

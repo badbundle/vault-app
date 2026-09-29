@@ -220,7 +220,8 @@ involved.
     opted out, which C7 cares about. VAULT-53 fixed it, and backups now keep both.
   - It goes through domain decoding, so an item that fails to decode can't be carried.
   - It uses lzma: 105 ms at 1,000 typical items, 546 ms with heavy notes.
-  - It uses CryptoSwift's AES-GCM: about 30 ms per MiB, against about 0.1 ms for CryptoKit.
+  - It used CryptoSwift's AES-GCM: about 30 ms per MiB, against about 0.1 ms for CryptoKit. VAULT-99 moved it to
+    CryptoKit without changing the format (see [`export-compliance.md`](./export-compliance.md)).
   - It derives the key directly from the password. There's no data key to rewrap.
   - It padded by a random amount rather than to a fixed size. Saved backups now pad to one (VAULT-75, see
     [Backups, killphrases and everything else](#backups-killphrases-and-everything-else)).

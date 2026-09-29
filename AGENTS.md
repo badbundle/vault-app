@@ -14,6 +14,8 @@ Read [`MANIFESTO.md`](./MANIFESTO.md) before proposing or implementing any featu
 
 [`docs/security-model.md`](./docs/security-model.md) lists every security and privacy promise Vault makes, the code that keeps it and the test that pins it, with the limits Vault accepts. A change that adds, changes or breaks a promise updates it in the same PR. Security problems are reported privately, as [`SECURITY.md`](./SECURITY.md) says, never in an issue, a PR or Trackslash.
 
+All of Vault's encryption uses Apple's CryptoKit, never another library's or our own, so that every build can tell App Store Connect it needs no export compliance documentation. Key derivation, hashing and HMAC aren't encryption. [`docs/export-compliance.md`](./docs/export-compliance.md) has the reasoning, and what to do if Vault ever needs other encryption.
+
 ## Issues
 
 Issues are recorded in Trackslash, in the `VAULT` project owned by `badbundle`, through its MCP server. Look there for what's open and in progress, and record a bug, a follow-up or a planned change there rather than in a TODO comment, a file in the repo or a PR body alone. Refer to an issue by its ref, such as `VAULT-60`. See [Issues](./README.md#issues).

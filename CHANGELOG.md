@@ -88,6 +88,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - The Backups FAQ explains that deleted items, including those a killphrase deleted, stay in backups made before they were deleted, and in an auto-backup folder until its older backups are cleaned up
 - Any App Lock Password that opens Vault, your real one or a duress one, starts the waits after wrong passwords again, as well as the count towards erasing after 10, and the erasing settings say so. The Duress Password FAQ explains what that means for someone who has your duress password
 - Setting a duress password asks for the current App Lock Password, which waits after wrong ones as changing the password does
+- Encrypted items, recovery phrases and backups are encrypted with Apple's CryptoKit instead of the CryptoSwift library. It's the same AES-GCM, so everything encrypted before opens as it always has, and saving a backup is faster. All of Vault's encryption is now Apple's
 - Help and the privacy policy say more exactly where Vault's data goes: the iPhone's own backups include the vault, and Vault has no analytics. The Duress Password page explains killphrases, and what can still give a duress vault away
 
 ### Removed
