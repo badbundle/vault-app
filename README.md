@@ -1,21 +1,52 @@
 # Vault
 
-A secret storage manager (2FA codes, secret notes) with built-in encrypted backup.
-It can create encrypted backups to a portable PDF document that you can print (as a hard copy) or save anywhere to restore from later.
+Vault is an open-source iPhone and iPad app for the secrets you can't afford to lose: two-factor codes, private notes and crypto recovery phrases. It's fully offline, with no servers, no accounts, no sync, no analytics and no network requests. And it's built for the moment someone forces you to unlock it.
 
-It has security features for when you're forced to unlock it (killphrases, hidden items and a duress password) and can be used as an offline backup for storing all your secret data.
-There are no servers and no sync. Every backup Vault makes is encrypted and goes only where you choose to put it, including the optional automatic backups to a folder such as one in iCloud Drive.
-Your iPhone's own backups, to iCloud or a computer, include Vault's data too, as they do other apps'. Set an App Lock Password to encrypt the vault, on the iPhone and in those backups.
+[badbundle.com/apps/vault](https://badbundle.com/apps/vault)
 
-## How to use Vault
+## Who it's for
 
-There's a few ways that you can use Vault to store your data:
+- Anyone who wants their 2FA codes and secrets on their own device, backed up where they choose, rather than synced to someone else's servers.
+- Anyone who might be made to unlock their iPhone, at a border, in a robbery or at home. Face ID and the passcode don't stop that, so Vault has an App Lock Password, a duress password, hidden items and killphrases. [`MANIFESTO.md`](./MANIFESTO.md) sets out the threat model.
 
-1. Super secret data
-   - Store data you really don't want to be accessed in encrypted notes, like cryptocurrency private keys. Hide them and add a killphrase so, if you're forced to unlock Vault, you can delete them quietly. Restore them from a backup, with its password, when you're safe.
+## Features
 
-2. Store OTP codes
-   - 2FA OTP codes provide a second layer of security for accessing your online accounts and are strongly recommended to setup whereever possible. Vault can store these codes natively and can replace other apps like Google Authenticator. Google Authenticator, in particular, has a far from ideal backup solution (automatic sync to Google's servers) or a manual QR code-based transfer. Neither match the security guarantees of Vault.
+### 2FA codes
+
+- Time-based (TOTP) and counter-based (HOTP) codes, added by scanning a QR code or typing in the secret.
+- Tap a code to copy it, or to open its details. Copies are cleared after 1 minute by default, and stay on the device unless you allow Universal Clipboard.
+- AutoFill for one-time codes, QuickType suggestions for the codes you choose, and widgets on the Home Screen, the Lock Screen and in StandBy.
+- Show Next Code near the end of a code's countdown, and Show in Spotlight, which is off by default and works only while App Lock is off.
+
+### Notes and recovery phrases
+
+- Notes in plain text or Markdown, with tags and instant search. Images in notes are never loaded.
+- Lock any item behind Face ID, Touch ID or the passcode, and encrypt a note with a password of its own.
+- Recovery phrases (crypto wallet seed words), always encrypted and locked. They're checked against the BIP39 (all 10 languages), SLIP-39, Electrum and Monero word lists and checksums, masked until tapped, and can't be copied.
+
+### When you're forced to unlock it
+
+- App Lock, off by default: Face ID, Touch ID or the passcode, locking straight away or after 1, 5 or 15 minutes, with a cover in the app switcher.
+- An App Lock Password that encrypts the whole vault on the device with AES-256-GCM. It's asked for after Face ID or the passcode, and wrong ones wait longer each time, as iOS does.
+- A duress password that opens a separate vault, with its own backups, instead of the real one.
+- Hidden items that only show while the search is their passphrase.
+- Killphrases that quietly delete an item from the vault as soon as they're searched for.
+- If you turn it on, 10 wrong App Lock Passwords in a row erase every vault.
+- Hide While Recording, on by default, covers Vault while the screen is recorded, mirrored or shared, and Apple's keyboard learns nothing typed into Vault.
+
+### Backups
+
+- Encrypted PDF backups to print, or to save anywhere, restored from the file or by scanning their QR codes. In plain text, a backup shows only that it's a Vault backup, when it was made, and a hint if you write one.
+- Automatic encrypted backups to a folder you choose, such as one in iCloud Drive, whenever your items change.
+- Moving the vault to another iPhone or iPad with QR codes, with no file saved.
+- Every export is the whole vault, encrypted with its backup password. There's no unencrypted export.
+
+### Privacy
+
+- No servers, no accounts, no sync, no analytics and no network requests.
+- Your iPhone's own backups, to iCloud or a computer, include Vault's data, as they do other apps'. Set an App Lock Password to encrypt the vault, on the iPhone and in those backups.
+
+Every promise, the code that keeps it, the test that pins it, and its limits are in [`docs/security-model.md`](./docs/security-model.md).
 
 ## Tenets
 
@@ -25,23 +56,9 @@ There's a few ways that you can use Vault to store your data:
 - [x] **Robust**: test-driven development, modular PRs/commits.
 - [x] **Duress-resistant**: see [`MANIFESTO.md`](./MANIFESTO.md) for the security principles that govern what Vault will and will not do.
 
-## Features
+## Development tenets
 
-- [x] OTP codes
-- [x] Notes
-- [x] Markdown notes
-- [x] Encrypted notes
-- [x] Item tags
-- [x] Instant item search
-- [x] Paper backups
-- [x] Automatic encrypted backups to a folder of your choice, like iCloud Drive
-- [x] Fully offline, no servers at all
-- [x] App Lock, and an App Lock Password that encrypts the vault on the device
-- [x] For when you're forced to unlock it: killphrases, hidden items and a duress password
-
-### Development Tenets
-
-- [x] **Tested**: high level of test coverage, mockolo for mocking, Swift Testing, snapshot tests
+- [x] **Tested**: high level of test coverage, mockolo for mocking, Swift Testing, snapshot tests and UI tests
 - [x] **Safe**: Swift 6 concurrency
 - [x] **Modern**: iOS 26, SwiftUI, Structured Concurrency
 - [x] **Availability**: iPhone & iPad Support
