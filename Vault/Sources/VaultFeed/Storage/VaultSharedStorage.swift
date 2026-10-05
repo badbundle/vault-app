@@ -8,10 +8,17 @@ import Foundation
 /// place. The widget extension cannot import `VaultiOS` and so must reach
 /// the same URL via this lightweight helper.
 public enum VaultSharedStorage {
-    /// The App Group identifier shared by the main app, autofill extension,
-    /// and widget extension. Must match the `com.apple.security.application-groups`
-    /// entitlement on every target that reads the vault.
+    // The App Group identifier shared by the main app, autofill extension,
+    // and widget extension. Must match the `com.apple.security.application-groups`
+    // entitlement on every target that reads the vault.
+    //
+    // The Mac's starts with the team ID: on the Mac, that needs no provisioning profile, and it's also the keychain
+    // access group its app and AutoFill extension share (docs/mac-app.md, decision 7).
+    #if os(macOS)
+    public static let appGroupID = "442P244AFS.com.badbundle.vault"
+    #else
     public static let appGroupID = "group.com.badbundle.vault-group"
+    #endif
 
     /// Resolves the App Group container URL. Crashes if the entitlement is
     /// missing — there is no meaningful fallback because the vault cannot be

@@ -31,5 +31,5 @@ There is no hosted CI. Before a PR can merge into `main`, its latest commit need
 ## Layout
 
 - [`Vault/`](./Vault) — Swift Package with all targets, tests, and tooling. Open `Vault.xcworkspace` to work on it.
-- [`VaultApp/`](./VaultApp) — minimal executable wrapper around the package.
+- [`VaultApp/`](./VaultApp) — minimal executable wrappers around the package: the iOS app (`VaultApp`) and the Mac app (`VaultMacApp`).
 - [`fastlane/`](./fastlane) — release tooling.

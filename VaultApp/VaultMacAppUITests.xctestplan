@@ -1,0 +1,33 @@
+{
+  "configurations" : [
+    {
+      "id" : "E5B4D2AD-D91C-4635-91E3-8EF1E75AD7A6",
+      "name" : "Default",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+    "defaultTestExecutionTimeAllowance" : 60,
+    "language" : "en",
+    "region" : "US",
+    "targetForVariableExpansion" : {
+      "containerPath" : "container:VaultApp.xcodeproj",
+      "identifier" : "1CAC00000000000000000012",
+      "name" : "VaultMacApp"
+    },
+    "testExecutionOrdering" : "random",
+    "testTimeoutsEnabled" : true
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:VaultApp.xcodeproj",
+        "identifier" : "1CAC00000000000000000014",
+        "name" : "VaultMacAppUITests"
+      }
+    }
+  ],
+  "version" : 1
+}

@@ -248,11 +248,14 @@ In `VaultApp/VaultApp.xcodeproj`, beside the iOS targets, which don't change:
 
 | Target | Kind | Bundle ID |
 | --- | --- | --- |
-| `VaultMacApp` | macOS app, SwiftUI `App` lifecycle | `com.badbundle.vault` |
+| `VaultMacApp` | macOS app, SwiftUI `App` lifecycle, built as `Vault.app` | `com.badbundle.vault` |
 | `VaultMacAutofill` | credential provider extension (VAULT-112) | `com.badbundle.vault.VaultAutofill` |
+| `VaultMacAppTests` | tests that run inside the launched app | `com.badbundle.vault.MacAppTests` |
 | `VaultMacAppUITests` | macOS UI tests | `com.badbundle.vault.MacUITests` |
 
-The Mac app's `@main` is as thin as the iOS app's: one scene from `VaultMac`. It's built for Apple silicon and Intel,
+The Mac app's `@main` is as thin as the iOS app's: one scene from `VaultMac`, `VaultMacScene`, which has the main
+window, the About window and Settings. Its icon is `VaultMacAppIconView`, the iOS icon's artwork on the Mac's icon
+grid, which `make app-icon` renders into `VaultMacApp`'s asset catalog at every size. It's built for Apple silicon and Intel,
 with a deployment target of macOS 26. Its version and build numbers follow the iOS app's, and `RELEASE.md`'s global
 rule for build numbers (VAULT-114).
 
@@ -287,7 +290,9 @@ The AutoFill extension gets the sandbox, the App Group and the AutoFill entitlem
 (`com.apple.developer.authentication-services.autofill-credential-provider`), and nothing else. The app itself doesn't
 need the AutoFill entitlement: it never writes the credential identity store, which stays empty on the Mac.
 
-A test (VAULT-105) reads the built app's entitlements and fails on any not in the first table.
+`make validate`'s "Mac app entitlements" check builds the app as it runs (a build for testing has entitlements of
+Xcode's own), and fails unless it's signed with the hardened runtime, sandboxed in its App Group, and with no
+entitlement outside the first table, apart from a development build's `get-task-allow`.
 
 ### Info.plist
 
@@ -377,8 +382,11 @@ ImageTools draws QR codes with Core Image, and VaultExport lays out and draws th
 1. **Build (macOS):** `CI_macOS` with its `macOS_SupportedTests` plan, for `platform=macOS`. The plan grows from
    today's five test targets to every shared module's tests, and then `VaultMacTests`.
 2. **Tests (macOS).**
-3. **Build Mac app UI tests**, then **Mac app UI tests**: `VaultMacAppUITests`, which launch the app on an in-memory
-   test vault, as the iOS UI tests do (`UITestVault`), so they never touch the Mac's own vault.
+3. **Build Mac app tests**, **Mac app tests** and **Mac app entitlements**: the app, launched with `VaultMacAppTests`
+   inside it, then the entitlements check above.
+4. **Build Mac UI tests**, then **Mac UI tests**: `VaultMacAppUITests`. From VAULT-106 they launch the app on a test
+   vault, as the iOS UI tests do (`UITestVault`), so they never touch the Mac's own vault. They run unattended, and
+   with the screen locked: `xcodebuild` sets up their automation session itself.
 
 Tests that can only run on iOS, such as those of iOS's own APIs, are marked as such with a trait, not deleted. Tests
 that need the data protection keychain only run where the test process has a keychain access group.

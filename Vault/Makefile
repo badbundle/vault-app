@@ -10,11 +10,13 @@ benchmark-keygen:
 calibrate-app-lock:
 	swift run -c release vault-keygen-speedtest --app-lock
 
-# App icon: renders Sources/VaultAppIcon into the app's asset catalog as the
-# light, dark and tinted 1024px PNGs plus Contents.json. Commit the output.
+# App icon: renders Sources/VaultAppIcon into the iOS app's asset catalog as the
+# light, dark and tinted 1024px PNGs plus Contents.json, and into the Mac app's
+# at every size it takes. Commit the output.
 .PHONY: app-icon
 app-icon:
 	swift run -c release vault-app-icon-generator
+	swift run -c release vault-app-icon-generator --mac
 
 .PHONY: format
 format:

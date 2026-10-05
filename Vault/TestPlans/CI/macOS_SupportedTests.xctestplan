@@ -108,6 +108,13 @@
         "identifier" : "VaultFeedTests",
         "name" : "VaultFeedTests"
       }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "VaultMacTests",
+        "name" : "VaultMacTests"
+      }
     }
   ],
   "version" : 1
