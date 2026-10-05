@@ -18,7 +18,7 @@ import VaultKeygen
 /// It never replaces a backup that's there. It prints each backup's ciphertext length, to be copied into its
 /// `BackupCorpusEntry`. See `Fixtures/Backups/README.md`.
 @MainActor
-@Suite(.enabled(if: GoldenFixture.isRecording))
+@Suite(.enabled(if: GoldenFixture.isRecording), .rendersPDFBackups)
 struct BackupCorpusRecorder {
     @Test
     func recordMissingBackups() async throws {

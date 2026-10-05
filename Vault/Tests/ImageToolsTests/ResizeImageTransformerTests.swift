@@ -1,3 +1,5 @@
+// The Mac resizes images from VAULT-104.
+#if canImport(UIKit)
 import Foundation
 import ImageTools
 import SnapshotTesting
@@ -28,3 +30,4 @@ extension ResizeImageTransformerTests {
         return try #require(qr.makeImage(fromData: data))
     }
 }
+#endif

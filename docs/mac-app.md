@@ -301,6 +301,12 @@ In the App Group's container, `~/Library/Group Containers/442P244AFS.com.badbund
 `VaultSharedStorage`, as on iOS. That holds the vault file, its storage state and the defaults the AutoFill extension
 shares. Settings only the app reads stay in its own container, under `~/Library/Containers/com.badbundle.vault/`.
 
+On a Mac with Apple silicon, file protection works as it does on iOS (found in VAULT-103): the vault file is written
+with complete protection, as on iOS, so it can't be read or written while the screen is locked. The Mac app locks at
+once when the screen locks anyway (see [Locking](#locking)). It also means the Mac's tests can't write such files while
+`make validate` runs with the screen locked, so the macOS test plan has debug builds write their files with
+`completeUntilFirstUserAuthentication` instead (`VAULT_TEST_FILE_PROTECTION`).
+
 The sandbox keeps other sandboxed apps out of both. Since macOS 14, other apps reading another app's container ask the
 user first, and since macOS 15 that covers Group Containers too. A process running as the user with Full Disk Access
 can still copy the vault file. It's encrypted, so, as with a copy of an iPhone's files, they can only guess at the

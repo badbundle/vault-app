@@ -1,19 +1,23 @@
-#if canImport(UIKit)
 import Foundation
 import SnapshotTesting
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /// Expected device configuration for snapshot tests.
 /// This must match the configuration specified in Vault/README.md.
 private let expectedDeviceName = "iPhone 18 Pro Max"
 private let expectedIOSVersion = "27.0"
+/// The Mac's snapshot tests run on this major version of macOS.
+private let expectedMacOSMajorVersion = 27
 private let expectedLocaleIdentifier = "en_US"
 private let expectedTimezoneIdentifier = ["UTC", "GMT"]
 
 /// Asserts that a snapshot matches a reference, but first validates the device configuration.
 ///
 /// This function wraps SnapshotTesting's `assertSnapshot` and adds a runtime check to ensure
-/// snapshot tests are running on the correct device and iOS version as specified in the README.
+/// snapshot tests are running on the correct device and iOS version as specified in the README, or on the Mac, the
+/// macOS version the README names.
 ///
 /// - Parameters:
 ///   - value: The value to snapshot
@@ -62,11 +66,20 @@ private func assertDeviceConfiguration(
     file: StaticString = #file,
     line: UInt = #line,
 ) {
+    #if canImport(UIKit)
+    assertIOSDeviceConfiguration(file: file, line: line)
+    #else
+    assertMacConfiguration(file: file, line: line)
+    #endif
+    assertLocaleAndTimezone(file: file, line: line)
+}
+
+#if canImport(UIKit)
+@MainActor
+private func assertIOSDeviceConfiguration(file: StaticString, line: UInt) {
     let currentDevice = UIDevice.current
     let deviceName = currentDevice.name
     let systemVersion = currentDevice.systemVersion
-    let currentLocale = Locale.current.identifier
-    let currentTimezone = TimeZone.current.identifier
 
     guard deviceName == expectedDeviceName else {
         fatalError(
@@ -95,6 +108,32 @@ private func assertDeviceConfiguration(
             line: line,
         )
     }
+}
+#else
+@MainActor
+private func assertMacConfiguration(file: StaticString, line: UInt) {
+    let majorVersion = ProcessInfo.processInfo.operatingSystemVersion.majorVersion
+    guard majorVersion == expectedMacOSMajorVersion else {
+        fatalError(
+            """
+            ❌ Snapshot test macOS version mismatch!
+            Expected: macOS \(expectedMacOSMajorVersion)
+            Actual: macOS \(majorVersion)
+
+            Please run snapshot tests on macOS \(expectedMacOSMajorVersion) as specified in Vault/README.md
+            """,
+            file: file,
+            line: line,
+        )
+    }
+}
+#endif
+
+/// The test plans set these, on iOS and the Mac.
+@MainActor
+private func assertLocaleAndTimezone(file: StaticString, line: UInt) {
+    let currentLocale = Locale.current.identifier
+    let currentTimezone = TimeZone.current.identifier
 
     guard currentLocale == expectedLocaleIdentifier else {
         fatalError(
@@ -103,7 +142,7 @@ private func assertDeviceConfiguration(
             Expected: \(expectedLocaleIdentifier)
             Actual: \(currentLocale)
 
-            Please configure the simulator locale to English (United States).
+            Please configure the simulator locale to English (United States). The test plans set it.
             """,
             file: file,
             line: line,
@@ -124,5 +163,3 @@ private func assertDeviceConfiguration(
         )
     }
 }
-
-#endif // canImport(UIKit)

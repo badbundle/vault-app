@@ -24,6 +24,7 @@ public struct VaultBackupPDFGenerator {
         payload: VaultExportPayload,
         progress: @escaping (Double) -> Void = { _ in },
     ) throws -> PDFDocument {
+        #if canImport(UIKit)
         let blockDocumentRenderer = PDFDataBlockDocumentRenderer(
             documentSize: size,
             rendererFactory: PDFDocumentPageRendererFactory(
@@ -47,6 +48,10 @@ public struct VaultBackupPDFGenerator {
             attacher: VaultBackupPDFAttacherImpl(),
         )
         return try documentRenderer.render(document: payload, progress: progress)
+        #else
+        // The Mac renders PDFs from VAULT-104.
+        throw PDFRenderingError.unavailableOnThisPlatform
+        #endif
     }
 
     private var dataShardBuilder: DataShardBuilder {

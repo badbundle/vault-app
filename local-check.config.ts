@@ -56,6 +56,17 @@ export default (({ xcode }) => {
         flags: ["-skipMacroValidation", "-skipPackagePluginValidation", "-skipPackageUpdates"],
       }),
       ios.testWithoutBuilding({ name: "UI tests" }),
+      // The shared modules, built and tested for the Mac as well, so work on either platform can't break the other
+      // (docs/mac-app.md). Last, so its .xctestrun is the newest when its tests run.
+      ios.buildForTesting({
+        name: "Build (macOS)",
+        workspace: "Vault.xcworkspace",
+        scheme: "CI_macOS",
+        testPlan: "macOS_SupportedTests",
+        destination: "platform=macOS",
+        flags: ["-skipMacroValidation", "-skipPackagePluginValidation", "-skipPackageUpdates"],
+      }),
+      ios.testWithoutBuilding({ name: "Tests (macOS)", destination: "platform=macOS" }),
     ],
   };
 }) satisfies ConfigFunction;

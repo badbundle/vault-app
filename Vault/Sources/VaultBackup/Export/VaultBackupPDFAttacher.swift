@@ -31,9 +31,9 @@ final class VaultBackupPDFAttacherImpl: VaultBackupPDFAttacher {
         )
         let encoded = try makeEncodedVault(vault: vault)
         annotation.contents = "\(VaultIdentifiers.Backup.encryptedVaultData):" + encoded
-        annotation.color = UIColor.clear
-        annotation.fontColor = UIColor.clear
-        annotation.backgroundColor = UIColor.clear
+        annotation.color = .clear
+        annotation.fontColor = .clear
+        annotation.backgroundColor = .clear
         return annotation
     }
 

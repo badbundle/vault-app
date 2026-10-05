@@ -1,3 +1,5 @@
+// The Mac resizes images from VAULT-104.
+#if canImport(UIKit)
 import UIKit
 
 public struct ResizeImageTransformer: ImageTransformer {
@@ -15,3 +17,4 @@ public struct ResizeImageTransformer: ImageTransformer {
         }
     }
 }
+#endif

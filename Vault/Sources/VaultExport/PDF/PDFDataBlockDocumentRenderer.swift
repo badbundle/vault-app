@@ -1,3 +1,5 @@
+// The Mac renders PDFs from VAULT-104.
+#if canImport(UIKit)
 import Foundation
 import ImageTools
 import PDFKit
@@ -226,3 +228,4 @@ extension DataBlockHeader {
         return labels
     }
 }
+#endif

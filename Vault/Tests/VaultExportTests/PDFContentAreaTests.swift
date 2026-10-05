@@ -1,6 +1,6 @@
+import Foundation
 import TestHelpers
 import Testing
-import UIKit
 @testable import VaultExport
 
 struct PDFContentAreaTests {
@@ -24,7 +24,7 @@ struct PDFContentAreaTests {
         let rect = CGRect(origin: .init(x: 10, y: 10), size: .init(width: 100, height: 100))
         var sut = PDFContentArea(fullSize: rect)
 
-        let insets = UIEdgeInsets(top: 10, left: 11, bottom: 12, right: 13)
+        let insets = PlatformEdgeInsets(top: 10, left: 11, bottom: 12, right: 13)
         sut.inset(by: insets)
 
         #expect(sut.currentBounds == rect.inset(by: insets))

@@ -109,6 +109,10 @@ Designed to cause an internal error during key generation.
 	<td>Simulator for snapshot tests</td>
 	<td><b>iPhone 18 Pro Max on iOS 27.0</b></td>
   </tr>
+  <tr>
+	<td>Mac for snapshot tests</td>
+	<td><b>macOS 27</b></td>
+  </tr>
 </table>
 
 Simulator configuration, such as setting locale is covered by the use of test plans.

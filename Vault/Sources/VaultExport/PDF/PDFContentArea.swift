@@ -1,4 +1,5 @@
-import UIKit
+import CoreGraphics
+import Foundation
 
 /// Manages the drawing area on a PDF document.
 struct PDFContentArea {
@@ -9,7 +10,7 @@ struct PDFContentArea {
     }
 
     /// Inset the content area by the given amount.
-    mutating func inset(by insets: UIEdgeInsets) {
+    mutating func inset(by insets: PlatformEdgeInsets) {
         currentBounds = currentBounds.inset(by: insets)
     }
 

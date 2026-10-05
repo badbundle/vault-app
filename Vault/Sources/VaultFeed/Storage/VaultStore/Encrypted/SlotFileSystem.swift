@@ -54,11 +54,33 @@ enum SlotFileProtection: Sendable {
     case completeUntilFirstUserAuthentication
 
     var writingOption: Data.WritingOptions {
-        switch self {
+        switch applied {
         case .complete: .completeFileProtection
         case .completeUntilFirstUserAuthentication: .completeFileProtectionUntilFirstUserAuthentication
         }
     }
+
+    /// The protection files are written with: this one, except in the Mac's tests.
+    private var applied: SlotFileProtection {
+        #if DEBUG
+        Self.testOverride ?? self
+        #else
+        self
+        #endif
+    }
+
+    #if DEBUG
+    /// On a Mac with Apple silicon, as on an iPhone, a file with complete protection can't be written while the screen
+    /// is locked. `make validate` runs the Mac's tests unattended, often with the screen locked, so the macOS test plan
+    /// sets `VAULT_TEST_FILE_PROTECTION` to `completeUntilFirstUserAuthentication` and its tests' files are written
+    /// with
+    /// that instead. Debug builds only.
+    static let testOverride: SlotFileProtection? =
+        switch ProcessInfo.processInfo.environment["VAULT_TEST_FILE_PROTECTION"] {
+        case "completeUntilFirstUserAuthentication": .completeUntilFirstUserAuthentication
+        default: nil
+        }
+    #endif
 }
 
 /// A lock taken with `SlotFileSystem.tryLock(_:)`.

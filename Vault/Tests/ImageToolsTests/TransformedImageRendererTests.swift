@@ -1,7 +1,6 @@
 import Foundation
 import TestHelpers
 import Testing
-import UIKit
 @testable import ImageTools
 
 struct TransformedImageRendererTests {
@@ -19,8 +18,10 @@ struct TransformedImageRendererTests {
     func makeImage_appliesTransformOnce() {
         let imageData = Data(repeating: 0x44, count: 45)
         let renderer = ImageDataRendererMock()
-        renderer.makeImageHandler = { _ in UIImage() }
+        renderer.makeImageHandler = { _ in PlatformImage() }
         let transformer = ImageTransformerMock()
+        // mockolo has a default image for UIImage, but not NSImage.
+        transformer.tranformHandler = { $0 }
         let sut = TransformedImageRenderer(renderer: renderer, transformer: transformer)
 
         let image = sut.makeImage(fromData: imageData)
