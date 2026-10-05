@@ -142,6 +142,10 @@ iOS shows a privacy cover while the app is inactive, for the app switcher. The M
 window left on screen behind another app is what the Require Unlock delay chose to keep. So the Mac has no privacy
 cover: with the delay at Immediately, leaving Vault locks it.
 
+Locked items lock as on iOS (G32): a locked item's page shows nothing of it until Touch ID or the Mac's password
+passes, and asks again whenever it's opened. A recovery phrase always asks, whatever its stored lock state, once its
+own password has opened it, and again once Vault stops being the active app (G41).
+
 ### Hide While Recording
 
 iOS can only notice the screen being captured, and cover the app (G24). On the Mac, a window whose `sharingType` is
@@ -174,7 +178,14 @@ The same rules as iOS (G50), with AppKit's equivalents:
 - It's kept to this Mac with `NSPasteboard.prepareForNewContents(with: .currentHostOnly)`, unless Universal Clipboard
   is allowed for that kind of text, which it isn't by default (C7).
 - It's cleared after the Clear Clipboard time, 1 minute by default. AppKit has no expiry date, so Vault clears it
-  itself, and only if the pasteboard's `changeCount` shows it still holds what Vault put there.
+  itself, and only if the pasteboard's `changeCount` shows it still holds what Vault put there. Quitting Vault, which
+  ends that timer, clears it at once.
+- Every copy goes through `VaultMacPasteboard`: clicking a code in the list (or opening its page, as Tap a Code To
+  says), Copy Code on its page, and Copy (⌘C) while no text has focus. The Edit menu's Copy goes to the text that has
+  focus otherwise.
+- An item's page shows its text without letting it be selected, so nothing on it is copied around Vault's clipboard:
+  a note has Copy Note instead.
+- A locked code asks for Touch ID or the Mac's password before it's copied (G32).
 - Recovery phrases can't be copied (G41), and a drag out of the list gives only the item's ID (G51).
 
 Whether macOS 26's own clipboard history, in Spotlight, keeps concealed and transient items is checked by hand
@@ -406,9 +417,12 @@ ImageTools draws QR codes with Core Image, and VaultExport lays out and draws th
 Tests that can only run on iOS, such as those of iOS's own APIs, are marked as such with a trait, not deleted. Tests
 that need the data protection keychain only run where the test process has a keychain access group.
 
-**Mac snapshot tests** are pinned to a configuration, as iOS's are to the iPhone 18 Pro Max: a fixed window size, a
-backing scale factor of 2, an explicit light or dark appearance, and macOS 27. They fail with a message, rather than
-recording, on anything else.
+**Mac snapshot tests** are pinned to a configuration, as iOS's are to the iPhone 18 Pro Max: a fixed window size, an
+explicit light or dark appearance, en_US in UTC, and macOS 27, which `assertSnapshot` checks before it compares
+anything. `.macWindow(width:height:appearance:)` draws a SwiftUI view in a window whose backing scale is always 2:
+with the screen locked, as it often is while `make validate` runs, a window would otherwise draw text at 1x. The
+Mac's text antialiasing still varies a little from run to run, so views are compared perceptually (98%), not pixel for
+pixel. The Mac's images are kept in a `macOS` folder beside each test file's iOS ones.
 
 They draw the same whether the screen is locked or not, as validation often runs on a locked Mac: a locked screen
 leaves the screen's scale at 1 and changes its colours. So a window is drawn in a window of its own whose scale is

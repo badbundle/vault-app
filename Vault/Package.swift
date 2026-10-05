@@ -395,6 +395,7 @@ let package = Package(
                 "VaultSettings",
                 "VaultAppIcon",
                 "FoundationExtensions",
+                .product(name: "MarkdownUI", package: "swift-markdown-ui"),
             ],
             swiftSettings: swiftSettings,
             plugins: targetPlugins,
