@@ -1,3 +1,5 @@
+// The Mac renders PDFs from VAULT-104.
+#if canImport(UIKit)
 import Foundation
 import PDFKit
 import UIKit
@@ -9,3 +11,4 @@ class UIGraphicsPDFRendererStub: UIGraphicsPDFRenderer {
         pdfDataValue
     }
 }
+#endif

@@ -1,3 +1,5 @@
+// The Mac renders PDFs from VAULT-104.
+#if canImport(UIKit)
 import ImageTools
 import PDFKit
 import TestHelpers
@@ -461,3 +463,4 @@ private class PageNumberHeaderGenerator: DataBlockHeaderGenerator {
         DataBlockHeader(left: "L: Page \(pageNumber)", right: "R: Page \(pageNumber)")
     }
 }
+#endif

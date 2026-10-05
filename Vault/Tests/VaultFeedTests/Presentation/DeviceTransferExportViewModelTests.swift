@@ -1,7 +1,6 @@
 import Foundation
 import TestHelpers
 import Testing
-import UIKit
 import VaultCore
 import VaultKeygen
 @testable import VaultFeed

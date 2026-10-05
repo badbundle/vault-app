@@ -1,12 +1,17 @@
+import Foundation
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 public struct DataBlockLabel {
     public var text: String
-    public var font: UIFont
-    public var textColor: UIColor
-    public var padding: UIEdgeInsets
+    public var font: PlatformFont
+    public var textColor: PlatformColor
+    public var padding: PlatformEdgeInsets
 
-    public init(text: String, font: UIFont, textColor: UIColor = .black, padding: UIEdgeInsets) {
+    public init(text: String, font: PlatformFont, textColor: PlatformColor = .black, padding: PlatformEdgeInsets) {
         self.text = text
         self.font = font
         self.textColor = textColor

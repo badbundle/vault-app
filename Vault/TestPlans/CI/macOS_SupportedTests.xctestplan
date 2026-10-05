@@ -9,6 +9,26 @@
     }
   ],
   "defaultOptions" : {
+    "environmentVariableEntries" : [
+      {
+        "key" : "TZ",
+        "value" : "UTC"
+      },
+      {
+        "key" : "SNAPSHOT_TESTING_RECORD",
+        "value" : "missing"
+      },
+      {
+        "key" : "VAULT_TEST_FILE_PROTECTION",
+        "value" : "completeUntilFirstUserAuthentication"
+      }
+    ],
+    "language" : "en",
+    "mainThreadCheckerDetectionPolicy" : {
+      "severity" : "failure"
+    },
+    "region" : "US",
+    "testExecutionOrdering" : "random",
     "testTimeoutsEnabled" : true
   },
   "testTargets" : [
@@ -52,6 +72,41 @@
         "containerPath" : "container:",
         "identifier" : "VaultAppIconGeneratorTests",
         "name" : "VaultAppIconGeneratorTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "VaultSettingsTests",
+        "name" : "VaultSettingsTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "ImageToolsTests",
+        "name" : "ImageToolsTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "VaultExportTests",
+        "name" : "VaultExportTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "VaultBackupTests",
+        "name" : "VaultBackupTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
+        "identifier" : "VaultFeedTests",
+        "name" : "VaultFeedTests"
       }
     }
   ],

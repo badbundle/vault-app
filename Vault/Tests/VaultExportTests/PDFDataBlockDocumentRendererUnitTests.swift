@@ -1,3 +1,5 @@
+// The Mac renders PDFs from VAULT-104.
+#if canImport(UIKit)
 import Foundation
 import ImageTools
 import TestHelpers
@@ -170,3 +172,4 @@ private func makeRendererFactory(renderer: UIGraphicsPDFRenderer = UIGraphicsPDF
     stub.makeRendererHandler = { renderer }
     return stub
 }
+#endif

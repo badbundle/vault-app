@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 public protocol PDFDocumentSize: Sendable {
     /// PPI of the document.
@@ -27,8 +26,8 @@ extension PDFDocumentSize {
         return (width * pointsPerInch, height * pointsPerInch)
     }
 
-    public var pointMargins: UIEdgeInsets {
-        UIEdgeInsets(
+    public var pointMargins: PlatformEdgeInsets {
+        PlatformEdgeInsets(
             top: inchMargins.top * pointsPerInch,
             left: inchMargins.left * pointsPerInch,
             bottom: inchMargins.bottom * pointsPerInch,

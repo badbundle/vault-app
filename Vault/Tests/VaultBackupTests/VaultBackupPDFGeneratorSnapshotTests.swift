@@ -1,3 +1,5 @@
+// The Mac renders PDFs from VAULT-104.
+#if canImport(UIKit)
 import Foundation
 import TestHelpers
 import Testing
@@ -92,3 +94,4 @@ extension VaultBackupPDFGeneratorSnapshotTests {
         )
     }
 }
+#endif

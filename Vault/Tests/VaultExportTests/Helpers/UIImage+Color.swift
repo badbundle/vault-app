@@ -1,3 +1,5 @@
+// The Mac renders PDFs from VAULT-104.
+#if canImport(UIKit)
 import UIKit
 
 extension UIImage {
@@ -8,3 +10,4 @@ extension UIImage {
         }
     }
 }
+#endif

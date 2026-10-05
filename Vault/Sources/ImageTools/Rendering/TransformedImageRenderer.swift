@@ -1,5 +1,4 @@
 import Foundation
-import UIKit
 
 /// Applies a certain `ImageTransformer` to a `ImageDataRenderer`.
 ///
@@ -13,7 +12,7 @@ public struct TransformedImageRenderer<Renderer: ImageDataRenderer, Transformer:
         self.transformer = transformer
     }
 
-    public func makeImage(fromData data: Data) -> UIImage? {
+    public func makeImage(fromData data: Data) -> PlatformImage? {
         guard let image = renderer.makeImage(fromData: data) else {
             return nil
         }

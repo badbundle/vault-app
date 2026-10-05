@@ -1,17 +1,16 @@
 import CoreGraphics
 import CoreImage
 import Foundation
-import UIKit
 
 /// Renders the provided data into a QR code.
 public struct QRCodeImageRenderer: ImageDataRenderer {
     public init() {}
 
-    public func makeImage(fromData data: Data) -> UIImage? {
+    public func makeImage(fromData data: Data) -> PlatformImage? {
         guard let pngData = CIFilter.qrCode(data: data)?.outputImage?.asPNG() else {
             return nil
         }
-        return UIImage(data: pngData)
+        return PlatformImage(data: pngData)
     }
 }
 

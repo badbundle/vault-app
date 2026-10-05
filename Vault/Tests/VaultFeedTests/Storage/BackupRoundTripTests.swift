@@ -15,6 +15,7 @@ import VaultKeygen
 /// the composition, and in particular that duress metadata (killphrase
 /// and search-passphrase digests, lock state, searchable level) survives
 /// the full trip (MANIFESTO C10).
+@Suite(.rendersPDFBackups)
 struct BackupRoundTripTests {
     private let killDigester = KillphraseDigester(key: .zero())
     private let searchDigester = SearchPassphraseDigester(key: .zero())

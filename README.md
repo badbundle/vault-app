@@ -93,7 +93,8 @@ The checks are in [`local-check.config.ts`](./local-check.config.ts). local-chec
 - `make lint`;
 - the Fastlane config check, which is skipped, and noted on the check, if the Ruby version in `.ruby-version` isn't installed;
 - a build and full run of the `iOSAllTests` test plan on a throwaway iPhone 18 Pro Max / iOS 27.0 simulator, created for the run and deleted afterwards;
-- a build and run of the UI tests, the `VaultAppUITests` scheme, on the same simulator.
+- a build and run of the UI tests, the `VaultAppUITests` scheme, on the same simulator;
+- a build and run of the `macOS_SupportedTests` test plan, the shared modules' tests, on the Mac itself, so that work on the Mac app can't break iOS, or the other way round (see [`docs/mac-app.md`](./docs/mac-app.md)).
 
 If the commit is already on GitHub, the result is posted straight away. Otherwise it's stored, and the pre-push hook posts it when you push, so you can validate before or after pushing. Every new commit needs validating again. Logs are kept in `.git/local-check/logs/`.
 

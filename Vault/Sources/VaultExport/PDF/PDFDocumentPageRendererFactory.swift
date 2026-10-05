@@ -1,3 +1,5 @@
+// The Mac renders PDFs from VAULT-104.
+#if canImport(UIKit)
 import UIKit
 
 /// Produces renderers optimized for rendering a standard size document.
@@ -46,3 +48,4 @@ extension PDFDocumentPageRendererFactory {
         return metadata
     }
 }
+#endif

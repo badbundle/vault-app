@@ -1,4 +1,9 @@
+import Foundation
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 final class PDFLabelRenderer {
     func makeAttributedTextForHeader(text: String, position: PDFLabelHeaderPosition) -> NSAttributedString {
@@ -10,8 +15,8 @@ final class PDFLabelRenderer {
             string: text,
             attributes: [
                 NSAttributedString.Key.paragraphStyle: paragraphStyle,
-                NSAttributedString.Key.font: UIFont.systemFont(ofSize: labelFontSize, weight: .regular),
-                NSAttributedString.Key.foregroundColor: UIColor.darkGray,
+                NSAttributedString.Key.font: PlatformFont.systemFont(ofSize: labelFontSize, weight: .regular),
+                NSAttributedString.Key.foregroundColor: PlatformColor.darkGray,
             ],
         )
     }

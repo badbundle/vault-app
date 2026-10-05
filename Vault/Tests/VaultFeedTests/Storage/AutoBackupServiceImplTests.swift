@@ -6,6 +6,7 @@ import VaultCore
 @testable import VaultFeed
 
 @MainActor
+@Suite(.rendersPDFBackups)
 struct AutoBackupServiceImplTests {
     // MARK: - Init
 

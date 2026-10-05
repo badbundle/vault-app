@@ -123,10 +123,21 @@ extension PDFDocument {
     }
 
     fileprivate static var onePage: PDFDocument {
+        #if canImport(UIKit)
         let renderer = UIGraphicsPDFRenderer()
         let data = renderer.pdfData { context in
             context.beginPage()
         }
         return PDFDocument(data: data)!
+        #else
+        // The same blank US Letter page, drawn with Core Graphics, as the Mac has no UIGraphicsPDFRenderer.
+        let data = NSMutableData()
+        var mediaBox = CGRect(x: 0, y: 0, width: 612, height: 792)
+        let context = CGContext(consumer: CGDataConsumer(data: data)!, mediaBox: &mediaBox, nil)!
+        context.beginPDFPage(nil)
+        context.endPDFPage()
+        context.closePDF()
+        return PDFDocument(data: data as Data)!
+        #endif
     }
 }

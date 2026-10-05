@@ -2,7 +2,6 @@ import CoreImage
 import Foundation
 import FoundationExtensions
 import Testing
-import UIKit
 import VaultBackup
 import VaultCore
 import VaultKeygen

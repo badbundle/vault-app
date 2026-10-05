@@ -2,7 +2,6 @@ import Combine
 import Foundation
 import FoundationExtensions
 import ImageTools
-import UIKit
 import VaultBackup
 import VaultCore
 import VaultExport
@@ -34,7 +33,7 @@ public final class DeviceTransferExportViewModel {
     }
 
     public private(set) var state: State = .idle
-    public private(set) var currentQRCodeImage: UIImage?
+    public private(set) var currentQRCodeImage: PlatformImage?
 
     private var shards: [DataShard] = []
     private var cycleTask: Task<Void, Never>?

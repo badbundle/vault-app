@@ -1,10 +1,10 @@
-import UIKit
+import Foundation
 
 /// @mockable
 public protocol ImageDataRenderer {
     /// Makes an image from the provided data.
     /// The way this transformation happens is down to each individual renderer.
-    func makeImage(fromData data: Data) -> UIImage?
+    func makeImage(fromData data: Data) -> PlatformImage?
 }
 
 // MARK: - Transform
@@ -17,8 +17,11 @@ extension ImageDataRenderer {
 
 // MARK: - Common Transforms
 
+// The Mac resizes images from VAULT-104.
+#if canImport(UIKit)
 extension ImageDataRenderer {
     public func resizing(to size: CGSize) -> some ImageDataRenderer {
         transform(ResizeImageTransformer(size: size))
     }
 }
+#endif
