@@ -16,6 +16,10 @@ Read [`MANIFESTO.md`](./MANIFESTO.md) before proposing or implementing any featu
 
 All of Vault's encryption uses Apple's CryptoKit, never another library's or our own, so that every build can tell App Store Connect it needs no export compliance documentation. Key derivation, hashing and HMAC aren't encryption. [`docs/export-compliance.md`](./docs/export-compliance.md) has the reasoning, and what to do if Vault ever needs other encryption.
 
+## The Mac app
+
+The native Mac app (VAULT-101) is designed in [`docs/mac-app.md`](./docs/mac-app.md): its decisions, how each iOS protection works on the Mac, its packaging and sandbox, and which modules build for both platforms. Read it before working on the Mac app, or on making a shared module build for macOS, and update it in the same PR if what you find changes the design.
+
 ## Issues
 
 Issues are recorded in Trackslash, in the `VAULT` project owned by `badbundle`, through its MCP server. Look there for what's open and in progress, and record a bug, a follow-up or a planned change there rather than in a TODO comment, a file in the repo or a PR body alone. Refer to an issue by its ref, such as `VAULT-60`. See [Issues](./README.md#issues).
