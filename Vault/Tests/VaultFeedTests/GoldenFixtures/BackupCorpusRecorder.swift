@@ -18,17 +18,21 @@ import VaultKeygen
 /// It never replaces a backup that's there. It prints each backup's ciphertext length, to be copied into its
 /// `BackupCorpusEntry`. See `Fixtures/Backups/README.md`.
 @MainActor
-@Suite(.enabled(if: GoldenFixture.isRecording), .rendersPDFBackups)
+@Suite(.enabled(if: GoldenFixture.isRecording))
 struct BackupCorpusRecorder {
     @Test
     func recordMissingBackups() async throws {
-        let recordings: [(BackupCorpusEntry, () async throws -> (data: Data, encryptedLength: Int))] = [
+        var recordings: [(BackupCorpusEntry, () async throws -> (data: Data, encryptedLength: Int))] = [
             (.pdfWithRandomPadding, recordPDFWithRandomPadding),
             (.pdfBeforeQuickTypeAndPreview, recordPDFBeforeQuickTypeAndPreview),
             (.pdfWithPlaintextSearchPassphrase, recordPDFWithPlaintextSearchPassphrase),
             (.autoBackup, recordAutoBackup),
             (.transferQRCodes, recordTransferQRCodes),
         ]
+        #if os(macOS)
+        // Only the Mac makes the Mac's PDF.
+        recordings.append((.pdfMadeOnTheMac, recordPDFWithRandomPadding))
+        #endif
         for (entry, record) in recordings where !GoldenFixture.isRecorded(entry.name) {
             let (data, encryptedLength) = try await record()
             try GoldenFixture.record(data, named: entry.name)
@@ -80,7 +84,7 @@ extension BackupCorpusRecorder {
 
 extension BackupCorpusRecorder {
     /// As the Backups page saved one from #624 to VAULT-75: `BackupCreatePDFViewModel`'s steps, as they were, with
-    /// random padding.
+    /// random padding. On the Mac, it's `pdfMadeOnTheMac`, drawn by the Mac's renderer.
     private func recordPDFWithRandomPadding() async throws -> (data: Data, encryptedLength: Int) {
         let source = try await sourceVault()
         let payload = try await source.dataModel.makeExport(userDescription: Self.encryptedDescription)

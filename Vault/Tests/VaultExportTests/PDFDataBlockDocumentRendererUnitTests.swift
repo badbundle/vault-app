@@ -1,10 +1,7 @@
-// The Mac renders PDFs from VAULT-104.
-#if canImport(UIKit)
 import Foundation
 import ImageTools
 import TestHelpers
 import Testing
-import UIKit
 import VaultExport
 
 struct PDFDataBlockDocumentRendererUnitTests {
@@ -38,7 +35,7 @@ struct PDFDataBlockDocumentRendererUnitTests {
 
     @Test
     func render_returnsPDFDocumentForValidData() {
-        let renderer = UIGraphicsPDFRenderer(bounds: .init())
+        let renderer = PlatformPDFRenderer(bounds: .init())
         let rendererFactory = makeRendererFactory(renderer: renderer)
         let sut = makeSUT(rendererFactory: rendererFactory)
 
@@ -49,7 +46,7 @@ struct PDFDataBlockDocumentRendererUnitTests {
 
     @Test
     func render_throwsForInvalidPDFData() {
-        let renderer = UIGraphicsPDFRendererStub()
+        let renderer = PlatformPDFRendererStub()
         renderer.pdfDataValue = makeInvalidPDFData()
         let rendererFactory = makeRendererFactory(renderer: renderer)
         let sut = makeSUT(rendererFactory: rendererFactory)
@@ -61,7 +58,7 @@ struct PDFDataBlockDocumentRendererUnitTests {
 
     @Test
     func render_reportsProgressAfterEachImage() throws {
-        let rendererFactory = makeRendererFactory(renderer: UIGraphicsPDFRenderer(bounds: .init()))
+        let rendererFactory = makeRendererFactory(renderer: PlatformPDFRenderer(bounds: .init()))
         let sut = makeSUT(rendererFactory: rendererFactory)
         var reported = [Double]()
 
@@ -72,7 +69,7 @@ struct PDFDataBlockDocumentRendererUnitTests {
 
     @Test
     func render_reportsProgressAcrossMultipleDataBlocks() throws {
-        let rendererFactory = makeRendererFactory(renderer: UIGraphicsPDFRenderer(bounds: .init()))
+        let rendererFactory = makeRendererFactory(renderer: PlatformPDFRenderer(bounds: .init()))
         let sut = makeSUT(rendererFactory: rendererFactory)
         var reported = [Double]()
 
@@ -83,7 +80,7 @@ struct PDFDataBlockDocumentRendererUnitTests {
 
     @Test
     func render_reportsCompleteProgressForDocumentWithoutImages() throws {
-        let rendererFactory = makeRendererFactory(renderer: UIGraphicsPDFRenderer(bounds: .init()))
+        let rendererFactory = makeRendererFactory(renderer: PlatformPDFRenderer(bounds: .init()))
         let sut = makeSUT(rendererFactory: rendererFactory)
         var reported = [Double]()
 
@@ -94,7 +91,7 @@ struct PDFDataBlockDocumentRendererUnitTests {
 
     @Test
     func render_doesNotReportProgressWhenRenderingFails() {
-        let renderer = UIGraphicsPDFRendererStub()
+        let renderer = PlatformPDFRendererStub()
         renderer.pdfDataValue = makeInvalidPDFData()
         let rendererFactory = makeRendererFactory(renderer: renderer)
         let sut = makeSUT(rendererFactory: rendererFactory)
@@ -165,11 +162,10 @@ private func makeImageRenderer() -> ImageDataRendererMock {
     return stub
 }
 
-private func makeRendererFactory(renderer: UIGraphicsPDFRenderer = UIGraphicsPDFRendererStub())
+private func makeRendererFactory(renderer: PlatformPDFRenderer = PlatformPDFRendererStub())
     -> PDFRendererFactoryMock
 {
     let stub = PDFRendererFactoryMock()
     stub.makeRendererHandler = { renderer }
     return stub
 }
-#endif

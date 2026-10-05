@@ -2,6 +2,9 @@ import Foundation
 import SnapshotTesting
 #if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+import Testing
 #endif
 
 /// Expected device configuration for snapshot tests.
@@ -57,6 +60,57 @@ public func assertSnapshot<Value>(
         column: column,
     )
 }
+
+#if !canImport(UIKit) && canImport(AppKit)
+/// Asserts that an image snapshot matches a reference made on the Mac, after checking the Mac's configuration.
+///
+/// The Mac draws differently from the iPhone, so its images are kept apart, in a `macOS` folder beside each test
+/// file's iOS images. Text and other snapshots are the same on both, so they share one reference.
+@MainActor
+public func assertSnapshot<Value>(
+    of value: @autoclosure () throws -> Value,
+    as snapshotting: Snapshotting<Value, NSImage>,
+    named name: String? = nil,
+    timeout: TimeInterval = 5,
+    file: StaticString = #file,
+    fileID: StaticString = #fileID,
+    filePath: StaticString = #filePath,
+    testName: String = #function,
+    line: UInt = #line,
+    column: UInt = #column,
+) {
+    assertDeviceConfiguration(file: file, line: line)
+
+    let testFile = URL(filePath: "\(filePath)")
+    let snapshotDirectory = testFile.deletingLastPathComponent()
+        .appending(path: "__Snapshots__")
+        .appending(path: testFile.deletingPathExtension().lastPathComponent)
+        .appending(path: "macOS")
+    let failure = try verifySnapshot(
+        of: value(),
+        as: snapshotting,
+        named: name,
+        snapshotDirectory: snapshotDirectory.path(percentEncoded: false),
+        timeout: timeout,
+        fileID: fileID,
+        file: filePath,
+        testName: testName,
+        line: line,
+        column: column,
+    )
+    if let failure {
+        Issue.record(
+            Comment(rawValue: failure),
+            sourceLocation: SourceLocation(
+                fileID: "\(fileID)",
+                filePath: "\(filePath)",
+                line: Int(line),
+                column: Int(column),
+            ),
+        )
+    }
+}
+#endif
 
 /// Validates that the current device matches the expected configuration for snapshot testing.
 ///

@@ -1,10 +1,7 @@
-// The Mac's snapshots of QR codes come with VAULT-104.
-#if canImport(UIKit)
 import Foundation
 import ImageTools
 import TestHelpers
 import Testing
-import UIKit
 
 @MainActor
 struct QRCodeImageRendererSnapshotTests {
@@ -25,4 +22,3 @@ struct QRCodeImageRendererSnapshotTests {
         assertSnapshot(of: image, as: .image)
     }
 }
-#endif

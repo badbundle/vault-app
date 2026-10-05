@@ -17,11 +17,8 @@ extension ImageDataRenderer {
 
 // MARK: - Common Transforms
 
-// The Mac resizes images from VAULT-104.
-#if canImport(UIKit)
 extension ImageDataRenderer {
     public func resizing(to size: CGSize) -> some ImageDataRenderer {
         transform(ResizeImageTransformer(size: size))
     }
 }
-#endif

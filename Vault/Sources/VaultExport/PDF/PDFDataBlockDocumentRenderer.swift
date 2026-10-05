@@ -1,9 +1,11 @@
-// The Mac renders PDFs from VAULT-104.
-#if canImport(UIKit)
 import Foundation
 import ImageTools
 import PDFKit
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 public struct PDFDataBlockDocumentRenderer<
     ImageRenderer: ImageDataRenderer,
@@ -77,7 +79,7 @@ public struct PDFDataBlockDocumentRenderer<
 }
 
 private final class PDFDocumentDrawerHelper<Layout: PageLayout> {
-    let context: UIGraphicsPDFRendererContext
+    let context: PlatformPDFRendererContext
     private let headerGenerator: any DataBlockHeaderGenerator
     private let pageLayout: (CGRect) -> Layout
     private let documentSize: any PDFDocumentSize
@@ -88,7 +90,7 @@ private final class PDFDocumentDrawerHelper<Layout: PageLayout> {
     private var currentPage = 0
 
     init(
-        context: UIGraphicsPDFRendererContext,
+        context: PlatformPDFRendererContext,
         documentSize: any PDFDocumentSize,
         headerGenerator: any DataBlockHeaderGenerator,
         labelRenderer: PDFLabelRenderer,
@@ -154,7 +156,7 @@ private final class PDFDocumentDrawerHelper<Layout: PageLayout> {
                 guard let image = imageRenderer.resizing(to: rect.size).makeImage(fromData: imageData) else {
                     return .failure(.contentMissing)
                 }
-                image.draw(in: rect)
+                image.drawUpright(in: rect)
                 contentArea.didDrawContent(at: rect)
                 return .success(.didDrawToDocument)
             } makeNewPage: { [self] in
@@ -228,4 +230,16 @@ extension DataBlockHeader {
         return labels
     }
 }
-#endif
+
+// MARK: - Drawing images
+
+extension PlatformImage {
+    /// Draws the image the right way up in the PDF's page, whose origin is at its top left.
+    fileprivate func drawUpright(in rect: CGRect) {
+        #if canImport(UIKit)
+        draw(in: rect)
+        #else
+        draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        #endif
+    }
+}
