@@ -34,6 +34,12 @@ struct VaultMacCommands: Commands {
             Button("New Recovery Phrase") { newItem?(.newRecoveryPhrase) }
                 .disabled(newItem == nil)
         }
+        CommandGroup(replacing: .help) {
+            Button("Vault Help") {
+                openWindow(id: VaultMacWindow.help.id)
+            }
+            .keyboardShortcut("?")
+        }
         CommandMenu("Item") {
             Button("Edit Item") { itemActions?.edit() }
                 .keyboardShortcut("e")

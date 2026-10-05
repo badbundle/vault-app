@@ -101,9 +101,27 @@ The standard menus, with Vault's commands in them:
 | Lock Vault | ⌃⌘L | Vault |
 | Settings… | ⌘, | Vault |
 | About Vault | | Vault |
-| Vault Help | ⌘? | Help (opens the FAQ) |
+| Vault Help | ⌘? | Help (opens the Help window) |
 
 There's no Undo for anything that changes the vault (C6). The Edit menu's Undo and Redo are only for text being typed.
+
+### Settings, Help and About
+
+The Settings window (⌘,) has two tabs, with every setting that means something on the Mac, at iOS's defaults (C7):
+
+- **General:** Tap a Code To, Show Next Code, the Clear Clipboard time, Universal Clipboard for codes and for notes
+  (both off), and Lock New Items.
+- **Security:** Require Unlock, Hide While Recording, the App Lock Password (Change Password, Set Duress Password and
+  Erase Vault After 10 Failed Passwords, each with the current password, in a sheet), and the Danger Zone's Delete All
+  Data, which asks first and then for Touch ID or the Mac's password (G15).
+
+Not on the Mac: Turn Off Password (G85), App Lock itself, which the password keeps on, and Show in Spotlight, which is
+always off with the password on (G49). Show New Codes in QuickType comes with AutoFill (VAULT-112).
+
+The Help window (⌘?) has the iOS app's FAQ pages, worded for either device, then the terms of use, the privacy
+policy, the libraries Vault uses and where its source is. The About window has the version, links to those pages,
+and the other Bad Bundle apps (`BadBundleApps`). Neither shows anything from the vault, so neither waits for it to be
+unlocked.
 
 ### Adding and editing items
 
@@ -190,7 +208,8 @@ Vault, such as the Open panel, are drawn by macOS, not Vault, and show only file
   Minimising a window locks Vault first, so the Dock's image of it shows only that.
 - **State restoration:** off for every window (`restorationBehavior(.disabled)`, and `isRestorable = false`), so
   macOS never saves a window's contents to disk. No window can be a tab, either.
-- **Window titles** are only ever "Vault" (and "Settings" for the Settings window), never an item's name, so the
+- **Window titles** are only ever "Vault", "About Vault", "Vault Help" and the Settings window's tab, never an item's
+  name, so the
   Window menu, Mission Control's labels and accessibility tools show nothing else.
 - **No Handoff** (`NSUserActivity`), **no Share menu** for items, and **no Quick Look** or other extensions.
 - **The Services menu** gets nothing from Vault's fields: they offer no Services.
@@ -532,6 +551,7 @@ The sub-issues on VAULT-101 stand, in the same order, with these changes:
   for Edit Item and Delete Item.
 - **VAULT-109:** minimising a window locks Vault, and no window can be a tab.
 - **VAULT-110:** the Backups pages are in the middle and detail columns, and transfers can be stopped.
-- **VAULT-111** to **VAULT-113** stand as they are.
+- **VAULT-111:** Settings has General and Security tabs, and Help is a window of its own.
+- **VAULT-112** and **VAULT-113** stand as they are.
 - **VAULT-114** (Bradley's) gains the Mac's clipboard history and `sharingType` checks for `RELEASE.md`.
 - **VAULT-115** (Bradley's): decision 9 recommends closing it.

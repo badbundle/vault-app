@@ -396,6 +396,7 @@ let package = Package(
                 "VaultAppIcon",
                 "FoundationExtensions",
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
+                .product(name: "BadBundleApps", package: "bad-bundle-apps"),
             ],
             swiftSettings: swiftSettings,
             plugins: targetPlugins,
