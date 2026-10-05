@@ -79,7 +79,7 @@ As soon as we are able, we will be dropping the xcodeproj project wrapper and go
 
 - `Vault.xcworkspace` what you should open
 - `/Vault` Swift Package that defines targets used by the app, build settings, tooling.
-- `/VaultApp` minimal wrapper that packages this into an executable application.
+- `/VaultApp` minimal wrapper that packages this into the iOS app (`VaultApp`) and the Mac app (`VaultMacApp`).
 
 ### Validation
 
@@ -94,7 +94,8 @@ The checks are in [`local-check.config.ts`](./local-check.config.ts). local-chec
 - the Fastlane config check, which is skipped, and noted on the check, if the Ruby version in `.ruby-version` isn't installed;
 - a build and full run of the `iOSAllTests` test plan on a throwaway iPhone 18 Pro Max / iOS 27.0 simulator, created for the run and deleted afterwards;
 - a build and run of the UI tests, the `VaultAppUITests` scheme, on the same simulator;
-- a build and run of the `macOS_SupportedTests` test plan, the shared modules' tests, on the Mac itself, so that work on the Mac app can't break iOS, or the other way round (see [`docs/mac-app.md`](./docs/mac-app.md)).
+- a build and run of the `macOS_SupportedTests` test plan, the shared modules' tests, on the Mac itself, so that work on the Mac app can't break iOS, or the other way round (see [`docs/mac-app.md`](./docs/mac-app.md));
+- a build of the Mac app, `VaultMacApp`, with its tests running inside it, then a check that it's signed with only the entitlements the design lists, and its UI tests, the `VaultMacAppUITests` scheme.
 
 If the commit is already on GitHub, the result is posted straight away. Otherwise it's stored, and the pre-push hook posts it when you push, so you can validate before or after pushing. Every new commit needs validating again. Logs are kept in `.git/local-check/logs/`.
 

@@ -142,7 +142,7 @@ You shouldn't need to manually change the locale or any other simulator setting 
 	<td><b>make screenshots</b></td>
   </tr>
   <tr>
-	<td>Regenerate the app icon from its SwiftUI source (see <a href="#app-icon">App Icon</a>)</td>
+	<td>Regenerate the iOS and Mac app icons from their SwiftUI source (see <a href="#app-icon">App Icon</a>)</td>
 	<td><b>make app-icon</b></td>
   </tr>
 </table>

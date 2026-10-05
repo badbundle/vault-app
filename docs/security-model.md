@@ -152,6 +152,15 @@ a password that can be guessed.
 | G74 | No prebuilt binary code ships in the app. | README | `Vault/Package.swift` | none | Holds, with a limit: see [Accepted limits](#accepted-limits) |
 | G75 | The source is public, and anyone can build the app from it. | README, Settings (Open Source) | the public repository | none | Holds |
 
+## The Mac app
+
+The Mac app (`docs/mac-app.md`) keeps every promise above that its shared code keeps, which is most of them. These are
+its own. Each part of the Mac app adds its rows as it's built.
+
+| ID | Promise | Made in | Kept by | Pinned by | Status |
+| --- | --- | --- | --- | --- | --- |
+| G84 | The Mac app is sandboxed in its own App Group, with the hardened runtime, and has only the entitlements its design lists: no network, no keychain access groups or iCloud, no Apple Events, and no exceptions to the sandbox or the hardened runtime. | `docs/mac-app.md` | `VaultMacApp.entitlements` | `make validate`'s "Mac app entitlements" check; `MacAppLaunchTests` `launch_runsInTheAppSandbox`, `appGroupContainer_isTheTeamPrefixedOne` | Holds |
+
 ## Accepted limits
 
 These are known and accepted. Each is said where users will read it.

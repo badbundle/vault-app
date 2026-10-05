@@ -58,3 +58,58 @@ struct AppIconCatalogTests {
         #expect(AppIconCatalog.defaultOutputPath.hasSuffix("VaultApp/VaultApp/Assets.xcassets/AppIcon.appiconset"))
     }
 }
+
+struct MacAppIconCatalogTests {
+    @Test
+    func slots_areEveryMacSizeAtOneAndTwoTimes() {
+        let slots = MacAppIconCatalog.slots.map { "\($0.points)@\($0.scale)x" }
+
+        #expect(slots == [
+            "16@1x",
+            "16@2x",
+            "32@1x",
+            "32@2x",
+            "128@1x",
+            "128@2x",
+            "256@1x",
+            "256@2x",
+            "512@1x",
+            "512@2x",
+        ])
+    }
+
+    @Test
+    func pixelSizes_haveOneFileEachForEverySlot() {
+        #expect(MacAppIconCatalog.pixelSizes == [16, 32, 64, 128, 256, 512, 1024])
+        #expect(MacAppIconCatalog.slots.allSatisfy { MacAppIconCatalog.pixelSizes.contains($0.pixels) })
+    }
+
+    @Test
+    func contentsJSON_listsEverySlotForTheMac() throws {
+        let contents = try JSONDecoder().decode(
+            MacAppIconCatalog.Contents.self,
+            from: MacAppIconCatalog.contentsJSON(),
+        )
+
+        #expect(contents.images.count == 10)
+        #expect(contents.images.allSatisfy { $0.idiom == "mac" })
+        #expect(contents.images.first == .init(
+            filename: "AppIcon-Mac-16.png",
+            idiom: "mac",
+            scale: "1x",
+            size: "16x16",
+        ))
+        #expect(contents.images.last == .init(
+            filename: "AppIcon-Mac-1024.png",
+            idiom: "mac",
+            scale: "2x",
+            size: "512x512",
+        ))
+    }
+
+    @Test
+    func defaultOutputPath_targetsTheMacAppsIconSet() {
+        #expect(MacAppIconCatalog.defaultOutputPath
+            .hasSuffix("VaultApp/VaultMacApp/Assets.xcassets/AppIcon.appiconset"))
+    }
+}

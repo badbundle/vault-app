@@ -42,3 +42,18 @@ struct AppIconPNGRendererTests {
         return properties[kCGImagePropertyHasAlpha as String] as? Bool ?? false
     }
 }
+
+@MainActor
+struct MacAppIconPNGRendererTests {
+    @Test
+    func macPNGData_isTheSizeAskedForWithTransparentCorners() throws {
+        let data = try AppIconPNGRenderer.macPNGData(pixelSize: 64)
+
+        let source = try #require(CGImageSourceCreateWithData(data as CFData, nil))
+        let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        #expect(image.width == 64)
+        #expect(image.height == 64)
+        let properties = try #require(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any])
+        #expect(properties[kCGImagePropertyHasAlpha as String] as? Bool == true)
+    }
+}

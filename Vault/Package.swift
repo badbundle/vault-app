@@ -40,6 +40,7 @@ let package = Package(
         .library(name: "VaultiOSAutofill", targets: ["VaultiOSAutofill"]),
         .library(name: "VaultiOSShared", targets: ["VaultiOSShared"]),
         .library(name: "VaultiOSWidgets", targets: ["VaultiOSWidgets"]),
+        .library(name: "VaultMac", targets: ["VaultMac"]),
         .executable(
             name: "vault-keygen-speedtest",
             targets: ["VaultKeygenSpeedtest"],
@@ -376,6 +377,33 @@ let package = Package(
                 "VaultFeed",
                 "VaultSettings",
                 "FoundationExtensions",
+                "TestHelpers",
+            ],
+            exclude: ["__Snapshots__"],
+            swiftSettings: swiftSettings,
+            plugins: testTargetPlugins,
+        ),
+
+        // MARK: - MAC
+
+        // The Mac app's views, its composition root and the AppKit pieces it needs. macOS only, as VaultiOS is
+        // iOS only: see docs/mac-app.md.
+        .target(
+            name: "VaultMac",
+            dependencies: [
+                "VaultFeed",
+                "VaultSettings",
+                "VaultAppIcon",
+                "FoundationExtensions",
+            ],
+            swiftSettings: swiftSettings,
+            plugins: targetPlugins,
+        ),
+        .testTarget(
+            name: "VaultMacTests",
+            dependencies: [
+                "VaultMac",
+                "VaultFeed",
                 "TestHelpers",
             ],
             exclude: ["__Snapshots__"],

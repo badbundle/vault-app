@@ -16,6 +16,8 @@ Use the simulator configuration specified in `README.md` for all builds and test
 
 The UI tests are in `VaultApp/VaultAppUITests`, a target of the app's Xcode project, as a Swift package can't hold UI tests. They launch the app on the in-memory demo vault (`-screenshot-scene feed`, see `ScreenshotMode`), or, for the lock, on a vault the app prepares in a directory, defaults and keychain items of its own (`-ui-test-vault`, see `UITestVault`), so they never touch the simulator's own vault. They find elements by accessibility identifier rather than by text. To run only them, from the root of the repo: `xcodebuild test -workspace Vault.xcworkspace -scheme VaultAppUITests -destination 'id=<simulator UDID>' -skipMacroValidation -skipPackagePluginValidation`.
 
+The Mac app's UI tests are in `VaultApp/VaultMacAppUITests`, with their own `VaultMacAppUITests` scheme, and its tests that run inside the launched app are in `VaultApp/VaultMacAppTests` (the `VaultMacApp` scheme). Run them with `-destination platform=macOS`. Development builds of the Mac app are signed with the team's Apple Development certificate and no provisioning profile (see [`../docs/mac-app.md`](../docs/mac-app.md)).
+
 ## Committing
 
 Before every commit, run `make format` and `make lint` from the `Vault/` directory to ensure code is properly formatted and passes linting.

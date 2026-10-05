@@ -67,9 +67,89 @@ export default (({ xcode }) => {
         flags: ["-skipMacroValidation", "-skipPackagePluginValidation", "-skipPackageUpdates"],
       }),
       ios.testWithoutBuilding({ name: "Tests (macOS)", destination: "platform=macOS" }),
+      // The Mac app, launched with its tests inside it: it starts, sandboxed, in its App Group.
+      ios.buildForTesting({
+        name: "Build Mac app tests",
+        workspace: "Vault.xcworkspace",
+        scheme: "VaultMacApp",
+        testPlan: "VaultMacAppTests",
+        destination: "platform=macOS",
+        flags: ["-skipMacroValidation", "-skipPackagePluginValidation", "-skipPackageUpdates"],
+      }),
+      ios.testWithoutBuilding({ name: "Mac app tests", destination: "platform=macOS" }),
+      {
+        name: "Mac app entitlements",
+        async run(ctx) {
+          await checkMacAppEntitlements(ctx, ios.derivedData(ctx));
+        },
+      },
+      // The Mac app's UI tests, in their own scheme as the iOS app's are. Each build stays just before its tests.
+      ios.buildForTesting({
+        name: "Build Mac UI tests",
+        workspace: "Vault.xcworkspace",
+        scheme: "VaultMacAppUITests",
+        testPlan: "VaultMacAppUITests",
+        destination: "platform=macOS",
+        flags: ["-skipMacroValidation", "-skipPackagePluginValidation", "-skipPackageUpdates"],
+      }),
+      ios.testWithoutBuilding({ name: "Mac UI tests", destination: "platform=macOS" }),
     ],
   };
 }) satisfies ConfigFunction;
+
+/**
+ * The entitlements the Mac app may have, from docs/mac-app.md's "App Sandbox" table. A development build also lets
+ * the debugger attach (`get-task-allow`), which an App Store build doesn't.
+ */
+const macAppEntitlements = [
+  "com.apple.security.app-sandbox",
+  "com.apple.security.application-groups",
+  "com.apple.security.device.camera",
+  "com.apple.security.files.bookmarks.app-scope",
+  "com.apple.security.files.user-selected.read-write",
+  "com.apple.security.get-task-allow",
+  "com.apple.security.print",
+];
+
+/**
+ * Builds the Mac app as it runs, rather than for testing, which adds entitlements of Xcode's own, and fails unless
+ * it's signed with the hardened runtime, sandboxed in its App Group, and with no entitlement the design doesn't list.
+ */
+async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promise<void> {
+  await ctx.exec([
+    "xcodebuild",
+    "build",
+    "-workspace",
+    "Vault.xcworkspace",
+    "-scheme",
+    "VaultMacApp",
+    "-destination",
+    "platform=macOS",
+    "-derivedDataPath",
+    derivedData,
+    "-skipMacroValidation",
+    "-skipPackagePluginValidation",
+    "-skipPackageUpdates",
+  ]);
+  const app = `${derivedData}/Build/Products/Debug/Vault.app`;
+  const signature = await ctx.capture(["codesign", "--display", "--verbose", app]);
+  if (!/flags=0x[0-9a-f]+\(runtime\)/.test(signature.stderr)) {
+    throw new Error(`Vault.app isn't signed with the hardened runtime:\n${signature.stderr}`);
+  }
+  const plist = `${ctx.cacheDir}/mac-app-entitlements.plist`;
+  await ctx.exec(["codesign", "--display", "--xml", "--entitlements", plist, app]);
+  const { stdout } = await ctx.capture(["plutil", "-convert", "json", "-o", "-", plist]);
+  const entitlements = JSON.parse(stdout) as Record<string, unknown>;
+  const unlisted = Object.keys(entitlements).filter((key) => !macAppEntitlements.includes(key));
+  if (unlisted.length > 0) {
+    throw new Error(`Vault.app has entitlements docs/mac-app.md doesn't list: ${unlisted.join(", ")}`);
+  }
+  const groups = entitlements["com.apple.security.application-groups"];
+  if (entitlements["com.apple.security.app-sandbox"] !== true || JSON.stringify(groups) !== '["442P244AFS.com.badbundle.vault"]') {
+    throw new Error(`Vault.app isn't sandboxed in its App Group: ${JSON.stringify(entitlements)}`);
+  }
+  ctx.log(`Vault.app's entitlements: ${Object.keys(entitlements).join(", ")}`);
+}
 
 /**
  * Puts rbenv's shims first on PATH. Shells that haven't run `rbenv init`

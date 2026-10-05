@@ -22,22 +22,47 @@ enum AppIconPNGRenderer {
     /// never has to cross an isolation boundary.
     @MainActor
     static func pngData(appearance: VaultAppIconAppearance, pixelSize: Int) throws -> Data {
-        let side = CGFloat(pixelSize)
-        let renderer = ImageRenderer(
-            content: VaultAppIconView(appearance: appearance)
-                .frame(width: side, height: side),
+        let rendered = try render(
+            VaultAppIconView(appearance: appearance),
+            pixelSize: pixelSize,
+            isOpaque: appearance.hasOpaqueBackground,
+            failure: .renderFailed(appearance),
         )
-        renderer.scale = 1
-        renderer.proposedSize = ProposedViewSize(width: side, height: side)
-        renderer.isOpaque = appearance.hasOpaqueBackground
-        guard let rendered = renderer.cgImage else {
-            throw Failure.renderFailed(appearance)
-        }
         // App Store icons may not carry an alpha channel, so the default icon is
         // redrawn without one whatever the renderer produced. The dark and tinted
         // variants keep theirs: Apple supplies the backgrounds behind them.
         let image = try appearance.hasOpaqueBackground ? withoutAlpha(rendered) : rendered
         return try encodePNG(image)
+    }
+
+    /// Renders the Mac's icon, `pixelSize` square. It keeps its alpha channel: the Mac shows the corners and the
+    /// shadow around the rounded square on whatever is behind it.
+    @MainActor
+    static func macPNGData(pixelSize: Int) throws -> Data {
+        try encodePNG(render(
+            VaultMacAppIconView(),
+            pixelSize: pixelSize,
+            isOpaque: false,
+            failure: .renderFailed(.light),
+        ))
+    }
+
+    @MainActor
+    private static func render(
+        _ view: some View,
+        pixelSize: Int,
+        isOpaque: Bool,
+        failure: Failure,
+    ) throws -> CGImage {
+        let side = CGFloat(pixelSize)
+        let renderer = ImageRenderer(content: view.frame(width: side, height: side))
+        renderer.scale = 1
+        renderer.proposedSize = ProposedViewSize(width: side, height: side)
+        renderer.isOpaque = isOpaque
+        guard let rendered = renderer.cgImage else {
+            throw failure
+        }
+        return rendered
     }
 
     static func withoutAlpha(_ image: CGImage) throws -> CGImage {
