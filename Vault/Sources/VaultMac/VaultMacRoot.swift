@@ -41,9 +41,13 @@ enum VaultMacRoot {
 
     // MARK: - Stores
 
-    /// The app's own keychain access group, as on iOS: the first in its `keychain-access-groups`. The items the
-    /// AutoFill extension reads too are in the App Group, which they name.
-    static let keychain: Keychain = .default
+    /// The app's own keychain access group, `…vault.private`: the first in its `keychain-access-groups`, and the only
+    /// one its own items are read from or written to, so nothing in the App Group, which the AutoFill extension shares,
+    /// is ever taken for one of them. The items the extension reads too name the App Group themselves.
+    static let keychain = Keychain(accessGroup: .keychainGroup(
+        teamID: "442P244AFS",
+        nameID: "com.badbundle.vault.private",
+    ))
 
     static let secureStorage: some SecureStorage = SecureStorageImpl(keychain: keychain)
 
@@ -202,8 +206,16 @@ enum VaultMacRoot {
         authenticationService: deviceAuthenticationService,
         passwordService: vaultPasswordService,
         purgeSensitiveData: {
-            // Straight away, then everything read from the vault. No item's page is open when it's unlocked again.
+            // Straight away, then everything read from the vault. No item's page or tag is open when it's unlocked
+            // again, which could be into another vault, so nothing shows which was open before (C2).
             feedModel.selectedItemID = nil
+            feedModel.sidebarSelection = .items
+            // What Vault copied doesn't outlast the vault it came from.
+            pasteboard.clearNow()
+            // Nor does a save, open or print panel showing a backup, or the folder it was choosing.
+            if NSApplication.shared.modalWindow != nil {
+                NSApplication.shared.abortModal()
+            }
             vaultDataModel.purgeSensitiveData()
             Task { await vaultDataModel.purgeVaultContents() }
         },
@@ -264,7 +276,8 @@ enum VaultMacRoot {
     // MARK: - Erasing
 
     /// Erases every vault, leaving a fresh, empty store in memory: after too many wrong App Lock Passwords, when the
-    /// user has turned that on, and Delete All Data. Go through `eraseVault()`.
+    /// user has turned that on, and Erase and Start Again on the failure screen. Go through `eraseVault()`. (Delete All
+    /// Data empties every vault instead, through `VaultDataModel.deleteVault()`, and keeps the password.)
     static let vaultEraser: VaultEraser = .init(
         directory: vaultStorageDirectory,
         session: vaultStore,
@@ -311,10 +324,21 @@ enum VaultMacRoot {
     /// everything held in memory from the erased vaults. The app goes back to its first launch: the password has to be
     /// set again before anything can be added.
     static func eraseVault() async throws {
+        feedModel.selectedItemID = nil
+        feedModel.sidebarSelection = .items
+        // AppKit's own memory of the folders its panels last showed, which could be where the backups are.
+        for key in defaultsKeysOfOpenAndSavePanels() {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
         plainVaultStore = try await vaultEraser.erase()
         vaultPasswordService.vaultWasErased()
         appLockService.vaultWasErased()
         await vaultDataModel.resetAfterErase()
+    }
+
+    /// The keys AppKit keeps for the Open and Save panels, such as the last folder each showed.
+    static func defaultsKeysOfOpenAndSavePanels(in defaults: UserDefaults = .standard) -> [String] {
+        defaults.dictionaryRepresentation().keys.filter { $0.hasPrefix("NSNav") }
     }
 
     /// Erases and starts again, if the vault's data is missing and nothing showed an erase was meant, once the user

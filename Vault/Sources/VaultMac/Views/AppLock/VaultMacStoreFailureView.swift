@@ -7,6 +7,8 @@ struct VaultMacStoreFailureView: View {
     var failure: VaultMacStoreFailure
     var missingVault: MissingVaultViewModel?
 
+    @State private var isConfirmingErase = false
+
     var body: some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.lock.fill")
@@ -21,10 +23,30 @@ struct VaultMacStoreFailureView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 420)
             if let missingVault {
-                Button("Erase and Start Again", role: .destructive) {
-                    Task { await missingVault.eraseAndStartAgain() }
+                // Erasing can't be undone, and deletes the keys killphrases and search passphrases are checked with,
+                // so it asks first, as on iOS.
+                Button("Erase and Start Again…", role: .destructive) {
+                    isConfirmingErase = true
                 }
                 .controlSize(.large)
+                .disabled(missingVault.state == .erasing || missingVault.state == .erased)
+                .accessibilityIdentifier("store-failure.erase")
+                .confirmationDialog("Erase Vault?", isPresented: $isConfirmingErase) {
+                    Button("Erase", role: .destructive) {
+                        Task { await missingVault.eraseAndStartAgain() }
+                    }
+                } message: {
+                    Text(
+                        "Everything Vault keeps on this Mac is erased, and it starts again as on its first launch. This can't be undone. Restore a backup afterwards to bring your items back.",
+                    )
+                }
+                if missingVault.state == .erasing {
+                    ProgressView()
+                        .controlSize(.small)
+                } else if missingVault.state == .failed {
+                    Text("Vault couldn't erase everything. Try again.")
+                        .foregroundStyle(.red)
+                }
             }
         }
         .padding(40)

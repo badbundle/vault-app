@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import TestHelpers
 import Testing
@@ -71,10 +72,33 @@ struct VaultMacAutofillModelTests {
         let locks = env.vault.lockCount
 
         env.sut.deviceWillLock()
-        await env.sut.endRequest()
+        await env.sut.waitForTheVault()
 
         #expect(env.sut.appLock.isLocked)
         #expect(env.vault.lockCount > locks)
+    }
+
+    /// As the app locks when another comes to the front.
+    @Test
+    func userLeaving_locksTheSheetAndTheVault() async throws {
+        let env = try await Environment.unlocked()
+        let locks = env.vault.lockCount
+
+        env.sut.userDidLeave()
+        await env.sut.waitForTheVault()
+
+        #expect(env.sut.appLock.isLocked)
+        #expect(env.vault.lockCount > locks)
+    }
+
+    /// The app's first launch set the password after the sheet's lock was made.
+    @Test
+    func passwordNotSetYet_sendsTheUserToVault() async throws {
+        let env = try Environment(password: nil)
+
+        await env.sut.prepareToUnlock()
+
+        #expect(env.sut.availability == .needsTheApp(.notSetUp))
     }
 
     @Test
@@ -99,6 +123,8 @@ struct VaultMacAutofillModelTests {
         hidden.metadata.searchableLevel = .onlyPassphrase
         _ = try await env.store.insert(item: hidden.makeWritable())
         _ = try await env.store.insert(item: MacTestItems.note().makeWritable())
+        _ = try await env.store
+            .insert(item: MacTestItems.code(issuer: "Counter", type: .hotp(counter: 3)).makeWritable())
 
         await env.sut.loadCodes()
 
@@ -123,11 +149,12 @@ struct VaultMacAutofillModelTests {
 
     @MainActor
     private struct Environment {
-        let vault = FakeAutofillVault(password: "correct horse battery")
+        let vault: FakeAutofillVault
         let sut: VaultMacAutofillModel
         let store: VaultStoreSession
 
-        init(mode: VaultAccessMode = .password) throws {
+        init(mode: VaultAccessMode = .password, password: String? = "correct horse battery") throws {
+            vault = FakeAutofillVault(password: password)
             let (dataModel, store) = try MacTestVault.make()
             self.store = store
             let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
@@ -160,7 +187,7 @@ final class FakeAutofillVault: VaultMacAutofillVaultUnlocking {
     var hasHeadroom = true
     private(set) var lockCount = 0
 
-    init(password: String) {
+    init(password: String?) {
         base = FakeAppLockPasswordService(password: password)
     }
 
@@ -215,5 +242,86 @@ final class FakeAutofillVault: VaultMacAutofillVaultUnlocking {
     func lockVault() async {
         lockCount += 1
         await base.lockVault()
+    }
+}
+
+@MainActor
+struct VaultMacAutofillLockObserverTests {
+    @Test(arguments: VaultMacLockTriggers.lockingDistributedNotifications)
+    func distributedNotification_locks(name: Notification.Name) {
+        let env = Environment()
+
+        env.distributed.post(name: name, object: nil)
+
+        #expect(env.events == [.macWillLock])
+    }
+
+    @Test(arguments: VaultMacLockTriggers.lockingWorkspaceNotifications)
+    func workspaceNotification_locks(name: Notification.Name) {
+        let env = Environment()
+
+        env.workspace.post(name: name, object: nil)
+
+        #expect(env.events == [.macWillLock])
+    }
+
+    @Test
+    func anotherAppComingToTheFront_isTheUserLeaving() throws {
+        let env = Environment()
+        let other = try #require(NSWorkspace.shared.runningApplications.first { $0 != NSRunningApplication.current })
+
+        env.workspace.post(
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            userInfo: [NSWorkspace.applicationUserInfoKey: other],
+        )
+
+        #expect(env.events == [.userDidLeave])
+    }
+
+    @Test
+    func theHostComingToTheFront_isNotLeaving() {
+        let env = Environment()
+
+        env.workspace.post(
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            userInfo: [NSWorkspace.applicationUserInfoKey: NSRunningApplication.current],
+        )
+
+        #expect(env.events.isEmpty)
+    }
+
+    @Test
+    func stop_stopsObserving() {
+        let env = Environment()
+
+        env.sut.stop()
+        env.distributed.post(name: VaultMacLockTriggers.lockingDistributedNotifications[0], object: nil)
+
+        #expect(env.events.isEmpty)
+    }
+
+    private enum Event: Equatable {
+        case macWillLock
+        case userDidLeave
+    }
+
+    @MainActor
+    private final class Environment {
+        let distributed = NotificationCenter()
+        let workspace = NotificationCenter()
+        var events: [Event] = []
+        private(set) var sut: VaultMacAutofillLockObserver!
+
+        init() {
+            sut = VaultMacAutofillLockObserver(
+                hostProcess: NSRunningApplication.current.processIdentifier,
+                distributedCenter: distributed,
+                workspaceCenter: workspace,
+                macWillLock: { [weak self] in self?.events.append(.macWillLock) },
+                userDidLeave: { [weak self] in self?.events.append(.userDidLeave) },
+            )
+        }
     }
 }

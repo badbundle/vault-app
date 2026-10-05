@@ -38,6 +38,22 @@ struct VaultEraserTests {
         }
     }
 
+    /// The Mac's erase makes its fresh store in memory, so nothing unencrypted is ever written to the App Group (G85).
+    @Test
+    func erase_withThePlainStoreInMemory_asOnTheMac_leavesNoStoreOnDisk() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try await VaultEraseHarness.encryptedDevice(in: directory)
+            await harness.session.lock()
+
+            try await harness.makeEraser(plainStoreInMemory: true).erase()
+
+            #expect(try await harness.session.retrieve(query: .init()).items.isEmpty)
+            for url in PersistedLocalVaultStoreFactory.storeFileURLs(storageDirectory: directory) {
+                #expect(!FileManager.default.fileExists(atPath: url.path), "\(url.lastPathComponent)")
+            }
+        }
+    }
+
     /// The count of wrong attempts takes its lock on a file beside the vault, which shows a password was tried on this
     /// device. An erase leaves none, however often the lock screen took the lock beforehand, and nothing makes it again
     /// until a password is set.
@@ -591,7 +607,11 @@ struct VaultEraseHarness {
     /// An eraser, as the app makes one.
     ///
     /// - Parameter whileReloadingWidgets: Runs as the widgets reload, after the vault is first removed.
-    func makeEraser(whileReloadingWidgets: @escaping @Sendable () -> Void = {}) -> VaultEraser {
+    /// - Parameter plainStoreInMemory: Makes the fresh store in memory, as the Mac app does.
+    func makeEraser(
+        whileReloadingWidgets: @escaping @Sendable () -> Void = {},
+        plainStoreInMemory: Bool = false,
+    ) -> VaultEraser {
         let fileSystem = fileSystem
         let directory = directory
         return VaultEraser(
@@ -617,6 +637,9 @@ struct VaultEraseHarness {
             ),
             makePlainStore: {
                 try fileSystem.step("create the plain store")
+                if plainStoreInMemory {
+                    return try PersistedLocalVaultStore.inMemory()
+                }
                 return try PersistedLocalVaultStoreFactory(storageDirectory: directory, recoveryMode: .openOnly)
                     .makeVaultStoreOrThrow()
             },

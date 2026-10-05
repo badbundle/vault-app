@@ -67,15 +67,36 @@ Lock Password set:
 
 ## Checking a build on a Mac
 
-The Mac app's AutoFill is checked by hand too, on a Mac with Touch ID, before
-each release of the Mac app. In System Settings, General, AutoFill & Passwords,
-turn on Vault, then in Safari, on a page with a one-time code field:
+The Mac app's use of the real Touch ID, screen capture and AutoFill is checked
+by hand, on a Mac with Touch ID, before each release of the Mac app, and on
+each new version of macOS.
+
+**Capture.** With Hide While Recording on, take a screenshot (⇧⌘3), a screen
+recording (⇧⌘5), a screen share (FaceTime or another app) and an AirPlay
+mirror, each with these on screen in turn: the main window with a code's page,
+an editor sheet, an alert, Settings, the QR code scanner and the AutoFill
+sheet. None of them is in any capture. Turn Hide While Recording off: they all
+are.
+
+**Locking.**
+
+- With Settings open, close the main window, then choose Window, Vault: it's
+  locked.
+- Minimise the main window with an item open: the Dock's image of it shows
+  nothing from the vault, and it's locked when it's back.
+- Copy a code, then lock the Mac: the clipboard is empty once it's unlocked.
+- With Spotlight's clipboard history on, copy a code: it isn't in the history.
+
+**AutoFill.** In System Settings, General, AutoFill & Passwords, turn on
+Vault, then in Safari, on a page with a one-time code field:
 
 - Choose Vault in the field's AutoFill menu: its sheet asks for Touch ID, then
-  the App Lock Password, and lists the vault's codes.
+  the App Lock Password, and lists the vault's time-based codes.
 - Search, and choose a code: it fills the field, and the sheet goes.
 - Open the sheet again: it asks for Touch ID and the password again.
-- A locked code, or one hidden behind a search passphrase, isn't listed.
+- A locked code, or one hidden behind a search passphrase, isn't listed, and
+  searching for a killphrase deletes nothing.
+- With the sheet unlocked, go to another app and back: the sheet is locked.
 - Lock the Mac with the sheet open, then unlock it: the sheet is locked.
 
 ## Shipping a build

@@ -49,7 +49,8 @@ Mine, for Bradley to review:
    Settings and About as sidebar entries.
 7. **A team-prefixed App Group, and keychain access groups as on iOS.** The Mac app and its AutoFill extension
    share `442P244AFS.com.badbundle.vault`, rather than the iOS app's `group.com.badbundle.vault-group`: on the Mac, an
-   App Group that starts with the team ID needs nothing registered for it. The keychain is as on iOS: the app's own
+   App Group that starts with the team ID needs nothing registered for it, so any app of the team could claim it: no
+   other Bad Bundle Mac app may. The keychain is as on iOS: the app's own
    group (`keychain-access-groups`, `…vault.private`), and the App Group for the few items the extension reads too.
    See [Keychain](#keychain).
 
@@ -174,11 +175,17 @@ The Mac locks the vault, dropping its items, caches, search and keys (G29):
   behind (G22). The default is Immediately, as on iOS. Hiding Vault (⌘H) counts as leaving it. Coming back to the
   front starts unlocking by itself, as the iOS app does coming back to the foreground;
 - **from the Vault menu,** with Lock Vault (⌃⌘L);
-- **when a window is minimised,** so the Dock's image of it shows only the lock screen (`VaultMacWindowPrivacy`);
+- **when the main window closes,** even with Settings, Help or About still open, which keep Vault running;
+- **when a window is minimised,** and its contents hide until it's back, so the Dock's image of it shows nothing from
+  the vault (`VaultMacWindowPrivacy`);
 - **when it quits,** which closing its window does, as for a single-window Mac app. Every launch starts locked, as on
   iOS.
 
-`VaultMacLockTriggers` listens for all of them.
+`VaultMacLockTriggers` listens for all of them. Locking also clears what Vault copied, closes any Open, Save or Print
+panel, and goes back to Items in the sidebar, so nothing of one vault is left for the next to show (C2). The lock
+screen forgets a password typed before Vault locked again.
+
+Before the first launch's password is set, the lock isn't on yet, so nothing locks: there's nothing in the vault.
 
 iOS shows a privacy cover while the app is inactive, for the app switcher. The Mac has no app switcher snapshot, and a
 window left on screen behind another app is what the Require Unlock delay chose to keep. So the Mac has no privacy
@@ -205,8 +212,9 @@ Vault, such as the Open panel, are drawn by macOS, not Vault, and show only file
 
 ### Other ways a window's contents could leak
 
-- **Mission Control, App Exposé and the Dock's previews:** once locked, every window shows only the lock screen.
-  Minimising a window locks Vault first, so the Dock's image of it shows only that.
+- **Mission Control, App Exposé, Stage Manager and the Dock's previews:** once locked, the main window shows only the
+  lock screen and Settings only that Vault is locked; Help and About have nothing from the vault. Within a Require
+  Unlock delay, they show a window as it was left. Minimising a window locks Vault first and hides its contents.
 - **State restoration:** off for every window (`restorationBehavior(.disabled)`, and `isRestorable = false`), so
   macOS never saves a window's contents to disk. No window can be a tab, either.
 - **Window titles** are only ever "Vault", "About Vault", "Vault Help" and the Settings window's tab, never an item's
@@ -216,6 +224,11 @@ Vault, such as the Open panel, are drawn by macOS, not Vault, and show only file
 - **The Services menu** gets nothing from Vault's fields: they offer no Services.
 - **Accessibility:** apps the user has allowed to control the Mac (Privacy & Security → Accessibility) can read the
   text of any window, Vault's included. That's an accepted limit, as a screen reader needs it.
+- **Windows macOS draws for Vault** aren't Vault's to hide from capture: the Open panel's preview of an image chosen
+  to read a code from, an input method's candidate window, Hover Text and Zoom, the Touch ID prompt, and Control
+  Center's camera preview. An accepted limit.
+- **Look Up** (a force click, or ⌃⌘D) has nothing to show in Vault's fields, so no word goes to Apple's Look Up
+  services.
 
 ### The clipboard
 
@@ -234,6 +247,7 @@ The same rules as iOS (G50), with AppKit's equivalents:
 - An item's page shows its text without letting it be selected, so nothing on it is copied around Vault's clipboard:
   a note has Copy Note instead.
 - A locked code asks for Touch ID or the Mac's password before it's copied (G32).
+- Locking clears it at once, so what was copied from one vault isn't there for the next (C2).
 - Recovery phrases can't be copied (G41), and a drag out of the list gives only the item's ID (G51).
 
 Whether macOS 26's own clipboard history, in Spotlight, keeps concealed and transient items is checked by hand
@@ -257,11 +271,22 @@ Secure fields, for passwords, passphrases, killphrases and a recovery phrase's w
 already keeps from learning or copying. As on iOS, each declares `secretTextInput()`, the Mac's counterpart, and
 `SecretTextInputDeclarationTests` fails for any that doesn't.
 
+A single-line field keeps no undo history, as its text can be a killphrase or a search passphrase, and AppKit's
+setting up of the field editor as editing starts can't turn any of the above back on: each field's cell sets it up
+again (`VaultMacFieldEditor.keepPrivate(_:)`). A note's editor has an undo history of its own, which it forgets as the
+sheet closes.
+
 Decision 8: Secure Keyboard Entry (`EnableSecureEventInput`) is on while a `VaultMacFieldEditor` has focus, and off
 again as soon as it loses focus or leaves its window. A secure field turns it on itself.
 
 A field's menu offers only Cut, Copy, Paste and Select All, Cut and Copy go through Vault's clipboard as details that
 never leave this Mac (G51, G87), and text can't be dragged out of a field.
+
+### Launch arguments
+
+On the Mac, an app's launch arguments go into a defaults domain that every defaults read checks first. Vault's
+settings are only ever changed in Settings, so `VaultMacScene` takes every `vault.` key out of that domain before
+anything reads a setting (`VaultMacSettingsArguments`).
 
 ### Keychain
 
@@ -273,14 +298,19 @@ On the Mac, the data protection keychain only answers an app whose provisioning 
 group: without one, every call fails with `errSecMissingEntitlement`, App Group or not (found in VAULT-106). So the Mac
 app has `keychain-access-groups`, and its App Group is a keychain access group too:
 
-- the backup password and the killphrase and search passphrase keyrings are in the app's own group,
-  `442P244AFS.com.badbundle.vault.private` (`SecureStorage` with the default group, the first in its
-  `keychain-access-groups`), which the AutoFill extension can't read;
+- the killphrase and search passphrase keyrings are in the app's own group, `442P244AFS.com.badbundle.vault.private`,
+  which the AutoFill extension can't read. `VaultMacRoot.keychain` names that group, so the app never reads one of
+  its own items from the App Group either. The backup password is inside each encrypted vault, as on iOS with the
+  password on;
 - the attempt counter, the device key and the wrap stamp name the App Group, `442P244AFS.com.badbundle.vault`, which
   the extension shares, and which is its only keychain access group.
 
 The app's own group isn't named for the app, as the iOS app's is, because on the Mac that name is the App Group's, and
 the extension would read it too (found in VAULT-112).
+
+The keyrings stay on this Mac: moving to another Mac, with Migration Assistant or a Time Machine restore, brings the
+vault file but not them, so its killphrases and search passphrases would stop working there. Moving to another Mac is
+done with a Vault backup, which carries them (G7).
 
 ### Spotlight
 
@@ -306,10 +336,18 @@ Mac's Settings don't offer it, and the Mac app never touches Core Spotlight.
     the extension (G2, G47);
   - Hide While Recording keeps its sheet out of every capture, as it does the app's windows (G24, G91).
 
+  It also locks when the user goes to another app, as the app does, and asks again when they're back. It offers
+  time-based codes only: filling a counter-based one would move its counter on, which only the app does. Its search
+  field copies nothing, as the extension ends with the request, before a copy could be cleared.
+
   With the identity store empty, nothing is filled without the sheet: `provideCredentialWithoutUserInteraction(for:)`
-  always asks for it. Until Vault's first launch has set the App Lock Password, the sheet says to open Vault. The
+  always asks for it, and each request empties the store again. Until Vault's first launch has set the App Lock Password, the sheet says to open Vault. The
   extension never touches `VaultMacRoot`, which recovers and converts the vault at the app's launch: it only reads
-  the vault as the app left it, from the App Group. Show New Codes in QuickType isn't offered on the Mac, as there's
+  the vault as the app left it, from the App Group.
+
+  The sheet is shown inside the app it fills, through a view macOS draws there, so whether its window's
+  `sharingType` keeps it out of captures is checked by hand (`RELEASE.md`); if macOS doesn't honour it, that's an
+  accepted limit. Show New Codes in QuickType isn't offered on the Mac, as there's
   no QuickType for it to fill.
 
   Whether Safari offers Vault's codes as its headers say is checked by hand (`RELEASE.md`, "Checking a build on a
@@ -328,19 +366,25 @@ is in the detail column.
 - **Backup Password:** whether it's set, and setting or changing it in a sheet, after Touch ID or the Mac's password,
   with the App Lock Password's rules (G27). Each vault has its own (G17).
 - **Keep a Backup** saves the encrypted PDF through `NSSavePanel`, straight to where the user chooses, named as on
-  iOS, or prints it with `NSPrintOperation`. There's no temporary file and no share sheet, so G43 and G53 don't apply.
-  It's logged as a backup once it's saved or printed, as a completed share is on iOS.
+  iOS, or prints it with `NSPrintOperation`. There's no temporary file of Vault's and no share sheet, so G43 and G53
+  don't apply. It's logged as a backup once it's saved, or printed or saved as a PDF from the print panel. The print
+  panel's PDF menu can also open it in Preview or send it on, as macOS offers for anything printed: an accepted limit.
+- Every Open and Save panel starts in Documents, never the last folder AppKit remembers for the app, which could be
+  where another vault's backups are, and an erase forgets those folders.
 - **Move to Another Device** shows the transfer's QR codes, for an iPhone or iPad to scan, two seconds each. Closing
   the page, or locking, stops them and forgets the encrypted vault they carried (`DeviceTransferExportViewModel.stop()`).
 - **Auto-Backup** writes to a folder the user picks with `NSOpenPanel`, such as one in iCloud Drive, whenever the vault
-  changes. Vault keeps access to it across launches with a security-scoped bookmark (`.withSecurityScope`, made and
+  changes while the backup password is loaded: after a Backups page has asked for Touch ID or the Mac's password,
+  until Vault locks, as on iOS. Otherwise the page and the list say it needs attention, and the next change after it's
+  loaded, or Back Up Now, backs everything up. Vault keeps access to it across launches with a security-scoped bookmark (`.withSecurityScope`, made and
   read so on macOS by `iCloudDriveProvider`), as iOS keeps its folder. If the folder moves and the bookmark goes
   stale, the user chooses it again.
 - **Restore** reads a PDF the user picks, or scans a device's transfer codes with the Mac's camera or Continuity
   Camera (`AVCaptureMetadataOutput`), until it has every one. It always asks for the backup's own password (G59),
-  after Touch ID or the Mac's password (G31), and asks again once the page closes or Vault stops being the active
-  app. An empty vault imports; otherwise Merge or Replace, as on iOS.
+  after Touch ID or the Mac's password (G31), and asks again once the page closes, or Vault stops being the active
+  app with no import open. An empty vault imports; otherwise Merge or Replace, as on iOS.
 - **Adding a code** can also read a QR code from an image file the user picks, with Vision's barcode detection.
+- **The camera** isn't used while another app is using it, as that app would see the code too.
 
 ## Packaging
 
@@ -576,6 +620,19 @@ The sub-issues on VAULT-101 stand, in the same order, with these changes:
 - **VAULT-110:** the Backups pages are in the middle and detail columns, and transfers can be stopped.
 - **VAULT-111:** Settings has General and Security tabs, and Help is a window of its own.
 - **VAULT-112:** the AutoFill extension, and the app's own keychain group renamed so the extension can't read it.
-- **VAULT-113** stands as it is.
-- **VAULT-114** (Bradley's) gains the Mac's clipboard history and `sharingType` checks for `RELEASE.md`.
+- **VAULT-113:** the review's fixes are recorded in each section, and its findings in its PR and ticket.
+
+### The review (VAULT-113)
+
+Seven read-only reviews checked the Mac app against the manifesto, the security model and this document: locking and
+the password, the vault file and keychain, the clipboard and text, windows and capture, backups and transfer, AutoFill,
+and the sandbox. What they found was fixed, or is under Accepted limits in `docs/security-model.md` with its reason.
+They found no way in from outside the app and its extension: no XPC services, URL schemes, App Intents, AppleScript,
+Services, Handoff, Spotlight, network or files outside the App Group.
+
+Hands on, on the Mac Studio: Terminal can't list Vault's App Group container ("Operation not permitted"), as macOS
+keeps other apps out of a group container unless the user allows them, and the data protection keychain's items
+aren't listed by the `security` tool or Keychain Access.
+- **VAULT-114** (Bradley's) runs `RELEASE.md`'s Mac checks, which VAULT-113 wrote: capture, locking, the clipboard
+  history and AutoFill. Its release lane also checks a Release build's entitlements, which `make validate` can't.
 - **VAULT-115** (Bradley's): decision 9 recommends closing it.

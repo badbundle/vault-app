@@ -39,6 +39,29 @@ struct VaultMacLockTriggersTests {
         ])
     }
 
+    /// Even with Settings, Help or About still open, which keep Vault running.
+    @Test
+    func closingTheMainWindow_locksAtOnceWhateverTheDelay() async throws {
+        let env = try await Environment(delay: .fifteenMinutes)
+        let window = NSWindow()
+        window.identifier = NSUserInterfaceItemIdentifier("main-AppWindow-1")
+
+        env.application.post(name: NSWindow.willCloseNotification, object: window)
+
+        #expect(env.appLock.isLocked)
+    }
+
+    @Test
+    func closingAnotherWindow_leavesVaultUnlocked() async throws {
+        let env = try await Environment(delay: .fifteenMinutes)
+        let window = NSWindow()
+        window.identifier = NSUserInterfaceItemIdentifier("help-AppWindow-1")
+
+        env.application.post(name: NSWindow.willCloseNotification, object: window)
+
+        #expect(!env.appLock.isLocked)
+    }
+
     @Test
     func leavingTheApp_withRequireUnlockImmediately_locksAtOnce() async throws {
         let env = try await Environment(delay: .immediately)

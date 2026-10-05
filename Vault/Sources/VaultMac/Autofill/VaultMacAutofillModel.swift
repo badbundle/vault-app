@@ -80,6 +80,9 @@ final class VaultMacAutofillModel {
     func prepareToUnlock() async {
         await lockTheVault().value
         switch accessMode() {
+        case .password where !appLock.isPasswordSet:
+            // Set meanwhile, by the app's first launch: the sheet's lock was made before it was.
+            availability = .needsTheApp(.notSetUp)
         case .password:
             let hasHeadroom = (try? await vaultService.hasMemoryHeadroomToUnlock()) ?? false
             availability = hasHeadroom ? .available : .needsTheApp(.notEnoughMemory)
@@ -97,11 +100,13 @@ final class VaultMacAutofillModel {
         await dataModel.reloadItems()
     }
 
-    /// The codes the sheet offers: never a locked one, which would need Touch ID or the Mac's password to copy, nor a
-    /// hidden one (G47).
+    /// The codes the sheet offers: time-based ones, never a locked one, which would need Touch ID or the Mac's password
+    /// to copy, nor a hidden one (G47). A counter-based code isn't offered: filling one would have to move its counter
+    /// on, which only the app does.
     var codes: [VaultItem] {
         dataModel.items.filter { item in
-            item.item.otpCode != nil && !item.metadata.lockState.isLocked
+            guard case .totp = item.item.otpCode?.type else { return false }
+            return !item.metadata.lockState.isLocked
                 && VaultItemViewConfiguration(
                     visibility: item.metadata.visibility,
                     searchableLevel: item.metadata.searchableLevel,
@@ -112,6 +117,17 @@ final class VaultMacAutofillModel {
     /// The Mac's locking, or going to sleep: the sheet's lock and the vault lock, and the codes go.
     func deviceWillLock() {
         appLock.deviceWillLock()
+    }
+
+    /// The user's gone to another app: the sheet locks, as the app does with Require Unlock at Immediately, and asks
+    /// again when they're back.
+    func userDidLeave() {
+        appLock.lockNow()
+    }
+
+    /// Waits for whatever's underway on the vault, such as locking it, to finish.
+    func waitForTheVault() async {
+        await lastVaultOperation?.value
     }
 
     /// Locks the vault again at the end of the request, before the sheet goes.

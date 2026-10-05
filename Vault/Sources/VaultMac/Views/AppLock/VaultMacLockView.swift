@@ -43,6 +43,11 @@ struct VaultMacLockView: View {
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onChange(of: state, initial: true) {
+            // A password typed before Vault locked again is forgotten, so it isn't waiting in the field, ready to be
+            // sent, once Touch ID or the Mac's password next passes.
+            if state.step != .password {
+                password = ""
+            }
             if state.step == .password, !state.isInProgress {
                 isPasswordFocused = true
             }

@@ -37,6 +37,8 @@ public final class DeviceTransferExportViewModel {
 
     private var shards: [DataShard] = []
     private var cycleTask: Task<Void, Never>?
+    /// Goes up each time the transfer stops, so a generation that was underway then shows nothing when it finishes.
+    private var generation = 0
 
     private let backupPassword: DerivedEncryptionKey
     private let dataModel: VaultDataModel
@@ -58,14 +60,18 @@ public final class DeviceTransferExportViewModel {
     }
 
     public func generateShards() async {
+        generation += 1
+        let generation = generation
         do {
             state = .generating
 
             // Export vault data
             let payload = try await dataModel.makeExport(userDescription: "")
+            guard generation == self.generation else { return }
 
             // Encrypt and encode
             let encryptedVault = try await encryptPayload(payload: payload)
+            guard generation == self.generation else { return }
 
             // Convert to data
             let coder = EncryptedVaultCoder()
@@ -80,6 +86,7 @@ public final class DeviceTransferExportViewModel {
             renderCurrentQRCode()
             startCycling()
         } catch {
+            guard generation == self.generation else { return }
             state = .error(.init(
                 userTitle: "Transfer Error",
                 userDescription: "Failed to prepare data for transfer. Please try again.",
@@ -91,6 +98,7 @@ public final class DeviceTransferExportViewModel {
     /// Ends the transfer: the codes stop cycling, and the encrypted vault they carried is forgotten. Generating again
     /// starts a new transfer.
     public func stop() {
+        generation += 1
         cycleTask?.cancel()
         cycleTask = nil
         shards = []
@@ -102,11 +110,11 @@ public final class DeviceTransferExportViewModel {
         guard case .displayingQR = state else { return }
         cycleTask?.cancel()
 
-        cycleTask = Task {
+        cycleTask = Task { [weak self, intervalTimer] in
             while !Task.isCancelled {
                 do {
                     try await intervalTimer.wait(for: 2.0)
-                    guard !Task.isCancelled else { break }
+                    guard !Task.isCancelled, let self else { break }
                     advanceToNextShard()
                 } catch {
                     break

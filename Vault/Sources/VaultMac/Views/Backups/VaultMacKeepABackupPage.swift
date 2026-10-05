@@ -74,6 +74,7 @@ struct VaultMacKeepABackupPage: View {
 
     private func save(_ pdf: BackupCreatePDFViewModel.GeneratedPDF) {
         let panel = NSSavePanel()
+        VaultMacPanels.prepare(panel)
         panel.allowedContentTypes = [.pdf]
         panel.nameFieldStringValue = BackupPDFTemporaryFiles.fileName(for: pdf)
         panel.canCreateDirectories = true
@@ -136,7 +137,10 @@ struct VaultMacBackupPDFSaver {
         ) else { return false }
         operation.showsPrintPanel = true
         operation.showsProgressPanel = true
-        return operation.run()
+        guard operation.run() else { return false }
+        // Printed, or saved as a PDF from the print panel: a backup kept. Opened in Preview, or sent somewhere from
+        // the panel's PDF menu, isn't one Vault can count on.
+        return [.spool, .save].contains(operation.printInfo.jobDisposition)
     }
 }
 

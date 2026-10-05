@@ -266,6 +266,7 @@ struct VaultMacImportSheet: View {
     /// The Open panel, for choosing one PDF.
     static func runPDFPanel() -> URL? {
         let panel = NSOpenPanel()
+        VaultMacPanels.prepare(panel)
         panel.allowedContentTypes = [.pdf]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
