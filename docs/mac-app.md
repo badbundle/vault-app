@@ -47,11 +47,11 @@ Mine, for Bradley to review:
    a list of items with their live codes, and the selected item's page. Settings is the standard Settings window
    (⌘,), and About is the standard About window, from the Vault menu. That changes VAULT-105's sidebar, which listed
    Settings and About as sidebar entries.
-7. **A team-prefixed App Group, and the iOS app's keychain access groups.** The Mac app and its AutoFill extension
+7. **A team-prefixed App Group, and keychain access groups as on iOS.** The Mac app and its AutoFill extension
    share `442P244AFS.com.badbundle.vault`, rather than the iOS app's `group.com.badbundle.vault-group`: on the Mac, an
    App Group that starts with the team ID needs nothing registered for it. The keychain is as on iOS: the app's own
-   group (`keychain-access-groups`), and the App Group for the few items the extension reads too. See
-   [Keychain](#keychain).
+   group (`keychain-access-groups`, `…vault.private`), and the App Group for the few items the extension reads too.
+   See [Keychain](#keychain).
 
    This was first planned without `keychain-access-groups`, so that development builds needed no provisioning
    profile. VAULT-106 found the Mac refuses the data protection keychain (`errSecMissingEntitlement`) to an app with
@@ -115,8 +115,9 @@ The Settings window (⌘,) has two tabs, with every setting that means something
   Erase Vault After 10 Failed Passwords, each with the current password, in a sheet), and the Danger Zone's Delete All
   Data, which asks first and then for Touch ID or the Mac's password (G15).
 
-Not on the Mac: Turn Off Password (G85), App Lock itself, which the password keeps on, and Show in Spotlight, which is
-always off with the password on (G49). Show New Codes in QuickType comes with AutoFill (VAULT-112).
+Not on the Mac: Turn Off Password (G85), App Lock itself, which the password keeps on, Show in Spotlight, which is
+always off with the password on (G49), and Show New Codes in QuickType, as there's no QuickType to fill (see
+[QuickType and AutoFill](#quicktype-and-autofill)).
 
 The Help window (⌘?) has the iOS app's FAQ pages, worded for either device, then the terms of use, the privacy
 policy, the libraries Vault uses and where its source is. The About window has the version, links to those pages,
@@ -270,12 +271,16 @@ needs for the iOS keychain's behaviour: no prompts, no access lists, and items t
 
 On the Mac, the data protection keychain only answers an app whose provisioning profile grants it a keychain access
 group: without one, every call fails with `errSecMissingEntitlement`, App Group or not (found in VAULT-106). So the Mac
-app has `keychain-access-groups` with its own group, `442P244AFS.com.badbundle.vault`, as the iOS app does, and its
-App Group is a keychain access group too:
+app has `keychain-access-groups`, and its App Group is a keychain access group too:
 
-- the backup password and the killphrase and search passphrase keyrings are in the app's own group (`SecureStorage`
-  with the default group), which the AutoFill extension can't read;
-- the attempt counter, the device key and the wrap stamp name the App Group, which the extension shares.
+- the backup password and the killphrase and search passphrase keyrings are in the app's own group,
+  `442P244AFS.com.badbundle.vault.private` (`SecureStorage` with the default group, the first in its
+  `keychain-access-groups`), which the AutoFill extension can't read;
+- the attempt counter, the device key and the wrap stamp name the App Group, `442P244AFS.com.badbundle.vault`, which
+  the extension shares, and which is its only keychain access group.
+
+The app's own group isn't named for the app, as the iOS app's is, because on the Mac that name is the App Group's, and
+the extension would read it too (found in VAULT-112).
 
 ### Spotlight
 
@@ -287,11 +292,28 @@ Mac's Settings don't offer it, and the Mac app never touches Core Spotlight.
 - **Suggestions:** macOS's credential identity store is what lists codes in Safari's suggestions, as QuickType does on
   iOS. With the password always on, it's kept empty and never written (G46).
 - **AutoFill:** since macOS 15, a credential provider extension can fill one-time codes, with `ProvidesOneTimeCodes`
-  in its `ASCredentialProviderExtensionCapabilities` and `prepareOneTimeCodeCredentialList(for:)`. The macOS 27 SDK
-  has the same API as iOS 18 and later. VAULT-112 builds it, under the iOS AutoFill rules: the App Lock Password asked
-  for in its own sheet after Touch ID or the Mac's password (G25, G48); its attempts counted with the app's, never the
-  tenth (G20); locking when the Mac locks (G29); and never a locked or hidden code (G47). VAULT-112 checks the API
-  works as its headers say, and records what it finds here.
+  in its `ASCredentialProviderExtensionCapabilities` and `prepareOneTimeCodeCredentialList(for:)`. VAULT-112 checked
+  the macOS 27 SDK: `ASOneTimeCodeCredential`, `ASOneTimeCodeCredentialRequest`,
+  `prepareOneTimeCodeCredentialList(for:)` and `completeOneTimeCodeRequest(using:)` are all there, available from macOS
+  15, as on iOS 18. So the Mac has an AutoFill extension, `VaultMacAutofill`, under the iOS AutoFill rules (G95):
+  - its sheet asks for Touch ID or the Mac's password, then the App Lock Password, with its own app lock, which starts
+    locked (G25, G48);
+  - its attempts are counted with the app's (`AutofillVaultService`), and it never makes the last one before the
+    vault would be erased: that one is only ever made at the app's lock screen (G20);
+  - it locks the vault again when the Mac locks, sleeps or its screen saver starts (`VaultMacLockTriggers`' lists),
+    and at the end of every request (G29);
+  - it never offers a locked or hidden code, and its search never checks killphrases: their keys are never loaded in
+    the extension (G2, G47);
+  - Hide While Recording keeps its sheet out of every capture, as it does the app's windows (G24, G91).
+
+  With the identity store empty, nothing is filled without the sheet: `provideCredentialWithoutUserInteraction(for:)`
+  always asks for it. Until Vault's first launch has set the App Lock Password, the sheet says to open Vault. The
+  extension never touches `VaultMacRoot`, which recovers and converts the vault at the app's launch: it only reads
+  the vault as the app left it, from the App Group. Show New Codes in QuickType isn't offered on the Mac, as there's
+  no QuickType for it to fill.
+
+  Whether Safari offers Vault's codes as its headers say is checked by hand (`RELEASE.md`, "Checking a build on a
+  Mac").
 
 ### Widgets
 
@@ -352,7 +374,7 @@ entitlements:
 | `com.apple.security.files.bookmarks.app-scope` | Keeping the auto-backup folder across launches. VAULT-110 checks whether macOS 26 still needs it. |
 | `com.apple.security.device.camera` | Scanning QR codes, with `NSCameraUsageDescription`. |
 | `com.apple.security.print` | Printing a backup. |
-| `keychain-access-groups`: `442P244AFS.com.badbundle.vault` | The app's own keychain items. |
+| `keychain-access-groups`: `442P244AFS.com.badbundle.vault.private`, then `442P244AFS.com.badbundle.vault` | The app's own keychain items, which the AutoFill extension can't read, then the App Group's. |
 
 The provisioning profile adds two more, which name the app and its team: `com.apple.application-identifier` and
 `com.apple.developer.team-identifier`.
@@ -361,7 +383,7 @@ It never has:
 
 - **network entitlements** (`network.client`, `network.server`): Vault makes no network requests (G70), and without
   them, the sandbox makes sure it can't;
-- a keychain access group but its own, or iCloud entitlements (G69);
+- a keychain access group but its own and the App Group's, or iCloud entitlements (G69);
 - temporary exceptions, file access beyond user-selected files (downloads, pictures and so on), Apple Events or
   scripting targets, or Mach lookup exceptions;
 - the hardened runtime's exceptions: no JIT, unsigned memory, DYLD environment variables, or disabled library
@@ -370,14 +392,15 @@ It never has:
 
 The hardened runtime is on, so other code can't be injected into Vault's process.
 
-The AutoFill extension gets the sandbox, the App Group and the AutoFill entitlement
+The AutoFill extension gets the sandbox, the hardened runtime, the App Group, the App Group as its only keychain
+access group, and the AutoFill entitlement
 (`com.apple.developer.authentication-services.autofill-credential-provider`), and nothing else. The app itself doesn't
 need the AutoFill entitlement: it never writes the credential identity store, which stays empty on the Mac.
 
 `make validate`'s "Mac app entitlements" check builds the app as it runs (a build for testing has entitlements of
-Xcode's own), and fails unless it's signed with the hardened runtime, sandboxed in its App Group, with only its own keychain access
-group, and with no entitlement outside the first table and the profile's two, apart from a development build's
-`get-task-allow`.
+Xcode's own), and fails unless the app and its extension are each signed with the hardened runtime, sandboxed in the
+App Group, with only their own keychain access groups, and with no entitlement outside their lists and the profile's
+two, apart from a development build's `get-task-allow`.
 
 ### Info.plist
 
@@ -409,7 +432,8 @@ password offline (G33, G64).
   the Mac Studio that validates registered on it. It lasts a year (until 5 October 2027). Another Mac that builds Vault
   has to be added to it, and the profile downloaded again. The tests that run inside the app and the UI test runner
   are signed with the certificate alone.
-- **The AutoFill extension** (VAULT-112) needs a development profile of its own.
+- **The AutoFill extension:** the same, with the "Vault Mac AutoFill Development" profile, made for
+  `com.badbundle.vault.VaultAutofill` on 5 October 2026 (until 5 October 2027), with the same Mac registered.
 - **The App Store:** a Mac App Store provisioning profile for each target, made with the release lanes (VAULT-114).
 
 ## Modules
@@ -421,8 +445,7 @@ password offline (G33, G64).
 | VaultBackup, VaultFeed | yes | yes | Build for macOS once ImageTools and VaultExport do (VAULT-103). |
 | VaultAppIcon | yes | yes | SwiftUI only. The Mac's app icon is rendered from it, like iOS's. |
 | VaultiOS, VaultiOSShared, VaultiOSAutofill, VaultiOSWidgets | yes | no | Unchanged. |
-| `VaultMac` | no | yes | The Mac app's views, its composition root and the AppKit pieces. |
-| `VaultMacAutofill` | no | yes | The credential provider's views (VAULT-112). |
+| `VaultMac` | no | yes | The Mac app's views, its composition root and the AppKit pieces, and the AutoFill extension's (in `Autofill/`, with a root of its own), which its target subclasses, as the iOS extension's does. |
 
 `VaultMac` doesn't reuse VaultiOS's views: they're iOS views, full of UIKit and iOS-only modifiers, and making them
 build for both would change the iOS app. It reuses everything beneath them. The shared view models, the App Lock, the
@@ -552,6 +575,7 @@ The sub-issues on VAULT-101 stand, in the same order, with these changes:
 - **VAULT-109:** minimising a window locks Vault, and no window can be a tab.
 - **VAULT-110:** the Backups pages are in the middle and detail columns, and transfers can be stopped.
 - **VAULT-111:** Settings has General and Security tabs, and Help is a window of its own.
-- **VAULT-112** and **VAULT-113** stand as they are.
+- **VAULT-112:** the AutoFill extension, and the app's own keychain group renamed so the extension can't read it.
+- **VAULT-113** stands as it is.
 - **VAULT-114** (Bradley's) gains the Mac's clipboard history and `sharingType` checks for `RELEASE.md`.
 - **VAULT-115** (Bradley's): decision 9 recommends closing it.
