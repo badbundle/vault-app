@@ -10,7 +10,13 @@ struct VaultMacMainView: View {
     var authentication: DeviceAuthenticationService
     var keyDeriverFactory: any VaultKeyDeriverFactory
 
-    @FocusState private var isSearchFocused: Bool
+    /// Goes up each time Find (⌘F) asks for the search field.
+    @State private var searchFocusRequest = 0
+    /// The item editor that's open, if one is.
+    @State private var editorRequest: VaultMacEditorRequest?
+    /// The item that's asking whether to delete it, if one is.
+    @State private var pendingDeletion: VaultItem.Metadata?
+    @State private var deletionProblem: String?
     @Environment(\.vaultMacItemPreviews) private var previews
     @Environment(\.vaultMacCopy) private var copy
 
@@ -64,8 +70,48 @@ struct VaultMacMainView: View {
         .onChange(of: dataModel.itemsFilteringByTags) {
             Task { await feed.reloadItems() }
         }
-        .focusedSceneValue(\.vaultMacFindAction, VaultMacMenuAction { isSearchFocused = true })
+        .sheet(item: $editorRequest) { request in
+            VaultMacEditorSheet(
+                request: request,
+                dataModel: dataModel,
+                keyDeriverFactory: keyDeriverFactory,
+                localSettings: localSettings,
+                close: { editorRequest = nil },
+            )
+        }
+        .environment(\.vaultMacEdit, openEditor)
+        .environment(\.vaultMacDelete, VaultMacDeleteAction { pendingDeletion = $0 })
+        // There's no undo and no history: once deleted, an item is gone (C6).
+        .confirmationDialog(
+            "Delete This Item?",
+            isPresented: Binding(get: { pendingDeletion != nil }, set: {
+                if !$0 {
+                    pendingDeletion = nil
+                }
+            }),
+            presenting: pendingDeletion,
+        ) { metadata in
+            Button("Delete", role: .destructive) {
+                Task { await delete(metadata) }
+            }
+        } message: { _ in
+            Text("It's deleted from Vault at once, and can't be brought back.")
+        }
+        .alert(
+            "Vault Couldn't Delete the Item",
+            isPresented: Binding(get: { deletionProblem != nil }, set: {
+                if !$0 {
+                    deletionProblem = nil
+                }
+            }),
+        ) {
+            Button("OK") {}
+        } message: {
+            Text(deletionProblem ?? "")
+        }
+        .focusedSceneValue(\.vaultMacFindAction, VaultMacMenuAction { searchFocusRequest += 1 })
         .focusedSceneValue(\.vaultMacCopyCodeAction, copySelectedCode)
+        .focusedSceneValue(\.vaultMacNewItemAction, editorRequest == nil ? openEditor : nil)
     }
 
     private var sidebar: some View {
@@ -90,6 +136,20 @@ struct VaultMacMainView: View {
             }
         }
         .listStyle(.sidebar)
+    }
+
+    private func delete(_ metadata: VaultItem.Metadata) async {
+        do {
+            try await dataModel.delete(itemID: metadata.id)
+        } catch {
+            deletionProblem = error.localizedDescription
+        }
+    }
+
+    private var openEditor: VaultMacEditAction {
+        VaultMacEditAction { request in
+            editorRequest = request
+        }
     }
 
     /// Copies the open item's code: Copy (⌘C) while no text has focus.
@@ -119,9 +179,24 @@ struct VaultMacMainView: View {
                 )
             }
         }
-        .searchable(text: Bindable(dataModel).itemsSearchQuery, placement: .toolbar, prompt: "Search")
-        .searchFocused($isSearchFocused)
-        .autocorrectionDisabled()
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button("New Code") { editorRequest = .newCode }
+                    Button("New Note") { editorRequest = .newNote }
+                    Button("New Recovery Phrase") { editorRequest = .newRecoveryPhrase }
+                } label: {
+                    Label("New Item", systemImage: "plus")
+                }
+                .help("New Item")
+                .accessibilityIdentifier("feed.new-item")
+            }
+            ToolbarItem(placement: .automatic) {
+                // A field of Vault's own rather than `searchable`'s, so it edits as every other field does (G52).
+                VaultMacSearchField(text: Bindable(dataModel).itemsSearchQuery, focusRequest: searchFocusRequest)
+                    .frame(width: 200)
+            }
+        }
         .accessibilityIdentifier("feed")
     }
 }

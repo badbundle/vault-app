@@ -11,14 +11,14 @@ struct VaultMacEncryptedItemDetailView: View {
 
     var body: some View {
         switch viewModel.state {
-        case let .decrypted(payload, _):
+        case let .decrypted(payload, key):
             VaultMacAuthenticationGate(
                 isRequired: Self.requiresDeviceAuthentication(payload),
                 reason: "Show the recovery phrase",
                 authentication: authentication,
                 locksWhenInactive: true,
             ) {
-                decrypted(payload)
+                decrypted(payload, key: key)
             }
         default:
             passwordForm
@@ -37,12 +37,17 @@ struct VaultMacEncryptedItemDetailView: View {
     }
 
     @ViewBuilder
-    private func decrypted(_ payload: VaultItem.Payload) -> some View {
+    private func decrypted(_ payload: VaultItem.Payload, key: DerivedEncryptionKey) -> some View {
         switch payload {
         case let .secureNote(note):
-            VaultMacNoteDetailView(note: note, metadata: viewModel.metadata, tags: tags)
+            VaultMacNoteDetailView(note: note, metadata: viewModel.metadata, tags: tags, encryptionKey: key)
         case let .recoveryPhrase(phrase):
-            VaultMacRecoveryPhraseDetailView(phrase: phrase, metadata: viewModel.metadata, tags: tags)
+            VaultMacRecoveryPhraseDetailView(
+                phrase: phrase,
+                metadata: viewModel.metadata,
+                tags: tags,
+                encryptionKey: key,
+            )
         case .otpCode, .encryptedItem:
             // Only notes and recovery phrases are encrypted with a password of their own.
             EmptyView()
@@ -88,14 +93,23 @@ struct VaultMacRecoveryPhraseDetailView: View {
     var phrase: RecoveryPhrase
     var metadata: VaultItem.Metadata
     var tags: [VaultItemTag]
+    /// The key it was decrypted with: a recovery phrase is always encrypted.
+    var encryptionKey: DerivedEncryptionKey
 
     @State private var areWordsRevealed = false
     @Environment(\.appearsActive) private var appearsActive
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text(phrase.title.isBlank ? "Recovery Phrase" : phrase.title)
-                .font(.largeTitle.bold())
+            HStack(alignment: .firstTextBaseline) {
+                Text(phrase.title.isBlank ? "Recovery Phrase" : phrase.title)
+                    .font(.largeTitle.bold())
+                Spacer()
+                VaultMacItemPageButtons(
+                    request: .editRecoveryPhrase(phrase, metadata, encryptionKey),
+                    metadata: metadata,
+                )
+            }
             if phrase.contents.isNotEmpty {
                 Text(phrase.contents)
             }

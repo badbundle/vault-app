@@ -45,7 +45,9 @@ struct VaultMacItemDetailView: View {
                 tags: tags,
                 authentication: authentication,
             )
-            .id(item.id)
+            // Made anew once the item is saved, so its page asks for the password again rather than showing what it
+            // held before (G42).
+            .id(item.metadata.updated)
         case .recoveryPhrase:
             // Only ever stored encrypted: a decrypted one only shows once its encrypted item is opened.
             EmptyView()

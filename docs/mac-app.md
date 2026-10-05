@@ -74,8 +74,8 @@ One main window, as Passwords has. Opening another isn't offered (no ⌘N for wi
   on iOS.
 - **The list:** each item's row shows its name, and for a code, its live code with its timer. Show Next Code works as
   on iOS. Clicking a code copies it, or opens its page, as Tap a Code To says.
-- **The item's page:** the selected item, with the same content as on iOS. Editing opens a sheet, with the same steps
-  as the iOS editor.
+- **The item's page:** the selected item, with the same content as on iOS. Edit opens the item's editor in a sheet
+  (see [Adding and editing items](#adding-and-editing-items)).
 - **The toolbar:** the search field, and + for a new item. Search works exactly as on iOS: hidden items only appear
   while the whole search is their passphrase (G8), and a killphrase deletes its item at once, without saying so (G1,
   G2).
@@ -91,17 +91,39 @@ The standard menus, with Vault's commands in them:
 
 | Command | Shortcut | Menu |
 | --- | --- | --- |
-| New Item | ⌘N | File |
+| New Code | ⌘N | File |
+| New Note | ⇧⌘N | File |
+| New Recovery Phrase | | File |
 | Find | ⌘F | Edit (focuses the search field) |
 | Copy Code | ⌘C | Edit (with an item selected and no text selected) |
-| Edit Item | ⌘E | Item |
-| Delete Item | ⌘⌫ | Item (asks first) |
+| Edit Item | ⌘E | Item (while the item's page shows it) |
+| Delete Item | ⌘⌫ | Item (asks first; while text has focus, ⌘⌫ deletes text as usual) |
 | Lock Vault | ⌃⌘L | Vault |
 | Settings… | ⌘, | Vault |
 | About Vault | | Vault |
 | Vault Help | ⌘? | Help (opens the FAQ) |
 
 There's no Undo for anything that changes the vault (C6). The Edit menu's Undo and Redo are only for text being typed.
+
+### Adding and editing items
+
+New Code, New Note and New Recovery Phrase, in the File menu and behind the toolbar's +, open the editor in a sheet,
+as Edit does for the open item. Each editor is one form, rather than iOS's steps, with the same fields and checks, on
+the same shared view models (`OTPCodeDetailViewModel`, `SecureNoteDetailViewModel` and
+`RecoveryPhraseDetailViewModel`) and `VaultDataModelEditorAdapter`:
+
+- **A code's key** is typed in, scanned with the Mac's camera or Continuity Camera (`AVCaptureSession`, only while the
+  scanner is open, with nothing kept), or read from an image the user chooses (Vision). Whichever it is, it's checked
+  as on iOS before it fills the form (G77).
+- **A note** can have a password of its own. It counts once it's typed the same twice, and is never stored (G42).
+  Once a note or recovery phrase is saved, its page asks for the password again.
+- **A recovery phrase** is checked against its standard's word list and checksum as it's typed, each word in a secure
+  field, and always has a password of its own (G41).
+- **Privacy & Security** is per item only, as on iOS (C1, C8, C9): lock, visibility with a search passphrase, and a
+  killphrase.
+- **Deleting** asks first, from the editor or Delete Item, and can't be undone (C6).
+
+Locking Vault closes the sheet, and what was typed into it is dropped.
 
 ## Each iOS protection on the Mac
 
@@ -193,20 +215,27 @@ Whether macOS 26's own clipboard history, in Spotlight, keeps concealed and tran
 
 ### The keyboard and text
 
-Every text field turns off what could learn from it or send it elsewhere (G52):
+Every text field turns off what could learn from it or send it elsewhere (G52, G89):
 
-- autocorrection, spelling and grammar checking, text completion and inline predictions;
-- Writing Tools (`writingToolsBehavior(.disabled)`);
+- autocorrection, spelling and grammar checking, text completion, inline predictions and every substitution;
+- Writing Tools;
 - the Services menu.
 
-As on iOS, every field declares this, through a Mac `SecretTextInput`, and a declaration test fails for any field
-that doesn't. SwiftUI's `TextField` doesn't expose every one of these on the Mac, so fields that need them are thin
-`NSTextField` and `NSTextView` wrappers.
+SwiftUI's `TextField`, `TextEditor` and `searchable` edit with AppKit's shared field editor, which turns some of these
+on and doesn't let Vault turn them all off. So every field the user types into, other than a secure field, edits with
+`VaultMacFieldEditor`, an `NSTextView` with all of them off: `VaultMacTextField` and `VaultMacSearchField` (thin
+`NSTextField` and `NSSearchField` wrappers that hand their cells that field editor) and `VaultMacTextEditor`, for a
+note. `VaultMacTextInputDeclarationTests` fails for any of SwiftUI's own in the Mac app's sources.
 
-Decision 8: Secure Keyboard Entry (`EnableSecureEventInput`) is on while any Vault field has focus, and off again as
-soon as none has.
+Secure fields, for passwords, passphrases, killphrases and a recovery phrase's words, are SwiftUI's, which AppKit
+already keeps from learning or copying. As on iOS, each declares `secretTextInput()`, the Mac's counterpart, and
+`SecretTextInputDeclarationTests` fails for any that doesn't.
 
-The Edit menu offers only the plain text actions, and copies made from a field go through Vault's clipboard (G51).
+Decision 8: Secure Keyboard Entry (`EnableSecureEventInput`) is on while a `VaultMacFieldEditor` has focus, and off
+again as soon as it loses focus or leaves its window. A secure field turns it on itself.
+
+A field's menu offers only Cut, Copy, Paste and Select All, Cut and Copy go through Vault's clipboard as details that
+never leave this Mac (G51, G87), and text can't be dragged out of a field.
 
 ### Keychain
 
@@ -484,7 +513,8 @@ The sub-issues on VAULT-101 stand, in the same order, with these changes:
 - **VAULT-106:** the first launch converts an in-memory store (see
   [App Lock and the App Lock Password](#app-lock-and-the-app-lock-password)). Lock Vault is in the Vault menu.
 - **VAULT-107:** the three-column window (decision 6).
-- **VAULT-108:** Secure Keyboard Entry (decision 8), and the Mac's `SecretTextInput`.
+- **VAULT-108:** Secure Keyboard Entry (decision 8), the Mac's field editor and `secretTextInput()`, and an Item menu
+  for Edit Item and Delete Item.
 - **VAULT-109** to **VAULT-113** stand as they are.
 - **VAULT-114** (Bradley's) gains the Mac's clipboard history and `sharingType` checks for `RELEASE.md`.
 - **VAULT-115** (Bradley's): decision 9 recommends closing it.

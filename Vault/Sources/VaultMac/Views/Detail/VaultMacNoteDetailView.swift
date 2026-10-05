@@ -9,6 +9,8 @@ struct VaultMacNoteDetailView: View {
     var note: SecureNote
     var metadata: VaultItem.Metadata
     var tags: [VaultItemTag]
+    /// The key it was decrypted with, if it's encrypted with a password of its own.
+    var encryptionKey: DerivedEncryptionKey?
 
     @Environment(\.vaultMacCopy) private var copy
 
@@ -17,6 +19,7 @@ struct VaultMacNoteDetailView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(note.title.isBlank ? "Untitled Note" : note.title)
                     .font(.largeTitle.bold())
+                    .accessibilityIdentifier("detail.title")
                 Spacer()
                 Button("Copy Note") {
                     Task {
@@ -29,6 +32,7 @@ struct VaultMacNoteDetailView: View {
                 }
                 .disabled(note.contents.isEmpty)
                 .accessibilityIdentifier("detail.copy-note")
+                VaultMacItemPageButtons(request: .editNote(note, metadata, encryptionKey), metadata: metadata)
             }
             contents
                 .frame(maxWidth: .infinity, alignment: .leading)
