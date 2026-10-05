@@ -88,6 +88,16 @@ public final class DeviceTransferExportViewModel {
         }
     }
 
+    /// Ends the transfer: the codes stop cycling, and the encrypted vault they carried is forgotten. Generating again
+    /// starts a new transfer.
+    public func stop() {
+        cycleTask?.cancel()
+        cycleTask = nil
+        shards = []
+        currentQRCodeImage = nil
+        state = .idle
+    }
+
     private func startCycling() {
         guard case .displayingQR = state else { return }
         cycleTask?.cancel()

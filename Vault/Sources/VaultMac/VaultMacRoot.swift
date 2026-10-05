@@ -280,10 +280,28 @@ enum VaultMacRoot {
             clearCredentialIdentities: {},
             reloadWidgets: {},
             forgetVaultSettings: {
+                // Both read their settings at launch, before an interrupted erase finishes.
+                await autoBackupService.forgetConfiguration()
                 await vaultDataModel.reloadLastBackupEvent()
             },
         ),
         makePlainStore: { makeEmptyStore() },
+    )
+
+    // MARK: - Backups
+
+    static let encryptedVaultDecoder: some EncryptedVaultDecoder<KeyData<32>> = EncryptedVaultDecoderImpl()
+
+    /// The folder the user chose for Auto-Backup, such as one in iCloud Drive, kept with a security-scoped bookmark.
+    static let backupFolderProvider: iCloudDriveProvider = .init()
+
+    /// Writes, keeps and cleans up backups in that folder, as on iOS (G62).
+    static let autoBackupService: some AutoBackupService = AutoBackupServiceImpl(
+        dataModel: vaultDataModel,
+        backupEventLogger: backupEventLogger,
+        clock: clock,
+        configurationStorage: openVaultBackupSettings,
+        providers: [backupFolderProvider],
     )
 
     /// Erases every vault (`VaultEraser`), then reads and writes the fresh, empty store it leaves, and forgets
@@ -332,11 +350,17 @@ enum VaultMacRoot {
         windowPrivacy.start(windows: NSApplication.shared.windows)
         self.windowPrivacy = windowPrivacy
         // Each vault has its own backup settings, read again whenever the session switches vault or locks.
+        // A change to the vault backs it up, if Auto-Backup is on.
+        vaultDataModel.onDataChanged = {
+            autoBackupService.notifyDataChanged()
+        }
+        // The Backups page goes first, because auto-backup waits for a backup of the previous vault to finish.
         let vaultChanges = vaultStore
         Task {
             for await _ in await vaultChanges.openVaultChanges() {
                 await openVaultBackupSettings.reload()
                 await vaultDataModel.openVaultDidChange()
+                await autoBackupService.vaultDidChange()
             }
         }
     }
