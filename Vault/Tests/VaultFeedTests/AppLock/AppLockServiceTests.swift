@@ -593,6 +593,29 @@ struct AppLockServiceTests {
         #expect(purge.callCount == 1)
     }
 
+    @Test(arguments: AppLockDelay.allCases)
+    func lockNow_locksWhateverTheDelay(delay: AppLockDelay) async throws {
+        let purge = CallCounter()
+        let (sut, _) = try makeSUT(isEnabled: true, delay: delay, purge: purge)
+        await activate(sut)
+
+        sut.lockNow()
+
+        #expect(sut.isLocked)
+        #expect(purge.callCount == 1)
+    }
+
+    @Test
+    func lockNow_lockOff_doesNothing() throws {
+        let purge = CallCounter()
+        let (sut, _) = try makeSUT(isEnabled: false, purge: purge)
+
+        sut.lockNow()
+
+        #expect(!sut.isLocked)
+        #expect(purge.callCount == 0)
+    }
+
     @Test
     func delay_backMuchLater_locksAndPrompts() async throws {
         let clock = FakeAppLockClock()

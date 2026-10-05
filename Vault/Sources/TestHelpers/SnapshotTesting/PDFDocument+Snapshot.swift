@@ -47,12 +47,15 @@ extension Snapshotting where Value == PDFDocument, Format == NSImage {
     /// Snapshots a PDF as an image, so we don't worry about metadata/non-visible aspects of the PDF.
     ///
     /// Drawn at a scale of 3, whatever the Mac's displays, so the snapshot is the same on every Mac. That's the scale
-    /// the
-    /// iPhone's snapshots have, and the backup's QR codes are drawn at, so their modules land on whole pixels.
+    /// the iPhone's snapshots have, and the backup's QR codes are drawn at, so their modules land on whole pixels.
+    ///
+    /// Every pixel has to match, but each colour only nearly: macOS turns some of a PDF's colours into the display's
+    /// own on the way, and the display's colours change while the screen is locked. A QR code's module that changed
+    /// would still fail.
     public static func pdf(page: Int = 1) -> Snapshotting {
         .init(
             pathExtension: "png",
-            diffing: .image,
+            diffing: .image(channelTolerance: 12),
             snapshot: { pdfDocument in
                 pdfDocument.asImage(page: page) ?? NSImage()
             },
@@ -85,7 +88,12 @@ extension PDFDocument {
         context.fill(pageRect)
         context.drawPDFPage(page)
         guard let image = context.makeImage() else { return nil }
-        return NSImage(cgImage: image, size: pageRect.size)
+        // Exactly a third of its pixels in points, so it's written out as these pixels. Otherwise AppKit draws it again
+        // at the scale of the Mac's screen, which a locked screen leaves at 1.
+        return NSImage(
+            cgImage: image,
+            size: NSSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale),
+        )
     }
 }
 #endif

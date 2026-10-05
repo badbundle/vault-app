@@ -32,6 +32,37 @@ struct VaultStorageRecoveryTests {
         }
     }
 
+    /// The Mac's plain store is only in memory: it stopped mid-conversion at its first launch, so what it was
+    /// encrypting was empty, and there's nothing on disk but the encrypted files the conversion began.
+    @Test
+    func recover_whileEncryptingAnInMemoryStore_deletesTheEncryptedFilesAndGoesBackToPlain() async throws {
+        try await withTemporaryDirectory { directory in
+            try Self.makeEncryptedFiles(in: directory)
+            try Self.write(VaultStorageState(mode: .plain, transition: .encrypting), in: directory)
+
+            let recovery = VaultStorageRecovery(directory: directory, plainStoreIsInMemory: true)
+            #expect(try recovery.recoverAtLaunch() == .plain)
+
+            #expect(try !Self.fileNames(in: directory).contains(EncryptedVaultFile.fileName))
+        }
+    }
+
+    /// With no journal, an encrypted file might be the Mac's vault with its state file lost, so it stays, even though
+    /// the Mac's plain store is only in memory.
+    @Test
+    func recover_inMemoryPlainStoreWithAnEncryptedFileButNoJournal_deletesNothing() async throws {
+        try await withTemporaryDirectory { directory in
+            try Self.makeEncryptedFiles(in: directory)
+            let before = try Self.fileNames(in: directory)
+
+            #expect(throws: VaultStorageRecovery.Failure.encryptedFileWithoutPlainStore) {
+                try VaultStorageRecovery(directory: directory, plainStoreIsInMemory: true).recoverAtLaunch()
+            }
+
+            #expect(try Self.fileNames(in: directory) == before)
+        }
+    }
+
     /// With no journal, the encrypted file goes only once the plain store is shown to hold the vault: it has items.
     @Test
     func recover_plainWithAStrayEncryptedFile_deletesIt() async throws {

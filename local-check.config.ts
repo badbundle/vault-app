@@ -98,10 +98,13 @@ export default (({ xcode }) => {
 }) satisfies ConfigFunction;
 
 /**
- * The entitlements the Mac app may have, from docs/mac-app.md's "App Sandbox" table. A development build also lets
- * the debugger attach (`get-task-allow`), which an App Store build doesn't.
+ * The entitlements the Mac app may have, from docs/mac-app.md's "App Sandbox" table, and the two its provisioning
+ * profile adds, which name the app and its team. A development build also lets the debugger attach
+ * (`get-task-allow`), which an App Store build doesn't.
  */
 const macAppEntitlements = [
+  "com.apple.application-identifier",
+  "com.apple.developer.team-identifier",
   "com.apple.security.app-sandbox",
   "com.apple.security.application-groups",
   "com.apple.security.device.camera",
@@ -109,11 +112,13 @@ const macAppEntitlements = [
   "com.apple.security.files.user-selected.read-write",
   "com.apple.security.get-task-allow",
   "com.apple.security.print",
+  "keychain-access-groups",
 ];
 
 /**
  * Builds the Mac app as it runs, rather than for testing, which adds entitlements of Xcode's own, and fails unless
- * it's signed with the hardened runtime, sandboxed in its App Group, and with no entitlement the design doesn't list.
+ * it's signed with the hardened runtime, sandboxed in its App Group, with its own keychain access group only, and with
+ * no entitlement the design doesn't list.
  */
 async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promise<void> {
   await ctx.exec([
@@ -144,9 +149,13 @@ async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promi
   if (unlisted.length > 0) {
     throw new Error(`Vault.app has entitlements docs/mac-app.md doesn't list: ${unlisted.join(", ")}`);
   }
-  const groups = entitlements["com.apple.security.application-groups"];
-  if (entitlements["com.apple.security.app-sandbox"] !== true || JSON.stringify(groups) !== '["442P244AFS.com.badbundle.vault"]') {
+  const groups = JSON.stringify(entitlements["com.apple.security.application-groups"]);
+  const keychainGroups = JSON.stringify(entitlements["keychain-access-groups"]);
+  if (entitlements["com.apple.security.app-sandbox"] !== true || groups !== '["442P244AFS.com.badbundle.vault"]') {
     throw new Error(`Vault.app isn't sandboxed in its App Group: ${JSON.stringify(entitlements)}`);
+  }
+  if (keychainGroups !== '["442P244AFS.com.badbundle.vault"]') {
+    throw new Error(`Vault.app's keychain access groups aren't only its own: ${keychainGroups}`);
   }
   ctx.log(`Vault.app's entitlements: ${Object.keys(entitlements).join(", ")}`);
 }

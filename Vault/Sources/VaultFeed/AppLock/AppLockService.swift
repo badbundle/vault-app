@@ -222,6 +222,12 @@ public final class AppLockService {
         lock()
     }
 
+    /// Locks the app, and the vault with it, straight away, whatever the delay: the Mac's Lock Vault command, and the
+    /// end of its Require Unlock delay while another app is in front. Does nothing while the lock is off.
+    public func lockNow() {
+        lock()
+    }
+
     private func startAutomaticUnlockIfNeeded() {
         guard startsUnlockWhenActive, scenePhase == .active,
               case let .locked(locked) = state, locked.step.startsAutomatically, !isAuthenticationUnderway
