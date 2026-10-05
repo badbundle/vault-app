@@ -23,6 +23,26 @@ struct MacAppLaunchTests {
         #expect(container?.lastPathComponent == Self.appGroupID)
     }
 
+    /// Hide While Recording is on by default (G24, C7), so no window can be captured, and none is restored.
+    @Test
+    func launch_everyWindowIsHiddenFromCaptureAndNeverRestored() async throws {
+        _ = try await mainWindow()
+
+        for window in NSApp.windows where window.isVisible {
+            #expect(window.sharingType == .none, "\(window.title)")
+            #expect(!window.isRestorable, "\(window.title)")
+            #expect(window.tabbingMode == .disallowed, "\(window.title)")
+        }
+    }
+
+    /// Nothing from Vault is offered to Handoff or the Services menu.
+    @Test
+    func app_offersNoHandoffOrServices() {
+        #expect(Bundle.main.object(forInfoDictionaryKey: "NSUserActivityTypes") == nil)
+        #expect(Bundle.main.object(forInfoDictionaryKey: "NSServices") == nil)
+        #expect(NSApp.servicesProvider == nil)
+    }
+
     /// docs/mac-app.md, decision 7.
     static let appGroupID = "442P244AFS.com.badbundle.vault"
 
