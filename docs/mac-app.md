@@ -353,14 +353,22 @@ without what the Mac doesn't have: the plain SQLite store, widgets, QuickType an
 
 ### PDF backups and images
 
-ImageTools draws QR codes with Core Image, then wraps them in a `UIImage`. VaultExport lays out and draws the PDF
-backup with `UIGraphicsPDFRenderer`, `UIFont` and `UIColor`. VAULT-104:
+ImageTools draws QR codes with Core Image, and VaultExport lays out and draws the PDF backup. On iOS they use UIKit:
+`UIImage`, `UIGraphicsPDFRenderer`, `UIFont` and `UIColor`. What VAULT-103 and VAULT-104 did:
 
-- puts Core Graphics and Core Text, which both platforms have, under one renderer for both, if iOS's snapshot tests pass
-  unchanged with it. If they don't, the UIKit renderer stays on iOS, and the Mac gets one with Core Graphics;
-- keeps the PDF exactly as it is: the same QR payloads, page layout, plain-text header and hint (G58), so a backup
-  made on either platform restores on the other;
-- uses a small platform image type, `UIImage` or `NSImage`, wherever a rendered image is handed out.
+- **The types are platform aliases**, `PlatformImage`, `PlatformFont`, `PlatformColor`, `PlatformEdgeInsets`,
+  `PlatformPDFRenderer` and `PlatformPDFRendererContext`, which are the UIKit types on iOS. So iOS draws exactly as it
+  did, and its tests pass unchanged.
+- **The Mac draws with `CoreGraphicsPDFRenderer`**, which does what `UIGraphicsPDFRenderer` does with a Core Graphics
+  PDF context: each page in UIKit's coordinates, origin at the top left, with AppKit's text and image drawing going
+  into it. The same layout code draws both platforms' pages.
+- **QR codes are the same images on both:** Core Image draws them, and the Mac resizes them with Core Graphics at three
+  times their size in points, as the iPhone does, with no smoothing. In a backup, each is a 214-pixel square image on
+  either platform.
+- **The PDF is the same format:** the same QR payloads, page layout, plain-text header and hint (G58). The Mac's text
+  has slightly taller lines, so its QR codes start a few points lower down the page, and nothing a restore reads
+  differs. The backup corpus has a Mac-made PDF that every iOS test run restores, and every PDF in it restores from
+  its QR codes alone, read one by one, as scanning the paper does.
 
 ## Validation
 

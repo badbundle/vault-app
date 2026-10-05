@@ -1,6 +1,8 @@
-// The Mac renders PDFs from VAULT-104.
+import CoreGraphics
+import Foundation
 #if canImport(UIKit)
 import UIKit
+#endif
 
 /// Produces renderers optimized for rendering a standard size document.
 ///
@@ -23,11 +25,15 @@ public struct PDFDocumentPageRendererFactory: PDFRendererFactory {
         self.documentTitle = documentTitle
     }
 
-    public func makeRenderer() -> UIGraphicsPDFRenderer {
+    public func makeRenderer() -> PlatformPDFRenderer {
+        #if canImport(UIKit)
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = pdfMetadata as [String: Any]
 
         return UIGraphicsPDFRenderer(bounds: pageRect(), format: format)
+        #else
+        return CoreGraphicsPDFRenderer(bounds: pageRect(), documentInfo: pdfMetadata as [String: Any])
+        #endif
     }
 }
 
@@ -48,4 +54,3 @@ extension PDFDocumentPageRendererFactory {
         return metadata
     }
 }
-#endif

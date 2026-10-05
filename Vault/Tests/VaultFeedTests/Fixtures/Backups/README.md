@@ -44,6 +44,7 @@ code, as described for each, rather than by building an old tag.
 | --- | --- | --- | ---: |
 | `auto-backup.json` | Today's | 32 KiB | 44 KB |
 | `pdf-random-padding.pdf` | Today's | Random | 150 KB |
+| `pdf-made-on-mac.pdf` | Today's, made on the Mac | Random | 195 KB |
 | `transfer-qr-codes.json` | Today's | Random | 6 KB |
 | `pdf-before-quicktype-and-preview.pdf` | Before #624 | Random | 218 KB |
 | `pdf-plaintext-search-passphrase.pdf` | Before #519 | Random | 179 KB |
@@ -67,6 +68,17 @@ in the title and hint printed on them.
 A PDF backup as the Backups page saved one from #624 until VAULT-75: v2.0.0 builds 100008 to 100011. Made with the
 page's steps as they were then, which are today's with random padding: `EncryptedVaultEncoder(padding: .random)`,
 which a device transfer still uses, and the same PDF. 3,216 bytes of ciphertext. It restores to exactly the vault.
+
+### `pdf-made-on-mac.pdf`
+
+A PDF backup made on the Mac, recorded on 5 October 2026 for VAULT-104 by the same recorder run on macOS, which drew it
+with the Mac's `CoreGraphicsPDFRenderer` rather than UIKit's. Its backup is made exactly as `pdf-random-padding.pdf`'s
+is, with random padding, to keep the file small: 4,652 bytes of ciphertext. Every iOS test run restores it, so a backup
+made on the Mac is known to restore on an iPhone, as the other PDFs, made on the iPhone, restore on the Mac.
+
+Every PDF here also restores from its QR codes alone, read one by one from the images the PDF draws them as, as
+someone scanning the paper would (`pdf_qrCodes_holdExactlyTheBackupItCarries`). The Mac's codes are the same images as
+the iPhone's: 214 pixels square, drawn at three times their size in points.
 
 ### `transfer-qr-codes.json`
 
@@ -103,7 +115,8 @@ When a backup format changes, or the way the app saves or restores one does:
 2. Make it in [`BackupCorpusRecorder`](../../GoldenFixtures/BackupCorpusRecorder.swift), with the app's own code, the
    way the app saved one. For an older format that today's code can't write, write it by hand from that release's
    encoder, and say so here.
-3. Record it on the Simulator, as for the other golden fixtures:
+3. Record it on the Simulator, as for the other golden fixtures (or, for a backup the Mac makes, on the Mac, with the
+   `CI_macOS` scheme, the `macOS_SupportedTests` plan and `-destination platform=macOS`):
 
    ```sh
    TEST_RUNNER_VAULT_RECORD_FIXTURES=1 xcodebuild test -workspace Vault.xcworkspace -scheme CI_iOS \

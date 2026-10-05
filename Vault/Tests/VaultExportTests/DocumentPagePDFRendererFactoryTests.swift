@@ -1,9 +1,10 @@
-// The Mac renders PDFs from VAULT-104.
-#if canImport(UIKit)
+import CoreGraphics
 import Foundation
 import Testing
-import UIKit
 import VaultExport
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct DocumentPagePDFRendererFactoryTests {
     @Test(arguments: [USLetterDocumentSize(), A4DocumentSize()] as [any PDFDocumentSize])
@@ -13,7 +14,7 @@ struct DocumentPagePDFRendererFactoryTests {
         let renderer = sut.makeRenderer()
 
         let expectedSize = documentSize.pointSize()
-        let actualSize = renderer.format.bounds.size
+        let actualSize = renderer.pageBounds.size
         #expect(actualSize.width.isAlmostEqual(to: expectedSize.width))
         #expect(actualSize.height.isAlmostEqual(to: expectedSize.height))
     }
@@ -24,7 +25,7 @@ struct DocumentPagePDFRendererFactoryTests {
 
         let renderer = sut.makeRenderer()
 
-        let actualOrigin = renderer.format.bounds.origin
+        let actualOrigin = renderer.pageBounds.origin
         #expect(actualOrigin == .zero)
     }
 
@@ -34,8 +35,7 @@ struct DocumentPagePDFRendererFactoryTests {
 
         let renderer = sut.makeRenderer()
 
-        let format = try #require(renderer.format as? UIGraphicsPDFRendererFormat)
-        #expect(format.documentInfo(forKey: kCGPDFContextCreator) as? String? == applicationName)
+        #expect(try renderer.documentInfo(forKey: kCGPDFContextCreator) as? String? == applicationName)
     }
 
     @Test(arguments: ["", "one", "two"])
@@ -44,8 +44,7 @@ struct DocumentPagePDFRendererFactoryTests {
 
         let renderer = sut.makeRenderer()
 
-        let format = try #require(renderer.format as? UIGraphicsPDFRendererFormat)
-        #expect(format.documentInfo(forKey: kCGPDFContextAuthor) as? String? == authorName)
+        #expect(try renderer.documentInfo(forKey: kCGPDFContextAuthor) as? String? == authorName)
     }
 
     @Test(arguments: ["", "one", "two"])
@@ -54,8 +53,7 @@ struct DocumentPagePDFRendererFactoryTests {
 
         let renderer = sut.makeRenderer()
 
-        let format = try #require(renderer.format as? UIGraphicsPDFRendererFormat)
-        #expect(format.documentInfo(forKey: kCGPDFContextTitle) as? String? == documentTitle)
+        #expect(try renderer.documentInfo(forKey: kCGPDFContextTitle) as? String? == documentTitle)
     }
 
     // MARK: - Helpers
@@ -75,13 +73,23 @@ struct DocumentPagePDFRendererFactoryTests {
     }
 }
 
-extension UIGraphicsPDFRendererFormat {
-    fileprivate func documentInfo(forKey key: String) -> Any? {
-        documentInfo[key]
+extension PlatformPDFRenderer {
+    /// The bounds of each page.
+    fileprivate var pageBounds: CGRect {
+        #if canImport(UIKit)
+        format.bounds
+        #else
+        bounds
+        #endif
     }
 
-    fileprivate func documentInfo(forKey key: CFString) -> Any? {
-        documentInfo[key as String]
+    /// The value the document's info dictionary has for the key.
+    fileprivate func documentInfo(forKey key: CFString) throws -> Any? {
+        #if canImport(UIKit)
+        let format = try #require(format as? UIGraphicsPDFRendererFormat)
+        return format.documentInfo[key as String]
+        #else
+        return documentInfo[key as String]
+        #endif
     }
 }
-#endif

@@ -1,5 +1,3 @@
-// The Mac renders PDFs from VAULT-104.
-#if canImport(UIKit)
 import ImageTools
 import PDFKit
 import TestHelpers
@@ -132,7 +130,7 @@ struct PDFDataBlockDocumentRendererSnapshotTests {
         let sut = makeSUT(tilesPerRow: 3)
         let titleLabel = DataBlockLabel(
             text: "Hello World",
-            font: UIFont.systemFont(ofSize: 50, weight: .bold),
+            font: PlatformFont.systemFont(ofSize: 50, weight: .bold),
             padding: .init(top: 36, left: 10, bottom: 22, right: 10),
         )
         let document = DataBlockDocument(
@@ -152,7 +150,7 @@ struct PDFDataBlockDocumentRendererSnapshotTests {
         let sut = makeSUT(tilesPerRow: 10)
         let titleLabel = DataBlockLabel(
             text: "Hello World",
-            font: UIFont.systemFont(ofSize: 50, weight: .bold),
+            font: PlatformFont.systemFont(ofSize: 50, weight: .bold),
             padding: .init(top: 36, left: 10, bottom: 22, right: 10),
         )
         let document = DataBlockDocument(
@@ -172,7 +170,7 @@ struct PDFDataBlockDocumentRendererSnapshotTests {
         let title = Array(repeating: "Title", count: 10).joined(separator: " ")
         let titleLabel = DataBlockLabel(
             text: "<START> \(title) <END>",
-            font: UIFont.systemFont(ofSize: 50, weight: .bold),
+            font: PlatformFont.systemFont(ofSize: 50, weight: .bold),
             padding: .init(top: 36, left: 10, bottom: 22, right: 10),
         )
         let document = DataBlockDocument(
@@ -192,7 +190,7 @@ struct PDFDataBlockDocumentRendererSnapshotTests {
         let subtitleMain = Array(repeating: "Subtitle", count: 50).joined(separator: " ")
         let titleLabel = DataBlockLabel(
             text: "<START> \(subtitleMain) <END>",
-            font: UIFont.systemFont(ofSize: 14, weight: .regular),
+            font: PlatformFont.systemFont(ofSize: 14, weight: .regular),
             padding: .init(top: 36, left: 10, bottom: 22, right: 10),
         )
         let document = DataBlockDocument(
@@ -211,7 +209,7 @@ struct PDFDataBlockDocumentRendererSnapshotTests {
         let sut = makeSUT(tilesPerRow: 10)
         let titleLabel = DataBlockLabel(
             text: "Hello World",
-            font: UIFont.systemFont(ofSize: 50, weight: .bold),
+            font: PlatformFont.systemFont(ofSize: 50, weight: .bold),
             padding: .init(top: 36, left: 10, bottom: 0, right: 10),
         )
         let document = DataBlockDocument(
@@ -336,22 +334,24 @@ struct PDFDataBlockDocumentRendererSnapshotTests {
         DataBlockDocument(content: [])
     }
 
-    private func longTitle(padding: UIEdgeInsets = .init(top: 36, left: 10, bottom: 0, right: 10)) -> DataBlockLabel {
+    private func longTitle(padding: PlatformEdgeInsets = .init(top: 36, left: 10, bottom: 0, right: 10))
+        -> DataBlockLabel
+    {
         let title = Array(repeating: "Title", count: 10).joined(separator: " ")
         return DataBlockLabel(
             text: "<START> \(title) <END>",
-            font: UIFont.systemFont(ofSize: 50, weight: .bold),
+            font: PlatformFont.systemFont(ofSize: 50, weight: .bold),
             padding: padding,
         )
     }
 
-    private func longSubtitle(padding: UIEdgeInsets = .init(top: 12, left: 10, bottom: 14, right: 10))
+    private func longSubtitle(padding: PlatformEdgeInsets = .init(top: 12, left: 10, bottom: 14, right: 10))
         -> DataBlockLabel
     {
         let subtitleMain = Array(repeating: "Subtitle", count: 50).joined(separator: " ")
         return DataBlockLabel(
             text: "<START> \(subtitleMain) <END>",
-            font: UIFont.systemFont(ofSize: 14, weight: .regular),
+            font: PlatformFont.systemFont(ofSize: 14, weight: .regular),
             padding: padding,
         )
     }
@@ -370,12 +370,12 @@ struct PDFDataBlockDocumentRendererSnapshotTests {
         )
         let title = DataBlockLabel(
             text: "My Title",
-            font: UIFont.systemFont(ofSize: 50, weight: .bold),
+            font: PlatformFont.systemFont(ofSize: 50, weight: .bold),
             padding: .zero,
         )
         let subtitle = DataBlockLabel(
             text: "Testing headers only - no padding on these labels",
-            font: UIFont.systemFont(ofSize: 18, weight: .regular),
+            font: PlatformFont.systemFont(ofSize: 18, weight: .regular),
             padding: .zero,
         )
         let document = DataBlockDocument(
@@ -416,17 +416,17 @@ private struct StubPDFRendererFactory: PDFRendererFactory {
 }
 
 private class RGBCyclingStubColorImageRenderer: ImageDataRenderer {
-    var states: [UIColor] = [.red, .green, .blue]
+    var states: [PlatformColor] = [.red, .green, .blue]
     var currentState = 0
-    func makeImage(fromData _: Data) -> UIImage? {
+    func makeImage(fromData _: Data) -> PlatformImage? {
         defer { currentState += 1 }
-        return UIImage.from(color: states[currentState % states.count])
+        return PlatformImage.from(color: states[currentState % states.count])
     }
 }
 
 private class PlainBlackColorImageRenderer: ImageDataRenderer {
-    func makeImage(fromData _: Data) -> UIImage? {
-        UIImage.from(color: .black)
+    func makeImage(fromData _: Data) -> PlatformImage? {
+        PlatformImage.from(color: .black)
     }
 }
 
@@ -463,4 +463,3 @@ private class PageNumberHeaderGenerator: DataBlockHeaderGenerator {
         DataBlockHeader(left: "L: Page \(pageNumber)", right: "R: Page \(pageNumber)")
     }
 }
-#endif

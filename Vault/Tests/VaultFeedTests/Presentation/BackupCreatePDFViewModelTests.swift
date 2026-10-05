@@ -7,7 +7,6 @@ import VaultKeygen
 @testable import VaultFeed
 
 @MainActor
-@Suite(.rendersPDFBackups)
 struct BackupCreatePDFViewModelTests {
     @Test
     func init_hasNoSideEffects() throws {

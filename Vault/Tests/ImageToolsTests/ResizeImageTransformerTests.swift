@@ -1,11 +1,9 @@
-// The Mac resizes images from VAULT-104.
-#if canImport(UIKit)
 import Foundation
 import ImageTools
-import SnapshotTesting
+import TestHelpers
 import Testing
-import UIKit
 
+@MainActor
 struct ResizeImageTransformerTests {
     @Test(arguments: [
         ("small", 20),
@@ -24,10 +22,9 @@ struct ResizeImageTransformerTests {
 // MARK: - Helpers
 
 extension ResizeImageTransformerTests {
-    private func exampleImage() throws -> UIImage {
+    private func exampleImage() throws -> PlatformImage {
         let qr = QRCodeImageRenderer()
         let data = Data(repeating: 0xFF, count: 200)
         return try #require(qr.makeImage(fromData: data))
     }
 }
-#endif

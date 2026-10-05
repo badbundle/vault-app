@@ -1,6 +1,8 @@
 import Combine
 import Foundation
 import FoundationExtensions
+import ImageIO
+import PDFKit
 import Testing
 import VaultBackup
 import VaultCore
@@ -56,6 +58,18 @@ struct BackupCorpusRestoreTests {
         case .toFixedSize: #expect((32 * 1024 - 16 ... 32 * 1024).contains(vault.data.count))
         case .random: #expect(vault.data.count < 32 * 1024 - 16)
         }
+    }
+
+    /// A printed backup holds the whole backup in its QR codes, as scanning the paper reads them, whichever device made
+    /// it: the Mac's PDF, drawn by its own renderer, as well as the iPhone's.
+    @Test(arguments: BackupCorpusEntry.pdfs)
+    func pdf_qrCodes_holdExactlyTheBackupItCarries(entry: BackupCorpusEntry) throws {
+        let document = try #require(PDFDocument(data: entry.data()))
+
+        let codes = try (0 ..< document.pageCount).flatMap { try PrintedQRCodes.read(page: $0, of: document) }
+
+        let scanned = try EncryptedVaultCoder().decode(vaultData: TransferQRCodes.join(codes))
+        #expect(try scanned == entry.encryptedVault())
     }
 
     @MainActor
@@ -240,5 +254,99 @@ extension BackupCorpusRestoreTests {
             #expect(try EncryptedVaultPayload.decode(slot: duress, in: after).items.map(decoder.decode(record:))
                 .sortedByID == BackupCorpusEntry.pdfWithRandomPadding.restoredItems().sortedByID)
         }
+    }
+}
+
+/// Reads the QR codes printed on a PDF backup's page, one by one, as a camera scanning the paper would.
+///
+/// Each code is drawn as an image of its own, so they're read from the page's images, as the PDF holds them: a
+/// detector looking at a whole page of them, packed together, stops after a few.
+enum PrintedQRCodes {
+    static func read(page index: Int, of document: PDFDocument) throws -> [String] {
+        let pdf = try #require(document.dataRepresentation().flatMap { CGDataProvider(data: $0 as CFData) })
+        let page = try #require(CGPDFDocument(pdf)?.page(at: index + 1))
+        let resources = try #require(page.dictionary.flatMap { $0.dictionary(named: "Resources") })
+        return try images(in: resources).map { image in
+            let png = try #require(PlatformImagePNG.data(of: image))
+            return try #require(QRCodeReader.text(inPNG: png))
+        }
+    }
+
+    /// The images a page's resources draw, including those inside its forms.
+    private static func images(in resources: CGPDFDictionaryRef) throws -> [CGImage] {
+        guard let objects = resources.dictionary(named: "XObject") else { return [] }
+        var images = [CGImage]()
+        var forms = [CGPDFDictionaryRef]()
+        CGPDFDictionaryApplyBlock(objects, { _, object, _ in
+            var stream: CGPDFStreamRef?
+            guard CGPDFObjectGetValue(object, .stream, &stream), let stream,
+                  let dictionary = CGPDFStreamGetDictionary(stream)
+            else { return true }
+            switch dictionary.name(named: "Subtype") {
+            case "Image":
+                if let image = image(from: stream, described: dictionary) {
+                    images.append(image)
+                }
+            case "Form":
+                if let resources = dictionary.dictionary(named: "Resources") {
+                    forms.append(resources)
+                }
+            default:
+                break
+            }
+            return true
+        }, nil)
+        return try images + forms.flatMap { try self.images(in: $0) }
+    }
+
+    /// An image XObject's pixels, which the PDF keeps uncompressed once decoded: 8 bits a component, in RGB or gray.
+    private static func image(from stream: CGPDFStreamRef, described dictionary: CGPDFDictionaryRef) -> CGImage? {
+        var format = CGPDFDataFormat.raw
+        guard let data = CGPDFStreamCopyData(stream, &format) as Data?, format == .raw,
+              let provider = CGDataProvider(data: data as CFData)
+        else { return nil }
+        var width = 0, height = 0, bitsPerComponent = 0
+        CGPDFDictionaryGetInteger(dictionary, "Width", &width)
+        CGPDFDictionaryGetInteger(dictionary, "Height", &height)
+        CGPDFDictionaryGetInteger(dictionary, "BitsPerComponent", &bitsPerComponent)
+        guard width > 0, height > 0, bitsPerComponent == 8 else { return nil }
+        let components = data.count / (width * height)
+        return CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 8 * components,
+            bytesPerRow: width * components,
+            space: components == 1 ? CGColorSpaceCreateDeviceGray() : CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(),
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent,
+        )
+    }
+}
+
+/// An image as PNG data, for `QRCodeReader`.
+private enum PlatformImagePNG {
+    static func data(of image: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) else {
+            return nil
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
+    }
+}
+
+extension CGPDFDictionaryRef {
+    fileprivate func dictionary(named key: String) -> CGPDFDictionaryRef? {
+        var dictionary: CGPDFDictionaryRef?
+        return CGPDFDictionaryGetDictionary(self, key, &dictionary) ? dictionary : nil
+    }
+
+    fileprivate func name(named key: String) -> String? {
+        var name: UnsafePointer<CChar>?
+        return CGPDFDictionaryGetName(self, key, &name) ? name.map { String(cString: $0) } : nil
     }
 }

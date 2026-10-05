@@ -11,7 +11,6 @@ import VaultCore
 /// Unlike `AutoBackupServiceImplTests`, the session switches on its own here, and the settings only follow once the app
 /// gets round to it, so these cover the moments in between.
 @MainActor
-@Suite(.rendersPDFBackups)
 struct PerVaultAutoBackupTests {
     @Test
     func eachVault_backsUpIntoItsOwnSettings() async throws {

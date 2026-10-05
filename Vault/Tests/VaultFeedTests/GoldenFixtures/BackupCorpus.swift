@@ -26,7 +26,7 @@ struct BackupCorpusEntry: Sendable, CustomTestStringConvertible {
     }
 
     /// How the file holds the backup.
-    enum Form: Sendable {
+    enum Form: Sendable, Equatable {
         /// A PDF, as the Backups page or auto-backup saves one.
         case pdf
         /// The `EncryptedVault` a PDF carries, as `EncryptedVaultCoder` encodes it: the backup, once the import flow
@@ -122,6 +122,17 @@ extension BackupCorpusEntry {
         encryptedLength: 4076,
     )
 
+    /// A PDF backup made on the Mac, drawn by `CoreGraphicsPDFRenderer` (VAULT-104). Its backup is today's, padded
+    /// by a random amount, as `pdfWithRandomPadding`'s is, so the file stays small: it's here for the Mac's PDF, which
+    /// every iOS test run restores.
+    static let pdfMadeOnTheMac = BackupCorpusEntry(
+        name: "Backups/pdf-made-on-mac.pdf",
+        form: .pdf,
+        format: .current,
+        padding: .random,
+        encryptedLength: 4652,
+    )
+
     /// An auto-backup as `AutoBackupServiceImpl` saves one, padded to its fixed size: the backup its PDF carries.
     ///
     /// The corpus keeps the backup rather than the PDF. A PDF around a backup padded to 32 KiB is about a megabyte,
@@ -139,9 +150,13 @@ extension BackupCorpusEntry {
     static let backups = [
         autoBackup,
         pdfWithRandomPadding,
+        pdfMadeOnTheMac,
         pdfBeforeQuickTypeAndPreview,
         pdfWithPlaintextSearchPassphrase,
     ]
+
+    /// The backups kept as PDFs, with their QR codes.
+    static let pdfs = backups.filter { $0.form == .pdf }
 
     /// The QR codes a device transfer shows (`DeviceTransferExportViewModel`).
     static let transferQRCodes = BackupCorpusEntry(
