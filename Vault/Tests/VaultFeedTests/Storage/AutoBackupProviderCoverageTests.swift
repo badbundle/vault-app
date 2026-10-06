@@ -82,6 +82,34 @@ struct AutoBackupProviderCoverageTests {
         }
     }
 
+    #if os(macOS)
+    /// The folder the user picked is kept as a bookmark, which a new provider, as after a relaunch, reads back to write
+    /// into it. On the Mac it's security-scoped, as the sandbox needs. (iOS only configures with the document picker's
+    /// security-scoped URLs, which a test can't make.)
+    @Test
+    func iCloudDriveProvider_configure_keepsTheFolderAcrossARelaunch() async throws {
+        try await withTemporaryDirectory { folder in
+            let picked = iCloudDriveProvider()
+            try await picked.configure(with: folder)
+            let configuration = try #require(await picked.configurationData)
+
+            let relaunched = iCloudDriveProvider()
+            try await relaunched.restoreConfiguration(from: configuration)
+            try await relaunched.write(data: Data("backup".utf8), filename: "vault-auto-backup-a.pdf")
+
+            #expect(await relaunched.isConfigured)
+            #expect(await relaunched.folderDisplayName == folder.lastPathComponent)
+            #expect(try Self.fileNames(in: folder) == ["vault-auto-backup-a.pdf"])
+        }
+    }
+
+    @Test
+    func iCloudDriveProvider_onTheMac_bookmarksAreSecurityScoped() {
+        #expect(iCloudDriveProvider.bookmarkCreationOptions == .withSecurityScope)
+        #expect(iCloudDriveProvider.bookmarkResolutionOptions == .withSecurityScope)
+    }
+    #endif
+
     /// A file only in iCloud for now has a hidden placeholder instead, which isn't listed, but is there: it's never
     /// replaced, and cleaning up doesn't forget it.
     @Test
@@ -128,7 +156,10 @@ extension AutoBackupProviderCoverageTests {
     /// A provider backing up to `folder`, as if the user had picked it.
     private static func provider(backingUpTo folder: URL) async throws -> iCloudDriveProvider {
         let sut = iCloudDriveProvider()
-        let bookmark = try folder.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil)
+        let bookmark = try folder.bookmarkData(
+            options: iCloudDriveProvider.bookmarkCreationOptions,
+            includingResourceValuesForKeys: nil,
+        )
         let configuration = iCloudDriveProviderConfiguration(folderBookmark: bookmark, folderDisplayName: "Backups")
         try await sut.restoreConfiguration(from: JSONEncoder().encode(configuration))
         return sut

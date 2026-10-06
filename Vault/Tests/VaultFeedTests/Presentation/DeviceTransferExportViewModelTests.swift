@@ -147,6 +147,26 @@ struct DeviceTransferExportViewModelTests {
     }
 
     @Test
+    func stop_endsTheTransferAndForgetsItsCodes() async throws {
+        let vaultStore = VaultStoreStub()
+        vaultStore.exportVaultHandler = { _ in
+            .init(userDescription: "", items: [], tags: [])
+        }
+        let timer = IntervalTimerMock()
+        let sut = try makeSUT(vaultStore: vaultStore, intervalTimer: timer)
+        await sut.generateShards()
+        #expect(sut.state.isDisplaying)
+
+        sut.stop()
+
+        #expect(sut.state == .idle)
+        #expect(sut.currentQRCodeImage == nil)
+        // The cycle has ended, so a timer firing changes nothing.
+        try? await timer.finishTimer(at: 0)
+        #expect(sut.state == .idle)
+    }
+
+    @Test
     func autoCycling_wrapsAroundAtEnd() async throws {
         let vaultStore = VaultStoreStub()
         vaultStore.exportVaultHandler = { _ in

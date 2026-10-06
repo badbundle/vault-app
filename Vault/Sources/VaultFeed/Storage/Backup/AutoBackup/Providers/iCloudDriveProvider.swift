@@ -79,13 +79,22 @@ public actor iCloudDriveProvider: BackupStorageProvider {
     ///
     /// - Parameter folderURL: The URL of the selected folder.
     public func configure(with folderURL: URL) throws {
-        guard folderURL.startAccessingSecurityScopedResource() else {
+        let isAccessing = folderURL.startAccessingSecurityScopedResource()
+        defer {
+            if isAccessing {
+                folderURL.stopAccessingSecurityScopedResource()
+            }
+        }
+        // iOS's document picker gives a security-scoped URL. The Mac's Open panel gives one the app can already use,
+        // for which there's nothing to start.
+        #if !os(macOS)
+        guard isAccessing else {
             throw AutoBackupError.accessDenied
         }
-        defer { folderURL.stopAccessingSecurityScopedResource() }
+        #endif
 
         let bookmark = try folderURL.bookmarkData(
-            options: .minimalBookmark,
+            options: Self.bookmarkCreationOptions,
             includingResourceValuesForKeys: nil,
             relativeTo: nil,
         )
@@ -180,7 +189,7 @@ public actor iCloudDriveProvider: BackupStorageProvider {
         do {
             url = try URL(
                 resolvingBookmarkData: bookmark,
-                options: [],
+                options: Self.bookmarkResolutionOptions,
                 relativeTo: nil,
                 bookmarkDataIsStale: &isStale,
             )
@@ -199,5 +208,27 @@ public actor iCloudDriveProvider: BackupStorageProvider {
         }
 
         return url
+    }
+}
+
+extension iCloudDriveProvider {
+    /// How the folder's bookmark is made. A sandboxed Mac app only gets back into a folder the user chose, after it
+    /// relaunches, through a security-scoped bookmark, which its app-scope bookmarks entitlement allows
+    /// (docs/mac-app.md, "App Sandbox").
+    static var bookmarkCreationOptions: URL.BookmarkCreationOptions {
+        #if os(macOS)
+        .withSecurityScope
+        #else
+        .minimalBookmark
+        #endif
+    }
+
+    /// How the folder's bookmark is read, to match how it was made.
+    static var bookmarkResolutionOptions: URL.BookmarkResolutionOptions {
+        #if os(macOS)
+        .withSecurityScope
+        #else
+        []
+        #endif
     }
 }

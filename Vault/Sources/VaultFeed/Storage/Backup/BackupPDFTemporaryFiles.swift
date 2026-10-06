@@ -25,10 +25,16 @@ public struct BackupPDFTemporaryFiles {
 
     /// Writes the PDF for the share sheet, named for when it was made, and returns the file's URL.
     public func write(_ pdf: BackupCreatePDFViewModel.GeneratedPDF) throws -> URL {
-        let timestamp = VaultDateFormatter(timezone: .current).formatForFileName(date: pdf.createdDate)
-        let url = directory.appending(path: "\(Self.namePrefix)\(timestamp).pdf")
+        let url = directory.appending(path: Self.fileName(for: pdf))
         guard pdf.document.write(to: url) else { throw Error.notWritten }
         return url
+    }
+
+    /// What a backup PDF is called, from when it was made: `vault-export-<date and time>.pdf`. The Mac suggests it
+    /// in its save panel.
+    public static func fileName(for pdf: BackupCreatePDFViewModel.GeneratedPDF) -> String {
+        let timestamp = VaultDateFormatter(timezone: .current).formatForFileName(date: pdf.createdDate)
+        return "\(namePrefix)\(timestamp).pdf"
     }
 
     /// Deletes a file that `write(_:)` made, if it's still there.

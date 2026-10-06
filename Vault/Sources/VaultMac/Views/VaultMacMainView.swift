@@ -12,6 +12,12 @@ struct VaultMacMainView: View {
 
     /// Goes up each time Find (⌘F) asks for the search field.
     @State private var searchFocusRequest = 0
+    /// The Backups page that's open, while Backups is chosen in the sidebar.
+    @State private var backupsPage: VaultMacBackupsPage?
+    private var backupServices: VaultMacBackupServices {
+        .live
+    }
+
     /// The item editor that's open, if one is.
     @State private var editorRequest: VaultMacEditorRequest?
     /// The item that's asking whether to delete it, if one is.
@@ -45,11 +51,13 @@ struct VaultMacMainView: View {
                 list
                     .navigationSplitViewColumnWidth(min: 260, ideal: 320)
             } else {
-                ContentUnavailableView("Backups", systemImage: "externaldrive")
+                VaultMacBackupsList(selection: $backupsPage, services: backupServices)
                     .navigationSplitViewColumnWidth(min: 260, ideal: 320)
             }
         } detail: {
-            if feed.showsItems, let item = feed.selectedItem {
+            if !feed.showsItems {
+                VaultMacBackupsDetail(page: backupsPage, services: backupServices)
+            } else if let item = feed.selectedItem {
                 VaultMacItemDetailView(
                     item: item,
                     tags: dataModel.allTags.filter { item.metadata.tags.contains($0.id) },

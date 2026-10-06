@@ -280,16 +280,25 @@ See decision 9. If VAULT-115 builds them, they follow every iOS widget rule (G44
 
 ### Backups, restore and transfer
 
-All of it is the shared code, so every backup and transfer rule holds as it does on iOS (G54–G62, G77–G79).
+All of it is the shared code, so every backup and transfer rule holds as it does on iOS (G54–G62, G77–G79, G93). The
+sidebar's Backups lists the pages in the window's middle column, with when this Mac last backed up, and the open page
+is in the detail column.
 
-- **Keep a Backup** saves the encrypted PDF through `NSSavePanel`, straight to where the user chooses, or prints it
-  with `NSPrintOperation`. There's no temporary file and no share sheet, so G43 and G53 don't apply.
-- **Move to Another Device** shows the transfer's QR codes, for an iPhone or iPad to scan.
-- **Auto-Backup** writes to a folder the user picks with `NSOpenPanel`, such as one in iCloud Drive. Vault keeps access
-  to it across launches with an app-scoped, security-scoped bookmark (`.withSecurityScope`), as iOS keeps its folder.
+- **Backup Password:** whether it's set, and setting or changing it in a sheet, after Touch ID or the Mac's password,
+  with the App Lock Password's rules (G27). Each vault has its own (G17).
+- **Keep a Backup** saves the encrypted PDF through `NSSavePanel`, straight to where the user chooses, named as on
+  iOS, or prints it with `NSPrintOperation`. There's no temporary file and no share sheet, so G43 and G53 don't apply.
+  It's logged as a backup once it's saved or printed, as a completed share is on iOS.
+- **Move to Another Device** shows the transfer's QR codes, for an iPhone or iPad to scan, two seconds each. Closing
+  the page, or locking, stops them and forgets the encrypted vault they carried (`DeviceTransferExportViewModel.stop()`).
+- **Auto-Backup** writes to a folder the user picks with `NSOpenPanel`, such as one in iCloud Drive, whenever the vault
+  changes. Vault keeps access to it across launches with a security-scoped bookmark (`.withSecurityScope`, made and
+  read so on macOS by `iCloudDriveProvider`), as iOS keeps its folder. If the folder moves and the bookmark goes
+  stale, the user chooses it again.
 - **Restore** reads a PDF the user picks, or scans a device's transfer codes with the Mac's camera or Continuity
-  Camera (`AVCaptureMetadataOutput`, on macOS since 13). It always asks for the backup's own password (G59), after
-  Touch ID or the Mac's password (G31).
+  Camera (`AVCaptureMetadataOutput`), until it has every one. It always asks for the backup's own password (G59),
+  after Touch ID or the Mac's password (G31), and asks again once the page closes or Vault stops being the active
+  app. An empty vault imports; otherwise Merge or Replace, as on iOS.
 - **Adding a code** can also read a QR code from an image file the user picks, with Vision's barcode detection.
 
 ## Packaging
@@ -522,6 +531,7 @@ The sub-issues on VAULT-101 stand, in the same order, with these changes:
 - **VAULT-108:** Secure Keyboard Entry (decision 8), the Mac's field editor and `secretTextInput()`, and an Item menu
   for Edit Item and Delete Item.
 - **VAULT-109:** minimising a window locks Vault, and no window can be a tab.
-- **VAULT-110** to **VAULT-113** stand as they are.
+- **VAULT-110:** the Backups pages are in the middle and detail columns, and transfers can be stopped.
+- **VAULT-111** to **VAULT-113** stand as they are.
 - **VAULT-114** (Bradley's) gains the Mac's clipboard history and `sharingType` checks for `RELEASE.md`.
 - **VAULT-115** (Bradley's): decision 9 recommends closing it.
