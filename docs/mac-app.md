@@ -155,6 +155,7 @@ The Mac locks the vault, dropping its items, caches, search and keys (G29):
   behind (G22). The default is Immediately, as on iOS. Hiding Vault (⌘H) counts as leaving it. Coming back to the
   front starts unlocking by itself, as the iOS app does coming back to the foreground;
 - **from the Vault menu,** with Lock Vault (⌃⌘L);
+- **when a window is minimised,** so the Dock's image of it shows only the lock screen (`VaultMacWindowPrivacy`);
 - **when it quits,** which closing its window does, as for a single-window Mac app. Every launch starts locked, as on
   iOS.
 
@@ -179,11 +180,16 @@ going up once capture is noticed.
 It depends on macOS honouring `sharingType`, which `RELEASE.md`'s Mac checks test by hand on each macOS version.
 Turning the setting off sets `.readOnly`, the system's default.
 
+`VaultMacWindowPrivacy` sets it on every window of Vault's as it opens, and again each time one updates, so a sheet or
+alert has it as soon as it appears, and a change to the setting reaches every window at once. Panels macOS shows for
+Vault, such as the Open panel, are drawn by macOS, not Vault, and show only files.
+
 ### Other ways a window's contents could leak
 
 - **Mission Control, App Exposé and the Dock's previews:** once locked, every window shows only the lock screen.
+  Minimising a window locks Vault first, so the Dock's image of it shows only that.
 - **State restoration:** off for every window (`restorationBehavior(.disabled)`, and `isRestorable = false`), so
-  macOS never saves a window's contents to disk.
+  macOS never saves a window's contents to disk. No window can be a tab, either.
 - **Window titles** are only ever "Vault" (and "Settings" for the Settings window), never an item's name, so the
   Window menu, Mission Control's labels and accessibility tools show nothing else.
 - **No Handoff** (`NSUserActivity`), **no Share menu** for items, and **no Quick Look** or other extensions.
@@ -515,6 +521,7 @@ The sub-issues on VAULT-101 stand, in the same order, with these changes:
 - **VAULT-107:** the three-column window (decision 6).
 - **VAULT-108:** Secure Keyboard Entry (decision 8), the Mac's field editor and `secretTextInput()`, and an Item menu
   for Edit Item and Delete Item.
-- **VAULT-109** to **VAULT-113** stand as they are.
+- **VAULT-109:** minimising a window locks Vault, and no window can be a tab.
+- **VAULT-110** to **VAULT-113** stand as they are.
 - **VAULT-114** (Bradley's) gains the Mac's clipboard history and `sharingType` checks for `RELEASE.md`.
 - **VAULT-115** (Bradley's): decision 9 recommends closing it.

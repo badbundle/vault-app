@@ -318,6 +318,7 @@ enum VaultMacRoot {
 
     /// The lock triggers, kept for as long as the app runs.
     private static var lockTriggers: VaultMacLockTriggers?
+    private static var windowPrivacy: VaultMacWindowPrivacy?
 
     /// Wires the app together at launch.
     static func setup() {
@@ -327,6 +328,9 @@ enum VaultMacRoot {
             }
         }
         lockTriggers = VaultMacLockTriggers(appLock: appLockService)
+        let windowPrivacy = VaultMacWindowPrivacy(localSettings: localSettings, appLock: appLockService)
+        windowPrivacy.start(windows: NSApplication.shared.windows)
+        self.windowPrivacy = windowPrivacy
         // Each vault has its own backup settings, read again whenever the session switches vault or locks.
         let vaultChanges = vaultStore
         Task {
