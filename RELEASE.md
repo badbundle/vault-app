@@ -65,6 +65,19 @@ Lock Password set:
   screen says to set one up, and never shows the password field. Turn the
   passcode back on: Face ID, then the password, open the vault again.
 
+## Checking a build on a Mac
+
+The Mac app's AutoFill is checked by hand too, on a Mac with Touch ID, before
+each release of the Mac app. In System Settings, General, AutoFill & Passwords,
+turn on Vault, then in Safari, on a page with a one-time code field:
+
+- Choose Vault in the field's AutoFill menu: its sheet asks for Touch ID, then
+  the App Lock Password, and lists the vault's codes.
+- Search, and choose a code: it fills the field, and the sheet goes.
+- Open the sheet again: it asks for Touch ID and the password again.
+- A locked code, or one hidden behind a search passphrase, isn't listed.
+- Lock the Mac with the sheet open, then unlock it: the sheet is locked.
+
 ## Shipping a build
 
 Run the release lane only when you intend to build and upload a real App Store

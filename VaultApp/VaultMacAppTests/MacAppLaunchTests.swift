@@ -1,4 +1,5 @@
 import AppKit
+import Security
 import Testing
 
 /// The Mac app, launched as it ships, with these tests running inside it.
@@ -56,5 +57,60 @@ struct MacAppLaunchTests {
         }
         Issue.record("The main window never opened. Windows: \(NSApp.windows.map(\.title))")
         throw CancellationError()
+    }
+}
+
+/// The app's keychain, as its entitlements make it: its own group, which its AutoFill extension can't read, by
+/// default, and the App Group, which the extension shares (docs/mac-app.md, "Keychain").
+@MainActor
+struct MacAppKeychainTests {
+    nonisolated static let ownGroup = "442P244AFS.com.badbundle.vault.private"
+
+    @Test(arguments: ["442P244AFS.com.badbundle.vault.private", "442P244AFS.com.badbundle.vault"])
+    func keychain_eachOfTheAppsGroups_holdsItems(group: String) throws {
+        let account = "vault-test-\(UUID().uuidString)"
+        defer { SecItemDelete(Self.query(account: account, group: group) as CFDictionary) }
+        var item = Self.query(account: account, group: group)
+        item[kSecValueData as String] = Data("secret".utf8)
+        // Readable while the screen's locked, as validation often runs: this is about the groups, not when.
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+
+        let added = SecItemAdd(item as CFDictionary, nil)
+        #expect(added == errSecSuccess, "SecItemAdd: \(added)")
+        var query = Self.query(account: account, group: group)
+        query[kSecReturnData as String] = true
+        var result: CFTypeRef?
+        #expect(SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess)
+        #expect(result as? Data == Data("secret".utf8))
+    }
+
+    /// An item added without a group goes in the app's own, not the App Group.
+    @Test
+    func keychain_defaultGroup_isTheAppsOwn() throws {
+        let account = "vault-test-\(UUID().uuidString)"
+        defer { SecItemDelete(Self.query(account: account, group: Self.ownGroup) as CFDictionary) }
+        var item = Self.query(account: account, group: nil)
+        item[kSecValueData as String] = Data("secret".utf8)
+        // Readable while the screen's locked, as validation often runs: this is about the groups, not when.
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        item[kSecReturnAttributes as String] = true
+        var added: CFTypeRef?
+
+        #expect(SecItemAdd(item as CFDictionary, &added) == errSecSuccess)
+        let attributes = try #require(added as? [String: Any])
+        #expect(attributes[kSecAttrAccessGroup as String] as? String == Self.ownGroup)
+    }
+
+    private static func query(account: String, group: String?) -> [String: Any] {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: "com.badbundle.vault.tests",
+            kSecAttrAccount as String: account,
+            kSecUseDataProtectionKeychain as String: true,
+        ]
+        if let group {
+            query[kSecAttrAccessGroup as String] = group
+        }
+        return query
     }
 }

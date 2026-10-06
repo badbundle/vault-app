@@ -115,10 +115,24 @@ const macAppEntitlements = [
   "keychain-access-groups",
 ];
 
+/** The entitlements the Mac app's AutoFill extension may have: the same table's, and its profile's. */
+const macAutofillEntitlements = [
+  "com.apple.application-identifier",
+  "com.apple.developer.authentication-services.autofill-credential-provider",
+  "com.apple.developer.team-identifier",
+  "com.apple.security.app-sandbox",
+  "com.apple.security.application-groups",
+  "com.apple.security.get-task-allow",
+  "keychain-access-groups",
+];
+
+const appGroup = "442P244AFS.com.badbundle.vault";
+
 /**
  * Builds the Mac app as it runs, rather than for testing, which adds entitlements of Xcode's own, and fails unless
- * it's signed with the hardened runtime, sandboxed in its App Group, with its own keychain access group only, and with
- * no entitlement the design doesn't list.
+ * the app and its AutoFill extension are each signed with the hardened runtime, sandboxed in the App Group, with only
+ * their own keychain access groups, and with no entitlement the design doesn't list. The app's own group isn't the
+ * extension's, so the extension can't read the app's keychain items.
  */
 async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promise<void> {
   await ctx.exec([
@@ -137,27 +151,44 @@ async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promi
     "-skipPackageUpdates",
   ]);
   const app = `${derivedData}/Build/Products/Debug/Vault.app`;
-  const signature = await ctx.capture(["codesign", "--display", "--verbose", app]);
+  await checkSignedEntitlements(ctx, app, "Vault.app", macAppEntitlements, [`${appGroup}.private`, appGroup]);
+  await checkSignedEntitlements(
+    ctx,
+    `${app}/Contents/PlugIns/VaultMacAutofill.appex`,
+    "VaultMacAutofill.appex",
+    macAutofillEntitlements,
+    [appGroup],
+  );
+}
+
+async function checkSignedEntitlements(
+  ctx: Context,
+  bundle: string,
+  name: string,
+  allowed: string[],
+  keychainGroups: string[],
+): Promise<void> {
+  const signature = await ctx.capture(["codesign", "--display", "--verbose", bundle]);
   if (!/flags=0x[0-9a-f]+\(runtime\)/.test(signature.stderr)) {
-    throw new Error(`Vault.app isn't signed with the hardened runtime:\n${signature.stderr}`);
+    throw new Error(`${name} isn't signed with the hardened runtime:\n${signature.stderr}`);
   }
-  const plist = `${ctx.cacheDir}/mac-app-entitlements.plist`;
-  await ctx.exec(["codesign", "--display", "--xml", "--entitlements", plist, app]);
+  const plist = `${ctx.cacheDir}/${name}-entitlements.plist`;
+  await ctx.exec(["codesign", "--display", "--xml", "--entitlements", plist, bundle]);
   const { stdout } = await ctx.capture(["plutil", "-convert", "json", "-o", "-", plist]);
   const entitlements = JSON.parse(stdout) as Record<string, unknown>;
-  const unlisted = Object.keys(entitlements).filter((key) => !macAppEntitlements.includes(key));
+  const unlisted = Object.keys(entitlements).filter((key) => !allowed.includes(key));
   if (unlisted.length > 0) {
-    throw new Error(`Vault.app has entitlements docs/mac-app.md doesn't list: ${unlisted.join(", ")}`);
+    throw new Error(`${name} has entitlements docs/mac-app.md doesn't list: ${unlisted.join(", ")}`);
   }
   const groups = JSON.stringify(entitlements["com.apple.security.application-groups"]);
-  const keychainGroups = JSON.stringify(entitlements["keychain-access-groups"]);
-  if (entitlements["com.apple.security.app-sandbox"] !== true || groups !== '["442P244AFS.com.badbundle.vault"]') {
-    throw new Error(`Vault.app isn't sandboxed in its App Group: ${JSON.stringify(entitlements)}`);
+  if (entitlements["com.apple.security.app-sandbox"] !== true || groups !== JSON.stringify([appGroup])) {
+    throw new Error(`${name} isn't sandboxed in its App Group: ${JSON.stringify(entitlements)}`);
   }
-  if (keychainGroups !== '["442P244AFS.com.badbundle.vault"]') {
-    throw new Error(`Vault.app's keychain access groups aren't only its own: ${keychainGroups}`);
+  const keychain = JSON.stringify(entitlements["keychain-access-groups"]);
+  if (keychain !== JSON.stringify(keychainGroups)) {
+    throw new Error(`${name}'s keychain access groups aren't ${JSON.stringify(keychainGroups)}: ${keychain}`);
   }
-  ctx.log(`Vault.app's entitlements: ${Object.keys(entitlements).join(", ")}`);
+  ctx.log(`${name}'s entitlements: ${Object.keys(entitlements).join(", ")}`);
 }
 
 /**
