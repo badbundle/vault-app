@@ -11,4 +11,9 @@ public final class VaultMacAppDelegate: NSObject, NSApplicationDelegate {
     public func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
         true
     }
+
+    /// Clears what Vault copied, if it's still on the clipboard: quitting ends the timer that would have (G50).
+    public func applicationWillTerminate(_: Notification) {
+        VaultMacRoot.pasteboard.clearNow()
+    }
 }

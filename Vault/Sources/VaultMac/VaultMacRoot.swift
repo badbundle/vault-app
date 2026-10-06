@@ -32,7 +32,12 @@ enum VaultMacRoot {
 
     static let clock: some EpochClock = EpochClockImpl()
 
+    static let timer: some IntervalTimer = IntervalTimerImpl()
+
     static let fileManager: FileManager = .default
+
+    /// Every copy Vault makes goes through here (G50).
+    static let pasteboard = VaultMacPasteboard(system: NSPasteboardSystemPasteboard(), localSettings: localSettings)
 
     // MARK: - Stores
 
@@ -134,6 +139,42 @@ enum VaultMacRoot {
         backupEventLogger: backupEventLogger,
     )
 
+    // MARK: - Items
+
+    static let vaultKeyDeriverFactory: some VaultKeyDeriverFactory = VaultKeyDeriverFactoryImpl()
+
+    static let otpCodeTimerUpdaterFactory: some OTPCodeTimerUpdaterFactory = OTPCodeTimerUpdaterFactoryImpl(
+        timer: timer,
+        clock: clock,
+    )
+
+    /// Time-based codes' live codes and timers, forgotten with everything else read from the vault when it locks.
+    static let totpPreviewRepository: TOTPPreviewViewRepositoryImpl = {
+        let repository = TOTPPreviewViewRepositoryImpl(
+            clock: clock,
+            timer: timer,
+            updaterFactory: otpCodeTimerUpdaterFactory,
+        )
+        vaultDataModel.itemCaches.append(repository)
+        return repository
+    }()
+
+    /// Counter-based codes' codes, and advancing their counters.
+    static let hotpPreviewRepository: HOTPPreviewViewRepositoryImpl = {
+        let repository = HOTPPreviewViewRepositoryImpl(timer: timer, store: vaultDataModel)
+        vaultDataModel.itemCaches.append(repository)
+        return repository
+    }()
+
+    /// What the main window shows.
+    static let feedModel = VaultMacFeedModel(dataModel: vaultDataModel)
+
+    /// The text to copy for a code, from whichever repository shows it.
+    static let vaultItemCopyHandler = GenericVaultItemCopyActionHandler(childHandlers: [
+        totpPreviewRepository,
+        hotpPreviewRepository,
+    ])
+
     // MARK: - App Lock
 
     static let deviceAuthenticationService: DeviceAuthenticationService = {
@@ -161,7 +202,8 @@ enum VaultMacRoot {
         authenticationService: deviceAuthenticationService,
         passwordService: vaultPasswordService,
         purgeSensitiveData: {
-            // Straight away, then everything read from the vault.
+            // Straight away, then everything read from the vault. No item's page is open when it's unlocked again.
+            feedModel.selectedItemID = nil
             vaultDataModel.purgeSensitiveData()
             Task { await vaultDataModel.purgeVaultContents() }
         },

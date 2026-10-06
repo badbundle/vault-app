@@ -29,7 +29,19 @@ struct VaultMacRootView: View {
                     unlockWithPassword: { await appLock.unlock(password: $0) },
                 )
             } else {
-                VaultMacMainView()
+                VaultMacMainView(
+                    feed: VaultMacRoot.feedModel,
+                    localSettings: VaultMacRoot.localSettings,
+                    authentication: VaultMacRoot.deviceAuthenticationService,
+                    keyDeriverFactory: VaultMacRoot.vaultKeyDeriverFactory,
+                )
+                .environment(\.vaultMacItemPreviews, .live)
+                .environment(\.vaultMacCopy, VaultMacCopyAction { action in
+                    await VaultMacCopier(
+                        pasteboard: VaultMacRoot.pasteboard,
+                        authentication: VaultMacRoot.deviceAuthenticationService,
+                    ).copy(action)
+                })
             }
         }
         .frame(minWidth: 720, minHeight: 480)
