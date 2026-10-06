@@ -7,6 +7,8 @@ struct VaultMacCommands: Commands {
     @State private var appLock = VaultMacRoot.appLockService
     @FocusedValue(\.vaultMacFindAction) private var find
     @FocusedValue(\.vaultMacCopyCodeAction) private var copyCode
+    @FocusedValue(\.vaultMacNewItemAction) private var newItem
+    @FocusedValue(\.vaultMacItemActions) private var itemActions
 
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
@@ -21,8 +23,32 @@ struct VaultMacCommands: Commands {
             .keyboardShortcut("l", modifiers: [.control, .command])
             .disabled(appLock.isLocked || !appLock.isPasswordSet)
         }
-        // There's only ever one main window, and ⌘N will be New Item.
-        CommandGroup(replacing: .newItem) {}
+        // There's only ever one main window, so New is for items.
+        CommandGroup(replacing: .newItem) {
+            Button("New Code") { newItem?(.newCode) }
+                .keyboardShortcut("n")
+                .disabled(newItem == nil)
+            Button("New Note") { newItem?(.newNote) }
+                .keyboardShortcut("n", modifiers: [.shift, .command])
+                .disabled(newItem == nil)
+            Button("New Recovery Phrase") { newItem?(.newRecoveryPhrase) }
+                .disabled(newItem == nil)
+        }
+        CommandMenu("Item") {
+            Button("Edit Item") { itemActions?.edit() }
+                .keyboardShortcut("e")
+                .disabled(itemActions == nil)
+            // ⌘⌫ deletes text while text has focus, as it does everywhere else.
+            Button("Delete Item…") {
+                if isEditingText {
+                    send(#selector(NSResponder.deleteToBeginningOfLine(_:)))
+                } else {
+                    itemActions?.delete()
+                }
+            }
+            .keyboardShortcut(.delete)
+            .disabled(itemActions == nil)
+        }
         // Copy copies the open item's code when no text has focus, through Vault's clipboard (G50). The rest go to
         // whatever has focus, as AppKit's own commands do.
         CommandGroup(replacing: .pasteboard) {

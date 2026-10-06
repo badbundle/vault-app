@@ -59,6 +59,19 @@ final class MacAppLockTests: XCTestCase {
 }
 
 extension XCUIApplication {
+    /// Sets the App Lock Password at the first launch, which opens the vault.
+    @MainActor
+    func setAppLockPassword(_ password: String = "correct horse battery") {
+        let setPassword = buttons["first-launch.set-password"]
+        XCTAssertTrue(setPassword.waitForExistence(timeout: 10))
+        secureTextFields["first-launch.password"].click()
+        typeText(password)
+        secureTextFields["first-launch.confirmation"].click()
+        typeText(password)
+        setPassword.click()
+        XCTAssertTrue(descendants(matching: .any)["sidebar.items"].waitForExistence(timeout: 10))
+    }
+
     /// The Mac app, launched on an empty vault of the tests' own, as on its first launch, with Touch ID or the Mac's
     /// password answering `authentication` (see `VaultMacUITestVault`).
     ///

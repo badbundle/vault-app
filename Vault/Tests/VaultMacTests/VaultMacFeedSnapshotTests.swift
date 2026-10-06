@@ -88,8 +88,13 @@ struct VaultMacFeedSnapshotTests {
             passphrase: "",
             contents: "The hardware wallet in the drawer.",
         )
-        let view = VaultMacRecoveryPhraseDetailView(phrase: phrase, metadata: MacTestItems.metadata(), tags: [])
-            .padding(28)
+        let view = VaultMacRecoveryPhraseDetailView(
+            phrase: phrase,
+            metadata: MacTestItems.metadata(),
+            tags: [],
+            encryptionKey: DerivedEncryptionKey(key: .zero(), salt: Data(), keyDervier: .testing),
+        )
+        .padding(28)
 
         assertSnapshot(of: view, as: .macWindow(width: 620, height: 420))
     }

@@ -103,26 +103,7 @@ struct VaultMacFeedModelTests {
     private nonisolated static let searchKey = (try? KeyData<32>(data: Data(repeating: 0xA2, count: 32))) ?? .zero()
 
     private func makeSUT() throws -> (VaultMacFeedModel, VaultStoreSession) {
-        let store = try PersistedLocalVaultStore.inMemory()
-        let session = VaultStoreSession(target: .plain(store))
-        let killphraseKeys = KillphraseKeyStoreMock()
-        killphraseKeys.loadOrCreateHandler = { Self.killphraseKey }
-        let searchKeys = SearchPassphraseKeyStoreMock()
-        searchKeys.loadOrCreateHandler = { Self.searchKey }
-        let dataModel = VaultDataModel(
-            vaultStore: session,
-            vaultTagStore: session,
-            vaultImporter: session,
-            vaultDeleter: session,
-            vaultKillphraseDeleter: session,
-            vaultOtpAutofillStore: NoCredentialIdentities(),
-            backupPasswordStore: BackupPasswordStoreMock(),
-            killphraseKeyStore: killphraseKeys,
-            killphraseRehashService: nil,
-            searchPassphraseKeyStore: searchKeys,
-            searchPassphraseRehashService: nil,
-            backupEventLogger: BackupEventLoggerMock(),
-        )
+        let (dataModel, session) = try MacTestVault.make(killphraseKey: Self.killphraseKey, searchKey: Self.searchKey)
         return (VaultMacFeedModel(dataModel: dataModel), session)
     }
 }

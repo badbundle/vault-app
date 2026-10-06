@@ -14,14 +14,19 @@ struct VaultMacOTPDetailView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(code.data.issuer.isBlank ? "Unnamed Code" : code.data.issuer)
-                    .font(.largeTitle.bold())
-                if code.data.accountName.isNotEmpty {
-                    Text(code.data.accountName)
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(code.data.issuer.isBlank ? "Unnamed Code" : code.data.issuer)
+                        .font(.largeTitle.bold())
+                        .accessibilityIdentifier("detail.title")
+                    if code.data.accountName.isNotEmpty {
+                        Text(code.data.accountName)
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                Spacer()
+                VaultMacItemPageButtons(request: .editCode(code, item.metadata), metadata: item.metadata)
             }
             if let viewModel = previews?.code(for: item) {
                 codeBox(viewModel)
