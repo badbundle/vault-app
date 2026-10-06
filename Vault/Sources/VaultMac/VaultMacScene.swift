@@ -6,6 +6,8 @@ import SwiftUI
 @MainActor
 public struct VaultMacScene: Scene {
     public init() {
+        // Before anything reads a setting.
+        VaultMacSettingsArguments.removeVaultSettings()
         VaultMacRoot.setup()
     }
 

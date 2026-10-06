@@ -79,6 +79,12 @@ struct VaultMacQRCodeScanner: NSViewRepresentable {
                     parent.didFail(.notAllowed)
                     return
                 }
+                // Another app using the camera at the same time sees what it sees: a code's key, or a vault's
+                // transfer codes.
+                if let device = Self.camera(), device.isInUseByAnotherApplication {
+                    parent.didFail(.inUseByAnotherApp)
+                    return
+                }
                 guard let device = Self.camera(), let input = try? AVCaptureDeviceInput(device: device),
                       session.canAddInput(input)
                 else {
@@ -135,11 +141,15 @@ enum VaultMacQRCodeScannerFailure: Equatable {
     case notAllowed
     /// There's no camera to use.
     case noCamera
+    /// Another app is using the camera, and would see the code too.
+    case inUseByAnotherApp
 
     var message: String {
         switch self {
         case .notAllowed: "Vault can't use the camera. You can allow it in System Settings, under Privacy & Security."
         case .noCamera: "There's no camera to scan with. You can choose an image of the code instead."
+        case .inUseByAnotherApp:
+            "Another app is using the camera, so it could see the code too. Close it and try again, or choose an image of the code instead."
         }
     }
 }
@@ -159,6 +169,7 @@ enum VaultMacQRCodeImageReader {
     @MainActor
     static func chooseImage() async -> [String]? {
         let panel = NSOpenPanel()
+        VaultMacPanels.prepare(panel)
         panel.allowedContentTypes = [.image]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false

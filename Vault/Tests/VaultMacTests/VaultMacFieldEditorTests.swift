@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import SwiftUI
 import Testing
 @testable import VaultMac
 
@@ -92,6 +93,58 @@ struct VaultMacFieldEditorTests {
         #expect(searchField?.isFieldEditor == true)
         #expect((VaultMacNSTextField().cell as? VaultMacTextFieldCell) != nil)
         #expect((VaultMacNSSearchField().cell as? VaultMacSearchFieldCell) != nil)
+    }
+
+    /// AppKit sets the field editor up again from the field as editing starts: it stays as Vault set it.
+    @Test(arguments: [true, false])
+    func field_whileEditing_learnsNothingAndKeepsNoUndoHistory(isSearchField: Bool) throws {
+        let window = NSWindow(
+            contentRect: .init(x: 0, y: 0, width: 200, height: 100),
+            styleMask: [],
+            backing: .buffered,
+            defer: true,
+        )
+        let field: NSTextField = isSearchField ? VaultMacNSSearchField() : VaultMacNSTextField()
+        VaultMacFieldEditor.turnOffLearning(in: field)
+        field.frame = .init(x: 0, y: 0, width: 200, height: 22)
+        window.contentView?.addSubview(field)
+
+        window.makeFirstResponder(field)
+        let editor = try #require(field.currentEditor() as? NSTextView)
+
+        #expect(editor is VaultMacFieldEditor)
+        #expect(!editor.allowsUndo)
+        #expect(!editor.isContinuousSpellCheckingEnabled)
+        #expect(!editor.isAutomaticTextCompletionEnabled)
+        #expect(!editor.isAutomaticSpellingCorrectionEnabled)
+        #expect(editor.inlinePredictionType == .no)
+        #expect(editor.writingToolsBehavior == .none)
+    }
+
+    /// Look Up has nothing to show, and so sends nothing to Apple's Look Up services.
+    @Test
+    func lookUp_offersNothing() {
+        let sut = VaultMacFieldEditor(frame: .zero)
+        sut.string = "secret"
+
+        #expect(sut.quickLookPreviewableItems(inRanges: [NSValue(range: NSRange(location: 0, length: 6))]).isEmpty)
+    }
+
+    /// A note's editor has an undo history of its own, which it forgets as it goes, rather than the window's, which
+    /// would keep what was typed after the sheet closes.
+    @Test
+    func noteEditor_undoHistory_isItsOwnAndForgottenAsItGoes() {
+        let coordinator = VaultMacTextEditor.Coordinator(
+            parent: VaultMacTextEditor(text: .constant(""), accessibilityLabel: "Note"),
+        )
+        let textView = VaultMacFieldEditor(frame: .zero)
+        #expect(coordinator.undoManager(for: textView) === coordinator.undoManager)
+        coordinator.undoManager.registerUndo(withTarget: textView) { _ in }
+        #expect(coordinator.undoManager.canUndo)
+
+        VaultMacTextEditor.dismantleNSView(NSScrollView(), coordinator: coordinator)
+
+        #expect(!coordinator.undoManager.canUndo)
     }
 
     /// Secure Keyboard Entry is system-wide, and already on while anything else has it, such as a locked screen's

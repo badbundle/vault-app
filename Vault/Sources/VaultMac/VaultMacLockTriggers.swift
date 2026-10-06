@@ -8,6 +8,8 @@ import VaultFeed
 ///   the Mac sleep, or the user switches to another account: the Mac's equivalents of iOS's
 ///   `protectedDataWillBecomeUnavailable`.
 /// - **When another app comes to the front,** straight away or once the delay has passed with Vault still behind.
+/// - **When the main window closes,** even with another of Vault's windows still open, so Vault never stays unlocked
+///   without the window that shows it.
 ///
 /// Coming back to the front starts unlocking by itself, as the iOS app does coming back to the foreground.
 @MainActor
@@ -50,6 +52,10 @@ final class VaultMacLockTriggers {
             observe(name, in: workspaceCenter) { $0.deviceWillLock() }
         }
         observe(NSApplication.didResignActiveNotification, in: applicationCenter) { $0.appDidLeave() }
+        observe(NSWindow.willCloseNotification, in: applicationCenter) { triggers, notification in
+            guard Self.isMainWindow(notification.object as? NSWindow) else { return }
+            triggers.appLock.lockNow()
+        }
         observe(NSApplication.didBecomeActiveNotification, in: applicationCenter) { $0.appDidReturn() }
     }
 
@@ -65,13 +71,28 @@ final class VaultMacLockTriggers {
         in center: NotificationCenter,
         action: @escaping @MainActor (VaultMacLockTriggers) -> Void,
     ) {
-        let observer = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+        observe(name, in: center) { triggers, _ in action(triggers) }
+    }
+
+    private func observe(
+        _ name: Notification.Name,
+        in center: NotificationCenter,
+        action: @escaping @MainActor (VaultMacLockTriggers, Notification) -> Void,
+    ) {
+        let observer = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+            // Delivered on the main queue, where it's only read.
+            nonisolated(unsafe) let notification = notification
             MainActor.assumeIsolated {
                 guard let self else { return }
-                action(self)
+                action(self, notification)
             }
         }
         observers.append((center, observer))
+    }
+
+    /// Whether `window` is the main window: SwiftUI names it after its scene's ID.
+    static func isMainWindow(_ window: NSWindow?) -> Bool {
+        window?.identifier?.rawValue.hasPrefix(VaultMacWindow.main.id) == true
     }
 
     private func deviceWillLock() {

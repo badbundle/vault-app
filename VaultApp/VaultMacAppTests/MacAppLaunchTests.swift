@@ -17,11 +17,20 @@ struct MacAppLaunchTests {
         #expect(ProcessInfo.processInfo.environment["APP_SANDBOX_CONTAINER_ID"] != nil)
     }
 
+    /// The App Group's container is one the app can write to and read back, as it can only with the group's
+    /// entitlement: a container URL alone is given whatever the entitlements.
     @Test
-    func appGroupContainer_isTheTeamPrefixedOne() {
-        let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupID)
+    func appGroupContainer_isTheTeamPrefixedOne() throws {
+        let container = try #require(
+            FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: Self.appGroupID),
+        )
+        let file = container.appending(path: "vault-app-tests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: file) }
 
-        #expect(container?.lastPathComponent == Self.appGroupID)
+        try Data("test".utf8).write(to: file)
+
+        #expect(container.lastPathComponent == Self.appGroupID)
+        #expect(try Data(contentsOf: file) == Data("test".utf8))
     }
 
     /// Hide While Recording is on by default (G24, C7), so no window can be captured, and none is restored.
@@ -36,12 +45,44 @@ struct MacAppLaunchTests {
         }
     }
 
-    /// Nothing from Vault is offered to Handoff or the Services menu.
+    /// Nothing from Vault is offered to Handoff, the Services menu, URL schemes, documents or AppleScript, and the
+    /// app has no way in but its AutoFill extension: no XPC services or login items.
     @Test
-    func app_offersNoHandoffOrServices() {
-        #expect(Bundle.main.object(forInfoDictionaryKey: "NSUserActivityTypes") == nil)
-        #expect(Bundle.main.object(forInfoDictionaryKey: "NSServices") == nil)
+    func app_hasNoWayInFromOutside() throws {
+        for key in [
+            "NSUserActivityTypes", "NSServices", "CFBundleURLTypes", "CFBundleDocumentTypes", "NSAppleScriptEnabled",
+            "OSAScriptingDefinition", "UTExportedTypeDeclarations", "UTImportedTypeDeclarations",
+        ] {
+            #expect(Bundle.main.object(forInfoDictionaryKey: key) == nil, "\(key)")
+        }
         #expect(NSApp.servicesProvider == nil)
+        let contents = Bundle.main.bundleURL.appending(path: "Contents")
+        // Leaving out these tests, which Xcode puts there to run them inside the app.
+        let plugIns = try FileManager.default.contentsOfDirectory(atPath: contents.appending(path: "PlugIns").path)
+            .filter { !$0.hasSuffix(".xctest") }
+        #expect(plugIns == ["VaultMacAutofill.appex"])
+        for folder in ["XPCServices", "Library/LoginItems"] {
+            #expect(!FileManager.default.fileExists(atPath: contents.appending(path: folder).path), "\(folder)")
+        }
+    }
+
+    /// The AutoFill extension offers one-time codes and nothing else.
+    @Test
+    func autofillExtension_providesOneTimeCodesOnly() throws {
+        let plugIn = try #require(Bundle(url: Bundle.main.bundleURL.appending(path: "Contents/PlugIns/VaultMacAutofill.appex")))
+        let attributes = try #require(
+            (plugIn.object(forInfoDictionaryKey: "NSExtension") as? [String: Any])?["NSExtensionAttributes"]
+                as? [String: Any],
+        )
+        let capabilities = try #require(attributes["ASCredentialProviderExtensionCapabilities"] as? [String: Bool])
+
+        #expect(capabilities == [
+            "ProvidesOneTimeCodes": true,
+            "ProvidesPasskeys": false,
+            "ProvidesPasswords": false,
+            "ProvidesTextToInsert": false,
+            "ShowsConfigurationUI": false,
+        ])
     }
 
     /// docs/mac-app.md, decision 7.

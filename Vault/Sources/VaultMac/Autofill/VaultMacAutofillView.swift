@@ -59,7 +59,8 @@ struct VaultMacAutofillView: View {
 
     private var codes: some View {
         VStack(spacing: 0) {
-            VaultMacSearchField(text: Bindable(model.dataModel).itemsSearchQuery, focusRequest: 0)
+            // Nothing typed here is copied: the sheet's process ends with the request, before Vault could clear it.
+            VaultMacSearchField(text: Bindable(model.dataModel).itemsSearchQuery, focusRequest: 0, copyText: nil)
                 .padding()
             List(model.codes) { item in
                 if let preview = previews.code(for: item) {

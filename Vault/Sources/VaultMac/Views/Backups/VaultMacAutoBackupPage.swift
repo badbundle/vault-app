@@ -123,6 +123,10 @@ struct VaultMacAutoBackupPage: View {
                         .controlSize(.small)
                 }
             } else {
+                if case let .error(error) = viewModel.status {
+                    errorLabel(error)
+                        .accessibilityIdentifier("backups.auto.problem")
+                }
                 LabeledContent("Last Backup") {
                     Text(viewModel.lastBackupDate?.formatted(date: .abbreviated, time: .shortened)
                         ?? "No automatic backups yet")
@@ -160,6 +164,7 @@ struct VaultMacAutoBackupPage: View {
     /// The Open panel, for choosing one folder.
     static func runFolderPanel() -> URL? {
         let panel = NSOpenPanel()
+        VaultMacPanels.prepare(panel)
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.canCreateDirectories = true

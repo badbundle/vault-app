@@ -50,6 +50,7 @@ private struct VaultMacTextFieldRepresentable: NSViewRepresentable {
 
     func makeNSView(context: Context) -> VaultMacNSTextField {
         let field = VaultMacNSTextField()
+        VaultMacFieldEditor.turnOffLearning(in: field)
         field.setAccessibilityLabel(title)
         field.setAccessibilityIdentifier(identifier)
         field.delegate = context.coordinator
@@ -101,12 +102,17 @@ final class VaultMacNSTextField: NSTextField {
     }
 }
 
-/// Hands its field the Vault field editor, rather than the window's shared one.
+/// Hands its field the Vault field editor, rather than the window's shared one, and keeps it as Vault set it up each
+/// time editing starts: AppKit sets the field editor up again from the field then.
 final class VaultMacTextFieldCell: NSTextFieldCell {
     private lazy var editor = VaultMacFieldEditor.makeFieldEditor()
 
     override func fieldEditor(for _: NSView) -> NSTextView? {
         editor
+    }
+
+    override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {
+        VaultMacFieldEditor.keepPrivate(super.setUpFieldEditorAttributes(textObj))
     }
 }
 
@@ -116,9 +122,13 @@ struct VaultMacSearchField: NSViewRepresentable {
     @Binding var text: String
     /// Changes each time something asks for the field to take focus, as Find (⌘F) does.
     var focusRequest: Int
+    /// Where Cut and Copy put what's selected: Vault's clipboard, or nowhere, as in the AutoFill sheet.
+    var copyText: (@MainActor (String) -> Void)? = VaultMacFieldEditor.copyToVaultClipboard
 
     func makeNSView(context: Context) -> NSSearchField {
         let field = VaultMacNSSearchField()
+        VaultMacFieldEditor.turnOffLearning(in: field)
+        (field.cell as? VaultMacSearchFieldCell)?.copyText = copyText
         field.placeholderString = "Search"
         field.setAccessibilityIdentifier("feed.search")
         field.delegate = context.coordinator
@@ -165,12 +175,23 @@ final class VaultMacNSSearchField: NSSearchField {
     }
 }
 
-/// Hands its field the Vault field editor, rather than the window's shared one.
+/// Hands its field the Vault field editor, rather than the window's shared one, and keeps it as Vault set it up each
+/// time editing starts.
 final class VaultMacSearchFieldCell: NSSearchFieldCell {
     private lazy var editor = VaultMacFieldEditor.makeFieldEditor()
 
+    /// Where Cut and Copy put what's selected: Vault's clipboard, unless the field says otherwise.
+    var copyText: (@MainActor (String) -> Void)? {
+        get { editor.copyText }
+        set { editor.copyText = newValue }
+    }
+
     override func fieldEditor(for _: NSView) -> NSTextView? {
         editor
+    }
+
+    override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {
+        VaultMacFieldEditor.keepPrivate(super.setUpFieldEditorAttributes(textObj))
     }
 }
 
@@ -185,6 +206,7 @@ struct VaultMacTextEditor: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let textView = VaultMacFieldEditor(frame: .zero)
         textView.isRichText = false
+        // Undo within the note, with an undo manager of its own, which forgets everything once the editor goes.
         textView.allowsUndo = true
         textView.font = isMonospaced
             ? .monospacedSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
@@ -215,16 +237,27 @@ struct VaultMacTextEditor: NSViewRepresentable {
         Coordinator(parent: self)
     }
 
+    static func dismantleNSView(_: NSScrollView, coordinator: Coordinator) {
+        coordinator.undoManager.removeAllActions()
+    }
+
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: VaultMacTextEditor
+        /// The note's own, rather than the window's, which would keep what was typed after the sheet closes.
+        let undoManager: UndoManager
 
         init(parent: VaultMacTextEditor) {
             self.parent = parent
+            undoManager = UndoManager()
         }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
+        }
+
+        func undoManager(for _: NSTextView) -> UndoManager? {
+            undoManager
         }
     }
 }

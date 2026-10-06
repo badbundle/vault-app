@@ -2,6 +2,7 @@ import AppKit
 import AuthenticationServices
 import SwiftUI
 import VaultFeed
+import VaultSettings
 
 /// The Mac's AutoFill extension: fills one-time codes into Safari and other apps, under the iOS AutoFill rules
 /// (docs/mac-app.md, "QuickType and AutoFill"). It offers nothing without the sheet: the App Lock Password is always
@@ -17,7 +18,7 @@ open class VaultMacCredentialProviderViewController: ASCredentialProviderViewCon
         appLockSettings: root.appLockSettings,
         authentication: root.authentication,
     )
-    private var lockObservers: [(NotificationCenter, any NSObjectProtocol)] = []
+    private var lockObserver: VaultMacAutofillLockObserver?
 
     override open func loadView() {
         view = NSHostingView(rootView: VaultMacAutofillView(
@@ -30,19 +31,29 @@ open class VaultMacCredentialProviderViewController: ASCredentialProviderViewCon
 
     override open func viewWillAppear() {
         super.viewWillAppear()
-        lockWhenTheMacLocks()
+        keepOutOfCaptures()
+        lockWhenTheMacLocksOrTheUserLeaves()
+        // Nothing is ever offered without the sheet (G46): the system's list of codes stays empty.
+        Task { try? await ASCredentialIdentityStore.shared.removeAllCredentialIdentities() }
     }
 
     override open func viewDidAppear() {
         super.viewDidAppear()
-        // Hide While Recording keeps the sheet out of every capture, as it does the app's windows (G24, G91).
-        view.window?.sharingType = root.localSettings.state.hidesVaultWhileScreenCaptured ? .none : .readOnly
+        keepOutOfCaptures()
     }
 
     override open func viewDidDisappear() {
         super.viewDidDisappear()
-        stopLockingWhenTheMacLocks()
+        lockObserver?.stop()
+        lockObserver = nil
         Task { await model.endRequest() }
+    }
+
+    /// Hide While Recording keeps the sheet out of every capture, as it does the app's windows (G24, G91), as macOS
+    /// shows it. The setting's read afresh for each request, as the app can change it meanwhile.
+    private func keepOutOfCaptures() {
+        let settings = LocalSettings(defaults: root.sharedDefaults, sharedDefaults: root.sharedDefaults)
+        view.window?.sharingType = settings.state.hidesVaultWhileScreenCaptured ? .none : .readOnly
     }
 
     // MARK: - Requests
@@ -81,28 +92,14 @@ open class VaultMacCredentialProviderViewController: ASCredentialProviderViewCon
 
     // MARK: - Locking
 
-    /// Locks the sheet and the vault when the screen locks, the screen saver starts, or the Mac or its displays
-    /// sleep, as the app does (G29, G86).
-    private func lockWhenTheMacLocks() {
-        guard lockObservers.isEmpty else { return }
-        let distributed = DistributedNotificationCenter.default()
-        for name in VaultMacLockTriggers.lockingDistributedNotifications {
-            lockObservers.append((distributed, distributed.addObserver(forName: name, object: nil, queue: .main) {
-                [weak self] _ in MainActor.assumeIsolated { self?.model.deviceWillLock() }
-            }))
-        }
-        let workspace = NSWorkspace.shared.notificationCenter
-        for name in VaultMacLockTriggers.lockingWorkspaceNotifications {
-            lockObservers.append((workspace, workspace.addObserver(forName: name, object: nil, queue: .main) {
-                [weak self] _ in MainActor.assumeIsolated { self?.model.deviceWillLock() }
-            }))
-        }
-    }
-
-    private func stopLockingWhenTheMacLocks() {
-        for (center, observer) in lockObservers {
-            center.removeObserver(observer)
-        }
-        lockObservers = []
+    /// Locks the sheet and the vault when the Mac locks or sleeps (G29, G86), and when the user goes to another app,
+    /// as the app locks when another comes to the front (G22).
+    private func lockWhenTheMacLocksOrTheUserLeaves() {
+        guard lockObserver == nil else { return }
+        lockObserver = VaultMacAutofillLockObserver(
+            hostProcess: NSWorkspace.shared.frontmostApplication?.processIdentifier,
+            macWillLock: { [weak self] in self?.model.deviceWillLock() },
+            userDidLeave: { [weak self] in self?.model.userDidLeave() },
+        )
     }
 }

@@ -166,6 +166,24 @@ struct DeviceTransferExportViewModelTests {
         #expect(sut.state == .idle)
     }
 
+    /// Stopping while the codes are still being made, as when the page closes or Vault locks straight away, means
+    /// they never show.
+    @Test
+    func stop_whileGenerating_showsNothingOnceItFinishes() async throws {
+        let vaultStore = VaultStoreStub()
+        let sut = try makeSUT(vaultStore: vaultStore, intervalTimer: IntervalTimerMock())
+        // The page closes while the vault's being exported for the codes.
+        vaultStore.exportVaultHandler = { _ in
+            MainActor.assumeIsolated { sut.stop() }
+            return .init(userDescription: "", items: [], tags: [])
+        }
+
+        await sut.generateShards()
+
+        #expect(sut.state == .idle)
+        #expect(sut.currentQRCodeImage == nil)
+    }
+
     @Test
     func autoCycling_wrapsAroundAtEnd() async throws {
         let vaultStore = VaultStoreStub()

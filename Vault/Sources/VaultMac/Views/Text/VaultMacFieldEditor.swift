@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import Quartz
 import VaultCore
 
 /// The text view every Vault field edits with: its own field editor for single-line fields, and the text view of a
@@ -46,6 +47,34 @@ final class VaultMacFieldEditor: NSTextView {
         textView.writingToolsBehavior = .none
         textView.allowsCharacterPickerTouchBarItem = false
         textView.usesFindPanel = false
+    }
+
+    /// The field editor as Vault sets it up, after AppKit has set it up for a field, which turns some of this back on.
+    /// A single-line field keeps no undo history: its text can be a killphrase or a search passphrase.
+    static func keepPrivate(_ text: NSText) -> NSText {
+        if let textView = text as? NSTextView {
+            turnOffLearning(textView)
+            textView.allowsUndo = false
+        }
+        return text
+    }
+
+    /// Turns off what a field itself would hand its field editor as editing starts.
+    static func turnOffLearning(in field: NSTextField) {
+        field.isAutomaticTextCompletionEnabled = false
+        field.allowsCharacterPickerTouchBarItem = false
+        (field.cell as? NSTextFieldCell)?.allowsUndo = false
+    }
+
+    // MARK: - Look Up
+
+    /// Look Up (a force click, or ⌃⌘D) shows nothing, and sends nothing to Apple's Look Up services.
+    override func quickLook(with _: NSEvent) {}
+
+    override func showDefinition(for _: NSAttributedString?, at _: NSPoint) {}
+
+    override func quickLookPreviewableItems(inRanges _: [NSValue]) -> [any QLPreviewItem] {
+        []
     }
 
     override func becomeFirstResponder() -> Bool {

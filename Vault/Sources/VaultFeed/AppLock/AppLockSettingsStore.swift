@@ -33,8 +33,8 @@ public struct AppLockSettingsStore: @unchecked Sendable { // swiftlint:disable:t
     /// this device (VAULT-34). Off unless the user turns it on.
     ///
     /// It's a setting of the device, not of a vault, like the attempt count, so every vault shares it. It's stored
-    /// only while it's on, and it's deleted with the app, so a reinstall never finds it on for a new password. An
-    /// erase clears it (`VaultEraser`).
+    /// only while it's on. On iOS it's deleted with the app, so a reinstall never finds it on for a new password; on
+    /// the Mac, the App Group's container outlasts the app. An erase clears it (`VaultEraser`).
     public var erasesAfterFailedPasswords: Bool {
         get {
             userDefaults.bool(forKey: VaultIdentifiers.Preferences.AppLock.erasesAfterFailedPasswords)

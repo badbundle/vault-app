@@ -10,6 +10,8 @@ struct VaultMacBackupsList: View {
 
     /// The latest value from the service's configuration publisher, which doesn't replay.
     @State private var publishedAutoBackupEnabled: Bool?
+    /// Likewise its status, which says when a backup couldn't be made.
+    @State private var publishedAutoBackupStatus: AutoBackupStatus?
 
     var body: some View {
         List(selection: $selection) {
@@ -35,13 +37,22 @@ struct VaultMacBackupsList: View {
         .onReceive(services.autoBackupService.configurationPublisher) { configuration in
             publishedAutoBackupEnabled = configuration.isEnabled
         }
+        .onReceive(services.autoBackupService.statusPublisher) { status in
+            publishedAutoBackupStatus = status
+        }
         .accessibilityIdentifier("backups")
     }
 
     private func status(of page: VaultMacBackupsPage) -> String? {
         switch page {
         case .autoBackup:
-            (publishedAutoBackupEnabled ?? services.autoBackupService.configuration.isEnabled) ? "On" : "Off"
+            if !(publishedAutoBackupEnabled ?? services.autoBackupService.configuration.isEnabled) {
+                "Off"
+            } else if case .error = publishedAutoBackupStatus ?? services.autoBackupService.status {
+                "Needs Attention"
+            } else {
+                "On"
+            }
         case .password:
             switch services.dataModel.backupPasswordStatus {
             case .unknown: nil

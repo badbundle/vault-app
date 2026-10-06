@@ -10,6 +10,7 @@ import VaultFeed
 /// It's shown again after an erase, which leaves no password.
 struct VaultMacFirstLaunchView: View {
     @State private var viewModel: AppLockPasswordFormViewModel
+    private let appLock: AppLockService
     var canAuthenticate: Bool
     @FocusState private var focusedField: Field?
 
@@ -20,6 +21,7 @@ struct VaultMacFirstLaunchView: View {
 
     init(appLock: AppLockService, canAuthenticate: Bool) {
         _viewModel = State(initialValue: AppLockPasswordFormViewModel(purpose: .set, appLock: appLock))
+        self.appLock = appLock
         self.canAuthenticate = canAuthenticate
     }
 
@@ -101,7 +103,14 @@ struct VaultMacFirstLaunchView: View {
 
     private func submit() {
         guard viewModel.canSubmit, canAuthenticate else { return }
-        Task { await viewModel.submit() }
+        Task {
+            // After an erase, the lock can still be on, which refuses to set a password until Touch ID or the Mac's
+            // password has passed.
+            if appLock.isLocked {
+                await appLock.unlock()
+            }
+            await viewModel.submit()
+        }
     }
 
     private var hint: String {

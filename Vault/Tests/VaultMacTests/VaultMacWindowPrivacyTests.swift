@@ -90,6 +90,20 @@ struct VaultMacWindowPrivacyTests {
         #expect(env.appLock.isLocked)
     }
 
+    @Test
+    func minimisingAWindow_hidesItsContentsUntilItsBack() async throws {
+        let env = try await Environment()
+        env.privacy.start(windows: [])
+        let window = makeWindow()
+        window.contentView = NSView()
+
+        env.center.post(name: NSWindow.willMiniaturizeNotification, object: window)
+        #expect(window.contentView?.isHidden == true)
+
+        env.center.post(name: NSWindow.didDeminiaturizeNotification, object: window)
+        #expect(window.contentView?.isHidden == false)
+    }
+
     private func makeWindow() -> NSWindow {
         NSWindow(
             contentRect: .init(x: 0, y: 0, width: 100, height: 100),

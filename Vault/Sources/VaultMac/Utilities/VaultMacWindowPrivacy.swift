@@ -8,7 +8,8 @@ import VaultSettings
 /// - With Hide While Recording on, the default, a window's `sharingType` is `.none`, so it's left out of screenshots,
 ///   screen recordings, screen sharing and AirPlay (G24). Turning it off gives the system's default, `.readOnly`.
 /// - No window is restorable, so macOS never saves what one showed, and none can be a tab.
-/// - Minimising a window locks Vault first, so the Dock shows only the lock screen.
+/// - Minimising a window locks Vault first, and hides the window's contents until it's back, so the Dock's image of it
+///   shows nothing from the vault.
 @MainActor
 final class VaultMacWindowPrivacy {
     private let localSettings: LocalSettings
@@ -39,12 +40,28 @@ final class VaultMacWindowPrivacy {
                 guard let window = note.object as? NSWindow else { return }
                 MainActor.assumeIsolated { self.apply(to: window) }
             })
+        // The Dock's image of a minimised window is taken before SwiftUI could draw the lock screen, so the window's
+        // contents hide until it's back, by when Vault is locked.
         observers.append(center.addObserver(
             forName: NSWindow.willMiniaturizeNotification,
             object: nil,
             queue: .main,
-        ) { _ in
-            MainActor.assumeIsolated { self.appLock.lockNow() }
+        ) { note in
+            let window = note.object as? NSWindow
+            MainActor.assumeIsolated {
+                self.appLock.lockNow()
+                window?.contentView?.isHidden = true
+            }
+        })
+        observers.append(center.addObserver(
+            forName: NSWindow.didDeminiaturizeNotification,
+            object: nil,
+            queue: .main,
+        ) { note in
+            let window = note.object as? NSWindow
+            MainActor.assumeIsolated {
+                window?.contentView?.isHidden = false
+            }
         })
     }
 
