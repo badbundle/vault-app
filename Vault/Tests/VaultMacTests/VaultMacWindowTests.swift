@@ -7,6 +7,7 @@ struct VaultMacWindowTests {
     func title_isOnlyEverTheAppsName() {
         #expect(VaultMacWindow.main.title == "Vault")
         #expect(VaultMacWindow.about.title == "About Vault")
+        #expect(VaultMacWindow.help.title == "Vault Help")
     }
 
     @Test

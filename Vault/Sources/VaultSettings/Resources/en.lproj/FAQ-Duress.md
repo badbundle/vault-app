@@ -11,9 +11,9 @@ Not from Vault itself. Every vault is kept in the same file, which always has ro
 Some things can still give it away:
 
 - **An empty or brand new duress vault.** Items show when they were added, so a vault filled today looks new. Put some codes and notes in it early, and open it now and then, so it looks used.
-- **Your real vault's backups.** Backups saved on this iPhone, or in a folder it can reach, can be found, and the duress vault's backup password won't open them. Keep your real vault's backups somewhere else, and give the duress vault its own backup password, backups and auto-backup folder.
+- **Your real vault's backups.** Backups saved on this device, or in a folder it can reach, can be found, and the duress vault's backup password won't open them. Keep your real vault's backups somewhere else, and give the duress vault its own backup password, backups and auto-backup folder.
 - **The folder picker.** When you choose an auto-backup folder, it opens where it was last used, which may be your real vault's folder.
-- **Older copies of this iPhone's data,** such as an earlier iCloud or computer backup, compared with the vault as it is now.
+- **Older copies of this device's data,** such as an earlier iCloud, Time Machine or computer backup, compared with the vault as it is now.
 
 ## Can I have more than one?
 
@@ -25,7 +25,7 @@ Your real vault is never touched by duress vaults up to eleven deep. Beyond that
 
 After 5 wrong App Lock Passwords in a row, Vault makes you wait before you try again, and longer after each one. If you turn on **Erase Vault After 10 Failed Passwords**, it erases every vault after 10 wrong ones in a row.
 
-Any vault's password, your real one or a duress one, starts the count again, so the next wrong password has no wait. It can also turn erasing off for this iPhone.
+Any vault's password, your real one or a duress one, starts the count again, so the next wrong password has no wait. It can also turn erasing off for this device.
 
 So neither the waits nor erasing hold back someone who has your duress password: they can try 4 passwords, open the duress vault, and try 4 more, as often as they like. What keeps your real vault safe is a long App Lock Password that nobody can guess.
 
@@ -33,7 +33,7 @@ So neither the waits nor erasing hold back someone who has your duress password:
 
 Unlock the vault above it, your real vault for the first one, and set a new duress password. It replaces the old duress vault, and the new one starts empty.
 
-Don't use **Delete All Data** for this. It deletes every vault on this iPhone, your real one included, whichever vault you're in.
+Don't use **Delete All Data** for this. It deletes every vault on this device, your real one included, whichever vault you're in.
 
 ## What about killphrases?
 

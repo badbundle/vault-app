@@ -20,11 +20,11 @@ There is no recovery mechanism. If you forget the password for an encrypted item
 
 This is the trade-off for strong encryption: it protects your data from everyone, including you, if the password is lost.
 
-## Is this the same as locking an item with Face ID?
+## Is this the same as locking an item with Face ID or Touch ID?
 
 No — these are two separate features that can be used together.
 
 - **Per-item encryption** (this page) encrypts the item's contents with a password you choose. Without the password, the data cannot be read by anything.
-- **Per-item lock** uses your device's native security (Face ID, Touch ID, or device passcode) to gate access to the item in the app. The data itself is not re-encrypted — the device's own protections are used to keep it out of view.
+- **Per-item lock** uses your device's native security (Face ID, Touch ID, or the device's passcode or password) to gate access to the item in the app. The data itself is not re-encrypted — the device's own protections are used to keep it out of view.
 
 Use per-item encryption for an extra layer on your most sensitive items, with a long password. Use a per-item lock when you just want a quick prompt before viewing.

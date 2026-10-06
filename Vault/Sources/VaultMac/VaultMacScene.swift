@@ -20,7 +20,7 @@ public struct VaultMacScene: Scene {
         }
 
         Window(VaultMacWindow.about.title, id: VaultMacWindow.about.id) {
-            VaultMacAboutView()
+            VaultMacAboutWindowContent()
         }
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
@@ -28,11 +28,24 @@ public struct VaultMacScene: Scene {
         // Opened from the Vault menu, as an About window is, rather than listed in the Window menu.
         .commandsRemoved()
 
+        Window(VaultMacWindow.help.title, id: VaultMacWindow.help.id) {
+            VaultMacHelpView(model: VaultMacRoot.help)
+        }
+        .defaultSize(width: 860, height: 600)
+        .restorationBehavior(.disabled)
+        // Opened from the Help menu and the About window, rather than listed in the Window menu.
+        .commandsRemoved()
+
         Settings {
             VaultMacLockedWindowGate {
-                VaultMacSettingsView()
+                VaultMacSettingsView(
+                    localSettings: VaultMacRoot.localSettings,
+                    appLock: VaultMacRoot.appLockService,
+                    dataModel: VaultMacRoot.vaultDataModel,
+                    authentication: VaultMacRoot.deviceAuthenticationService,
+                )
             }
-            .frame(width: 480, height: 320)
+            .frame(minWidth: 480, minHeight: 320)
         }
         .restorationBehavior(.disabled)
     }
@@ -44,11 +57,14 @@ enum VaultMacWindow: CaseIterable {
     case main
     /// The app's name, version and links.
     case about
+    /// The FAQ, policies and libraries.
+    case help
 
     var id: String {
         switch self {
         case .main: "main"
         case .about: "about"
+        case .help: "help"
         }
     }
 
@@ -57,6 +73,19 @@ enum VaultMacWindow: CaseIterable {
         switch self {
         case .main: "Vault"
         case .about: "About Vault"
+        case .help: "Vault Help"
+        }
+    }
+}
+
+/// The About window, which opens the Help window at a page.
+private struct VaultMacAboutWindowContent: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        VaultMacAboutView { page in
+            VaultMacRoot.help.selection = page
+            openWindow(id: VaultMacWindow.help.id)
         }
     }
 }

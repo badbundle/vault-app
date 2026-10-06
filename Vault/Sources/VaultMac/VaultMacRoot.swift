@@ -288,6 +288,9 @@ enum VaultMacRoot {
         makePlainStore: { makeEmptyStore() },
     )
 
+    /// Which Help page is open.
+    static let help = VaultMacHelpModel()
+
     // MARK: - Backups
 
     static let encryptedVaultDecoder: some EncryptedVaultDecoder<KeyData<32>> = EncryptedVaultDecoderImpl()
