@@ -5,8 +5,8 @@ import Testing
 ///
 /// A text field left to the system's defaults lets the keyboard autocorrect, predict and learn from what's typed, and
 /// what the keyboard learns lives outside the vault. So every `TextField`, `SecureField`, `TextEditor` and
-/// `LabeledTextField` in the app's sources, including the AutoFill extension and widgets, has to chain
-/// `.secretTextInput(_:)` onto its declaration.
+/// `LabeledTextField` in the app's sources, including the AutoFill extension, the widgets and the Mac app, has to chain
+/// `.secretTextInput(_:)` onto its declaration, or the Mac app's `.secretTextInput()`.
 struct SecretTextInputDeclarationTests {
     @Test
     func everyTextInputDeclaresSecretTextInput() throws {

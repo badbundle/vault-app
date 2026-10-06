@@ -14,12 +14,25 @@ extension UIImage {
 import AppKit
 
 extension NSImage {
+    /// A bitmap of `color` in sRGB, so it's the same colour in a PDF whatever the Mac's display. An image drawn by a
+    /// handler takes on the display's colours, which change while the screen is locked.
     static func from(color: NSColor, size: CGSize = .init(width: 1, height: 1)) -> NSImage {
-        NSImage(size: size, flipped: false) { rect in
-            color.setFill()
-            rect.fill()
-            return true
-        }
+        guard let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let srgb = color.usingColorSpace(.sRGB),
+              let context = CGContext(
+                  data: nil,
+                  width: Int(size.width),
+                  height: Int(size.height),
+                  bitsPerComponent: 8,
+                  bytesPerRow: 0,
+                  space: space,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue,
+              )
+        else { return NSImage() }
+        context.setFillColor(srgb.cgColor)
+        context.fill(CGRect(origin: .zero, size: size))
+        guard let image = context.makeImage() else { return NSImage() }
+        return NSImage(cgImage: image, size: size)
     }
 }
 #endif

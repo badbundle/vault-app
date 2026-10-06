@@ -32,7 +32,8 @@ import Foundation
 /// deadline, and no rekey changes the file while the device key is tried on it.
 ///
 /// It never deletes the only copy of anything: an encrypted file goes only if the plain store is there to be the
-/// vault, the plain store only if there's an encrypted file the size of one, and the device key only once it's been
+/// vault (or, for the Mac's plain store, which is only in memory, if the journal shows the file was being made from
+/// it), the plain store only if there's an encrypted file the size of one, and the device key only once it's been
 /// shown to open nothing. See "Migration: plain to encrypted" and "Turning the password off" in
 /// `docs/on-device-encryption.md`.
 public struct VaultStorageRecovery: Sendable {
@@ -75,9 +76,22 @@ public struct VaultStorageRecovery: Sendable {
     private let fileSystem: any SlotFileSystem
     private let deviceKeyStore: any VaultDeviceKeyStoring
     private let attemptStorage: any AppLockPasswordAttemptStorage
+    private let plainStoreIsInMemory: Bool
 
-    public init(directory: URL, deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore()) {
-        self.init(directory: directory, fileSystem: LiveSlotFileSystem(), deviceKeyStore: deviceKeyStore)
+    /// - Parameter plainStoreIsInMemory: Whether the plain store is only ever in memory, as the Mac's is, which only
+    ///   stands in for a vault until the password is first set (docs/mac-app.md). A conversion the journal says was
+    ///   underway is then undone without one on disk: what it was encrypting was empty.
+    public init(
+        directory: URL,
+        deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore(),
+        plainStoreIsInMemory: Bool = false,
+    ) {
+        self.init(
+            directory: directory,
+            fileSystem: LiveSlotFileSystem(),
+            deviceKeyStore: deviceKeyStore,
+            plainStoreIsInMemory: plainStoreIsInMemory,
+        )
     }
 
     /// - Parameter attemptStorage: Where the count of wrong attempts is, which shows whether an erase was meant when
@@ -87,11 +101,13 @@ public struct VaultStorageRecovery: Sendable {
         fileSystem: any SlotFileSystem,
         deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore(),
         attemptStorage: any AppLockPasswordAttemptStorage = AppLockPasswordAttemptKeychainStorage(),
+        plainStoreIsInMemory: Bool = false,
     ) {
         self.directory = directory
         self.fileSystem = fileSystem
         self.deviceKeyStore = deviceKeyStore
         self.attemptStorage = attemptStorage
+        self.plainStoreIsInMemory = plainStoreIsInMemory
     }
 
     private var stateFile: VaultStorageStateFile {
@@ -320,7 +336,12 @@ public struct VaultStorageRecovery: Sendable {
         }
         guard !encryptedFiles.isEmpty else { return }
         let plainStoreFile = PersistedLocalVaultStoreFactory.storeFileURLs(storageDirectory: directory)[0]
-        guard contents.contains(where: { $0.lastPathComponent == plainStoreFile.lastPathComponent }) else {
+        // An in-memory plain store has no file to look for. Only the journal shows the conversion's encrypted file is
+        // the only thing there: without it, the encrypted file might be the vault, with its state file lost.
+        let isInMemoryConversion = plainStoreIsInMemory && isJournaled
+        guard isInMemoryConversion || contents
+            .contains(where: { $0.lastPathComponent == plainStoreFile.lastPathComponent })
+        else {
             throw Failure.encryptedFileWithoutPlainStore
         }
         let hasEncryptedFile = encryptedFiles.contains { $0.lastPathComponent == EncryptedVaultFile.fileName }

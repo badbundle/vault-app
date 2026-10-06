@@ -47,12 +47,16 @@ Mine, for Bradley to review:
    a list of items with their live codes, and the selected item's page. Settings is the standard Settings window
    (⌘,), and About is the standard About window, from the Vault menu. That changes VAULT-105's sidebar, which listed
    Settings and About as sidebar entries.
-7. **A team-prefixed App Group, which is also the only keychain access group.** The Mac app and its AutoFill
-   extension share `442P244AFS.com.badbundle.vault`, rather than the iOS app's `group.com.badbundle.vault-group`.
-   On the Mac, an App Group that starts with the team ID needs no provisioning profile, and it's a keychain access
-   group for the data protection keychain too. So the app needs no restricted entitlement, and a development build
-   signed with the Apple Development certificate runs as it is, which `make validate` relies on. See
+7. **A team-prefixed App Group, and the iOS app's keychain access groups.** The Mac app and its AutoFill extension
+   share `442P244AFS.com.badbundle.vault`, rather than the iOS app's `group.com.badbundle.vault-group`: on the Mac, an
+   App Group that starts with the team ID needs nothing registered for it. The keychain is as on iOS: the app's own
+   group (`keychain-access-groups`), and the App Group for the few items the extension reads too. See
    [Keychain](#keychain).
+
+   This was first planned without `keychain-access-groups`, so that development builds needed no provisioning
+   profile. VAULT-106 found the Mac refuses the data protection keychain (`errSecMissingEntitlement`) to an app with
+   no profile, whatever its App Group. So development builds, and `make validate`, sign with a Mac development profile
+   (see [Signing](#signing)).
 8. **Secure Keyboard Entry while a Vault field has focus.** On the Mac, other apps can watch the keyboard, if the user
    has allowed them to (Input Monitoring), and that includes the search field, where killphrases and search
    passphrases are typed. So Vault turns on secure event input whenever one of its text fields has focus, as
@@ -125,10 +129,14 @@ The Mac locks the vault, dropping its items, caches, search and keys (G29):
   starts, the displays sleep, the Mac sleeps (`NSWorkspace.willSleepNotification`), or the user switches to another
   account (`NSWorkspace.sessionDidResignActiveNotification`). These are the Mac's equivalents of iOS's
   `protectedDataWillBecomeUnavailable`;
-- **when Vault stops being the active app,** straight away or after the Require Unlock delay (G22). The default is
-  Immediately, as on iOS. Hiding Vault (⌘H) or closing its window counts as leaving it;
+- **when another app comes to the front,** straight away or once the Require Unlock delay has passed with Vault still
+  behind (G22). The default is Immediately, as on iOS. Hiding Vault (⌘H) counts as leaving it. Coming back to the
+  front starts unlocking by itself, as the iOS app does coming back to the foreground;
 - **from the Vault menu,** with Lock Vault (⌃⌘L);
-- **when it quits.** Every launch starts locked, as on iOS.
+- **when it quits,** which closing its window does, as for a single-window Mac app. Every launch starts locked, as on
+  iOS.
+
+`VaultMacLockTriggers` listens for all of them.
 
 iOS shows a privacy cover while the app is inactive, for the app switcher. The Mac has no app switcher snapshot, and a
 window left on screen behind another app is what the Require Unlock delay chose to keep. So the Mac has no privacy
@@ -195,16 +203,14 @@ Vault already uses the data protection keychain (`kSecUseDataProtectionKeychain`
 needs for the iOS keychain's behaviour: no prompts, no access lists, and items that never sync
 (`kSecAttrSynchronizable` false).
 
-On the Mac, the data protection keychain needs the app to have a keychain access group. `keychain-access-groups` is a
-restricted entitlement on the Mac, needing a provisioning profile, but an App Group that starts with the team ID isn't,
-and it also serves as a keychain access group. So (decision 7) the Mac's only keychain access group is its App Group,
-`442P244AFS.com.badbundle.vault`, shared by the app and its AutoFill extension and nothing else. Every keychain item
-the Mac writes names that group explicitly, so a development build and an App Store build, whose default groups
-differ, keep their items in the same place.
+On the Mac, the data protection keychain only answers an app whose provisioning profile grants it a keychain access
+group: without one, every call fails with `errSecMissingEntitlement`, App Group or not (found in VAULT-106). So the Mac
+app has `keychain-access-groups` with its own group, `442P244AFS.com.badbundle.vault`, as the iOS app does, and its
+App Group is a keychain access group too:
 
-The difference from iOS: there, the backup password and the killphrase and search passphrase keyrings are in the app's
-own group, which the AutoFill extension can't read. On the Mac, the extension could read them. It doesn't, and it's
-the same team's code, but it's listed under the accepted limits.
+- the backup password and the killphrase and search passphrase keyrings are in the app's own group (`SecureStorage`
+  with the default group), which the AutoFill extension can't read;
+- the attempt counter, the device key and the wrap stamp name the App Group, which the extension shares.
 
 ### Spotlight
 
@@ -272,12 +278,16 @@ entitlements:
 | `com.apple.security.files.bookmarks.app-scope` | Keeping the auto-backup folder across launches. VAULT-110 checks whether macOS 26 still needs it. |
 | `com.apple.security.device.camera` | Scanning QR codes, with `NSCameraUsageDescription`. |
 | `com.apple.security.print` | Printing a backup. |
+| `keychain-access-groups`: `442P244AFS.com.badbundle.vault` | The app's own keychain items. |
+
+The provisioning profile adds two more, which name the app and its team: `com.apple.application-identifier` and
+`com.apple.developer.team-identifier`.
 
 It never has:
 
 - **network entitlements** (`network.client`, `network.server`): Vault makes no network requests (G70), and without
   them, the sandbox makes sure it can't;
-- `keychain-access-groups` or iCloud entitlements (decision 7, G69);
+- a keychain access group but its own, or iCloud entitlements (G69);
 - temporary exceptions, file access beyond user-selected files (downloads, pictures and so on), Apple Events or
   scripting targets, or Mach lookup exceptions;
 - the hardened runtime's exceptions: no JIT, unsigned memory, DYLD environment variables, or disabled library
@@ -291,8 +301,9 @@ The AutoFill extension gets the sandbox, the App Group and the AutoFill entitlem
 need the AutoFill entitlement: it never writes the credential identity store, which stays empty on the Mac.
 
 `make validate`'s "Mac app entitlements" check builds the app as it runs (a build for testing has entitlements of
-Xcode's own), and fails unless it's signed with the hardened runtime, sandboxed in its App Group, and with no
-entitlement outside the first table, apart from a development build's `get-task-allow`.
+Xcode's own), and fails unless it's signed with the hardened runtime, sandboxed in its App Group, with only its own keychain access
+group, and with no entitlement outside the first table and the profile's two, apart from a development build's
+`get-task-allow`.
 
 ### Info.plist
 
@@ -319,10 +330,12 @@ password offline (G33, G64).
 
 ### Signing
 
-- **Development and `make validate`:** signed with the Apple Development certificate of team `442P244AFS`, manual
-  style, with no provisioning profile. That works because none of the entitlements above is restricted (decision 7).
-  The AutoFill extension's entitlement is restricted, so it needs a development profile. VAULT-112 works out how
-  `make validate` builds and tests it without one.
+- **Development and `make validate`:** manual style, with the Apple Development certificate of team `442P244AFS` and
+  the "Vault Mac Development" profile, made in the developer account for `com.badbundle.vault` on 5 October 2026, with
+  the Mac Studio that validates registered on it. It lasts a year (until 5 October 2027). Another Mac that builds Vault
+  has to be added to it, and the profile downloaded again. The tests that run inside the app and the UI test runner
+  are signed with the certificate alone.
+- **The AutoFill extension** (VAULT-112) needs a development profile of its own.
 - **The App Store:** a Mac App Store provisioning profile for each target, made with the release lanes (VAULT-114).
 
 ## Modules
@@ -343,14 +356,16 @@ stores, backups and import, the OTP timers and copy actions are all in VaultFeed
 
 What changes in the shared modules:
 
-- **`VaultSharedStorage.appGroupID`** is the Mac's App Group on macOS (decision 7).
-- **The keychain items with an explicit access group** (the attempt counter, the device wrap stamp and the device key)
-  use it, and so does the Mac's `SecureStorage` (decision 7).
+- **`VaultSharedStorage.appGroupID`** is the Mac's App Group on macOS (decision 7), which the keychain items with an
+  explicit access group (the attempt counter, the device wrap stamp and the device key) name.
+- **`VaultStorageRecovery`** knows the Mac's plain store is only in memory: a first launch stopped mid-conversion
+  leaves only the encrypted files it began, which the journal shows can go.
+- **`VaultEraser`** leaves the Mac a fresh store in memory, and `AppLockService.lockNow()` locks at once, for Lock
+  Vault and the end of the Require Unlock delay.
 - **`VaultBackgroundTime`** has a Mac version: Mac apps aren't suspended, so it only stops macOS ending Vault abruptly
   (`ProcessInfo.disableSuddenTermination()`) until an unlock, a conversion or a rekey has finished.
 - **`DeviceTransferExportViewModel`**, VaultFeed's one UIKit file, keeps its QR codes as images both platforms can
   draw.
-- **`VaultEraser`** can leave its fresh store in memory, for the Mac.
 
 `VaultMac` has its own composition root, `VaultMacRoot`, which wires the shared services as `VaultRoot` does on iOS,
 without what the Mac doesn't have: the plain SQLite store, widgets, QuickType and Spotlight. Its tests are
@@ -395,6 +410,14 @@ that need the data protection keychain only run where the test process has a key
 backing scale factor of 2, an explicit light or dark appearance, and macOS 27. They fail with a message, rather than
 recording, on anything else.
 
+They draw the same whether the screen is locked or not, as validation often runs on a locked Mac: a locked screen
+leaves the screen's scale at 1 and changes its colours. So a window is drawn in a window of its own whose scale is
+always 2, a PDF at a scale of 3 into sRGB and written out as exactly those pixels, and the coloured test images in a
+PDF are sRGB bitmaps rather than drawn as the screen draws them. Each pixel's colours only have to be close, so the
+small shifts in colour that are left don't fail them, but every pixel of a PDF has to match, and all but 1% of a
+window's. (SnapshotTesting's perceptual precision would do the same, but it throws inside Core Image on macOS 27 as
+soon as two images differ.)
+
 A run takes several minutes longer. As now, never run two vault-app validations at once.
 
 ## The security model
@@ -433,7 +456,6 @@ free G numbers, so that the file always matches what's built. It gains:
   - Apps you've allowed to control the Mac (Accessibility) can read what Vault's windows show, and what's typed into
     its fields, while they show it. Secure Keyboard Entry only keeps keystrokes from apps watching the keyboard.
   - Hiding windows from capture depends on macOS honouring `sharingType`.
-  - The AutoFill extension can read every Vault keychain item (decision 7).
   - A Mac that's compromised, or someone with an administrator's access to it, is out of scope, as a jailbroken iPhone
     is.
 

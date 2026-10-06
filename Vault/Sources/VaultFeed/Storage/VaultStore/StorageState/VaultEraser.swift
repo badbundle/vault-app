@@ -107,6 +107,8 @@ public actor VaultEraser {
     ///     backup's hint are.
     ///   - temporaryDirectory: The app's temporary directory, where a PDF backup is written while the share sheet has
     ///     it (`BackupPDFTemporaryFiles`).
+    ///   - makePlainStore: Makes the fresh, empty plain store the erase leaves, if not the SQLite store in `directory`:
+    ///     the Mac's is in memory, as it never keeps a vault that isn't encrypted (docs/mac-app.md).
     public init(
         directory: URL,
         session: VaultStoreSession,
@@ -116,6 +118,7 @@ public actor VaultEraser {
         defaults: Defaults,
         temporaryDirectory: URL,
         hooks: Hooks,
+        makePlainStore: (@Sendable () throws -> PersistedLocalVaultStore)? = nil,
     ) {
         self.init(
             directory: directory,
@@ -129,7 +132,7 @@ public actor VaultEraser {
             defaults: defaults,
             temporaryDirectory: temporaryDirectory,
             hooks: hooks,
-            makePlainStore: {
+            makePlainStore: makePlainStore ?? {
                 // Only opens: a store it couldn't open is never set aside, as that would keep a copy of it.
                 try PersistedLocalVaultStoreFactory(storageDirectory: directory, recoveryMode: .openOnly)
                     .makeVaultStoreOrThrow()

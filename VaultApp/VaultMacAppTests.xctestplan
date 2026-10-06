@@ -9,6 +9,11 @@
     }
   ],
   "defaultOptions" : {
+    "commandLineArgumentEntries" : [
+      {
+        "argument" : "-ui-test-vault fresh"
+      }
+    ],
     "language" : "en",
     "region" : "US",
     "targetForVariableExpansion" : {

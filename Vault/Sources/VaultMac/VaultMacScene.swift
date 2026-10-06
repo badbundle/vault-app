@@ -5,11 +5,13 @@ import SwiftUI
 /// None of them is restored at launch, so macOS never saves what a window showed.
 @MainActor
 public struct VaultMacScene: Scene {
-    public init() {}
+    public init() {
+        VaultMacRoot.setup()
+    }
 
     public var body: some Scene {
         Window(VaultMacWindow.main.title, id: VaultMacWindow.main.id) {
-            VaultMacMainView()
+            VaultMacRootView()
         }
         .defaultSize(width: 960, height: 640)
         .restorationBehavior(.disabled)
@@ -27,7 +29,10 @@ public struct VaultMacScene: Scene {
         .commandsRemoved()
 
         Settings {
-            VaultMacSettingsView()
+            VaultMacLockedWindowGate {
+                VaultMacSettingsView()
+            }
+            .frame(width: 480, height: 320)
         }
         .restorationBehavior(.disabled)
     }
