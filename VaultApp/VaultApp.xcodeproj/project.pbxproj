@@ -16,11 +16,11 @@
 		1C4688FC2FC8D7E9004E2279 /* VaultiOSWidgets in Frameworks */ = {isa = PBXBuildFile; productRef = 1C4688FB2FC8D7E9004E2279 /* VaultiOSWidgets */; };
 		1C58F2F32AE5764100962BAB /* VaultiOS in Frameworks */ = {isa = PBXBuildFile; productRef = 1C58F2F22AE5764100962BAB /* VaultiOS */; };
 		1C8B89F52CD3759400F3D340 /* VaultiOSAutofill in Frameworks */ = {isa = PBXBuildFile; productRef = 1C8B89F42CD3759400F3D340 /* VaultiOSAutofill */; };
-		1CBE0CCD2CD229FF000EA09D /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1CBE0CCC2CD229FF000EA09D /* AuthenticationServices.framework */; };
-		1CBE0CD82CD229FF000EA09D /* VaultAppAutofill.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1CBE0CCB2CD229FF000EA09D /* VaultAppAutofill.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1CAC00000000000000000010 /* VaultMac in Frameworks */ = {isa = PBXBuildFile; productRef = 1CAC00000000000000000011 /* VaultMac */; };
 		1CAC00000000000000000029 /* VaultMac in Frameworks */ = {isa = PBXBuildFile; productRef = 1CAC0000000000000000002A /* VaultMac */; };
 		1CAC0000000000000000002F /* VaultMacAutofill.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1CAC00000000000000000022 /* VaultMacAutofill.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		1CBE0CCD2CD229FF000EA09D /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1CBE0CCC2CD229FF000EA09D /* AuthenticationServices.framework */; };
+		1CBE0CD82CD229FF000EA09D /* VaultAppAutofill.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1CBE0CCB2CD229FF000EA09D /* VaultAppAutofill.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -30,20 +30,6 @@
 			proxyType = 1;
 			remoteGlobalIDString = 1C4688E02FC8D77F004E2279;
 			remoteInfo = VaultWidgetsExtension;
-		};
-		1CBE0CD62CD229FF000EA09D /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 1CDA9C892A057A8B00555E7A /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 1CBE0CCA2CD229FF000EA09D;
-			remoteInfo = VaultAppAutofill;
-		};
-		1CF0A1012FD4C0B800C3E5F1 /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 1CDA9C892A057A8B00555E7A /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 1CDA9C902A057A8B00555E7A;
-			remoteInfo = VaultApp;
 		};
 		1CAC00000000000000000015 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -66,9 +52,34 @@
 			remoteGlobalIDString = 1CAC00000000000000000025;
 			remoteInfo = VaultMacAutofill;
 		};
+		1CBE0CD62CD229FF000EA09D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1CDA9C892A057A8B00555E7A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1CBE0CCA2CD229FF000EA09D;
+			remoteInfo = VaultAppAutofill;
+		};
+		1CF0A1012FD4C0B800C3E5F1 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1CDA9C892A057A8B00555E7A /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1CDA9C902A057A8B00555E7A;
+			remoteInfo = VaultApp;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		1CAC0000000000000000002E /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				1CAC0000000000000000002F /* VaultMacAutofill.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		1CBE0CD92CD229FF000EA09D /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -77,17 +88,6 @@
 			files = (
 				1CBE0CD82CD229FF000EA09D /* VaultAppAutofill.appex in Embed Foundation Extensions */,
 				1C4688F62FC8D77F004E2279 /* VaultWidgetsExtension.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		1CAC0000000000000000002E /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				1CAC0000000000000000002F /* VaultMacAutofill.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -104,14 +104,14 @@
 		1C4688E42FC8D77F004E2279 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		1C4688FD2FC8D806004E2279 /* VaultWidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VaultWidgetsExtension.entitlements; sourceTree = "<group>"; };
 		1C648DFB2C0A884500163D41 /* VaultApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VaultApp.entitlements; sourceTree = "<group>"; };
-		1CBE0CCB2CD229FF000EA09D /* VaultAppAutofill.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VaultAppAutofill.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		1CBE0CCC2CD229FF000EA09D /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
-		1CDA9C912A057A8B00555E7A /* VaultApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VaultApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		1CF0A1022FD4C0B800C3E5F1 /* VaultAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VaultAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CAC00000000000000000001 /* Vault.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vault.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CAC00000000000000000002 /* VaultMacAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VaultMacAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CAC00000000000000000003 /* VaultMacAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VaultMacAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CAC00000000000000000022 /* VaultMacAutofill.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VaultMacAutofill.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		1CBE0CCB2CD229FF000EA09D /* VaultAppAutofill.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VaultAppAutofill.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		1CBE0CCC2CD229FF000EA09D /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
+		1CDA9C912A057A8B00555E7A /* VaultApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VaultApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1CF0A1022FD4C0B800C3E5F1 /* VaultAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VaultAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -122,13 +122,6 @@
 			);
 			target = 1C4688E02FC8D77F004E2279 /* VaultWidgetsExtension */;
 		};
-		1CBE0CDC2CD229FF000EA09D /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 1CBE0CCA2CD229FF000EA09D /* VaultAppAutofill */;
-		};
 		1CAC00000000000000000024 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -136,16 +129,23 @@
 			);
 			target = 1CAC00000000000000000025 /* VaultMacAutofill */;
 		};
+		1CBE0CDC2CD229FF000EA09D /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 1CBE0CCA2CD229FF000EA09D /* VaultAppAutofill */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		1C4688E62FC8D77F004E2279 /* VaultWidgets */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (1C4688F92FC8D77F004E2279 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = VaultWidgets; sourceTree = "<group>"; };
-		1CBE0CCE2CD229FF000EA09D /* VaultAppAutofill */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (1CBE0CDC2CD229FF000EA09D /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = VaultAppAutofill; sourceTree = "<group>"; };
-		1CF0A1032FD4C0B800C3E5F1 /* VaultAppUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = VaultAppUITests; sourceTree = "<group>"; };
 		1CAC00000000000000000004 /* VaultMacApp */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = VaultMacApp; sourceTree = "<group>"; };
 		1CAC00000000000000000005 /* VaultMacAppTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = VaultMacAppTests; sourceTree = "<group>"; };
 		1CAC00000000000000000006 /* VaultMacAppUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = VaultMacAppUITests; sourceTree = "<group>"; };
 		1CAC00000000000000000023 /* VaultMacAutofill */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (1CAC00000000000000000024 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = VaultMacAutofill; sourceTree = "<group>"; };
+		1CBE0CCE2CD229FF000EA09D /* VaultAppAutofill */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (1CBE0CDC2CD229FF000EA09D /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = VaultAppAutofill; sourceTree = "<group>"; };
+		1CF0A1032FD4C0B800C3E5F1 /* VaultAppUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = VaultAppUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -156,30 +156,6 @@
 				1C4688E52FC8D77F004E2279 /* SwiftUI.framework in Frameworks */,
 				1C4688E32FC8D77F004E2279 /* WidgetKit.framework in Frameworks */,
 				1C4688FC2FC8D7E9004E2279 /* VaultiOSWidgets in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		1CBE0CC82CD229FF000EA09D /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				1CBE0CCD2CD229FF000EA09D /* AuthenticationServices.framework in Frameworks */,
-				1C8B89F52CD3759400F3D340 /* VaultiOSAutofill in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		1CDA9C8E2A057A8B00555E7A /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				1C58F2F32AE5764100962BAB /* VaultiOS in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		1CF0A1042FD4C0B800C3E5F1 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -210,6 +186,30 @@
 			buildActionMask = 2147483647;
 			files = (
 				1CAC00000000000000000029 /* VaultMac in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1CBE0CC82CD229FF000EA09D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1CBE0CCD2CD229FF000EA09D /* AuthenticationServices.framework in Frameworks */,
+				1C8B89F52CD3759400F3D340 /* VaultiOSAutofill in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1CDA9C8E2A057A8B00555E7A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1C58F2F32AE5764100962BAB /* VaultiOS in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1CF0A1042FD4C0B800C3E5F1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -303,75 +303,6 @@
 			productName = VaultWidgetsExtension;
 			productReference = 1C4688E12FC8D77F004E2279 /* VaultWidgetsExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
-		};
-		1CBE0CCA2CD229FF000EA09D /* VaultAppAutofill */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 1CBE0CDD2CD229FF000EA09D /* Build configuration list for PBXNativeTarget "VaultAppAutofill" */;
-			buildPhases = (
-				1CBE0CC72CD229FF000EA09D /* Sources */,
-				1CBE0CC82CD229FF000EA09D /* Frameworks */,
-				1CBE0CC92CD229FF000EA09D /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				1CBE0CCE2CD229FF000EA09D /* VaultAppAutofill */,
-			);
-			name = VaultAppAutofill;
-			packageProductDependencies = (
-				1C8B89F42CD3759400F3D340 /* VaultiOSAutofill */,
-			);
-			productName = VaultAppAutofill;
-			productReference = 1CBE0CCB2CD229FF000EA09D /* VaultAppAutofill.appex */;
-			productType = "com.apple.product-type.app-extension";
-		};
-		1CDA9C902A057A8B00555E7A /* VaultApp */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 1CDA9CB52A057A8C00555E7A /* Build configuration list for PBXNativeTarget "VaultApp" */;
-			buildPhases = (
-				1CDA9C8D2A057A8B00555E7A /* Sources */,
-				1CDA9C8E2A057A8B00555E7A /* Frameworks */,
-				1CDA9C8F2A057A8B00555E7A /* Resources */,
-				1CBE0CD92CD229FF000EA09D /* Embed Foundation Extensions */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				1CBE0CD72CD229FF000EA09D /* PBXTargetDependency */,
-				1C4688F52FC8D77F004E2279 /* PBXTargetDependency */,
-			);
-			name = VaultApp;
-			packageProductDependencies = (
-				1C58F2F22AE5764100962BAB /* VaultiOS */,
-			);
-			productName = CodeManager;
-			productReference = 1CDA9C912A057A8B00555E7A /* VaultApp.app */;
-			productType = "com.apple.product-type.application";
-		};
-		1CF0A1072FD4C0B800C3E5F1 /* VaultAppUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 1CF0A10B2FD4C0B800C3E5F1 /* Build configuration list for PBXNativeTarget "VaultAppUITests" */;
-			buildPhases = (
-				1CF0A1062FD4C0B800C3E5F1 /* Sources */,
-				1CF0A1042FD4C0B800C3E5F1 /* Frameworks */,
-				1CF0A1052FD4C0B800C3E5F1 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				1CF0A1082FD4C0B800C3E5F1 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				1CF0A1032FD4C0B800C3E5F1 /* VaultAppUITests */,
-			);
-			name = VaultAppUITests;
-			packageProductDependencies = (
-			);
-			productName = VaultAppUITests;
-			productReference = 1CF0A1022FD4C0B800C3E5F1 /* VaultAppUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 		1CAC00000000000000000012 /* VaultMacApp */ = {
 			isa = PBXNativeTarget;
@@ -467,6 +398,75 @@
 			productReference = 1CAC00000000000000000022 /* VaultMacAutofill.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		1CBE0CCA2CD229FF000EA09D /* VaultAppAutofill */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1CBE0CDD2CD229FF000EA09D /* Build configuration list for PBXNativeTarget "VaultAppAutofill" */;
+			buildPhases = (
+				1CBE0CC72CD229FF000EA09D /* Sources */,
+				1CBE0CC82CD229FF000EA09D /* Frameworks */,
+				1CBE0CC92CD229FF000EA09D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				1CBE0CCE2CD229FF000EA09D /* VaultAppAutofill */,
+			);
+			name = VaultAppAutofill;
+			packageProductDependencies = (
+				1C8B89F42CD3759400F3D340 /* VaultiOSAutofill */,
+			);
+			productName = VaultAppAutofill;
+			productReference = 1CBE0CCB2CD229FF000EA09D /* VaultAppAutofill.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		1CDA9C902A057A8B00555E7A /* VaultApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1CDA9CB52A057A8C00555E7A /* Build configuration list for PBXNativeTarget "VaultApp" */;
+			buildPhases = (
+				1CDA9C8D2A057A8B00555E7A /* Sources */,
+				1CDA9C8E2A057A8B00555E7A /* Frameworks */,
+				1CDA9C8F2A057A8B00555E7A /* Resources */,
+				1CBE0CD92CD229FF000EA09D /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1CBE0CD72CD229FF000EA09D /* PBXTargetDependency */,
+				1C4688F52FC8D77F004E2279 /* PBXTargetDependency */,
+			);
+			name = VaultApp;
+			packageProductDependencies = (
+				1C58F2F22AE5764100962BAB /* VaultiOS */,
+			);
+			productName = CodeManager;
+			productReference = 1CDA9C912A057A8B00555E7A /* VaultApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		1CF0A1072FD4C0B800C3E5F1 /* VaultAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1CF0A10B2FD4C0B800C3E5F1 /* Build configuration list for PBXNativeTarget "VaultAppUITests" */;
+			buildPhases = (
+				1CF0A1062FD4C0B800C3E5F1 /* Sources */,
+				1CF0A1042FD4C0B800C3E5F1 /* Frameworks */,
+				1CF0A1052FD4C0B800C3E5F1 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1CF0A1082FD4C0B800C3E5F1 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				1CF0A1032FD4C0B800C3E5F1 /* VaultAppUITests */,
+			);
+			name = VaultAppUITests;
+			packageProductDependencies = (
+			);
+			productName = VaultAppUITests;
+			productReference = 1CF0A1022FD4C0B800C3E5F1 /* VaultAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -480,19 +480,6 @@
 					1C4688E02FC8D77F004E2279 = {
 						CreatedOnToolsVersion = 26.5;
 					};
-					1CBE0CCA2CD229FF000EA09D = {
-						CreatedOnToolsVersion = 16.0;
-					};
-					1CDA9C902A057A8B00555E7A = {
-						CreatedOnToolsVersion = 14.3;
-					};
-					1CF0A1072FD4C0B800C3E5F1 = {
-						CreatedOnToolsVersion = 27.0;
-						TestTargetID = 1CDA9C902A057A8B00555E7A;
-					};
-					1CAC00000000000000000025 = {
-						CreatedOnToolsVersion = 27.0;
-					};
 					1CAC00000000000000000012 = {
 						CreatedOnToolsVersion = 27.0;
 					};
@@ -503,6 +490,19 @@
 					1CAC00000000000000000014 = {
 						CreatedOnToolsVersion = 27.0;
 						TestTargetID = 1CAC00000000000000000012;
+					};
+					1CAC00000000000000000025 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					1CBE0CCA2CD229FF000EA09D = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					1CDA9C902A057A8B00555E7A = {
+						CreatedOnToolsVersion = 14.3;
+					};
+					1CF0A1072FD4C0B800C3E5F1 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = 1CDA9C902A057A8B00555E7A;
 					};
 				};
 			};
@@ -539,29 +539,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		1CBE0CC92CD229FF000EA09D /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		1CDA9C8F2A057A8B00555E7A /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				1C2856652ADFF39800DA4AA9 /* Preview Assets.xcassets in Resources */,
-				1C1318072AD75008006F14F5 /* Assets.xcassets in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		1CF0A1052FD4C0B800C3E5F1 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		1CAC00000000000000000009 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -590,32 +567,33 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1CBE0CC92CD229FF000EA09D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1CDA9C8F2A057A8B00555E7A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1C2856652ADFF39800DA4AA9 /* Preview Assets.xcassets in Resources */,
+				1C1318072AD75008006F14F5 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1CF0A1052FD4C0B800C3E5F1 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		1C4688DD2FC8D77F004E2279 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		1CBE0CC72CD229FF000EA09D /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		1CDA9C8D2A057A8B00555E7A /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				1C45B07C2ADFE8BE00197B32 /* VaultAppMain.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		1CF0A1062FD4C0B800C3E5F1 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -650,6 +628,28 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1CBE0CC72CD229FF000EA09D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1CDA9C8D2A057A8B00555E7A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1C45B07C2ADFE8BE00197B32 /* VaultAppMain.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1CF0A1062FD4C0B800C3E5F1 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -657,16 +657,6 @@
 			isa = PBXTargetDependency;
 			target = 1C4688E02FC8D77F004E2279 /* VaultWidgetsExtension */;
 			targetProxy = 1C4688F42FC8D77F004E2279 /* PBXContainerItemProxy */;
-		};
-		1CBE0CD72CD229FF000EA09D /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 1CBE0CCA2CD229FF000EA09D /* VaultAppAutofill */;
-			targetProxy = 1CBE0CD62CD229FF000EA09D /* PBXContainerItemProxy */;
-		};
-		1CF0A1082FD4C0B800C3E5F1 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 1CDA9C902A057A8B00555E7A /* VaultApp */;
-			targetProxy = 1CF0A1012FD4C0B800C3E5F1 /* PBXContainerItemProxy */;
 		};
 		1CAC00000000000000000017 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -682,6 +672,16 @@
 			isa = PBXTargetDependency;
 			target = 1CAC00000000000000000025 /* VaultMacAutofill */;
 			targetProxy = 1CAC00000000000000000030 /* PBXContainerItemProxy */;
+		};
+		1CBE0CD72CD229FF000EA09D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1CBE0CCA2CD229FF000EA09D /* VaultAppAutofill */;
+			targetProxy = 1CBE0CD62CD229FF000EA09D /* PBXContainerItemProxy */;
+		};
+		1CF0A1082FD4C0B800C3E5F1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1CDA9C902A057A8B00555E7A /* VaultApp */;
+			targetProxy = 1CF0A1012FD4C0B800C3E5F1 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -754,6 +754,206 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		1CAC0000000000000000001C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = VaultMacApp/VaultMacApp.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 100008;
+				DEVELOPMENT_TEAM = 442P244AFS;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Vault;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Vault uses the camera to scan QR codes, to add a code or restore a backup.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault;
+				PRODUCT_MODULE_NAME = VaultMacApp;
+				PRODUCT_NAME = Vault;
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		1CAC0000000000000000001D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = VaultMacApp/VaultMacApp.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 100008;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Vault;
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Vault uses the camera to scan QR codes, to add a code or restore a backup.";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault;
+				PRODUCT_MODULE_NAME = VaultMacApp;
+				PRODUCT_NAME = Vault;
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Release;
+		};
+		1CAC0000000000000000001E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Manual;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.MacAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Vault.app/Contents/MacOS/Vault";
+			};
+			name = Debug;
+		};
+		1CAC0000000000000000001F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.MacAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Vault.app/Contents/MacOS/Vault";
+			};
+			name = Release;
+		};
+		1CAC00000000000000000020 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Manual;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.MacUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = VaultMacApp;
+			};
+			name = Debug;
+		};
+		1CAC00000000000000000021 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.MacUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = VaultMacApp;
+			};
+			name = Release;
+		};
+		1CAC0000000000000000002C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = VaultMacAutofill/VaultMacAutofill.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 100008;
+				DEVELOPMENT_TEAM = 442P244AFS;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VaultMacAutofill/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Vault AutoFill";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.VaultAutofill;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				VERSIONING_SYSTEM = "apple-generic";
+			};
+			name = Debug;
+		};
+		1CAC0000000000000000002D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = VaultMacAutofill/VaultMacAutofill.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 100008;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = VaultMacAutofill/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Vault AutoFill";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.VaultAutofill;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Release;
 		};
@@ -1044,204 +1244,6 @@
 			};
 			name = Release;
 		};
-		1CAC0000000000000000001C /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = VaultMacApp/VaultMacApp.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Manual;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 100008;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Vault;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Vault uses the camera to scan QR codes, to add a code or restore a backup.";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault;
-				PRODUCT_MODULE_NAME = VaultMacApp;
-				PRODUCT_NAME = Vault;
-				PROVISIONING_PROFILE_SPECIFIER = "Vault Mac Development";
-				SDKROOT = macosx;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				VERSIONING_SYSTEM = "apple-generic";
-			};
-			name = Debug;
-		};
-		1CAC0000000000000000001D /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = VaultMacApp/VaultMacApp.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 100008;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Vault;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
-				INFOPLIST_KEY_NSCameraUsageDescription = "Vault uses the camera to scan QR codes, to add a code or restore a backup.";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault;
-				PRODUCT_MODULE_NAME = VaultMacApp;
-				PRODUCT_NAME = Vault;
-				SDKROOT = macosx;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				VERSIONING_SYSTEM = "apple-generic";
-			};
-			name = Release;
-		};
-		1CAC0000000000000000001E /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Manual;
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.MacAppTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SDKROOT = macosx;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Vault.app/Contents/MacOS/Vault";
-			};
-			name = Debug;
-		};
-		1CAC0000000000000000001F /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.MacAppTests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 6.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Vault.app/Contents/MacOS/Vault";
-			};
-			name = Release;
-		};
-		1CAC00000000000000000020 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Manual;
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.MacUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SDKROOT = macosx;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 6.0;
-				TEST_TARGET_NAME = VaultMacApp;
-			};
-			name = Debug;
-		};
-		1CAC00000000000000000021 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.MacUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 6.0;
-				TEST_TARGET_NAME = VaultMacApp;
-			};
-			name = Release;
-		};
-		1CAC0000000000000000002C /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = VaultMacAutofill/VaultMacAutofill.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 100008;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = VaultMacAutofill/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Vault AutoFill";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@executable_path/../../../../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.VaultAutofill;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "Vault Mac AutoFill Development";
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				VERSIONING_SYSTEM = "apple-generic";
-			};
-			name = Debug;
-		};
-		1CAC0000000000000000002D /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = VaultMacAutofill/VaultMacAutofill.entitlements;
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 100008;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = VaultMacAutofill/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = "Vault AutoFill";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@executable_path/../../../../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 2.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.VaultAutofill;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx;
-				SKIP_INSTALL = YES;
-				SUPPORTED_PLATFORMS = macosx;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				VERSIONING_SYSTEM = "apple-generic";
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1250,42 +1252,6 @@
 			buildConfigurations = (
 				1C4688F72FC8D77F004E2279 /* Debug */,
 				1C4688F82FC8D77F004E2279 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		1CBE0CDD2CD229FF000EA09D /* Build configuration list for PBXNativeTarget "VaultAppAutofill" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				1CBE0CDA2CD229FF000EA09D /* Debug */,
-				1CBE0CDB2CD229FF000EA09D /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		1CDA9C8C2A057A8B00555E7A /* Build configuration list for PBXProject "VaultApp" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				1CDA9CB32A057A8C00555E7A /* Debug */,
-				1CDA9CB42A057A8C00555E7A /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		1CDA9CB52A057A8C00555E7A /* Build configuration list for PBXNativeTarget "VaultApp" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				1CDA9CB62A057A8C00555E7A /* Debug */,
-				1CDA9CB72A057A8C00555E7A /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		1CF0A10B2FD4C0B800C3E5F1 /* Build configuration list for PBXNativeTarget "VaultAppUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				1CF0A1092FD4C0B800C3E5F1 /* Debug */,
-				1CF0A10A2FD4C0B800C3E5F1 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -1322,6 +1288,42 @@
 			buildConfigurations = (
 				1CAC0000000000000000002C /* Debug */,
 				1CAC0000000000000000002D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1CBE0CDD2CD229FF000EA09D /* Build configuration list for PBXNativeTarget "VaultAppAutofill" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1CBE0CDA2CD229FF000EA09D /* Debug */,
+				1CBE0CDB2CD229FF000EA09D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1CDA9C8C2A057A8B00555E7A /* Build configuration list for PBXProject "VaultApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1CDA9CB32A057A8C00555E7A /* Debug */,
+				1CDA9CB42A057A8C00555E7A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1CDA9CB52A057A8C00555E7A /* Build configuration list for PBXNativeTarget "VaultApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1CDA9CB62A057A8C00555E7A /* Debug */,
+				1CDA9CB72A057A8C00555E7A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1CF0A10B2FD4C0B800C3E5F1 /* Build configuration list for PBXNativeTarget "VaultAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1CF0A1092FD4C0B800C3E5F1 /* Debug */,
+				1CF0A10A2FD4C0B800C3E5F1 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
