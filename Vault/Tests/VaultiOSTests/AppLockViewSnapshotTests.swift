@@ -30,6 +30,17 @@ struct AppLockViewSnapshotTests {
         snapshotScenarios(view: AppLockView(state: .init(step: .deviceAuthentication, failure: .unavailable)) {})
     }
 
+    /// A screen whose safe area is wider on one side, as the iPhone Duo's unfolded is: the door is still in the middle
+    /// of the screen, and the words under it are under it, inside the safe area.
+    @Test
+    func locked_onAScreenWithAnUnevenSafeArea() {
+        snapshotScenarios(
+            view: AppLockView(state: .init(step: .deviceAuthentication)) {}
+                .safeAreaPadding(.leading, 96),
+            dynamicTypeSizes: [.medium, .accessibility3],
+        )
+    }
+
     // MARK: - App Lock Password
 
     @Test
@@ -37,6 +48,15 @@ struct AppLockViewSnapshotTests {
         snapshotScenarios(
             view: AppLockView(state: .init(step: .password)) {},
             dynamicTypeSizes: [.xSmall, .medium, .xxLarge, .accessibility3],
+        )
+    }
+
+    @Test
+    func passwordEntry_onAScreenWithAnUnevenSafeArea() {
+        snapshotScenarios(
+            view: AppLockView(state: .init(step: .password)) {}
+                .safeAreaPadding(.trailing, 96),
+            dynamicTypeSizes: [.medium, .accessibility3],
         )
     }
 
