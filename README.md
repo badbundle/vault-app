@@ -97,6 +97,8 @@ The checks are in [`local-check.config.ts`](./local-check.config.ts). local-chec
 - a build and run of the `macOS_SupportedTests` test plan, the shared modules' tests, on the Mac itself, so that work on the Mac app can't break iOS, or the other way round (see [`docs/mac-app.md`](./docs/mac-app.md));
 - a build of the Mac app, `VaultMacApp`, with its tests running inside it, then a check that it's signed with only the entitlements the design lists, and its UI tests, the `VaultMacAppUITests` scheme.
 
+The Mac UI tests need the Mac's screen unlocked: on a locked Mac, every one of them fails to activate the app. To validate while it's locked, run `VAULT_SKIP_MAC_UI_TESTS=1 make validate`, which skips "Build Mac UI tests" and "Mac UI tests" and names them on the check as skipped. Everything else still runs. Validate again without it once the Mac is unlocked.
+
 If the commit is already on GitHub, the result is posted straight away. Otherwise it's stored, and the pre-push hook posts it when you push, so you can validate before or after pushing. Every new commit needs validating again. Logs are kept in `.git/local-check/logs/`.
 
 The check is self-attested: it records that the commit passed on the machine that posted it, rather than on independent CI.

@@ -84,18 +84,30 @@ export default (({ xcode }) => {
         },
       },
       // The Mac app's UI tests, in their own scheme as the iOS app's are. Each build stays just before its tests.
-      ios.buildForTesting({
-        name: "Build Mac UI tests",
-        workspace: "Vault.xcworkspace",
-        scheme: "VaultMacAppUITests",
-        testPlan: "VaultMacAppUITests",
-        destination: "platform=macOS",
-        flags: ["-skipMacroValidation", "-skipPackagePluginValidation", "-skipPackageUpdates"],
-      }),
-      ios.testWithoutBuilding({ name: "Mac UI tests", destination: "platform=macOS" }),
+      {
+        ...ios.buildForTesting({
+          name: "Build Mac UI tests",
+          workspace: "Vault.xcworkspace",
+          scheme: "VaultMacAppUITests",
+          testPlan: "VaultMacAppUITests",
+          destination: "platform=macOS",
+          flags: ["-skipMacroValidation", "-skipPackagePluginValidation", "-skipPackageUpdates"],
+        }),
+        skip: skipMacUITests,
+      },
+      { ...ios.testWithoutBuilding({ name: "Mac UI tests", destination: "platform=macOS" }), skip: skipMacUITests },
     ],
   };
 }) satisfies ConfigFunction;
+
+/**
+ * Skips the Mac app's UI tests when `VAULT_SKIP_MAC_UI_TESTS=1` is set, for a Mac whose screen is locked, where every
+ * one of them fails to activate the app. The status names both checks as skipped, so a green check still shows they
+ * didn't run.
+ */
+function skipMacUITests(): string | undefined {
+  return process.env.VAULT_SKIP_MAC_UI_TESTS === "1" ? "VAULT_SKIP_MAC_UI_TESTS is set" : undefined;
+}
 
 /**
  * The entitlements the Mac app may have, from docs/mac-app.md's "App Sandbox" table, and the two its provisioning
