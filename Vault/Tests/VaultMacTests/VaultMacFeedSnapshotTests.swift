@@ -24,6 +24,7 @@ struct VaultMacFeedSnapshotTests {
         let view = List(items) { item in
             VaultMacItemRow(item: item, showsNextCode: false, copiesOnClick: true)
         }
+        .vaultMacItemRowHeight()
         .environment(\.vaultMacItemPreviews, .fixed)
 
         assertSnapshot(

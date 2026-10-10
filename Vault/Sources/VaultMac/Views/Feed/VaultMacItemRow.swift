@@ -146,3 +146,26 @@ struct VaultMacItemRow: View {
         }
     }
 }
+
+/// Gives every row in a list of items the height of the tallest one: a title with a subtitle, or a code with its next
+/// code above it.
+///
+/// The Mac's list measures the rows it has when it first shows them, but not a row it inserts later, such as an item
+/// that's just been added. It gives that row its default height of 24 points, which clips it until something makes the
+/// list lay out again (VAULT-124). With every row at least this tall, an inserted row has its full height from the
+/// start.
+struct VaultMacItemRowHeight: ViewModifier {
+    /// A row with a subtitle at the default text size, with the row's padding and the list's.
+    @ScaledMetric(relativeTo: .body) private var height = 49.0
+
+    func body(content: Content) -> some View {
+        content.environment(\.defaultMinListRowHeight, height)
+    }
+}
+
+extension View {
+    /// Every row in this list of items is as tall as the tallest one (`VaultMacItemRowHeight`).
+    func vaultMacItemRowHeight() -> some View {
+        modifier(VaultMacItemRowHeight())
+    }
+}
