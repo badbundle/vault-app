@@ -77,16 +77,16 @@ struct VaultMacHelpView: View {
             List(selection: $model.selection) {
                 Section("Questions") {
                     ForEach(VaultMacHelpPage.questions) { page in
-                        Text(page.title).tag(page)
+                        title(page)
                     }
                 }
                 Section("About Vault") {
                     ForEach(VaultMacHelpPage.about) { page in
-                        Text(page.title).tag(page)
+                        title(page)
                     }
                 }
             }
-            .navigationSplitViewColumnWidth(min: 220, ideal: 260)
+            .navigationSplitViewColumnWidth(min: 220, ideal: 300)
         } detail: {
             if let page = model.selection {
                 VaultMacHelpPageView(page: page)
@@ -96,6 +96,15 @@ struct VaultMacHelpView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 480)
+    }
+
+    /// A page's title in the sidebar, wrapping onto a second line rather than being cut off where the sidebar is
+    /// narrower than it.
+    private func title(_ page: VaultMacHelpPage) -> some View {
+        Text(page.title)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .tag(page)
     }
 }
 
