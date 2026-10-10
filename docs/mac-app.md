@@ -408,8 +408,11 @@ In `VaultApp/VaultApp.xcodeproj`, beside the iOS targets, which don't change:
 | `VaultMacAppUITests` | macOS UI tests | `com.badbundle.vault.MacUITests` |
 
 The Mac app's `@main` is as thin as the iOS app's: one scene from `VaultMac`, `VaultMacScene`, which has the main
-window, the About window and Settings. Its icon is `VaultMacAppIconView`, the iOS icon's artwork on the Mac's icon
-grid, which `make app-icon` renders into `VaultMacApp`'s asset catalog at every size. It's built for Apple silicon and Intel,
+window, the About window and Settings. Its icon is an Icon Composer document, `VaultMacApp/AppIcon.icon`, which
+`make app-icon` renders from the iOS icon's artwork: the door and wheel full bleed on a white fill, or silver on near
+black in the dark appearance, flat as on iOS. macOS 26 masks it to its own rounded square, and Xcode compiles it into
+every size the app and the App Store take. An image with its own corners and shadow, as Mac icons were drawn before
+macOS 26, is shrunk onto a grey tile (VAULT-125). It's built for Apple silicon and Intel,
 with a deployment target of macOS 26. Its version and build numbers follow the iOS app's, and `RELEASE.md`'s global
 rule for build numbers (VAULT-114).
 
@@ -495,7 +498,7 @@ password offline (G33, G64).
 | CryptoEngine, CArgon2, FoundationExtensions, VaultCore, VaultKeygen, VaultSettings | yes | yes | Already build for macOS. |
 | ImageTools, VaultExport | yes | yes | Their rendering moves off UIKit (VAULT-104). |
 | VaultBackup, VaultFeed | yes | yes | Build for macOS once ImageTools and VaultExport do (VAULT-103). |
-| VaultAppIcon | yes | yes | SwiftUI only. The Mac's app icon is rendered from it, like iOS's. |
+| VaultAppIcon | yes | yes | SwiftUI only. The Mac's app icon is rendered from it, like iOS's, as an Icon Composer document. |
 | VaultiOS, VaultiOSShared, VaultiOSAutofill, VaultiOSWidgets | yes | no | Unchanged. |
 | `VaultMac` | no | yes | The Mac app's views, its composition root and the AppKit pieces, and the AutoFill extension's (in `Autofill/`, with a root of its own), which its target subclasses, as the iOS extension's does. |
 

@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// The app icon as the Mac shows it.
+/// The app icon as the Mac shows it, for drawing in the app, such as at the first launch.
 ///
-/// macOS doesn't mask an app's icon, so this draws `VaultAppIconView` in the Mac's rounded square, on the grid every
-/// Mac app icon shares: an 824-point square with continuous corners, in the middle of a 1024-point canvas, with a soft
-/// shadow below. `VaultAppIconGenerator` renders it at every size the Mac's asset catalog takes.
+/// This draws `VaultAppIconView` in the Mac's rounded square, on the grid every Mac app icon shares: an 824-point
+/// square
+/// with continuous corners, in the middle of a 1024-point canvas, with a soft shadow below. The app's own icon isn't
+/// rendered from this: `VaultAppIconGenerator` writes it as an Icon Composer document, which macOS masks to the same
+/// shape itself.
 public struct VaultMacAppIconView: View {
     public init() {}
 

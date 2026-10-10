@@ -59,57 +59,54 @@ struct AppIconCatalogTests {
     }
 }
 
-struct MacAppIconCatalogTests {
+struct MacIconComposerDocumentTests {
     @Test
-    func slots_areEveryMacSizeAtOneAndTwoTimes() {
-        let slots = MacAppIconCatalog.slots.map { "\($0.points)@\($0.scale)x" }
+    func imageNames_areOnePerAppearance() {
+        let names = VaultAppIconAppearance.allCases.map(MacIconComposerDocument.imageName(for:))
 
-        #expect(slots == [
-            "16@1x",
-            "16@2x",
-            "32@1x",
-            "32@2x",
-            "128@1x",
-            "128@2x",
-            "256@1x",
-            "256@2x",
-            "512@1x",
-            "512@2x",
+        #expect(names == ["Glyph-Light.png", "Glyph-Dark.png", "Glyph-Tinted.png"])
+    }
+
+    @Test
+    func imagesAndJSON_liveInTheDocument() {
+        let document = MacIconComposerDocument(directory: URL(
+            filePath: "/tmp/AppIcon.icon",
+            directoryHint: .isDirectory,
+        ))
+
+        #expect(document.imageURL(for: .dark).path() == "/tmp/AppIcon.icon/Assets/Glyph-Dark.png")
+        #expect(document.jsonURL.path() == "/tmp/AppIcon.icon/icon.json")
+    }
+
+    @Test
+    func json_isAFlatGlyphOnWhiteOrNearBlackForTheMac() throws {
+        let document = try JSONDecoder().decode(IconDocument.self, from: MacIconComposerDocument.json())
+
+        #expect(document == .vaultMac)
+        #expect(document.supportedPlatforms.squares == ["macOS"])
+        #expect(document.fillSpecializations.map(\.appearance) == [nil, "dark"])
+        #expect(document.fillSpecializations.first?.value.solid == "srgb:1.00000,1.00000,1.00000,1.00000")
+        let layers = document.groups.flatMap(\.layers)
+        #expect(layers.count == 1)
+        #expect(layers.allSatisfy { !$0.glass })
+        #expect(layers.first?.imageNameSpecializations == [
+            .init(appearance: nil, value: "Glyph-Light.png"),
+            .init(appearance: "dark", value: "Glyph-Dark.png"),
+            .init(appearance: "tinted", value: "Glyph-Tinted.png"),
         ])
     }
 
+    /// The default appearance is the specialization with no appearance at all, not one named "light".
     @Test
-    func pixelSizes_haveOneFileEachForEverySlot() {
-        #expect(MacAppIconCatalog.pixelSizes == [16, 32, 64, 128, 256, 512, 1024])
-        #expect(MacAppIconCatalog.slots.allSatisfy { MacAppIconCatalog.pixelSizes.contains($0.pixels) })
+    func json_leavesOutTheDefaultAppearancesName() throws {
+        let json = try #require(String(data: MacIconComposerDocument.json(), encoding: .utf8))
+
+        #expect(!json.contains("\"light\""))
+        #expect(!json.contains("null"))
     }
 
     @Test
-    func contentsJSON_listsEverySlotForTheMac() throws {
-        let contents = try JSONDecoder().decode(
-            MacAppIconCatalog.Contents.self,
-            from: MacAppIconCatalog.contentsJSON(),
-        )
-
-        #expect(contents.images.count == 10)
-        #expect(contents.images.allSatisfy { $0.idiom == "mac" })
-        #expect(contents.images.first == .init(
-            filename: "AppIcon-Mac-16.png",
-            idiom: "mac",
-            scale: "1x",
-            size: "16x16",
-        ))
-        #expect(contents.images.last == .init(
-            filename: "AppIcon-Mac-1024.png",
-            idiom: "mac",
-            scale: "2x",
-            size: "512x512",
-        ))
-    }
-
-    @Test
-    func defaultOutputPath_targetsTheMacAppsIconSet() {
-        #expect(MacAppIconCatalog.defaultOutputPath
-            .hasSuffix("VaultApp/VaultMacApp/Assets.xcassets/AppIcon.appiconset"))
+    func defaultOutputPath_targetsTheMacAppsFolder() {
+        #expect(MacIconComposerDocument.defaultOutputPath.hasSuffix("VaultApp/VaultMacApp/AppIcon.icon"))
     }
 }

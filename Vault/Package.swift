@@ -326,7 +326,8 @@ let package = Package(
             swiftSettings: swiftSettings,
             plugins: targetPlugins,
         ),
-        // Renders `VaultAppIcon` into the app's `AppIcon.appiconset` (`make app-icon`).
+        // Renders `VaultAppIcon` into the app's `AppIcon.appiconset`, and the Mac app's `AppIcon.icon` (`make
+        // app-icon`).
         .executableTarget(
             name: "VaultAppIconGenerator",
             dependencies: [

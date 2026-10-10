@@ -44,10 +44,12 @@ struct AppIconPNGRendererTests {
 }
 
 @MainActor
-struct MacAppIconPNGRendererTests {
-    @Test
-    func macPNGData_isTheSizeAskedForWithTransparentCorners() throws {
-        let data = try AppIconPNGRenderer.macPNGData(pixelSize: 64)
+struct GlyphPNGRendererTests {
+    /// Every appearance, the default one too, is the glyph alone, for the Mac's Icon Composer document to put on its
+    /// own background.
+    @Test(arguments: VaultAppIconAppearance.allCases)
+    func glyphPNGData_isTheSizeAskedForOnTransparency(appearance: VaultAppIconAppearance) throws {
+        let data = try AppIconPNGRenderer.glyphPNGData(appearance: appearance, pixelSize: 64)
 
         let source = try #require(CGImageSourceCreateWithData(data as CFData, nil))
         let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
