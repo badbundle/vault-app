@@ -98,6 +98,7 @@ open class VaultMacCredentialProviderViewController: ASCredentialProviderViewCon
         guard lockObserver == nil else { return }
         lockObserver = VaultMacAutofillLockObserver(
             hostProcess: NSWorkspace.shared.frontmostApplication?.processIdentifier,
+            isAuthenticating: { [root] in root.authentication.isAuthenticating },
             macWillLock: { [weak self] in self?.model.deviceWillLock() },
             userDidLeave: { [weak self] in self?.model.userDidLeave() },
         )

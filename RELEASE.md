@@ -80,6 +80,13 @@ are.
 
 **Locking.**
 
+- Lock Vault (⌃⌘L), go to another app and come back: Touch ID is asked for
+  once, then the App Lock Password, and Vault unlocks. Do it again with the
+  Mac's password instead of Touch ID.
+- With Require Unlock at Immediately, open a locked item and unlock it with
+  Touch ID: the item opens, and Vault stays unlocked.
+- Lock Vault, and go to another app while Touch ID is being asked for: when
+  you're back, Vault is still locked.
 - With Settings open, close the main window, then choose Window, Vault: it's
   locked.
 - Minimise the main window with an item open: the Dock's image of it shows

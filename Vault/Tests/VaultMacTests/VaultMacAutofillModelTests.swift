@@ -292,6 +292,35 @@ struct VaultMacAutofillLockObserverTests {
         #expect(env.events.isEmpty)
     }
 
+    /// macOS shows the sheet's own Touch ID or password prompt from an agent of its own, which isn't the user leaving.
+    @Test
+    func anAgentComingToTheFront_whileItsOwnPromptIsUp_isNotLeaving() throws {
+        let env = Environment()
+        env.isAuthenticating = true
+
+        try env.workspace.post(
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            userInfo: [NSWorkspace.applicationUserInfoKey: VaultMacLockTriggersTests.agent()],
+        )
+
+        #expect(env.events.isEmpty)
+    }
+
+    @Test
+    func anotherAppComingToTheFront_whileItsOwnPromptIsUp_isTheUserLeaving() throws {
+        let env = Environment()
+        env.isAuthenticating = true
+
+        try env.workspace.post(
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            userInfo: [NSWorkspace.applicationUserInfoKey: VaultMacLockTriggersTests.otherApp()],
+        )
+
+        #expect(env.events == [.userDidLeave])
+    }
+
     @Test
     func stop_stopsObserving() {
         let env = Environment()
@@ -312,11 +341,13 @@ struct VaultMacAutofillLockObserverTests {
         let distributed = NotificationCenter()
         let workspace = NotificationCenter()
         var events: [Event] = []
+        var isAuthenticating = false
         private(set) var sut: VaultMacAutofillLockObserver!
 
         init() {
             sut = VaultMacAutofillLockObserver(
                 hostProcess: NSRunningApplication.current.processIdentifier,
+                isAuthenticating: { [weak self] in self?.isAuthenticating ?? false },
                 distributedCenter: distributed,
                 workspaceCenter: workspace,
                 macWillLock: { [weak self] in self?.events.append(.macWillLock) },

@@ -29,6 +29,6 @@ There is no hosted CI. `main` only accepts a PR whose latest commit has the **Va
 - If `bun install` hasn't been run in this clone, run it at the root of the repo first.
 - Commit first, then run `make validate` from the `Vault/` directory. It validates the committed `HEAD` in a clean worktree, so uncommitted changes aren't covered.
 - Run it again after every new commit on a PR branch: each commit needs its own check.
-- The Mac UI tests can't run while the Mac's screen is locked. Only when the user has asked to bypass them, run `VAULT_SKIP_MAC_UI_TESTS=1 make validate`, and tell them that check was skipped, so a full run can follow once the Mac is unlocked.
+- The Mac UI tests can't run while the Mac's screen is locked. Only when the user has asked to bypass them, run `VAULT_SKIP_MAC_UI_TESTS=1 make validate`, and tell them the Mac UI tests were skipped (the check on GitHub may not show it), so a full run can follow once the Mac is unlocked.
 - If it fails, fix the problem, commit, and validate the new commit. Never post, edit or fake the status by hand (for example with `gh api .../statuses`), and don't work around a failing test to get a green check.
 - It takes several minutes. Tell the user whether it passed, and if it didn't, which check failed and where its log is.

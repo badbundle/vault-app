@@ -98,38 +98,216 @@ struct VaultMacLockTriggersTests {
         #expect(!env.appLock.isLocked)
     }
 
-    /// An unlocked app lock with the App Lock Password set, and the triggers on centers of its own.
+    // MARK: - Vault's own prompt
+
+    /// macOS shows Touch ID and the Mac's password from a process of its own, so Vault stops being the active app under
+    /// its own prompt. Taking that for leaving locked Vault again, threw the answer away and asked again, forever.
+    @Test(arguments: [AppLockDelay.immediately, .fiveMinutes])
+    func unlocking_underItsOwnPrompt_isNotLeaving(delay: AppLockDelay) async throws {
+        let env = try await Environment(delay: delay, unlocked: false)
+
+        let unlocking = Task { await env.appLock.unlock() }
+        await env.prompts.waitForPrompt()
+        env.front.application = try Self.agent()
+        env.application.post(name: NSApplication.didResignActiveNotification, object: nil)
+        #expect(env.triggers.isBehindItsOwnPrompt)
+        await env.prompts.answer(true)
+        await unlocking.value
+        env.application.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+        // Time for a second prompt to come up, if coming back started unlocking again.
+        try await Task.sleep(for: .milliseconds(100))
+
+        guard case let .locked(locked) = env.appLock.state else {
+            Issue.record("Expected Vault to be locked at its password")
+            return
+        }
+        #expect(locked.step == .password)
+        #expect(await env.prompts.promptCount == 1)
+        await env.appLock.unlock(password: "password")
+        #expect(!env.appLock.isLocked)
+    }
+
+    /// As for a locked item, a backup or a setting: with Require Unlock at Immediately, its prompt mustn't lock Vault.
+    @Test
+    func promptWhileUnlocked_withRequireUnlockImmediately_staysUnlocked() async throws {
+        let env = try await Environment(delay: .immediately)
+
+        let authenticating = Task { try await env.authentication.validateAuthentication(reason: "Test") }
+        await env.prompts.waitForPrompt()
+        env.front.application = try Self.agent()
+        env.application.post(name: NSApplication.didResignActiveNotification, object: nil)
+        #expect(!env.appLock.isLocked)
+        await env.prompts.answer(true)
+        try await authenticating.value
+        env.application.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+
+        #expect(!env.appLock.isLocked)
+        #expect(!env.triggers.isBehindItsOwnPrompt)
+    }
+
+    @Test
+    func anotherAppComingToTheFront_whileItsOwnPromptIsUp_isLeaving() async throws {
+        let env = try await Environment(delay: .immediately)
+
+        let authenticating = Task { try? await env.authentication.validateAuthentication(reason: "Test") }
+        await env.prompts.waitForPrompt()
+        env.front.application = try Self.agent()
+        env.application.post(name: NSApplication.didResignActiveNotification, object: nil)
+        #expect(!env.appLock.isLocked)
+        try env.workspace.post(
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            userInfo: [NSWorkspace.applicationUserInfoKey: Self.otherApp()],
+        )
+
+        #expect(env.appLock.isLocked)
+        #expect(!env.triggers.isBehindItsOwnPrompt)
+        await env.prompts.answer(false)
+        await authenticating.value
+    }
+
+    @Test
+    func leavingForAnotherApp_whileItsOwnPromptIsUp_isLeaving() async throws {
+        let env = try await Environment(delay: .immediately)
+
+        let authenticating = Task { try? await env.authentication.validateAuthentication(reason: "Test") }
+        await env.prompts.waitForPrompt()
+        env.front.application = try Self.otherApp()
+        env.application.post(name: NSApplication.didResignActiveNotification, object: nil)
+
+        #expect(env.appLock.isLocked)
+        await env.prompts.answer(false)
+        await authenticating.value
+    }
+
+    @Test
+    func workspaceActivation_withoutItsOwnPromptUp_doesNothing() async throws {
+        let env = try await Environment(delay: .immediately)
+
+        try env.workspace.post(
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil,
+            userInfo: [NSWorkspace.applicationUserInfoKey: Self.otherApp()],
+        )
+
+        #expect(!env.appLock.isLocked)
+    }
+
+    @Test
+    func isAnotherApp_isOnlyAnOrdinaryAppOtherThanVault() throws {
+        #expect(try VaultMacLockTriggers.isAnotherApp(Self.otherApp()))
+        #expect(try !VaultMacLockTriggers.isAnotherApp(Self.agent()))
+        #expect(!VaultMacLockTriggers.isAnotherApp(.current))
+        #expect(!VaultMacLockTriggers.isAnotherApp(nil))
+    }
+
+    /// An ordinary app other than this one, such as the Finder.
+    static func otherApp() throws -> NSRunningApplication {
+        try #require(NSWorkspace.shared.runningApplications.first {
+            $0.activationPolicy == .regular && $0.processIdentifier != ProcessInfo.processInfo.processIdentifier
+        })
+    }
+
+    /// An agent with no Dock icon, as the one that shows Touch ID and the Mac's password is.
+    static func agent() throws -> NSRunningApplication {
+        try #require(NSWorkspace.shared.runningApplications.first { $0.activationPolicy == .accessory })
+    }
+
+    /// An app lock with the App Lock Password set, unlocked unless asked, its device authentication's prompts up until
+    /// the test answers them, and the triggers on centers of their own.
     @MainActor
     private struct Environment {
         let appLock: AppLockService
+        let authentication: DeviceAuthenticationService
+        let prompts = PendingAuthenticationPolicy()
         let triggers: VaultMacLockTriggers
         let distributed = NotificationCenter()
         let workspace = NotificationCenter()
         let application = NotificationCenter()
+        let front = Front()
         let sleeps = Sleeps()
 
-        init(delay: AppLockDelay) async throws {
+        /// The app in front, as Vault stops being the active app.
+        final class Front {
+            var application: NSRunningApplication?
+        }
+
+        init(delay: AppLockDelay, unlocked: Bool = true) async throws {
             let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
             settings.isEnabled = true
             settings.delay = delay
+            authentication = DeviceAuthenticationService(policy: prompts)
             appLock = AppLockService(
                 settings: settings,
-                authenticationService: DeviceAuthenticationService(policy: DeviceAuthenticationPolicyAlwaysAllow()),
+                authenticationService: authentication,
                 passwordService: FakeAppLockPasswordService(password: "password"),
                 purgeSensitiveData: {},
             )
-            await appLock.unlock()
-            await appLock.unlock(password: "password")
-            #expect(!appLock.isLocked)
+            if unlocked {
+                let unlocking = Task { [appLock] in await appLock.unlock() }
+                await prompts.waitForPrompt()
+                await prompts.answer(true)
+                await unlocking.value
+                await appLock.unlock(password: "password")
+                #expect(!appLock.isLocked)
+            }
             let sleeps = sleeps
+            let front = front
             triggers = VaultMacLockTriggers(
                 appLock: appLock,
+                authentication: authentication,
                 distributedCenter: distributed,
                 workspaceCenter: workspace,
                 applicationCenter: application,
+                frontApplication: { front.application },
                 sleep: { try await sleeps.sleep(for: $0) },
             )
         }
+    }
+}
+
+/// A device authentication whose prompts stay up until the test answers them.
+private actor PendingAuthenticationPolicy: DeviceAuthenticationPolicy {
+    nonisolated var canAuthenicateWithPasscode: Bool {
+        true
+    }
+
+    nonisolated var canAuthenticateWithBiometrics: Bool {
+        true
+    }
+
+    private var pending = [CheckedContinuation<Bool, any Error>]()
+    private(set) var promptCount = 0
+
+    func authenticateWithBiometrics(reason _: String) async throws -> Bool {
+        try await prompt()
+    }
+
+    func authenticateWithPasscode(reason _: String) async throws -> Bool {
+        try await prompt()
+    }
+
+    private func prompt() async throws -> Bool {
+        promptCount += 1
+        return try await withCheckedThrowingContinuation { continuation in
+            pending.append(continuation)
+        }
+    }
+
+    /// Waits (for up to 5 seconds) until a prompt is up.
+    func waitForPrompt() async {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while pending.isEmpty, ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(1))
+        }
+    }
+
+    func answer(_ authenticated: Bool) {
+        guard !pending.isEmpty else {
+            Issue.record("No prompt is up to answer")
+            return
+        }
+        pending.removeFirst().resume(returning: authenticated)
     }
 }
 
