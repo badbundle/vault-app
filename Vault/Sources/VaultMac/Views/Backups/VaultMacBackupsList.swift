@@ -20,14 +20,10 @@ struct VaultMacBackupsList: View {
             }
             Section {
                 ForEach(VaultMacBackupsPage.allCases) { page in
-                    LabeledContent {
-                        Text(status(of: page) ?? "")
-                            .foregroundStyle(.secondary)
-                    } label: {
-                        Label(page.title, systemImage: page.systemImage)
-                    }
-                    .tag(page)
-                    .accessibilityIdentifier("backups.\(page.rawValue)")
+                    VaultMacBackupsRow(page: page, status: status(of: page))
+                        // Of the selection's own type, so the list shows the open page as selected.
+                        .tag(VaultMacBackupsPage?.some(page))
+                        .accessibilityIdentifier("backups.\(page.rawValue)")
                 }
             }
         }
@@ -81,7 +77,7 @@ struct VaultMacBackupsList: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("backups.last-backup")
     }
@@ -174,5 +170,31 @@ struct VaultMacBackupNotice: View {
         }
         .padding(32)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// One of the Backups pages in the list: its symbol, its name and how it stands, spaced as the Items list's rows are.
+struct VaultMacBackupsRow: View {
+    var page: VaultMacBackupsPage
+    var status: String?
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: page.systemImage)
+                .font(.title3)
+                .foregroundStyle(.tint)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            Text(page.title)
+                .font(.body.weight(.medium))
+            Spacer(minLength: 8)
+            if let status {
+                Text(status)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 7)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 }
