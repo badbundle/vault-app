@@ -13,14 +13,16 @@ final class MacSettingsTests: XCTestCase {
         app.setAppLockPassword()
 
         app.typeKey(",", modifierFlags: .command)
+        // The window opens at whichever tab it showed last, which the app's defaults keep from one launch to the next.
+        let tabs = app.windows["com_apple_SwiftUI_Settings_window"].toolbars.firstMatch
+        XCTAssertTrue(tabs.waitForExistence(timeout: 5))
+        tabs.buttons["General"].click()
         let codeTapAction = app.popUpButtons["settings.code-tap-action"]
         XCTAssertTrue(codeTapAction.waitForExistence(timeout: 5))
-        let tabs = app.toolbars.firstMatch
-        XCTAssertTrue(tabs.exists)
         XCTAssertGreaterThanOrEqual(codeTapAction.frame.minY, tabs.frame.maxY)
         XCTAssertTrue(codeTapAction.isHittable)
 
-        tabs.descendants(matching: .any)["Security"].firstMatch.click()
+        tabs.buttons["Security"].click()
         let requireUnlock = app.popUpButtons["settings.require-unlock"]
         XCTAssertTrue(requireUnlock.waitForExistence(timeout: 5))
         XCTAssertGreaterThanOrEqual(requireUnlock.frame.minY, tabs.frame.maxY)
