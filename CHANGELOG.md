@@ -46,6 +46,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Moving the vault to another device with QR codes counted as a backup, so the Backups page and the App Lock Password screen could show a recent backup when nothing had been saved. Transfers aren't counted any more, including one made before this change
 - At the largest text sizes, codes in the feed ran off the edge of the screen, and the item editor wrapped its titles a word to a line with "Continue" split in two. The feed now shows a card per row at those sizes, and the editor puts each step's icon above its title
 - Codes with a period other than 30 seconds, such as 60, came out wrong in AutoFill's QuickType bar and in widgets, which always worked them out as 30 second codes. They now use the code's own period, as the feed does
+- On a screen whose safe area is wider on one side than the other, such as the iPhone Duo's unfolded, the lock screen's vault door sat off-centre, as did the privacy and screen-capture covers'. The door is now in the middle of the screen, and the words and buttons beneath it move across to be under it as far as they can while staying clear of the screen's edges
 
 ### Changed
 
