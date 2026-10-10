@@ -372,7 +372,7 @@ enum VaultMacRoot {
                 await interruptedErase.finish()
             }
         }
-        lockTriggers = VaultMacLockTriggers(appLock: appLockService)
+        lockTriggers = VaultMacLockTriggers(appLock: appLockService, authentication: deviceAuthenticationService)
         let windowPrivacy = VaultMacWindowPrivacy(localSettings: localSettings, appLock: appLockService)
         windowPrivacy.start(windows: NSApplication.shared.windows)
         self.windowPrivacy = windowPrivacy

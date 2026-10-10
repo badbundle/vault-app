@@ -102,8 +102,7 @@ export default (({ xcode }) => {
 
 /**
  * Skips the Mac app's UI tests when `VAULT_SKIP_MAC_UI_TESTS=1` is set, for a Mac whose screen is locked, where every
- * one of them fails to activate the app. The status names both checks as skipped, so a green check still shows they
- * didn't run.
+ * one of them fails to activate the app. The run's output and stored result name both checks as skipped.
  */
 function skipMacUITests(): string | undefined {
   return process.env.VAULT_SKIP_MAC_UI_TESTS === "1" ? "VAULT_SKIP_MAC_UI_TESTS is set" : undefined;

@@ -173,7 +173,11 @@ The Mac locks the vault, dropping its items, caches, search and keys (G29):
   `protectedDataWillBecomeUnavailable`;
 - **when another app comes to the front,** straight away or once the Require Unlock delay has passed with Vault still
   behind (G22). The default is Immediately, as on iOS. Hiding Vault (⌘H) counts as leaving it. Coming back to the
-  front starts unlocking by itself, as the iOS app does coming back to the foreground;
+  front starts unlocking by itself, as the iOS app does coming back to the foreground. Vault's own Touch ID or password
+  prompt isn't another app, though macOS shows it from a process of its own, so Vault stops being the active app while
+  it's up: Vault is only inactive then, as the iOS app is under its own Face ID prompt, and an ordinary app coming to
+  the front while it's up is still leaving. Taking the prompt for leaving locked Vault again behind it, and asked again,
+  forever (VAULT-119);
 - **from the Vault menu,** with Lock Vault (⌃⌘L);
 - **when the main window closes,** even with Settings, Help or About still open, which keep Vault running;
 - **when a window is minimised,** and its contents hide until it's back, so the Dock's image of it shows nothing from
@@ -336,7 +340,8 @@ Mac's Settings don't offer it, and the Mac app never touches Core Spotlight.
     the extension (G2, G47);
   - Hide While Recording keeps its sheet out of every capture, as it does the app's windows (G24, G91).
 
-  It also locks when the user goes to another app, as the app does, and asks again when they're back. It offers
+  It also locks when the user goes to another app, as the app does, and asks again when they're back. Its own Touch ID
+  or password prompt coming to the front isn't the user going to another app. It offers
   time-based codes only: filling a counter-based one would move its counter on, which only the app does. Its search
   field copies nothing, as the extension ends with the request, before a copy could be cleared.
 
