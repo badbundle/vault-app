@@ -38,16 +38,15 @@ public struct VaultMacScene: Scene {
         // Opened from the Help menu and the About window, rather than listed in the Window menu.
         .commandsRemoved()
 
+        // Its tab view is its root, so it gets the Mac's settings window, with the tabs in the toolbar. Each tab locks
+        // on its own.
         Settings {
-            VaultMacLockedWindowGate {
-                VaultMacSettingsView(
-                    localSettings: VaultMacRoot.localSettings,
-                    appLock: VaultMacRoot.appLockService,
-                    dataModel: VaultMacRoot.vaultDataModel,
-                    authentication: VaultMacRoot.deviceAuthenticationService,
-                )
-            }
-            .frame(minWidth: 480, minHeight: 320)
+            VaultMacSettingsView(
+                localSettings: VaultMacRoot.localSettings,
+                appLock: VaultMacRoot.appLockService,
+                dataModel: VaultMacRoot.vaultDataModel,
+                authentication: VaultMacRoot.deviceAuthenticationService,
+            )
         }
         .restorationBehavior(.disabled)
     }

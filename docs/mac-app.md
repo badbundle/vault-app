@@ -83,8 +83,8 @@ One main window, as Passwords has. Opening another isn't offered (no ⌘N for wi
 - **Backups:** the same page as on iOS, in the window's content area: the backup password, Keep a Backup, Move to
   Another Device, Auto-Backup and Restore.
 
-While Vault is locked, every window shows only the lock screen. Sheets are closed, and the Settings window shows that
-Vault is locked, with a button that brings the main window forward to unlock it.
+While Vault is locked, every window shows only the lock screen. Sheets are closed, and each of the Settings window's tabs shows
+that Vault is locked, with a button that brings the main window forward to unlock it.
 
 ### Menus and shortcuts
 
@@ -108,7 +108,10 @@ There's no Undo for anything that changes the vault (C6). The Edit menu's Undo a
 
 ### Settings, Help and About
 
-The Settings window (⌘,) has two tabs, with every setting that means something on the Mac, at iOS's defaults (C7):
+The Settings window (⌘,) has two tabs, in its toolbar as a Mac settings window's are, with every setting that means
+something on the Mac, at iOS's defaults (C7). Its tab view is the window's root, which is what puts the tabs in the
+toolbar, so each tab shows that Vault is locked on its own. Each tab is sized for its rows, and scrolls at larger text
+sizes:
 
 - **General:** Tap a Code To, Show Next Code, the Clear Clipboard time, Universal Clipboard for codes and for notes
   (both off), and Lock New Items.
