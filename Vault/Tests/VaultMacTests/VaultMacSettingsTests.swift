@@ -31,7 +31,11 @@ struct VaultMacSettingsTests {
 
         assertSnapshot(
             of: view,
-            as: .macWindow(width: 540, height: 600, appearance: appearance.name),
+            as: .macWindow(
+                width: VaultMacSettingsView.width,
+                height: VaultMacSettingsView.generalHeight,
+                appearance: appearance.name,
+            ),
             named: appearance.rawValue,
         )
     }
@@ -56,7 +60,11 @@ struct VaultMacSettingsTests {
 
         assertSnapshot(
             of: view,
-            as: .macWindow(width: 540, height: 640, appearance: appearance.name),
+            as: .macWindow(
+                width: VaultMacSettingsView.width,
+                height: VaultMacSettingsView.securityHeight,
+                appearance: appearance.name,
+            ),
             named: appearance.rawValue,
         )
     }

@@ -10,21 +10,35 @@ struct VaultMacSettingsView: View {
     var dataModel: VaultDataModel
     var authentication: DeviceAuthenticationService
 
+    /// How wide the window is.
+    static let width = 540.0
+    /// How tall the General tab is: enough for all its rows at the default text size. At larger sizes it scrolls.
+    static let generalHeight = 520.0
+    /// How tall the Security tab is, likewise.
+    static let securityHeight = 600.0
+
+    /// The window's root, as the Mac's settings window only puts the tabs in its toolbar for a root `TabView`. Each tab
+    /// has its own size, which the window takes as the tab is chosen, and shows only that Vault is locked while it is.
     var body: some View {
         TabView {
             Tab("General", systemImage: "gearshape") {
-                VaultMacGeneralSettings(localSettings: localSettings)
+                VaultMacLockedWindowGate {
+                    VaultMacGeneralSettings(localSettings: localSettings)
+                }
+                .frame(width: Self.width, height: Self.generalHeight)
             }
             Tab("Security", systemImage: "lock") {
-                VaultMacSecuritySettings(
-                    localSettings: localSettings,
-                    appLock: appLock,
-                    dataModel: dataModel,
-                    authentication: authentication,
-                )
+                VaultMacLockedWindowGate {
+                    VaultMacSecuritySettings(
+                        localSettings: localSettings,
+                        appLock: appLock,
+                        dataModel: dataModel,
+                        authentication: authentication,
+                    )
+                }
+                .frame(width: Self.width, height: Self.securityHeight)
             }
         }
-        .frame(width: 540, height: 520)
     }
 }
 
