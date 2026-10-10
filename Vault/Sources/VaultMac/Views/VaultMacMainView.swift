@@ -179,6 +179,7 @@ struct VaultMacMainView: View {
             )
             .tag(item.id)
         }
+        .vaultMacItemRowHeight()
         .overlay {
             if dataModel.items.isEmpty {
                 ContentUnavailableView(

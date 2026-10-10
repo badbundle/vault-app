@@ -48,4 +48,42 @@ final class MacItemEditingTests: XCTestCase {
         XCTAssertTrue(title.waitForExistence(timeout: 5))
         XCTAssertEqual(title.value as? String, "Shopping list")
     }
+
+    /// A code added to a list that already has one is listed at its full height, not clipped (VAULT-124).
+    @MainActor
+    func test_newCode_addedAboveAnother_isListedAtItsFullHeight() throws {
+        let app = XCUIApplication.launchedOnAFreshVault()
+        app.setAppLockPassword()
+
+        app.addCode(issuer: "First", account: "ada@example.com")
+        app.addCode(issuer: "Second", account: "grace@example.com")
+
+        let rows = app.outlines["feed"].outlineRows
+        XCTAssertEqual(rows.count, 2)
+        for index in 0 ..< rows.count {
+            let row = rows.element(boundBy: index)
+            let item = row.descendants(matching: .any)["feed.item"]
+            XCTAssertTrue(item.exists)
+            XCTAssertLessThanOrEqual(row.frame.minY, item.frame.minY, "Row \(index) starts below its content")
+            XCTAssertGreaterThanOrEqual(row.frame.maxY, item.frame.maxY, "Row \(index) cuts off its content")
+        }
+    }
+}
+
+extension XCUIApplication {
+    /// Adds a code with New Code, and waits for it to be listed.
+    @MainActor
+    func addCode(issuer: String, account: String) {
+        typeKey("n", modifierFlags: .command)
+        let secret = textFields["editor.secret"]
+        XCTAssertTrue(secret.waitForExistence(timeout: 5))
+        secret.click()
+        typeText("JBSWY3DPEHPK3PXP")
+        textFields["editor.issuer"].click()
+        typeText(issuer)
+        textFields["editor.account"].click()
+        typeText(account)
+        buttons["editor.save"].click()
+        XCTAssertTrue(staticTexts[issuer].waitForExistence(timeout: 5))
+    }
 }
