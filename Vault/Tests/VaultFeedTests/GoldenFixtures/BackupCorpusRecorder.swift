@@ -26,7 +26,9 @@ struct BackupCorpusRecorder {
             (.pdfWithRandomPadding, recordPDFWithRandomPadding),
             (.pdfBeforeQuickTypeAndPreview, recordPDFBeforeQuickTypeAndPreview),
             (.pdfWithPlaintextSearchPassphrase, recordPDFWithPlaintextSearchPassphrase),
-            (.autoBackup, recordAutoBackup),
+            (.autoBackup, { try await recordAutoBackup(password: backupPassword()) }),
+            (.autoBackupKeygenV2, { try await recordAutoBackup(password: backupPasswordKeygenV2()) }),
+            (.autoBackupKeygenV1ThenV2, { try await recordAutoBackup(password: backupPasswordMovedOnToV2()) }),
             (.transferQRCodes, recordTransferQRCodes),
         ]
         #if os(macOS)
@@ -48,7 +50,7 @@ struct BackupCorpusRecorder {
 extension BackupCorpusRecorder {
     /// As `AutoBackupServiceImpl` saves one, into a folder: the service itself. It keeps the backup the PDF carries,
     /// as the PDF carries it, rather than the PDF, which is about a megabyte of QR codes.
-    private func recordAutoBackup() async throws -> (data: Data, encryptedLength: Int) {
+    private func recordAutoBackup(password: DerivedEncryptionKey) async throws -> (data: Data, encryptedLength: Int) {
         let source = try await sourceVault()
         let provider = BackupStorageProviderStub(id: "folder")
         let sut = try AutoBackupServiceImpl(
@@ -58,7 +60,7 @@ extension BackupCorpusRecorder {
             defaults: Defaults(userDefaults: testUserDefaults()),
             providers: [provider],
         )
-        try await source.dataModel.store(backupPassword: backupPassword())
+        try await source.dataModel.store(backupPassword: password)
         await sut.selectProvider(id: "folder")
 
         await sut.forceBackup()
@@ -169,9 +171,21 @@ extension BackupCorpusRecorder {
         EpochClockMock(currentTime: BackupCorpus.created.timeIntervalSince1970)
     }
 
-    /// The backup password, as setting it derives it: with a new salt.
+    /// The backup password, as setting it derived it before v2: with a new salt.
     private func backupPassword() throws -> DerivedEncryptionKey {
         try VaultKeyDeriver.Backup.Fast.v1.createEncryptionKey(password: BackupCorpus.password)
+    }
+
+    /// The backup password, as setting it derives it since v2.
+    private func backupPasswordKeygenV2() throws -> DerivedEncryptionKey {
+        try VaultKeyDeriver.Backup.Fast.v2.createEncryptionKey(password: BackupCorpus.password)
+    }
+
+    /// The backup password as setting it derived it before v2, then moved on to v2 by the app once it loaded it.
+    private func backupPasswordMovedOnToV2() async throws -> DerivedEncryptionKey {
+        let upgrader = BackupPasswordUpgrader(keyDeriverFactory: VaultKeyDeriverFactoryImpl())
+        let upgraded = try await upgrader.upgraded(backupPassword())
+        return try #require(upgraded)
     }
 
     private func sourceVault() async throws -> RestoreHarness {

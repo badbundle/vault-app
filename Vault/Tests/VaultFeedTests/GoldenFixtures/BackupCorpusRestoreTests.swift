@@ -28,7 +28,7 @@ struct BackupCorpusRestoreTests {
         let vault = try await harness.vault()
         #expect(try vault.items == entry.restoredItems().sortedByID)
         #expect(Set(vault.tags) == Set(BackupCorpus.tags))
-        for fixture in EncryptedItemFixture.all {
+        for fixture in EncryptedItemFixture.v1 {
             let restored = try #require(vault.items.first { $0.id == fixture.metadata.id })
             let encrypted = try #require(restored.item.encryptedItem)
             #expect(try EncryptedItemFixture.decrypt(encrypted, password: fixture.password) == fixture.decrypted)
@@ -52,7 +52,7 @@ struct BackupCorpusRestoreTests {
         let vault = try entry.encryptedVault()
 
         #expect(vault.version == "1.0.0")
-        #expect(vault.keygenSignature == VaultKeyDeriver.Signature.backupFastV1.rawValue)
+        #expect(vault.keygenSignature == entry.keygen.rawValue)
         #expect(vault.data.count == entry.encryptedLength)
         switch entry.padding {
         case .toFixedSize: #expect((32 * 1024 - 16 ... 32 * 1024).contains(vault.data.count))

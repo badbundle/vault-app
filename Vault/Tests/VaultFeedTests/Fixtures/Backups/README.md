@@ -26,9 +26,10 @@ The killphrase and search passphrase digests were made with the keys of the devi
 still import, and the digests arrive exactly as they were.
 
 **Every backup's password is `correct horse battery staple`.** Its key is derived with `vault.keygen.backup.fast.v1`,
-as debug builds derive it, which takes milliseconds. Release builds derive with `vault.keygen.backup.secure.v1`, which
-takes minutes without optimization; `VaultKeyDeriverParameterPinTests` pins its parameters. Each backup's salt and IV
-were random, and each carries them.
+as debug builds derived it before VAULT-128, which takes milliseconds, except in the two backups below that are there
+for the v2 derivations. Release builds derive with `vault.keygen.backup.secure.v1`, `.v2` or `.v1-then-v2`, which take
+seconds to minutes; `VaultKeyDeriverParameterPinTests` pins their parameters. Each backup's salt and IV were random,
+and each carries them.
 
 ## The backups
 
@@ -43,6 +44,8 @@ code, as described for each, rather than by building an old tag.
 | File | Format | Padding | Size |
 | --- | --- | --- | ---: |
 | `auto-backup.json` | Today's | 32 KiB | 44 KB |
+| `auto-backup-keygen-v2.json` | Today's, with a v2 key | 32 KiB | 44 KB |
+| `auto-backup-keygen-v1-then-v2.json` | Today's, with a v1 key moved on to v2 | 32 KiB | 44 KB |
 | `pdf-random-padding.pdf` | Today's | Random | 150 KB |
 | `pdf-made-on-mac.pdf` | Today's, made on the Mac | Random | 195 KB |
 | `transfer-qr-codes.json` | Today's | Random | 6 KB |
@@ -62,6 +65,20 @@ backup out of one. So the tests hand it to the import flow where the flow has re
 
 It stands for the PDFs the Backups page has saved since VAULT-75 too. Their backups are the same: the PDFs differ only
 in the title and hint printed on them.
+
+### `auto-backup-keygen-v2.json`
+
+Recorded on 11 October 2026 for VAULT-128, by the same recorder and in the same way as `auto-backup.json`, with a
+backup password set as it is since v2: its key derived with `vault.keygen.backup.fast.v2`. Padded to just under 32
+KiB of ciphertext (32,768 bytes). It restores to exactly the vault.
+
+### `auto-backup-keygen-v1-then-v2.json`
+
+Recorded with it, in the same way, with a backup password set before v2 whose key the app has since moved on to v2:
+the key `vault.keygen.backup.fast.v1` derived, carried on by `BackupPasswordUpgrader`, which is what the app does
+the next time it loads a v1 key. So it names `vault.keygen.backup.fast.v1-then-v2`, with the salt the v1 key was made
+with. 32,768 bytes of ciphertext. Restoring it derives v1 from the password, then v2, and it restores to exactly the
+vault.
 
 ### `pdf-random-padding.pdf`
 

@@ -19,8 +19,11 @@ struct GoldenFixtureRecorder {
     /// The encrypted items come first, because the slot file's real vault holds them.
     @Test
     func recordMissingFixtures() async throws {
-        for fixture in EncryptedItemFixture.all where !GoldenFixture.isRecorded(fixture.name) {
+        for fixture in EncryptedItemFixture.v1 where !GoldenFixture.isRecorded(fixture.name) {
             try record(fixture)
+        }
+        if !GoldenFixture.isRecorded(EncryptedItemFixture.noteKeygenV2.name) {
+            try await recordOpened(EncryptedItemFixture.note, as: EncryptedItemFixture.noteKeygenV2)
         }
         if !GoldenFixture.isRecorded(SlotFileFixture.name) {
             try await recordSlotFile()
@@ -47,6 +50,32 @@ extension GoldenFixtureRecorder {
         )
         let payload = try EncryptedVaultPayload.encode(VaultRecordState(items: [record], tags: []))
         try GoldenFixture.record(payload.data, named: fixture.name)
+    }
+
+    /// Opens the item stored in `fixture` with its password, as its page does, in a store holding just it, which
+    /// encrypts it again with v2's derivation (VAULT-128), and stores what the store holds then.
+    @MainActor
+    private func recordOpened(_ fixture: EncryptedItemFixture, as opened: EncryptedItemFixture) async throws {
+        let stored = try fixture.storedItem()
+        let store = RecordVaultStore()
+        try await store.importAndMergeVault(payload: VaultApplicationPayload(
+            userDescription: "",
+            items: [stored],
+            tags: [],
+        ))
+        let page = try EncryptedItemDetailViewModel(
+            item: #require(stored.item.encryptedItem),
+            metadata: stored.metadata,
+            keyDeriverFactory: VaultKeyDeriverFactoryImpl(),
+            itemStore: store,
+        )
+        page.enteredEncryptionPassword = opened.password
+        await page.startDecryption()
+        let state = await store.state
+        let reencrypted = try #require(state.items.first?.encryptedItemDetails)
+        #expect(reencrypted.keygenSignature == opened.keygen.rawValue)
+        let payload = try EncryptedVaultPayload.encode(VaultRecordState(items: state.items, tags: []))
+        try GoldenFixture.record(payload.data, named: opened.name)
     }
 
     private func encrypt(_ payload: VaultItem.Payload, with encryptor: VaultItemEncryptor) throws -> EncryptedItem {

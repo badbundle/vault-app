@@ -16,7 +16,7 @@ struct EncryptedItemFixtureTests {
         let encrypted = try #require(stored.item.encryptedItem)
         #expect(encrypted.version == "1.0.0")
         #expect(encrypted.title == fixture.title)
-        #expect(encrypted.keygenSignature == VaultKeyDeriver.Signature.itemFastV1.rawValue)
+        #expect(encrypted.keygenSignature == fixture.keygen.rawValue)
         #expect(encrypted.keygenSalt.count == 48)
         #expect(encrypted.encryptionIV.count == 32)
         #expect(encrypted.authentication.count == 16)
@@ -27,6 +27,21 @@ struct EncryptedItemFixtureTests {
         let encrypted = try #require(fixture.storedItem().item.encryptedItem)
 
         #expect(try EncryptedItemFixture.decrypt(encrypted, password: fixture.password) == fixture.decrypted)
+    }
+
+    /// Opening an item encrypted with v1 encrypts it again with v2, and changes nothing else about it (VAULT-128).
+    @Test
+    func noteKeygenV2_isTheV1NoteWithOnlyItsEncryptionChanged() throws {
+        let v1 = try EncryptedItemFixture.note.storedItem()
+        let v2 = try EncryptedItemFixture.noteKeygenV2.storedItem()
+
+        #expect(v2.metadata == v1.metadata)
+        let v1Encrypted = try #require(v1.item.encryptedItem)
+        let v2Encrypted = try #require(v2.item.encryptedItem)
+        #expect(v2Encrypted.title == v1Encrypted.title)
+        #expect(v2Encrypted.version == v1Encrypted.version)
+        #expect(v2Encrypted.keygenSalt != v1Encrypted.keygenSalt)
+        #expect(v2Encrypted.encryptionIV != v1Encrypted.encryptionIV)
     }
 
     @Test(arguments: EncryptedItemFixture.all)
@@ -49,15 +64,17 @@ struct EncryptedItemFixtureTests {
 /// before it's compressed) with that one item in it. Its details are the `EncryptedItem`: the item's own password
 /// derives its key, which decrypts the item's JSON.
 ///
-/// The key is derived with `vault.keygen.item.fast.v1`, as debug builds of the app derive it, which takes
-/// milliseconds. Release builds derive with `vault.keygen.item.secure.v1`, which takes seconds without optimization:
-/// `VaultKeyDeriverParameterPinTests` pins its parameters, and `CryptoEngineTests` the derivations it chains.
+/// The key is derived with `vault.keygen.item.fast.v1` or `.v2`, as debug builds of the app derive it, which takes
+/// milliseconds. Release builds derive with `vault.keygen.item.secure.v1` or `.v2`, which take seconds:
+/// `VaultKeyDeriverParameterPinTests` pins their parameters, and `CryptoEngineTests` the derivations they use.
 struct EncryptedItemFixture: Sendable, CustomTestStringConvertible {
     var name: String
     var password: String
     var metadata: VaultItem.Metadata
     /// What the item decrypts to.
     var decrypted: VaultItem.Payload
+    /// The derivation its key was made with.
+    var keygen: VaultKeyDeriver.Signature = .itemFastV1
 
     var testDescription: String {
         name
@@ -107,7 +124,20 @@ struct EncryptedItemFixture: Sendable, CustomTestStringConvertible {
         )),
     )
 
-    static let all = [note, recoveryPhrase]
+    /// `note`, opened with its password by a version of Vault with v2 key derivations, which encrypted it again
+    /// with `vault.keygen.item.fast.v2` and kept everything else about it (VAULT-128).
+    static let noteKeygenV2 = EncryptedItemFixture(
+        name: "encrypted-note-keygen-v2.json",
+        password: note.password,
+        metadata: note.metadata,
+        decrypted: note.decrypted,
+        keygen: .itemFastV2,
+    )
+
+    /// The items the slot file and the backup corpus hold.
+    static let v1 = [note, recoveryPhrase]
+
+    static let all = v1 + [noteKeygenV2]
 
     /// The item as it's stored, read from the test bundle.
     func storedItem() throws -> VaultItem {
