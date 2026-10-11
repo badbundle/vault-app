@@ -24,8 +24,11 @@ Left out:
 
 ## How it's built
 
-`Package.swift` defines `ARGON2_NO_THREADS`, so the reference computes lanes one after another instead of starting
-pthreads. The app always uses one lane.
+It's built with threads (VAULT-128): with more than one lane, the reference fills each lane's segment on a pthread
+of its own, joining them at every sync point, so the lanes run in parallel. That gives the same output as filling
+them one after another, which is what it did before, when `Package.swift` defined `ARGON2_NO_THREADS`. With one
+lane it never starts a thread, and the App Lock Password always uses one. A thread only needs a few KiB of its
+stack, and the working memory is the same one block however many lanes share it.
 
 The reference wipes its working memory before freeing it (`FLAG_clear_internal_memory`, on by default), and wipes
 the password copy it's given when `ARGON2_FLAG_CLEAR_PASSWORD` is set. `Argon2idKeyDeriver` relies on both, and
@@ -34,5 +37,5 @@ its tests check them.
 ## Updating
 
 Replace the files above with the same files from a newer upstream commit and update the commit here.
-`Argon2idKeyDeriverTests` holds the RFC 9106 vector and the reference known-answer tests, so a behavior change
-fails there.
+`Argon2idKeyDeriverTests` holds the RFC 9106 vector, the reference known-answer tests and keys derived with lanes run
+one after another, so a behavior change fails there.

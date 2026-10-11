@@ -1583,6 +1583,23 @@ an A15-class iPhone is estimated at about twice as slow.
 The optimized scrypt matched RFC 7914's vectors and CryptoSwift's output. A process deriving with 64 MiB peaked
 at a 75 MB footprint.
 
+**VAULT-128** made the app's derivations faster without changing their output. PBKDF2 moved from CryptoSwift to
+CommonCrypto, and `CArgon2` is built with threads, so an Argon2id derivation's lanes run in parallel. Measured with
+`vault-keygen-speedtest --runs 3` (the fastest of three runs) on the M5 Max while other builds ran, at a load average
+of about 12 before and 85–105 after, so the after figures are if anything slow:
+
+| Derivation | Before | After |
+| --- | ---: | ---: |
+| PBKDF2-SHA384, 372,002 iterations | 960 ms | 142 ms |
+| PBKDF2-SHA384, 5,452,351 iterations | 13.6 s | 2.1 s |
+| `Item.Secure.v1` | 1,006 ms | 139 ms |
+| `Backup.Secure.v1` | 15.4 s | 2.8 s |
+| Argon2id m=64 MiB, t=3, p=1 (the App Lock Password's) | 99 ms | 92 ms (the same code) |
+| Argon2id m=64 MiB, t=3, p=4 | 97 ms | 33 ms |
+
+Four lanes add four thread stacks of a few KiB each: a 64 MiB derivation's peak footprint grew by 64 KiB. With one
+lane, as the App Lock Password uses, no thread is started.
+
 ### Payload sizes
 
 | | 10 items | 100 | 1,000 | 5,000 |

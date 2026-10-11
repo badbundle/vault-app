@@ -217,12 +217,12 @@ let package = Package(
             plugins: targetPlugins,
         ),
         // The Argon2 reference implementation (CC0), vendored unmodified. Provenance and the upstream commit are in
-        // its README. Lanes run one after another, so it never starts threads.
+        // its README. With more than one lane, each lane runs on a thread of its own; with one, as the App Lock
+        // Password's derivation has, it never starts a thread.
         .target(
             name: "CArgon2",
             exclude: ["LICENSE", "README.md"],
             cSettings: [
-                .define("ARGON2_NO_THREADS"),
                 // Fully optimized in every configuration. Unlocking gets a fixed time budget, so a faster
                 // derivation buys more passes, and more cost for anyone guessing the password.
                 .unsafeFlags(["-O3"]),
