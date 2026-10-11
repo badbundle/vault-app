@@ -241,6 +241,7 @@ struct VaultMacTextEditor: NSViewRepresentable {
         coordinator.undoManager.removeAllActions()
     }
 
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: VaultMacTextEditor
         /// The note's own, rather than the window's, which would keep what was typed after the sheet closes.
