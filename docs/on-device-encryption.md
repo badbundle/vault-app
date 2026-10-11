@@ -373,8 +373,10 @@ Calibration adds about 0.3–1.5 s, once, to setting the password. It runs behin
 **API.** It's a new `Argon2idKeyDeriver` in `CryptoEngine`, parameterized by the header. It isn't a fixed
 `VaultKeyDeriver.Signature`, because its parameters differ from file to file.
 
-For comparison, the existing per-item password KDF (`Item.Secure.v1`) takes 733 ms on the M5 Max. The backup's
-`Secure.v1` spends about 13 s on PBKDF2 alone there, and minutes on an iPhone.
+For comparison, the existing per-item password KDF (`Item.Secure.v1`) took 733 ms on the M5 Max. The backup's
+`Secure.v1` spent about 13 s on PBKDF2 alone there, and minutes on an iPhone. Both used CryptoSwift's PBKDF2 until
+VAULT-128 moved them to CommonCrypto's, which derives exactly the same keys: `Item.Secure.v1` now takes about 140 ms,
+and `Secure.v1`'s PBKDF2 about 2 s (see [Key derivation](#key-derivation-1) in the appendix).
 
 ### On-disk format (`vault-slots.v1`)
 
