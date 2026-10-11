@@ -10,11 +10,11 @@ import VaultKeygen
 // This is tested by this command: `make benchmark-keygen`
 
 // Latest results (M5 Max, the fastest of 3 runs with `--runs 3`, VAULT-128):
-//   - Item Fast v1 = ~1 ms
-//   - Item Secure v1 = ~140 ms
-//   - Backup Fast v1 = ~1 ms
-//   - Backup Secure v1 = ~3 s
-//   - Argon2id over 64 MiB, 3 passes = ~90 ms with 1 lane, ~30 ms with 4
+//   - Item Fast v1 / v2 = ~1 ms
+//   - Item Secure v1 = ~130 ms, v2 = ~110 ms
+//   - Backup Fast v1 / v2 / v1 then v2 = ~1–3 ms
+//   - Backup Secure v1 = ~2.6 s, v2 = ~1.7 s, v1 then v2 = ~4.4 s, or ~1.7 s from a stored v1 key
+//   - Argon2id over 64 MiB, 3 passes = ~65–90 ms with 1 lane, ~17–30 ms with 4
 
 @main
 struct KeygenSpeedtest: ParsableCommand {

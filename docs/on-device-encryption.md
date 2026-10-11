@@ -413,15 +413,17 @@ Backup passwords and items' own passwords derive their keys with fixed derivatio
 device. v2 replaces v1's PBKDF2, HKDF and scrypt chains with the same Argon2id as the App Lock Password, with more
 memory, because they only ever run in the app:
 
-| Signature | Argon2id | M5 Max, one thread | iPhone 11, estimated |
+| Signature | Argon2id | M5 Max | iPhone 11, estimated |
 | --- | --- | ---: | ---: |
-| `vault.keygen.item.secure.v2` | m = 256 MiB, t = 4, p = 4 | 0.41 s | about 1 s |
-| `vault.keygen.backup.secure.v2` | m = 512 MiB, t = 32, p = 4 | 6.9 s | about 14 s |
-| `vault.keygen.backup.secure.v1-then-v2` | v1, then v2's Argon2id | 20 s from the password, 6.7 s from a stored v1 key | v1's minutes, then about 14 s |
+| `vault.keygen.item.secure.v2` | m = 256 MiB, t = 4, p = 4 | 0.11 s | about 1 s at most |
+| `vault.keygen.backup.secure.v2` | m = 512 MiB, t = 32, p = 4 | 1.7 s | about 14 s at most |
+| `vault.keygen.backup.secure.v1-then-v2` | v1, then v2's Argon2id | 4.4 s from the password, 1.7 s from a stored v1 key | v1's seconds, then about 14 s at most |
 
-The M5 Max figures are with the reference built without threads, as it is today (`ARGON2_NO_THREADS`), so the four
-lanes run one after another; the output is the same either way. No iPhone was measured: VAULT-128 accepted about 14
-seconds for a v2 restore on an iPhone 11, and the item's figure is scaled from it. Every new item password, and every edit that sets one,
+The M5 Max figures are the fastest of three runs of `vault-keygen-speedtest`, with the lanes on threads of their own
+(see the [appendix](#key-derivation-1)). No iPhone was measured. VAULT-128 accepted about 14 seconds for a v2 restore
+on an iPhone 11, estimated before the lanes ran in parallel, so it's an upper bound: an iPhone 11 has two performance
+cores for four lanes. The item's figure is scaled from it. Backup derivations the user waits for say they can take up
+to a minute, a few times the estimate for the slowest iPhone Vault runs on. Every new item password, and every edit that sets one,
 derives with `item.secure.v2`, and every backup password set or changed with `backup.secure.v2`. Debug builds use the
 `fast` ones, which have the same shape with a fraction of the memory and passes, so they run the same code.
 
@@ -471,9 +473,10 @@ nobody waits on, runs at utility priority, not background, so its 512 MiB isn't 
   Backups pages. AutoFill only fills codes, and widgets never derive anything.
 - Only the apps' data models are given a `BackupPasswordUpgrader`. The iOS AutoFill extension shares `VaultRoot`, so
   its data model is made without one (`VaultRoot.isAppExtension`), and the Mac's has its own root.
-- In the app, a backup derivation holds 515 MiB at its peak, measured on the Mac with malloc's large-allocation cache
-  off. Restoring a `v1-then-v2` backup frees scrypt's 256 MiB before Argon2id takes 512 MiB, though on macOS the
-  freed memory stays in malloc's cache, for a peak of 771 MiB. The oldest iPhone Vault runs on, the iPhone 11, has
+- In the app, a backup derivation holds 515 MiB at its peak, measured on the Mac, and an item's 259 MiB. Restoring a
+  `v1-then-v2` backup frees scrypt's 256 MiB before Argon2id takes 512 MiB, though on macOS the freed memory stays in
+  malloc's cache, for a peak of 771 MiB (515 MiB with `MallocLargeCache=0`). Moving a stored key on runs only the
+  Argon2id, so it holds 515 MiB. Running the lanes on threads adds only their stacks. The oldest iPhone Vault runs on, the iPhone 11, has
   4 GB, and a foreground app there can typically use around 2 GB before jetsam ends it, so there's room, but a
   restore, or the first load of a v1 backup key, on a phone short of free memory is the case to watch. Nothing checks
   `os_proc_available_memory()` first, as AutoFill does for the App Lock Password. Measure on an iPhone 11 before a
@@ -1693,8 +1696,6 @@ an A15-class iPhone is estimated at about twice as slow.
 | Argon2id m=128 MiB, t=1 / 3; m=256 MiB, t=1 | 128–256 MiB | 46 / 139 / 92 ms |
 | CommonCrypto PBKDF2-SHA256, 1M iterations | — | 114 ms |
 | App today: `Item.Secure.v1` / `Backup.Fast.v1` | — | 733 / 4 ms |
-| VAULT-128, `vault-keygen-speedtest` one derivation per process, 11 October 2026: `Item.Secure.v1` / `.v2` | 128 KiB / 256 MiB | 0.78 / 0.41 s |
-| VAULT-128: `Backup.Secure.v1` / `.v2` / `.v1ThenV2` / a stored v1 key carried on | 256 / 512 / 512 / 512 MiB | 12.2 / 6.9 / 19.8 / 6.7 s |
 | Trying 8 slots (HKDF + AES-GCM open each); 16 slots scale linearly to about 0.04 ms | — | 0.02 ms |
 
 The optimized scrypt matched RFC 7914's vectors and CryptoSwift's output. A process deriving with 64 MiB peaked
@@ -1716,6 +1717,22 @@ of about 12 before and 85–105 after, so the after figures are if anything slow
 
 Four lanes add four thread stacks of a few KiB each: a 64 MiB derivation's peak footprint grew by 64 KiB. With one
 lane, as every App Lock file made before VAULT-128 has, no thread is started.
+
+**The v2 derivations** (VAULT-128), with PBKDF2 from CommonCrypto and the lanes on threads, measured with
+`vault-keygen-speedtest --runs 3` on the M5 Max on 11 October 2026 at a load average (`uptime`) of 3–6. The peak
+footprints are of a process making only that derivation, three times each with the same result:
+
+| Derivation | Memory | Fastest of 3 | Peak footprint |
+| --- | ---: | ---: | ---: |
+| `Item.Secure.v1` | 128 KiB | 128 ms | 3 MiB |
+| `Item.Secure.v2` | 256 MiB | 108 ms | 259 MiB |
+| `Backup.Secure.v1` | 256 MiB | 2.6 s | 259 MiB |
+| `Backup.Secure.v2` | 512 MiB | 1.7 s | 515 MiB |
+| `Backup.Secure.v1ThenV2`, restoring from the password | 256, then 512 MiB | 4.4 s | 771 MiB, or 515 MiB with `MallocLargeCache=0` |
+| `Backup.Secure.v1ThenV2`, moving a stored v1 key on | 512 MiB | 1.7 s | 515 MiB |
+
+Before the lanes ran on threads, with the four run one after another, `Item.Secure.v2` took 0.41 s and
+`Backup.Secure.v2` 6.9 s, at a load average of 4–22.
 
 ### App Lock calibration
 

@@ -67,11 +67,6 @@ public final class BackupKeyChangeViewModel {
         encryptionKeyDeriver.signature
     }
 
-    /// How long deriving the new password's key can take, for what's shown while it does.
-    public var keyDerivationTime: BackupKeyDerivationTime {
-        BackupKeyDerivationTime(signature: encryptionKeyDeriver.signature)
-    }
-
     /// Whether a backup password is already set, and when.
     public var currentPasswordStatus: VaultDataModel.BackupPasswordStatus {
         dataModel.backupPasswordStatus

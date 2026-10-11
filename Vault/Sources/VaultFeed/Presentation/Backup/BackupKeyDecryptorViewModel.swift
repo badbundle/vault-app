@@ -64,12 +64,6 @@ public final class BackupKeyDecryptorViewModel {
         enteredPassword.isNotEmpty
     }
 
-    /// How long recreating the backup's key can take, for what's shown while it does: a v2 backup's takes seconds,
-    /// and an older one's, or one moved on to v2, minutes (VAULT-128).
-    public var keyDerivationTime: BackupKeyDerivationTime {
-        BackupKeyDerivationTime(signature: VaultKeyDeriver.Signature(rawValue: encryptedVault.keygenSignature))
-    }
-
     public func attemptDecryption() async {
         do {
             guard enteredPassword.isNotEmpty else { throw MissingPasswordError() }

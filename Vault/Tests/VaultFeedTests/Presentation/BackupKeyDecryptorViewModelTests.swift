@@ -163,33 +163,6 @@ struct BackupKeyDecryptorViewModelTests {
 // MARK: - Key derivations
 
 extension BackupKeyDecryptorViewModelTests {
-    @Test @LeakTracked
-    func keyDerivationTime_isTheBackupsDerivations() throws {
-        let times: [VaultKeyDeriver.Signature: BackupKeyDerivationTime] = [
-            .backupSecureV2: .upToAMinute,
-            .backupFastV2: .upToAMinute,
-            .backupSecureV1: .upToThreeMinutes,
-            .backupSecureV1ThenV2: .upToThreeMinutes,
-            .backupFastV1: .upToThreeMinutes,
-        ]
-        for (signature, time) in times {
-            var vault = anyEncryptedVault()
-            vault.keygenSignature = signature.rawValue
-            let sut = makeSUT(encryptedVault: vault)
-
-            #expect(sut.keyDerivationTime == time, "\(signature)")
-        }
-    }
-
-    @Test @LeakTracked
-    func keyDerivationTime_ofADerivationThisVersionDoesntKnow_isTheLonger() throws {
-        var vault = anyEncryptedVault()
-        vault.keygenSignature = "vault.keygen.backup.secure.v3"
-        let sut = makeSUT(encryptedVault: vault)
-
-        #expect(sut.keyDerivationTime == .upToThreeMinutes)
-    }
-
     /// Made by a newer version of Vault: it says so, rather than "Missing Key Deriver", without deriving anything.
     @Test @LeakTracked
     func attemptDecryption_backupFromANewerVersion_saysToUpdateVault() async throws {

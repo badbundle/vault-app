@@ -316,9 +316,9 @@ extension VaultKeyDeriver {
 
             /// V2 secure key deriver for backups: Argon2id over 512 MiB, with 32 passes and 4 lanes.
             ///
-            /// Every backup password set or changed from v2 on derives with it. It takes about 7 seconds on an M5 Max
-            /// with its lanes run one after another, and about 14 on an iPhone 11, and needs 512 MiB, so it only ever
-            /// runs in the app, never in an extension (see `docs/on-device-encryption.md`).
+            /// Every backup password set or changed from v2 on derives with it. It takes about 1.7 seconds on an M5
+            /// Max, with its lanes on threads of their own, and at most about 14 on an iPhone 11, and needs 512 MiB, so
+            /// it only ever runs in the app, never in an extension (see `docs/on-device-encryption.md`).
             public static let v2 = VaultKeyDeriver(
                 deriver: Argon2idKeyDeriver<32>(parameters: v2Parameters),
                 signature: .backupSecureV2,

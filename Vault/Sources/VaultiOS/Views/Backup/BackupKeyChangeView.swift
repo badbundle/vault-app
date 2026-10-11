@@ -82,7 +82,8 @@ struct BackupKeyChangeView: View {
             ToolbarItem(placement: .cancellationAction) {
                 // Deliberately enabled while the keygen runs: with
                 // interactive dismissal disabled, this is the only
-                // escape hatch from the up-to-3-minute derivation.
+                // escape hatch from the derivation, which can take up to
+                // a minute.
                 Button {
                     keyGenerationTask?.cancel()
                     dismiss()
@@ -255,12 +256,7 @@ struct BackupKeyChangeView: View {
         case .creating:
             HStack(alignment: .center, spacing: 4) {
                 ProgressView()
-                switch viewModel.keyDerivationTime {
-                case .upToAMinute:
-                    Text("Securing your password. This can take up to a minute.")
-                case .upToThreeMinutes:
-                    Text("Securing your password. This can take up to 3 minutes.")
-                }
+                Text("Securing your password. This can take up to a minute.")
             }
         case .passwordConfirmError:
             Label("Passwords do not match", systemImage: "xmark")

@@ -92,7 +92,7 @@ final class BackupKeyChangeViewSnapshotTests {
     }
 
     /// The Cancel button must render enabled while the keygen runs — it
-    /// is the only escape hatch from the up-to-3-minute derivation, since
+    /// is the only escape hatch from the up-to-a-minute derivation, since
     /// interactive dismissal is disabled during `.creating`.
     @Test
     func layoutCreatingState() async {
