@@ -8,9 +8,10 @@ import VaultKeygen
 /// `uniqueAlgorithmIdentifier` encodes all parameters (including nesting
 /// via `COMBINATION<...|...>`), so any drift in the chains fails here on
 /// every run. This exists because a full pinned-vector test of
-/// `Backup.Secure.v1` costs minutes of KDF per run and would rot skipped;
-/// the fast pinned vectors in `VaultKeyDeriverTests` prove the shared
-/// composition machinery, and this test pins the secure parameters.
+/// `Backup.Secure.v1` costs half a minute of scrypt per debug run and would
+/// rot skipped; the fast pinned vectors in `VaultKeyDeriverTests` prove the
+/// shared composition machinery, `PBKDF2KeyDeriverTests` pins its PBKDF2
+/// step's output, and this test pins the secure parameters.
 struct VaultKeyDeriverParameterPinTests {
     @Test
     func backupSecureV1_pinsExactKDFChain() {

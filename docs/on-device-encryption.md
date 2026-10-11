@@ -373,8 +373,10 @@ Calibration adds about 0.3–1.5 s, once, to setting the password. It runs behin
 **API.** It's a new `Argon2idKeyDeriver` in `CryptoEngine`, parameterized by the header. It isn't a fixed
 `VaultKeyDeriver.Signature`, because its parameters differ from file to file.
 
-For comparison, the existing per-item password KDF (`Item.Secure.v1`) takes 733 ms on the M5 Max. The backup's
-`Secure.v1` spends about 13 s on PBKDF2 alone there, and minutes on an iPhone.
+For comparison, the existing per-item password KDF (`Item.Secure.v1`) took 733 ms on the M5 Max. The backup's
+`Secure.v1` spent about 13 s on PBKDF2 alone there, and minutes on an iPhone. Both used CryptoSwift's PBKDF2 until
+VAULT-128 moved them to CommonCrypto's, which derives exactly the same keys: `Item.Secure.v1` now takes about 140 ms,
+and `Secure.v1`'s PBKDF2 about 2 s (see [Key derivation](#key-derivation-1) in the appendix).
 
 ### On-disk format (`vault-slots.v1`)
 
@@ -1580,6 +1582,23 @@ an A15-class iPhone is estimated at about twice as slow.
 
 The optimized scrypt matched RFC 7914's vectors and CryptoSwift's output. A process deriving with 64 MiB peaked
 at a 75 MB footprint.
+
+**VAULT-128** made the app's derivations faster without changing their output. PBKDF2 moved from CryptoSwift to
+CommonCrypto, and `CArgon2` is built with threads, so an Argon2id derivation's lanes run in parallel. Measured with
+`vault-keygen-speedtest --runs 3` (the fastest of three runs) on the M5 Max while other builds ran, at a load average
+of about 12 before and 85–105 after, so the after figures are if anything slow:
+
+| Derivation | Before | After |
+| --- | ---: | ---: |
+| PBKDF2-SHA384, 372,002 iterations | 960 ms | 142 ms |
+| PBKDF2-SHA384, 5,452,351 iterations | 13.6 s | 2.1 s |
+| `Item.Secure.v1` | 1,006 ms | 139 ms |
+| `Backup.Secure.v1` | 15.4 s | 2.8 s |
+| Argon2id m=64 MiB, t=3, p=1 (the App Lock Password's) | 99 ms | 92 ms (the same code) |
+| Argon2id m=64 MiB, t=3, p=4 | 97 ms | 33 ms |
+
+Four lanes add four thread stacks of a few KiB each: a 64 MiB derivation's peak footprint grew by 64 KiB. With one
+lane, as the App Lock Password uses, no thread is started.
 
 ### Payload sizes
 

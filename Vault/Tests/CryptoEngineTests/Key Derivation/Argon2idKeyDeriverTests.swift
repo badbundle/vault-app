@@ -7,7 +7,7 @@ import Testing
 /// Serialized, as the tests that watch the working memory share one log of it.
 @Suite(.serialized)
 struct Argon2idKeyDeriverTests {
-    /// RFC 9106, section 5.3: Argon2id with a secret and associated data, over 4 lanes.
+    /// RFC 9106, section 5.3: Argon2id with a secret and associated data, over 4 lanes, which run in parallel.
     @Test
     func hash_matchesRFC9106TestVector() throws {
         let tag = try Argon2id.hash(
@@ -30,6 +30,21 @@ struct Argon2idKeyDeriverTests {
         let key = try sut.key(password: Data(answer.password.utf8), salt: Data(answer.salt.utf8))
 
         #expect(key.data == Data(hex: answer.hex))
+    }
+
+    /// The App Lock Password's memory and passes, over one lane, as it uses, and over four, which run in parallel.
+    /// The keys are the ones derived before VAULT-128, when the reference was built to run lanes one after another
+    /// (`ARGON2_NO_THREADS`). argon2-cffi, built with threads, derives the same.
+    @Test(arguments: [
+        (1, "0b2b7614c92417dbae5ad67e179de78a4b4d5ee89ac0c24a4d23995ccb363d95"),
+        (4, "bd8a1711bf2db6f771c47d5560d1f2d13930b8e2eade78ca63354718d0bf3c62"),
+    ] as [(UInt32, String)])
+    func key_over64MiB_matchesTheKeyDerivedOneLaneAtATime(lanes: UInt32, hex: String) throws {
+        let sut = Argon2idKeyDeriver<32>(parameters: .init(memoryKiB: 64 * 1024, iterations: 3, parallelism: lanes))
+
+        let key = try sut.key(password: Data("hello world".utf8), salt: Data("somesalt".utf8))
+
+        #expect(key.data == Data(hex: hex))
     }
 
     @Test
@@ -177,6 +192,30 @@ extension Argon2idKeyDeriverTests {
         #expect(key == Data(hex: "9dfeb910e80bad0311fee20f9c0e2b12c17987b4cac90c2ef54d5b3021c68bfe"))
     }
 
+    /// Lanes that run in parallel share the one block of working memory, which is wiped all the same.
+    @Test
+    func hash_withFourLanes_wipesTheWorkingMemoryBeforeFreeingIt() throws {
+        WorkingMemoryLog.records.modify { $0.removeAll() }
+
+        let tag = try Argon2id.hash(
+            password: Data(repeating: 0x01, count: 32),
+            salt: Data(repeating: 0x02, count: 16),
+            secret: Data(repeating: 0x03, count: 8),
+            associatedData: Data(repeating: 0x04, count: 12),
+            parameters: Argon2idParameters(memoryKiB: 32, iterations: 3, parallelism: 4),
+            length: 32,
+            allocate: WorkingMemoryLog.allocate,
+            free: WorkingMemoryLog.free,
+        )
+
+        let records = WorkingMemoryLog.records.get { $0 }
+        let everyBlockWasWiped = records.allSatisfy(\.wasWiped)
+        #expect(records.map(\.size) == [32 * 1024], "One 32 KiB block of working memory")
+        #expect(everyBlockWasWiped)
+        // RFC 9106's vector, as in `hash_matchesRFC9106TestVector`.
+        #expect(tag == Data(hex: "0d640df58d78766c08c037a34a8b53c9d01ef0452d75b65eb52520e96b01e659"))
+    }
+
     /// The most working memory a derivation holds with the App Lock Password's parameters
     /// (`AppLockKeyDerivation.memoryKiB`): the 64 MiB it asks for, in one block, wiped before it's freed, and nothing
     /// more. The AutoFill extension checks it has that much to spare before it derives
@@ -265,8 +304,8 @@ extension Argon2idParameters {
 
 /// Allocates and frees Argon2's working memory, recording whether each block was wiped by the time it was freed.
 ///
-/// The reference implementation's callbacks can't carry any context, so the log is global. Only
-/// `hash_wipesTheWorkingMemoryBeforeFreeingIt` uses it.
+/// The reference implementation's callbacks can't carry any context, so the log is global. Only the tests under
+/// Wiping use it.
 private enum WorkingMemoryLog {
     struct Record: Sendable {
         var size: Int

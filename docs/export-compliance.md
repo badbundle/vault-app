@@ -35,7 +35,8 @@ What Vault uses, and whether it's encryption:
 | --- | --- | --- |
 | AES-GCM for the vault file, encrypted items, recovery phrases, backups and transfers | CryptoKit | Yes, Apple's |
 | The keychain and iOS Data Protection | iOS | Yes, Apple's |
-| scrypt, PBKDF2 and HKDF, which turn a password into a key | CryptoSwift | No: key derivation is one-way and can't decrypt anything |
+| PBKDF2, which turns a password into a key | CommonCrypto (Apple's) | No: key derivation is one-way and can't decrypt anything |
+| scrypt and HKDF, which do the same | CryptoSwift | No, as above |
 | Argon2id, which turns the App Lock Password into a key | `CArgon2`, the reference C implementation | No, as above |
 | HMAC for HOTP and TOTP codes | CryptoSwift | No: that's authentication |
 | SHA digests | CryptoSwift | No: that's data integrity |
@@ -47,7 +48,9 @@ for data confidentiality leaves out authentication, digital signatures and data 
 ([BIS](https://www.bis.gov/learn-support/encryption-controls/cryptography-for-data-confidentiality)).
 
 scrypt and Argon2 have no implementation in Apple's operating system, and they can't be replaced: backups and vaults
-made with them have to keep opening (G67 in [`security-model.md`](./security-model.md)).
+made with them have to keep opening (G67 in [`security-model.md`](./security-model.md)). PBKDF2 does: VAULT-128 moved
+it from CryptoSwift to CommonCrypto's `CCKeyDerivationPBKDF`, which derives the same keys much faster. Either way it's
+key derivation, not encryption, so it changed nothing here.
 
 ## What the library doesn't change
 

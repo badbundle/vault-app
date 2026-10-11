@@ -47,7 +47,9 @@ Vault defines some standard key derivers that are used by default to create encr
 
 In the case of a composition key deriver: the output at each step is directed as an input to the next step.
 
-These derivers are benchmarked via `make benchmark-keygen`, so you can see their performance on your machine.
+These derivers are benchmarked via `make benchmark-keygen`, so you can see their performance on your machine. It prints
+how long each one takes, and the steps that cost the most on their own. For the fastest of several runs, run
+`swift run -c release vault-keygen-speedtest --runs 3`.
 
 | Key Deriver Namespace        | Purpose                                                                                                                                                                                                                                                                                                                 |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

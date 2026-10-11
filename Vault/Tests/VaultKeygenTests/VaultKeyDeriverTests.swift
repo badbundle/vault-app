@@ -96,6 +96,21 @@ struct VaultKeyDeriverTests {
         """)
     }
 
+    /// Derived before VAULT-128, when PBKDF2 was CryptoSwift's. Items encrypted with their own password use this.
+    @Test
+    func Item_Secure_v1_recreatesExpectedKeyForSamePasswordAndSalt() throws {
+        let result = try VaultKeyDeriver.Item.Secure.v1.recreateEncryptionKey(
+            password: "hello world",
+            salt: Data("salt".utf8),
+        )
+
+        #expect(result.key.data.toHexString() == """
+        b90904e2241fe404a7b6a0a483db830dd6534e79a59b4c63e62f24f0e689d268
+        """)
+        #expect(result.salt == Data("salt".utf8))
+        #expect(result.keyDervier == .itemSecureV1)
+    }
+
     @Test(arguments: VaultKeyDeriver.Signature.allCases)
     func lookupSignature_looksUpCorrect(signature: VaultKeyDeriver.Signature) {
         let result = VaultKeyDeriver.lookup(signature: signature)
