@@ -56,6 +56,8 @@ struct VaultMacSettingsTests {
             ),
             dataModel: dataModel,
             authentication: authentication,
+            // Kept out of Time Machine only once the user chooses.
+            backupExclusion: VaultStorageBackupExclusion(directory: .temporaryDirectory),
         )
 
         assertSnapshot(

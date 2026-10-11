@@ -116,8 +116,9 @@ sizes:
 - **General:** Tap a Code To, Show Next Code, the Clear Clipboard time, Universal Clipboard for codes and for notes
   (both off), and Lock New Items.
 - **Security:** Require Unlock, Hide While Recording, the App Lock Password (Change Password, Set Duress Password and
-  Erase Vault After 10 Failed Passwords, each with the current password, in a sheet), and the Danger Zone's Delete All
-  Data, which asks first and then for Touch ID or the Mac's password (G15).
+  Erase Vault After 10 Failed Passwords, each with the current password, in a sheet), Keep Out of Time Machine (see
+  [Time Machine](#time-machine)), and the Danger Zone's Delete All Data, which asks first and then for Touch ID or the
+  Mac's password (G15).
 
 Not on the Mac: Turn Off Password (G85), App Lock itself, which the password keeps on, Show in Spotlight, which is
 always off with the password on (G49), and Show New Codes in QuickType, as there's no QuickType to fill (see
@@ -490,6 +491,18 @@ The sandbox keeps other sandboxed apps out of both. Since macOS 14, other apps r
 user first, and since macOS 15 that covers Group Containers too. A process running as the user with Full Disk Access
 can still copy the vault file. It's encrypted, so, as with a copy of an iPhone's files, they can only guess at the
 password offline (G33, G64).
+
+### Time Machine
+
+Time Machine backs up the App Group's container as it does other apps' data, so its backups, and the local snapshots
+it keeps on the Mac's own disk, hold the vault file as it was then: an item a killphrase deleted, or a vault an erase
+removed, can come back from one with the App Lock Password it had then (C6). Keep Out of Time Machine, in Settings,
+sets `isExcludedFromBackup` on the container itself (`VaultStorageBackupExclusion`, G97), so every file in it, the
+vault file included however often a save replaces it, is left out of the backups Time Machine makes from then on. The
+container is the only record of the choice.
+
+It's off by default, as a backup is how a lost Mac's vault comes back. It can't keep the vault out of local snapshots,
+which are of the whole disk, or out of backups already made: an accepted limit. The FAQ's About Backups page says so.
 
 ### Signing
 

@@ -53,6 +53,10 @@ enum VaultMacRoot {
 
     static let vaultStorageDirectory: URL = VaultSharedStorage.directory(fileManager: fileManager)
 
+    /// Keep Out of Time Machine, in Settings: whether the App Group's container, with the vault file, is left out of
+    /// Time Machine's backups.
+    static let vaultBackupExclusion = VaultStorageBackupExclusion(directory: vaultStorageDirectory)
+
     /// Why the vault couldn't be opened, if it couldn't. The main window shows a failure screen instead of the vault.
     private(set) static var vaultStoreLoadFailure: VaultMacStoreFailure?
 
