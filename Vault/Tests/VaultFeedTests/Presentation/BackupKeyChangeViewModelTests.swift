@@ -27,6 +27,22 @@ struct BackupKeyChangeViewModelTests {
         #expect(sut.keyDerivationTime == .upToAMinute)
     }
 
+    /// The user is waiting, so the key is derived at user-initiated priority, not background.
+    @Test
+    func saveEnteredPassword_derivesAtUserInitiatedPriority() async {
+        let deriver = QoSRecordingKeyDeriver()
+        let factory = VaultKeyDeriverFactoryMock()
+        factory.makeVaultBackupKeyDeriverHandler = { VaultKeyDeriver(deriver: deriver, signature: .testing) }
+        let sut = makeSUT(deriverFactory: factory)
+        sut.newlyEnteredPassword = "a long password"
+        sut.newlyEnteredPasswordConfirm = "a long password"
+
+        await sut.saveEnteredPassword()
+
+        #expect(sut.newPassword == .success)
+        #expect(deriver.qualitiesOfService == [QOS_CLASS_USER_INITIATED])
+    }
+
     @Test
     func init_initialPermissionStateLoading() {
         let sut = makeSUT()

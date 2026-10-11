@@ -41,6 +41,32 @@ struct EncryptedItemDetailViewModelUpgradeTests {
         #expect(reopened == note)
     }
 
+    /// The user is waiting for the item, so both derivations, opening it and moving it to v2, run at user-initiated
+    /// priority, not background.
+    @Test
+    func startDecryption_v1Item_derivesAtUserInitiatedPriority() async throws {
+        let deriver = QoSRecordingKeyDeriver()
+        let factory = VaultKeyDeriverFactoryMock()
+        factory.lookupVaultKeyDeriverHandler = { VaultKeyDeriver(deriver: deriver, signature: $0) }
+        let key = try VaultKeyDeriver(deriver: VaultKeyDeriver.testing, signature: .itemSecureV1)
+            .createEncryptionKey(password: "open sesame")
+        let item = try VaultItemEncryptor(key: key).encrypt(item: anySecureNote())
+        let store = VaultStoreEncryptedItemReplacerMock()
+        store.replaceEncryptedItemHandler = { _, _, _ in true }
+        let sut = EncryptedItemDetailViewModel(
+            item: item,
+            metadata: anyVaultItemMetadata(),
+            keyDeriverFactory: factory,
+            itemStore: store,
+        )
+        sut.enteredEncryptionPassword = "open sesame"
+
+        await sut.startDecryption()
+
+        #expect(store.replaceEncryptedItemCallCount == 1)
+        #expect(deriver.qualitiesOfService == [QOS_CLASS_USER_INITIATED, QOS_CLASS_USER_INITIATED])
+    }
+
     @Test
     func startDecryption_v2Item_isLeftAsItIs() async throws {
         let item = try encrypt(anySecureNote(), with: .Item.Fast.v2, password: "open sesame")

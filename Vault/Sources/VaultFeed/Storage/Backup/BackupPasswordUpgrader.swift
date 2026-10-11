@@ -8,7 +8,7 @@ import VaultKeygen
 public protocol BackupPasswordUpgrading: Sendable {
     /// `password` carried on to the derivation that replaces its own, or `nil` if Vault has none stronger for it.
     ///
-    /// Runs off the main actor, for as long as that derivation takes: seconds on an iPhone.
+    /// Runs off the main actor, at utility priority, for as long as that derivation takes: seconds on an iPhone.
     func upgraded(_ password: DerivedEncryptionKey) async throws -> DerivedEncryptionKey?
 }
 
@@ -30,7 +30,9 @@ public struct BackupPasswordUpgrader: BackupPasswordUpgrading {
     public func upgraded(_ password: DerivedEncryptionKey) async throws -> DerivedEncryptionKey? {
         guard let signature = password.keyDervier.storedBackupKeyUpgrade else { return nil }
         let keyDeriver = keyDeriverFactory.lookupVaultKeyDeriver(signature: signature)
-        return try await Task.background {
+        // Nobody waits for it, but at background priority an iPhone could keep it to its efficiency cores for
+        // minutes, with its 512 MiB held all the while.
+        return try await Task.runDetached(priority: .utility) {
             try keyDeriver.continueDerivation(from: password)
         }
     }

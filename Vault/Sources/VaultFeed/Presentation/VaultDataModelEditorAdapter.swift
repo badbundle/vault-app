@@ -187,20 +187,21 @@ extension VaultDataModelEditorAdapter: SecureNoteDetailEditor {
         )
         if edits.newEncryptionPassword.isNotBlank {
             // An explicit new encryption password has been specified.
-            // Derive the key and encrypt the item.
+            // Derive the key and encrypt the item. The user is waiting for the save, so this isn't at background
+            // priority, which an iPhone can keep to its efficiency cores.
             let keyDervier = keyDeriverFactory.makeVaultItemKeyDeriver()
-            let encryptionKey = try await Task.background {
+            let encryptionKey = try await Task.userInitiated {
                 try keyDervier.createEncryptionKey(password: edits.newEncryptionPassword)
             }
             let encryptor = VaultItemEncryptor(key: encryptionKey)
-            let encryptedNote = try await Task.background {
+            let encryptedNote = try await Task.userInitiated {
                 try encryptor.encrypt(item: note)
             }
             return .encryptedItem(encryptedNote)
         } else if let encryptionKey = edits.existingEncryptionKey {
             // Use the existing encryption key, as the user does not want to override the existing one.
             let encryptor = VaultItemEncryptor(key: encryptionKey)
-            let encryptedNote = try await Task.background {
+            let encryptedNote = try await Task.userInitiated {
                 try encryptor.encrypt(item: note)
             }
             return .encryptedItem(encryptedNote)
@@ -250,7 +251,7 @@ extension VaultDataModelEditorAdapter: RecoveryPhraseDetailEditor {
         let encryptionKey: DerivedEncryptionKey
         if edits.newEncryptionPassword.isNotBlank {
             let keyDeriver = keyDeriverFactory.makeVaultItemKeyDeriver()
-            encryptionKey = try await Task.background {
+            encryptionKey = try await Task.userInitiated {
                 try keyDeriver.createEncryptionKey(password: edits.newEncryptionPassword)
             }
         } else if let existingEncryptionKey = edits.existingEncryptionKey {
@@ -260,7 +261,7 @@ extension VaultDataModelEditorAdapter: RecoveryPhraseDetailEditor {
         }
         let phrase = edits.makeRecoveryPhrase()
         let encryptor = VaultItemEncryptor(key: encryptionKey)
-        let encryptedItem = try await Task.background {
+        let encryptedItem = try await Task.userInitiated {
             try encryptor.encrypt(item: phrase)
         }
         return (encryptedItem, encryptionKey)

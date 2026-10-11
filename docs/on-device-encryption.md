@@ -458,6 +458,12 @@ earlier backup PDF keeps v1 items. Anyone with one of those guesses at v1's cost
 **A newer signature.** A backup or item whose signature this version doesn't know was made by a newer one, so it
 says "Needs a Newer Version of Vault" instead of failing to derive.
 
+**Priority.** Every derivation the user waits on runs at user-initiated priority (`Task.userInitiated`): restoring a
+backup, setting a backup password, and opening an item or saving it with a new password. At background priority an
+iPhone can keep the work, and the threads Argon2id starts for its lanes, which take the starting thread's quality of
+service, to its efficiency cores, which could turn seconds into minutes. Moving a stored backup key to v2, which
+nobody waits on, runs at utility priority, not background, so its 512 MiB isn't held for minutes.
+
 **Memory.** 256 MiB and 512 MiB are far more than an extension can have (AutoFill about 120 MiB, widgets about
 30 MiB), so v2 derivations only ever run in the app:
 

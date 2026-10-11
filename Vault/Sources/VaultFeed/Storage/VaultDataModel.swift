@@ -506,7 +506,8 @@ extension VaultDataModel {
               password.keyDervier.storedBackupKeyUpgrade != nil
         else { return }
         let writes = backupPasswordWrites
-        backupPasswordUpgrade = Task { [weak self] in
+        // At utility priority, as the derivation runs: awaiting it from a task of higher priority would raise it.
+        backupPasswordUpgrade = Task(priority: .utility) { [weak self] in
             defer { self?.backupPasswordUpgrade = nil }
             guard let upgraded = try? await backupPasswordUpgrader.upgraded(password) else { return }
             guard let self, change == openVaultChanges, writes == backupPasswordWrites else { return }

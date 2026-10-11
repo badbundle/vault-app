@@ -1,6 +1,7 @@
 import Combine
 import CryptoEngine
 import Foundation
+import FoundationExtensions
 import TestHelpers
 import Testing
 import VaultBackup
@@ -207,6 +208,28 @@ extension BackupKeyDecryptorViewModelTests {
         #expect(error.userTitle == "Needs a Newer Version of Vault")
         #expect(error.userDescription == "This was made by a newer version of Vault. Update Vault, then try again.")
         #expect(factory.lookupVaultKeyDeriverCallCount == 0)
+    }
+
+    /// The user is waiting, so deriving and decrypting run at user-initiated priority: at background priority an
+    /// iPhone can keep them, and Argon2id's lane threads, to its efficiency cores.
+    @Test @LeakTracked
+    func attemptDecryption_derivesAndDecryptsAtUserInitiatedPriority() async throws {
+        let deriver = QoSRecordingKeyDeriver()
+        let factory = VaultKeyDeriverFactoryMock()
+        factory.lookupVaultKeyDeriverHandler = { VaultKeyDeriver(deriver: deriver, signature: $0) }
+        let decoder = EncryptedVaultDecoderMock()
+        let decodingQoS = SharedMutex<qos_class_t?>(nil)
+        decoder.decryptAndDecodeHandler = { _, _ in
+            decodingQoS.modify { $0 = qos_class_self() }
+            return anyVaultApplicationPayload()
+        }
+        let sut = makeSUT(keyDeriverFactory: factory, encryptedVaultDecoder: decoder)
+        sut.enteredPassword = "hello"
+
+        await sut.attemptDecryption()
+
+        #expect(deriver.qualitiesOfService == [QOS_CLASS_USER_INITIATED])
+        #expect(decodingQoS.value == QOS_CLASS_USER_INITIATED)
     }
 
     /// A backup made with a stored v1 key moved on to v2 restores from the password: v1, then v2.

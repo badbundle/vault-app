@@ -114,7 +114,8 @@ public final class BackupKeyChangeViewModel {
 
             newPassword = .creating
             let password = newlyEnteredPassword
-            let createdBackupPassword = try await Task.background {
+            // The user is waiting, so not at background priority, which an iPhone can keep to its efficiency cores.
+            let createdBackupPassword = try await Task.userInitiated {
                 try self.encryptionKeyDeriver.createEncryptionKey(password: password)
             }
             // The KDF body is synchronous, so cancellation cannot
