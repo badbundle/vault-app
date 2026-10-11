@@ -97,8 +97,12 @@ enum TransferQRCodes {
         }
         var codes = [String]()
         for index in 0 ..< count {
-            for _ in 0 ..< 100 where screen.state != .displayingQR(currentIndex: index, totalCount: count) {
-                await Task.yield()
+            // Each code is rendered off the main actor before it shows, so this waits up to a few seconds for it.
+            let deadline = ContinuousClock.now + .seconds(5)
+            while screen.state != .displayingQR(currentIndex: index, totalCount: count),
+                  ContinuousClock.now < deadline
+            {
+                try await Task.sleep(for: .milliseconds(5))
             }
             #expect(screen.state == .displayingQR(currentIndex: index, totalCount: count))
             let image = try #require(screen.currentQRCodeImage?.pngData())
