@@ -16,7 +16,7 @@ struct VaultMacSettingsView: View {
     /// How tall the General tab is: enough for all its rows at the default text size. At larger sizes it scrolls.
     static let generalHeight = 520.0
     /// How tall the Security tab is, likewise.
-    static let securityHeight = 740.0
+    static let securityHeight = 728.0
 
     /// The window's root, as the Mac's settings window only puts the tabs in its toolbar for a root `TabView`. Each tab
     /// has its own size, which the window takes as the tab is chosen, and shows only that Vault is locked while it is.
@@ -182,7 +182,7 @@ struct VaultMacSecuritySettings: View {
                 Text("Time Machine")
             } footer: {
                 footnote(
-                    "Keeps your vaults out of Time Machine's backups from now on, so keep your own from Backups. Backups Time Machine has already made, and its local snapshots, still hold them as they were.",
+                    "Time Machine doesn't back up your vaults, so keep your own backups from Backups. Its local snapshots, and backups it made before, still hold them as they were.",
                 )
             }
             Section {

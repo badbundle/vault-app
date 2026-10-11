@@ -23,13 +23,13 @@ This method ensures that you have a tangible copy of your data that is immune to
 
 ## What about Time Machine on a Mac?
 
-Time Machine backs up Vault's data on a Mac, as it does other apps'. That's the encrypted vault, as it was when each backup was made, and it opens with the App Lock Password it had then.
-Time Machine also keeps local snapshots of the Mac's own disk for a while, which hold the vault the same way.
-So an item you've deleted since, with a killphrase too, or a vault you've erased, could come back from one.
+On a Mac, Vault keeps your vaults out of Time Machine's backups, unless you turn off **Keep Out of Time Machine** in Vault's Settings, under Security.
+A Time Machine backup would hold the encrypted vault as it was when it was made, with the App Lock Password it had then, so an item you've deleted since, with a killphrase too, or a vault you've erased, could come back from one.
 
-To leave your vaults out of Time Machine's backups from now on, turn on **Keep Out of Time Machine** in Vault's Settings, under Security.
-Backups Time Machine has already made, and its local snapshots, still hold them as they were.
-Without Time Machine, a lost or broken Mac's vault can only come back from a backup you made in Vault, so keep one somewhere safe.
+That means Time Machine can't bring your vault back if your Mac is lost or broken: a backup you made in Vault is how it comes back, so keep one somewhere safe.
+
+Time Machine also keeps local snapshots of the Mac's own disk for a while, and those hold the vault as it was, whatever the setting.
+So do any Time Machine backups made before Vault kept the vault out, or while the setting was off.
 
 ## What does a backup look like?
 
@@ -45,7 +45,7 @@ Nothing else in it can be read without the password.
 
 ## What happens to items I delete?
 
-They stay in any backup made before you deleted them, including items deleted by a killphrase, and on a Mac, in Time Machine's backups and local snapshots.
+They stay in any backup made before you deleted them, including items deleted by a killphrase, and on a Mac, in Time Machine's local snapshots, and its backups if you've let it back up Vault.
 Automatic backups keep earlier versions of your vault in their folder until Vault cleans them up, after the time you chose in **Keep Backups For**, so a deleted item is still in those files until then.
 Choose how long backups are kept with that in mind, and keep the folder somewhere you trust.
 Files deleted from iCloud Drive stay in its Recently Deleted folder for 30 days.

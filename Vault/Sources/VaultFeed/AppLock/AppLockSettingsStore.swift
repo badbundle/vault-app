@@ -10,7 +10,8 @@ import SwiftSecurity
 /// (`AppLockDeviceSettingsKeychainStorage`), where only Vault can change them: other processes running as the user can
 /// be allowed into the App Group's container there, and so its defaults. On iOS, only Vault can reach that container,
 /// so they stay in its defaults (VAULT-118). The first time the Mac reads them, what an earlier version kept in the
-/// defaults moves to the keychain, once. If the keychain can't be read, each reads as its safer value.
+/// defaults moves to the keychain, once. If the keychain can't be read, each reads as its safer value. The Mac keeps
+/// whether the user has let Time Machine back up the vault there too.
 ///
 /// `UserDefaults` is documented thread-safe, and this only reads and writes single values through it. Marked
 /// `@unchecked Sendable` so the widget extension's actor can hold it.
@@ -110,6 +111,28 @@ public struct AppLockSettingsStore: @unchecked Sendable { // swiftlint:disable:t
         }
         var settings = try loadDeviceSettings(from: deviceSettings)
         settings.delaySeconds = delay.rawValue
+        try deviceSettings.save(settings)
+    }
+
+    /// Whether the user has turned Keep Out of Time Machine off, so the Mac's own backups include the vault
+    /// (`VaultStorageBackupExclusion`, VAULT-118). Off unless they do: keeping the vault out is the protective choice
+    /// (MANIFESTO C7). It's kept with erasing and the delay, where only Vault can change it. Only the Mac has it, so
+    /// it's always off elsewhere.
+    ///
+    /// - Throws: If it can't be read. Whatever acts on it keeps the vault out then.
+    public func loadIncludesVaultInBackups() throws -> Bool {
+        guard let deviceSettings else { return false }
+        return try loadDeviceSettings(from: deviceSettings).includesVaultInBackups
+    }
+
+    /// Lets the device's own backups include the vault, or keeps it out of them. It's in storage by the time this
+    /// returns.
+    ///
+    /// - Throws: If it couldn't be stored, and it's as it was, or where there's nowhere to keep it, as on iOS.
+    public func setIncludesVaultInBackups(_ includes: Bool) throws {
+        guard let deviceSettings else { throw CocoaError(.featureUnsupported) }
+        var settings = try loadDeviceSettings(from: deviceSettings)
+        settings.includesVaultInBackups = includes
         try deviceSettings.save(settings)
     }
 

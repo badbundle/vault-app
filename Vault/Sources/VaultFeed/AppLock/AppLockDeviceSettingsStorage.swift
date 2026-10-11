@@ -2,18 +2,37 @@ import Foundation
 import Security
 import SwiftSecurity
 
-/// The app lock's settings that protect the vault and belong to the device, not to a vault: erasing after failed
-/// passwords, and the Require Unlock delay. Weakening either needs the App Lock Password or the user's
-/// authentication, so on the Mac, `AppLockSettingsStore` keeps them where only Vault can change them.
+/// The settings that protect the vault and belong to the device, not to a vault: erasing after failed passwords, the
+/// Require Unlock delay, and whether the vault is kept out of the device's own backups. Weakening the first two needs
+/// the App Lock Password or the user's authentication, and the last is on unless the user turns it off (C7), so on the
+/// Mac, `AppLockSettingsStore` keeps them where only Vault can change them.
 struct AppLockDeviceSettings: Codable, Equatable, Sendable {
     /// Whether `AppLockPasswordAttemptCounter.eraseThreshold` wrong App Lock Passwords in a row erase every vault.
     var erasesAfterFailedPasswords: Bool
     /// The Require Unlock delay in seconds, as an `AppLockDelay` raw value. Kept as a number, so a value this version
     /// doesn't know reads as Immediately rather than failing to decode.
     var delaySeconds: Int
+    /// Whether the user has turned Keep Out of Time Machine off, so the device's own backups include the vault
+    /// (`VaultStorageBackupExclusion`). Off unless they do.
+    var includesVaultInBackups: Bool
 
     var delay: AppLockDelay {
         AppLockDelay(rawValue: delaySeconds) ?? .default
+    }
+
+    init(erasesAfterFailedPasswords: Bool, delaySeconds: Int, includesVaultInBackups: Bool = false) {
+        self.erasesAfterFailedPasswords = erasesAfterFailedPasswords
+        self.delaySeconds = delaySeconds
+        self.includesVaultInBackups = includesVaultInBackups
+    }
+
+    /// Settings stored before a setting was added read it as its default, which is always the protective one, rather
+    /// than failing to decode, which would leave every setting unreadable and unchangeable.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        erasesAfterFailedPasswords = try container.decode(Bool.self, forKey: .erasesAfterFailedPasswords)
+        delaySeconds = try container.decode(Int.self, forKey: .delaySeconds)
+        includesVaultInBackups = try container.decodeIfPresent(Bool.self, forKey: .includesVaultInBackups) ?? false
     }
 }
 

@@ -263,6 +263,42 @@ struct AppLockSettingsStoreTests {
         #expect(userDefaults.object(forKey: Self.delayKey) == nil)
     }
 
+    // MARK: - Keep Out of Time Machine
+
+    @Test
+    func includesVaultInBackups_isOffByDefault() throws {
+        #expect(try !AppLockSettingsStore.keepingDeviceSettings().loadIncludesVaultInBackups())
+        #expect(try !AppLockSettingsStore(userDefaults: .nonPersistent()).loadIncludesVaultInBackups())
+    }
+
+    /// It's kept with erasing and the delay, where only Vault can change it, and leaves them as they were.
+    @Test
+    func setIncludesVaultInBackups_storesItWithTheOtherDeviceSettings() throws {
+        let storage = InMemoryAppLockDeviceSettingsStorage(
+            settings: AppLockDeviceSettings(erasesAfterFailedPasswords: true, delaySeconds: 60),
+        )
+        let sut = try AppLockSettingsStore.keepingDeviceSettings(in: storage)
+
+        try sut.setIncludesVaultInBackups(true)
+
+        #expect(storage.settings == AppLockDeviceSettings(
+            erasesAfterFailedPasswords: true,
+            delaySeconds: 60,
+            includesVaultInBackups: true,
+        ))
+        #expect(try AppLockSettingsStore.keepingDeviceSettings(in: storage).loadIncludesVaultInBackups())
+    }
+
+    /// Only the Mac has the setting, so there's nowhere else to keep it.
+    @Test
+    func setIncludesVaultInBackups_withoutDeviceSettings_throws() throws {
+        let sut = try AppLockSettingsStore(userDefaults: .nonPersistent())
+
+        #expect(throws: CocoaError.self) {
+            try sut.setIncludesVaultInBackups(true)
+        }
+    }
+
     private static let delayKey = "vault.preferences.app-lock.delay"
     private static let erasesKey = "vault.preferences.app-lock.erases-after-failed-passwords"
 }

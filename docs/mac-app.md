@@ -326,7 +326,8 @@ first time they're read, what an earlier version kept in the defaults moves into
 never read for them again. If the keychain can't be read, each reads as its safer value: the delay as Immediately,
 erasing as on in Settings, and an attempt at the password that depends on erasing isn't made
 (`AppLockSettingsStore`, `AppLockPasswordUnlocker`). An erase keeps the item, with erasing off, so they're never read
-from the defaults again. Vault's other settings, such as Hide While Recording, which anyone at the unlocked Vault can
+from the defaults again. The item also keeps whether the user has turned Keep Out of Time Machine off (see
+[Time Machine](#time-machine)). Vault's other settings, such as Hide While Recording, which anyone at the unlocked Vault can
 change, stay in the defaults.
 
 The keyrings stay on this Mac: moving to another Mac, with Migration Assistant or a Time Machine restore, brings the
@@ -497,14 +498,17 @@ password offline (G33, G64).
 ### Time Machine
 
 Time Machine backs up the App Group's container as it does other apps' data, so its backups, and the local snapshots
-it keeps on the Mac's own disk, hold the vault file as it was then: an item a killphrase deleted, or a vault an erase
-removed, can come back from one with the App Lock Password it had then (C6). Keep Out of Time Machine, in Settings,
-sets `isExcludedFromBackup` on the container itself (`VaultStorageBackupExclusion`, G97), so every file in it, the
-vault file included however often a save replaces it, is left out of the backups Time Machine makes from then on. The
-container is the only record of the choice.
+it keeps on the Mac's own disk, would hold the vault file as it was then: an item a killphrase deleted, or a vault an
+erase removed, could come back from one with the App Lock Password it had then (C6). So Vault keeps the container out
+of Time Machine's backups: Keep Out of Time Machine, in Settings, is on by default (C7), for vaults made before it as
+well. Every launch sets `isExcludedFromBackup` on the container itself (`VaultStorageBackupExclusion.apply()`, G97),
+unless the user has turned it off, so every file in it, the vault file included however often a save replaces it, is
+left out. Turning it off is kept with erasing and the delay, in the keychain item only Vault can change (see
+[Keychain](#keychain)), and if that can't be read, the vault is kept out.
 
-It's off by default, as a backup is how a lost Mac's vault comes back. It can't keep the vault out of local snapshots,
-which are of the whole disk, or out of backups already made: an accepted limit. The FAQ's About Backups page says so.
+A lost Mac's vault comes back from a backup made in Vault, which the FAQ's About Backups page says. Local snapshots are
+of the whole disk, so the vault can't be kept out of them, nor out of Time Machine backups made before, or while the
+setting was off: an accepted limit.
 
 ### Signing
 

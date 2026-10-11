@@ -54,8 +54,11 @@ enum VaultMacRoot {
     static let vaultStorageDirectory: URL = VaultSharedStorage.directory(fileManager: fileManager)
 
     /// Keep Out of Time Machine, in Settings: whether the App Group's container, with the vault file, is left out of
-    /// Time Machine's backups.
-    static let vaultBackupExclusion = VaultStorageBackupExclusion(directory: vaultStorageDirectory)
+    /// Time Machine's backups. On unless the user turns it off, which is kept with the app lock's device settings.
+    static let vaultBackupExclusion = VaultStorageBackupExclusion(
+        directory: vaultStorageDirectory,
+        settings: appLockSettingsStore,
+    )
 
     /// Why the vault couldn't be opened, if it couldn't. The main window shows a failure screen instead of the vault.
     private(set) static var vaultStoreLoadFailure: VaultMacStoreFailure?
@@ -376,6 +379,8 @@ enum VaultMacRoot {
 
     /// Wires the app together at launch.
     static func setup() {
+        // At every launch, so the vault stays out of Time Machine unless the user lets it in, whenever it was made.
+        vaultBackupExclusion.apply()
         if let interruptedErase {
             Task {
                 await interruptedErase.finish()
