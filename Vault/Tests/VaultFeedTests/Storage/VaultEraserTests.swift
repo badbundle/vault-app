@@ -38,6 +38,32 @@ struct VaultEraserTests {
         }
     }
 
+    /// A keychain that can't be written as erasing is turned off doesn't stop the erase: every vault is still gone.
+    /// Left on, erasing decides nothing until a new password, which turns it off first
+    /// (`EncryptedVaultPasswordServiceTests`).
+    @Test
+    func erase_whenErasingCantBeTurnedOff_stillErasesEveryVault() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try await VaultEraseHarness.encryptedDevice(in: directory)
+            await harness.session.lock()
+            harness.deviceSettings.failToStore()
+
+            try await harness.erase()
+
+            let state = try harness.stateFile.read()
+            #expect(state == VaultStorageState(mode: .plain))
+            #expect(await !harness.session.isLocked)
+            #expect(try await harness.session.retrieve(query: .init()).items.isEmpty)
+            #expect(!FileManager.default.fileExists(
+                atPath: directory.appending(path: EncryptedVaultFile.fileName).path(percentEncoded: false),
+            ))
+            for key in VaultIdentifiers.SecureStorageKey.allCases where key != .appLockDeviceSettings {
+                #expect(await !harness.isStored(key), "\(key)")
+            }
+            #expect(harness.deviceSettings.settings?.erasesAfterFailedPasswords == true)
+        }
+    }
+
     /// The Mac's erase makes its fresh store in memory, so nothing unencrypted is ever written to the App Group (G85).
     @Test
     func erase_withThePlainStoreInMemory_asOnTheMac_leavesNoStoreOnDisk() async throws {

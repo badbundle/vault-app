@@ -117,6 +117,52 @@ struct EncryptedVaultPasswordServiceTests {
         }
     }
 
+    /// If erasing can't be turned off as the erase finishes, as on a Mac whose keychain can't be written, the erase
+    /// still finishes. Erasing then means nothing, as there's no password, and a new password turns it off before
+    /// it's set, or isn't set while that can't be done.
+    @Test
+    func unlock_tenthWrongPasswordWithErasingOn_whenErasingCantBeTurnedOff_stillErasesAndANewPasswordStartsWithItOff()
+        async throws
+    {
+        try await withTemporaryDirectory { directory in
+            let keychain = try Keychain(keepsDeviceSettings: true)
+            let sut = try await SUT(directory: directory, keychain: keychain)
+            _ = try await sut.insertItem()
+            #expect(try await sut.appLock.setPassword(Self.password))
+            #expect(try await sut.appLock.setErasesAfterFailedPasswords(true, current: Self.password) == .accepted)
+            try await sut.lock()
+            await sut.appLock.unlock()
+            keychain.deviceSettings.failToStore()
+
+            for attempt in 1 ... AppLockPasswordAttemptCounter.eraseThreshold {
+                // Past any wait, so every attempt is tried.
+                sut.keychain.attemptClock.advance(by: .seconds(24 * 60 * 60))
+                await sut.appLock.unlock(password: "wrong password \(attempt)")
+            }
+
+            #expect(sut.appLock.state == .unlocked)
+            #expect(!sut.appLock.isPasswordSet)
+            #expect(sut.service.mode == .plain)
+            #expect(try await sut.itemIDs().isEmpty)
+            #expect(!FileManager.default.fileExists(
+                atPath: directory.appending(path: EncryptedVaultFile.fileName).path(percentEncoded: false),
+            ))
+            #expect(keychain.deviceSettings.settings?.erasesAfterFailedPasswords == true)
+
+            await #expect(throws: InMemoryAppLockDeviceSettingsStorage.Failure.self) {
+                try await sut.appLock.setPassword(Self.newPassword)
+            }
+            #expect(!sut.appLock.isPasswordSet)
+            #expect(sut.service.mode == .plain)
+
+            keychain.deviceSettings.failToStore(false)
+            #expect(try await sut.appLock.setPassword(Self.newPassword))
+            #expect(sut.appLock.isPasswordSet)
+            #expect(!sut.appLock.erasesAfterFailedPasswords)
+            #expect(keychain.deviceSettings.settings?.erasesAfterFailedPasswords == false)
+        }
+    }
+
     /// The app locks while the vault is converted: the lock finds the plain store, which it doesn't lock, and the
     /// conversion then opens the encrypted vault. It's locked again once the password is set, so nothing decrypted is
     /// open behind the lock screen, and the password opens it.

@@ -209,6 +209,9 @@ extension VaultEraser {
         try await removeEveryVault()
         try await deleteKeychainItems()
         await Self.clearVaultSettings(in: defaults)
+        // Attempted, not required, so a keychain that can't be written never stops an erase. Left on, it decides
+        // nothing: with no password, there are no attempts to count or erase after, and setting a password turns it
+        // off first, or throws and sets none (`EncryptedVaultPasswordService.setPassword(_:deletingSetAsideVaults:)`).
         try? appLockSettings.setErasesAfterFailedPasswords(false)
         await hooks.forgetVaultSettings()
         try removeFilesLeftBehind(stateFile: stateFile)
