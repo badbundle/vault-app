@@ -1,5 +1,4 @@
 import AppKit
-import Carbon.HIToolbox
 import Quartz
 import VaultCore
 
@@ -10,21 +9,25 @@ import VaultCore
 ///   autocorrection, text completion, inline predictions and every substitution are off (G52).
 /// - Writing Tools and the Services menu get nothing from it.
 /// - Cut and Copy go through Vault's clipboard (G50, G51), and its menu has only the plain text actions.
-/// - While it has focus, Secure Keyboard Entry is on, so apps watching the keyboard see nothing typed
-///   (docs/mac-app.md, decision 8).
+/// - While it has focus and Vault is the active app, Secure Keyboard Entry is on, so apps watching the keyboard see
+///   nothing typed (docs/mac-app.md, decision 8).
 final class VaultMacFieldEditor: NSTextView {
     /// Where Cut and Copy put the text: Vault's clipboard, as the app has it.
     var copyText: (@MainActor (String) -> Void)?
-    private var hasSecureInput = false
+    /// Secure Keyboard Entry, which follows this editor's focus and whether Vault is the active app. Tests stand in
+    /// for it before the editor first has focus.
+    var secureInput = VaultMacSecureInput()
 
     override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
         super.init(frame: frameRect, textContainer: container)
         Self.turnOffLearning(self)
+        observeAppActivity()
     }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         Self.turnOffLearning(self)
+        observeAppActivity()
     }
 
     @available(*, unavailable)
@@ -77,11 +80,12 @@ final class VaultMacFieldEditor: NSTextView {
         []
     }
 
+    // MARK: - Secure Keyboard Entry
+
     override func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
-        if became, !hasSecureInput {
-            EnableSecureEventInput()
-            hasSecureInput = true
+        if became {
+            secureInput.hasFocus = true
         }
         return became
     }
@@ -89,7 +93,7 @@ final class VaultMacFieldEditor: NSTextView {
     override func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
         if resigned {
-            endSecureInput()
+            secureInput.hasFocus = false
         }
         return resigned
     }
@@ -97,14 +101,24 @@ final class VaultMacFieldEditor: NSTextView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil {
-            endSecureInput()
+            secureInput.hasFocus = false
         }
     }
 
-    private func endSecureInput() {
-        guard hasSecureInput else { return }
-        DisableSecureEventInput()
-        hasSecureInput = false
+    /// Follows Vault becoming and stopping being the active app, for as long as the editor lives.
+    private func observeAppActivity() {
+        for name in [NSApplication.didBecomeActiveNotification, NSApplication.didResignActiveNotification] {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(appActivityDidChange),
+                name: name,
+                object: nil,
+            )
+        }
+    }
+
+    @objc private func appActivityDidChange(_: Notification) {
+        secureInput.appActivityDidChange()
     }
 
     // MARK: - Clipboard

@@ -158,6 +158,7 @@ struct VaultMacFieldEditorTests {
             defer: true,
         )
         let sut = VaultMacFieldEditor(frame: .init(x: 0, y: 0, width: 200, height: 20))
+        sut.secureInput = VaultMacSecureInput(isAppActive: { true })
         let other = NSView(frame: .init(x: 0, y: 40, width: 200, height: 20))
         window.contentView?.addSubview(sut)
         window.contentView?.addSubview(other)
@@ -178,6 +179,7 @@ struct VaultMacFieldEditorTests {
             defer: true,
         )
         let sut = VaultMacFieldEditor(frame: .init(x: 0, y: 0, width: 200, height: 20))
+        sut.secureInput = VaultMacSecureInput(isAppActive: { true })
         window.contentView?.addSubview(sut)
         window.makeFirstResponder(sut)
         #expect(IsSecureEventInputEnabled())
@@ -185,5 +187,43 @@ struct VaultMacFieldEditorTests {
         sut.removeFromSuperview()
 
         #expect(!IsSecureEventInputEnabled())
+    }
+
+    /// Another app coming to the front turns it off, though the field keeps its focus behind it, and Vault coming
+    /// back turns it on again, as AppKit's secure fields do.
+    @Test
+    func anotherAppInFront_turnsOffSecureKeyboardEntryUntilVaultIsBack() {
+        let window = NSWindow(
+            contentRect: .init(x: 0, y: 0, width: 200, height: 100),
+            styleMask: [],
+            backing: .buffered,
+            defer: true,
+        )
+        let app = VaultMacSecureInputTests.AppActivity(isActive: true)
+        let switches = VaultMacSecureInputTests.Switches()
+        let sut = VaultMacFieldEditor(frame: .init(x: 0, y: 0, width: 200, height: 20))
+        sut.secureInput = VaultMacSecureInput(
+            isAppActive: { app.isActive },
+            turnOn: { switches.log.append("on") },
+            turnOff: { switches.log.append("off") },
+        )
+        window.contentView?.addSubview(sut)
+        window.makeFirstResponder(sut)
+        #expect(sut.secureInput.isOn)
+
+        app.isActive = false
+        NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: nil)
+
+        #expect(window.firstResponder === sut)
+        #expect(!sut.secureInput.isOn)
+
+        app.isActive = true
+        NotificationCenter.default.post(name: NSApplication.didBecomeActiveNotification, object: nil)
+
+        #expect(sut.secureInput.isOn)
+        #expect(switches.log == ["on", "off", "on"])
+
+        window.makeFirstResponder(nil)
+        #expect(switches.log == ["on", "off", "on", "off"])
     }
 }

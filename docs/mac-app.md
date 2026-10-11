@@ -60,8 +60,8 @@ Mine, for Bradley to review:
    (see [Signing](#signing)).
 8. **Secure Keyboard Entry while a Vault field has focus.** On the Mac, other apps can watch the keyboard, if the user
    has allowed them to (Input Monitoring), and that includes the search field, where killphrases and search
-   passphrases are typed. So Vault turns on secure event input whenever one of its text fields has focus, as
-   Terminal's Secure Keyboard Entry does, and not only in password fields.
+   passphrases are typed. So Vault turns on secure event input whenever one of its text fields has focus and Vault is
+   the active app, as Terminal's Secure Keyboard Entry does, and not only in password fields.
 9. **No widgets, recommended.** With the App Lock Password always on, iOS's widgets only ever show Vault as locked
    (G44), so a Mac widget would only ever say "Locked". VAULT-115 decides, after the first release.
 
@@ -284,8 +284,10 @@ setting up of the field editor as editing starts can't turn any of the above bac
 again (`VaultMacFieldEditor.keepPrivate(_:)`). A note's editor has an undo history of its own, which it forgets as the
 sheet closes.
 
-Decision 8: Secure Keyboard Entry (`EnableSecureEventInput`) is on while a `VaultMacFieldEditor` has focus, and off
-again as soon as it loses focus or leaves its window. A secure field turns it on itself.
+Decision 8: Secure Keyboard Entry (`EnableSecureEventInput`) is on while a `VaultMacFieldEditor` has focus and Vault
+is the active app (`VaultMacSecureInput`). It's off again as soon as the field loses focus or leaves its window, or
+another app comes to the front, as it's for the whole Mac while it's on, and on again once Vault is back with the field
+still focused, as AppKit's secure fields have it. A secure field turns it on itself.
 
 A field's menu offers only Cut, Copy, Paste and Select All, Cut and Copy go through Vault's clipboard as details that
 never leave this Mac (G51, G87), and text can't be dragged out of a field.
