@@ -13,6 +13,9 @@ import WidgetKit
 /// on a locked device, and advancing an HOTP counter is irreversible. In StandBy,
 /// this family's actions ask for the iPhone to be unlocked first, and its code,
 /// issuer and account are hidden until it is (`privacySensitive`).
+///
+/// It's the Mac's widget too. There, clicking the code copies it, and clicking
+/// anything else opens Vault: the Mac app has no links (`OTPWidgetLink`).
 struct OTPWidgetSmallView: View {
     let snapshot: OTPWidgetSnapshot
 
@@ -65,11 +68,19 @@ struct OTPWidgetSmallView: View {
 
         switch snapshot {
         case let .totp(state):
-            Link(destination: WidgetDeepLink.openItemDetail(itemID: state.itemID)) {
+            if let url = OTPWidgetLink.itemDetail(itemID: state.itemID) {
+                Link(destination: url) {
+                    content
+                }
+            } else {
                 content
             }
         case let .hotp(state):
-            Link(destination: WidgetDeepLink.openItemDetail(itemID: state.itemID)) {
+            if let url = OTPWidgetLink.itemDetail(itemID: state.itemID) {
+                Link(destination: url) {
+                    content
+                }
+            } else {
                 content
             }
         case .unavailable, .locked, .placeholder:
@@ -97,7 +108,11 @@ struct OTPWidgetSmallView: View {
         case let .hotp(state) where state.advancesInTheApp:
             // The widget only reads the vault the device key opens, so the app gets the next code, as from the
             // lock-screen widgets.
-            Link(destination: WidgetDeepLink.hotpIncrement(itemID: state.itemID)) {
+            if let url = OTPWidgetLink.hotpIncrement(itemID: state.itemID) {
+                Link(destination: url) {
+                    content
+                }
+            } else {
                 content
             }
         case let .hotp(state):
@@ -123,7 +138,7 @@ struct OTPWidgetSmallView: View {
             .progressViewStyle(.linear)
             .tint(.accentColor)
         case .hotp, .unavailable, .locked, .placeholder:
-            Color(.quaternarySystemFill)
+            Color.widgetTrack
         }
     }
 

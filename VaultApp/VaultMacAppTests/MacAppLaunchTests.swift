@@ -46,7 +46,8 @@ struct MacAppLaunchTests {
     }
 
     /// Nothing from Vault is offered to Handoff, the Services menu, URL schemes, documents or AppleScript, and the
-    /// app has no way in but its AutoFill extension: no XPC services or login items.
+    /// app has no way in but its AutoFill extension: no XPC services or login items. Its widget extension only reads
+    /// the codes the app hands it (G98).
     @Test
     func app_hasNoWayInFromOutside() throws {
         for key in [
@@ -60,7 +61,7 @@ struct MacAppLaunchTests {
         // Leaving out these tests, which Xcode puts there to run them inside the app.
         let plugIns = try FileManager.default.contentsOfDirectory(atPath: contents.appending(path: "PlugIns").path)
             .filter { !$0.hasSuffix(".xctest") }
-        #expect(plugIns == ["VaultMacAutofill.appex"])
+        #expect(plugIns.sorted() == ["VaultMacAutofill.appex", "VaultMacWidgets.appex"])
         for folder in ["XPCServices", "Library/LoginItems"] {
             #expect(!FileManager.default.fileExists(atPath: contents.appending(path: folder).path), "\(folder)")
         }
@@ -85,6 +86,54 @@ struct MacAppLaunchTests {
         ])
     }
 
+    /// The widget extension is a widget extension, and nothing else.
+    @Test
+    func widgetExtension_isOnlyWidgets() throws {
+        let plugIn = try #require(
+            Bundle(url: Bundle.main.bundleURL.appending(path: "Contents/PlugIns/VaultMacWidgets.appex")),
+        )
+        let attributes = try #require(plugIn.object(forInfoDictionaryKey: "NSExtension") as? [String: Any])
+
+        #expect(attributes as NSDictionary == ["NSExtensionPointIdentifier": "com.apple.widgetkit-extension"])
+    }
+
+    /// The widget extension has no App Group, which would also make it a member of the App Group's keychain access
+    /// group, and so able to read the attempt counter, the device key and the wrap stamp. Its only keychain access group
+    /// is the widgets' own (G84, G98).
+    @Test
+    func widgetExtension_hasNoAppGroupAndOnlyTheWidgetsKeychainGroup() throws {
+        let url = Bundle.main.bundleURL.appending(path: "Contents/PlugIns/VaultMacWidgets.appex")
+        var staticCode: SecStaticCode?
+        #expect(SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode) == errSecSuccess)
+        var information: CFDictionary?
+        #expect(SecCodeCopySigningInformation(
+            try #require(staticCode),
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &information,
+        ) == errSecSuccess)
+        let signing = try #require(information as? [String: Any])
+        let entitlements = try #require(signing[kSecCodeInfoEntitlementsDict as String] as? [String: Any])
+
+        #expect(entitlements["com.apple.security.application-groups"] == nil)
+        #expect(entitlements["keychain-access-groups"] as? [String] == ["442P244AFS.com.badbundle.vault.widgets"])
+        #expect(entitlements["com.apple.security.app-sandbox"] as? Bool == true)
+    }
+
+    /// The only App Intents are the widget's, which the app lists as it does any extension's, and none is offered to
+    /// Shortcuts or Spotlight (docs/mac-app.md, decision 2).
+    @Test
+    func appIntents_areOnlyTheWidgetsAndNoneIsOfferedOutsideIt() throws {
+        let metadata = Bundle.main.bundleURL
+            .appending(path: "Contents/Resources/Metadata.appintents/extract.actionsdata")
+        let json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: metadata)) as? [String: Any])
+        let actions = try #require(json["actions"] as? [String: [String: Any]])
+
+        #expect(Set(actions.keys) == ["OTPWidgetIntent", "CopyTOTPCodeIntent", "IncrementAndCopyHOTPCodeIntent"])
+        for (name, action) in actions {
+            #expect(action["isDiscoverable"] as? Bool == false, "\(name)")
+        }
+    }
+
     /// docs/mac-app.md, decision 7.
     static let appGroupID = "442P244AFS.com.badbundle.vault"
 
@@ -101,13 +150,18 @@ struct MacAppLaunchTests {
     }
 }
 
-/// The app's keychain, as its entitlements make it: its own group, which its AutoFill extension can't read, by
-/// default, and the App Group, which the extension shares (docs/mac-app.md, "Keychain").
+/// The app's keychain, as its entitlements make it: its own group, which its extensions can't read, by default, the
+/// App Group, which the AutoFill extension shares, and the widgets' group, which only the widget extension shares
+/// (docs/mac-app.md, "Keychain").
 @MainActor
 struct MacAppKeychainTests {
     nonisolated static let ownGroup = "442P244AFS.com.badbundle.vault.private"
 
-    @Test(arguments: ["442P244AFS.com.badbundle.vault.private", "442P244AFS.com.badbundle.vault"])
+    @Test(arguments: [
+        "442P244AFS.com.badbundle.vault.private",
+        "442P244AFS.com.badbundle.vault",
+        "442P244AFS.com.badbundle.vault.widgets",
+    ])
     func keychain_eachOfTheAppsGroups_holdsItems(group: String) throws {
         let account = "vault-test-\(UUID().uuidString)"
         defer { SecItemDelete(Self.query(account: account, group: group) as CFDictionary) }

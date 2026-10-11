@@ -484,6 +484,8 @@ extension EncryptedVaultPasswordServiceTests {
                 attemptCounter: attemptCounter,
                 wrapStamps: keychain.wrapStamps,
                 deviceKeyStore: keychain.deviceKeys,
+                widgetCodes: WidgetCodeHandoffStore(keychain: InMemoryWidgetKeychainItem()),
+                widgetCopiedCodes: WidgetCopiedCodeStore(keychain: InMemoryWidgetKeychainItem(), notify: {}),
                 appLockSettings: settings,
                 defaults: Defaults(userDefaults: .nonPersistent()),
                 temporaryDirectory: directory.appending(path: "tmp"),

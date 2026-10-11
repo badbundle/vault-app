@@ -20,6 +20,7 @@
 	<array>
 		<string>$(AppIdentifierPrefix)com.badbundle.vault.private</string>
 		<string>$(TeamIdentifierPrefix)com.badbundle.vault</string>
+		<string>$(TeamIdentifierPrefix)com.badbundle.vault.widgets</string>
 	</array>
 </dict>
 </plist>

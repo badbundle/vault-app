@@ -27,9 +27,10 @@ Bradley's, on VAULT-101 (2026-09-29):
    part of the first launch, it can't be skipped, and it can't be turned off. So the vault on the Mac is only ever
    the encrypted vault file (G33), and never depends on FileVault alone.
 2. **No CLI, and no other way into the vault from outside the app.** The vault's data stays in the app. Only the app
-   and its AutoFill extension can open it. There are no XPC services, no URL schemes or App Intents that read items,
-   no AppleScript, no Services, no Shortcuts actions, no Spotlight or Quick Look extensions, and no files outside the
-   App Group's container.
+   and its AutoFill extension can open it. Its widgets only show the codes the unlocked app hands them (decision 9).
+   There are no XPC services, no URL schemes or App Intents that read items (the widget's own read only those codes,
+   and aren't offered to Shortcuts or Spotlight), no AppleScript, no Services, no Shortcuts actions, no Spotlight or
+   Quick Look extensions, and no files outside the App Group's container.
 
 Following from those, and from the manifesto:
 
@@ -62,8 +63,11 @@ Mine, for Bradley to review:
    has allowed them to (Input Monitoring), and that includes the search field, where killphrases and search
    passphrases are typed. So Vault turns on secure event input whenever one of its text fields has focus and Vault is
    the active app, as Terminal's Secure Keyboard Entry does, and not only in password fields.
-9. **No widgets, recommended.** With the App Lock Password always on, iOS's widgets only ever show Vault as locked
-   (G44), so a Mac widget would only ever say "Locked". VAULT-115 decides, after the first release.
+9. **Widgets, the same as iOS's, that show codes only while Vault is unlocked.** Bradley's, on VAULT-115
+   (2026-10-11). With the App Lock Password always on, iOS's rule (G44) would only ever show Vault as locked. So on the
+   Mac, while Vault is unlocked, the app hands its widget extension the next few minutes of each code a widget may
+   show, never a secret, and any lock takes them back, so the widgets show Vault locked. No secret ever leaves the
+   encrypted vault (G33). See [Widgets](#widgets). iOS's widgets don't change.
 
 ## What the Mac app is
 
@@ -313,7 +317,10 @@ app has `keychain-access-groups`, and its App Group is a keychain access group t
   its own items from the App Group either. The backup password is inside each encrypted vault, as on iOS with the
   password on;
 - the attempt counter, the device key, the wrap stamp and the app lock's device settings name the App Group,
-  `442P244AFS.com.badbundle.vault`, which the extension shares, and which is its only keychain access group.
+  `442P244AFS.com.badbundle.vault`, which the AutoFill extension shares, and which is its only keychain access group;
+- the codes the app hands its widgets, and a widget's note of a code it copied, are in the widgets' own group,
+  `442P244AFS.com.badbundle.vault.widgets`, which only the widget extension shares, and which is its only keychain
+  access group (see [Widgets](#widgets)).
 
 The app's own group isn't named for the app, as the iOS app's is, because on the Mac that name is the App Group's, and
 the extension would read it too (found in VAULT-112).
@@ -378,7 +385,64 @@ Mac's Settings don't offer it, and the Mac app never touches Core Spotlight.
 
 ### Widgets
 
-See decision 9. If VAULT-115 builds them, they follow every iOS widget rule (G44, G45).
+Decision 9: the Mac has the iOS widget, in the small size (the Lock Screen's sizes aren't on the Mac), set up the
+same way, with the same views, built from the same code (`VaultiOSWidgets`). Only where its codes come from differs.
+An iOS widget opens the vault itself while the App Lock Password is off, and shows it locked while it's on (G44). The
+Mac's password is always on, and its widget extension never opens the vault: it has nothing to open it with. Instead
+(G98):
+
+- **While Vault is unlocked, the app hands over codes** (`VaultMacWidgetCodes`). It works out, off the main actor,
+  each time-based code a widget may show (`VaultItemWidgetEligibility`: never a locked or hidden one, and a code with a
+  killphrase like any other, G5, G45) for the next five minutes (`WidgetCodeHandoff.window`): the code for each period,
+  with its site, account and number of digits. Never a secret, so the widget extension can't work out any other code,
+  and has nothing once these run out. It does this when Vault unlocks, whenever its items change, and every two and a
+  half minutes while it stays unlocked, so the codes never run out while it is. Before the password is first set
+  there's no vault, so nothing to hand over.
+- **Where it keeps them** (`WidgetCodeHandoffStore`): a keychain item in the widgets' own keychain access group,
+  `442P244AFS.com.badbundle.vault.widgets`, which only the app and the widget extension have, readable only while the
+  Mac is unlocked, and never synced or restored elsewhere (`kSecAttrAccessibleWhenUnlockedThisDeviceOnly`). It's all
+  the app shares with the widget extension, which has no App Group (see [Keychain](#keychain)), so it reads nothing
+  of the App Group's container, defaults or keychain items.
+- **Any lock takes them back at once**, whatever locked Vault (see [Locking](#locking)): it's the first thing the
+  lock's purge does. The keychain item is deleted, or if that fails, as it can while the Mac locks, replaced with one
+  that has no codes and has already expired. If neither can be done, the app tries again every ten seconds until it
+  can, or the codes would have run out anyway, and the extension can't read them while the Mac stays locked; at worst
+  they run out by themselves, within five minutes. Quitting does the same, and so does every launch, in case Vault
+  last stopped without locking. Codes worked out before a lock are never handed over after it: handing over happens on
+  the main actor, as locking does, and only if Vault hasn't locked since. An erase deletes the item too.
+- **Each change reloads the widgets** (`WidgetCenter`). A widget's timeline holds one entry for each period's code,
+  then Vault locked once the codes run out, so if macOS holds a reload back, a widget goes on showing the codes it had
+  for at most five minutes, and never a stale one.
+- **Counter-based codes aren't on the Mac's widgets.** A counter-based code stays usable until it's used, so it's
+  never worked out ahead, and only the app moves a counter on: the Mac's AutoFill offers time-based codes only too.
+- **While Vault is locked, a widget shows it locked, and its settings list no codes.** A widget set up for a code
+  that's gone, or that a widget may no longer show, shows it unavailable, as on iOS (C2).
+- **Copying a code from a widget** asks for the Mac to be unlocked, as on iOS (G45). The widget extension puts it on
+  the clipboard as the app does (G87): concealed, transient and kept to this Mac, whatever Universal Clipboard allows,
+  as on iOS. AppKit's clipboard has no expiry, the extension doesn't run long enough to clear it, and it has no App
+  Group to read the Clear Clipboard time from. So it leaves the app a note (`WidgetCopiedCodeStore`): the clipboard's
+  change count and when it copied, nothing of the code, as a keychain item in the widgets' group, readable once the
+  Mac has been unlocked after starting up, so the app can read it as the Mac locks. Then it posts a Darwin
+  notification, which a sandboxed extension can post with no App Group. The app takes the note when it hears that,
+  and whenever it becomes active, locks, quits or launches, in case it didn't, and clears the code as one of its own
+  copies: once the Clear Clipboard time has passed since it was copied, or when Vault locks or quits, unless something
+  else was copied since (`VaultMacWidgetCopies`). Any process can post the notification, but that only has the app
+  look for a note, which only the app and the widget extension can write.
+- **No links.** The Mac app has no URL scheme (decision 2), so clicking a widget anywhere but its code opens Vault, as
+  any widget does, and the widget's actions aren't offered to Shortcuts or Spotlight (`isDiscoverable`).
+
+Vault is unlocked only while it's the active app, unless Require Unlock has a delay (see [Locking](#locking)), so a
+widget shows codes on the desktop only while Vault's in front, or within that delay.
+
+What this leaves, which `docs/security-model.md` lists under Accepted limits:
+
+- if macOS doesn't reload a widget when Vault locks, or Vault stops without locking, as when it crashes, or the codes
+  can't be deleted or replaced as the Mac locks and the Mac is unlocked again before they can, the widget can go on
+  showing the codes it was given until they run out, five minutes at most;
+- widgets are drawn by macOS, not Vault, so Hide While Recording doesn't keep them out of captures;
+- a widget's settings keep the site and account of the code it was set up with until it's removed, as on iOS (G44),
+  and with a duress vault open, a widget set up for another vault's code shows it unavailable, as for a code that's
+  been deleted.
 
 ### Backups, restore and transfer
 
@@ -419,6 +483,7 @@ In `VaultApp/VaultApp.xcodeproj`, beside the iOS targets, which don't change:
 | --- | --- | --- |
 | `VaultMacApp` | macOS app, SwiftUI `App` lifecycle, built as `Vault.app` | `com.badbundle.vault` |
 | `VaultMacAutofill` | credential provider extension (VAULT-112) | `com.badbundle.vault.VaultAutofill` |
+| `VaultMacWidgets` | widget extension (VAULT-115) | `com.badbundle.vault.Widgets` |
 | `VaultMacAppTests` | tests that run inside the launched app | `com.badbundle.vault.MacAppTests` |
 | `VaultMacAppUITests` | macOS UI tests | `com.badbundle.vault.MacUITests` |
 
@@ -444,7 +509,7 @@ entitlements:
 | `com.apple.security.files.bookmarks.app-scope` | Keeping the auto-backup folder across launches. VAULT-110 checks whether macOS 26 still needs it. |
 | `com.apple.security.device.camera` | Scanning QR codes, with `NSCameraUsageDescription`. |
 | `com.apple.security.print` | Printing a backup. |
-| `keychain-access-groups`: `442P244AFS.com.badbundle.vault.private`, then `442P244AFS.com.badbundle.vault` | The app's own keychain items, which the AutoFill extension can't read, then the App Group's. |
+| `keychain-access-groups`: `442P244AFS.com.badbundle.vault.private`, then `442P244AFS.com.badbundle.vault`, then `442P244AFS.com.badbundle.vault.widgets` | The app's own keychain items, which neither extension can read, then the App Group's, then the codes it hands its widgets. |
 
 The provisioning profile adds two more, which name the app and its team: `com.apple.application-identifier` and
 `com.apple.developer.team-identifier`.
@@ -467,10 +532,16 @@ access group, and the AutoFill entitlement
 (`com.apple.developer.authentication-services.autofill-credential-provider`), and nothing else. The app itself doesn't
 need the AutoFill entitlement: it never writes the credential identity store, which stays empty on the Mac.
 
+The widget extension gets the sandbox, the hardened runtime, and the widgets' keychain access group as its only one,
+and nothing else. It has no App Group, which would also be a keychain access group (see [Keychain](#keychain)): it
+can't read the App Group's keychain items, such as the attempt counter, nor its container or defaults, and the
+AutoFill extension can't read the widgets' items.
+
 `make validate`'s "Mac app entitlements" check builds the app as it runs (a build for testing has entitlements of
-Xcode's own), and fails unless the app and its extension are each signed with the hardened runtime, sandboxed in the
-App Group, with only their own keychain access groups, and with no entitlement outside their lists and the profile's
-two, apart from a development build's `get-task-allow`.
+Xcode's own), and fails unless the app and its two extensions are each signed with the hardened runtime and
+sandboxed, the app and the AutoFill extension in the App Group and the widget extension in none, with only their own
+keychain access groups, and with no entitlement outside their lists and the profile's two, apart from a development
+build's `get-task-allow`.
 
 ### Info.plist
 
@@ -519,6 +590,9 @@ setting was off: an accepted limit.
   are signed with the certificate alone.
 - **The AutoFill extension:** the same, with the "Vault Mac AutoFill Development" profile, made for
   `com.badbundle.vault.VaultAutofill` on 5 October 2026 (until 5 October 2027), with the same Mac registered.
+- **The widget extension:** signed automatically, with the "Mac Team Provisioning Profile:
+  com.badbundle.vault.Widgets" Xcode made on 11 October 2026 (until 11 October 2027), for the App ID the iOS widgets
+  already have. Another Mac that builds Vault gets one by building once with `-allowProvisioningUpdates`.
 - **The App Store:** a Mac App Store provisioning profile for each target, made with the release lanes (VAULT-114).
 
 ## Modules
@@ -529,8 +603,9 @@ setting was off: an accepted limit.
 | ImageTools, VaultExport | yes | yes | Their rendering moves off UIKit (VAULT-104). |
 | VaultBackup, VaultFeed | yes | yes | Build for macOS once ImageTools and VaultExport do (VAULT-103). |
 | VaultAppIcon | yes | yes | SwiftUI only. The Mac's app icon is rendered from it, like iOS's, as an Icon Composer document. |
-| VaultiOS, VaultiOSShared, VaultiOSAutofill, VaultiOSWidgets | yes | no | Unchanged. |
-| `VaultMac` | no | yes | The Mac app's views, its composition root and the AppKit pieces, and the AutoFill extension's (in `Autofill/`, with a root of its own), which its target subclasses, as the iOS extension's does. |
+| VaultiOS, VaultiOSAutofill | yes | no | Unchanged. |
+| VaultiOSShared, VaultiOSWidgets | yes | yes | The widgets, shared with the Mac's (VAULT-115): only where their codes come from differs (`OTPWidgetSource`). They keep their names, which the widgets' App Intents carry. |
+| `VaultMac` | no | yes | The Mac app's views, its composition root and the AppKit pieces, the AutoFill extension's (in `Autofill/`, with a root of its own), which its target subclasses, as the iOS extension's does, and handing the widgets their codes (in `Widgets/`). |
 
 `VaultMac` doesn't reuse VaultiOS's views: they're iOS views, full of UIKit and iOS-only modifiers, and making them
 build for both would change the iOS app. It reuses everything beneath them. The shared view models, the App Lock, the
@@ -548,10 +623,12 @@ What changes in the shared modules:
   (`ProcessInfo.disableSuddenTermination()`) until an unlock, a conversion or a rekey has finished.
 - **`DeviceTransferExportViewModel`**, VaultFeed's one UIKit file, keeps its QR codes as images both platforms can
   draw.
+- **`WidgetCodeHandoff`** and **`WidgetCodeHandoffStore`**, in VaultFeed, are the codes the Mac app hands its widgets
+  and where they're kept (VAULT-115). The iOS app never stores any.
 
 `VaultMac` has its own composition root, `VaultMacRoot`, which wires the shared services as `VaultRoot` does on iOS,
-without what the Mac doesn't have: the plain SQLite store, widgets, QuickType and Spotlight. Its tests are
-`VaultMacTests`.
+without what the Mac doesn't have: the plain SQLite store, QuickType and Spotlight. Its widgets never read the vault
+(see [Widgets](#widgets)). Its tests are `VaultMacTests`.
 
 ### PDF backups and images
 
@@ -622,7 +699,8 @@ free G numbers, so that the file always matches what's built. It gains:
   - the Mac's text fields, and Secure Keyboard Entry (VAULT-108);
   - the sandbox and the entitlements, and no way in from outside the app (VAULT-105, VAULT-113);
   - Spotlight and the identity store always empty (VAULT-106, VAULT-112);
-  - AutoFill (VAULT-112).
+  - AutoFill (VAULT-112);
+  - the widgets, and the codes the app hands them (VAULT-115).
 - **Rows that hold unchanged on the Mac** because they're kept by shared code (duress, the vault file, cryptography,
   backups) say nothing new, and the section says so.
 - **Rows that don't apply on the Mac**, listed in the section with the reason:
@@ -630,7 +708,7 @@ free G numbers, so that the file always matches what's built. It gains:
   - G28 and G16: turning the password off, which the Mac doesn't offer.
   - G38 and G39: the plain SQLite store.
   - G43 and G53: the PDF's temporary file and share sheet.
-  - G44 and G45: widgets, unless VAULT-115 builds them.
+  - G44 and G45 as iOS has them: the Mac's widgets have their own rule, G98 (VAULT-115).
   - G49: Spotlight, which is always off.
 - **Rows with a Mac version:** G22 (leaving the app, rather than the background), G24 (`sharingType`, rather than a
   cover), G25 and G31 (Touch ID, an Apple Watch or the Mac's password; a Mac with no login password), G29 (the
@@ -676,4 +754,4 @@ keeps other apps out of a group container unless the user allows them, and the d
 aren't listed by the `security` tool or Keychain Access.
 - **VAULT-114** (Bradley's) runs `RELEASE.md`'s Mac checks, which VAULT-113 wrote: capture, locking, the clipboard
   history and AutoFill. Its release lane also checks a Release build's entitlements, which `make validate` can't.
-- **VAULT-115** (Bradley's): decision 9 recommends closing it.
+- **VAULT-115** (Bradley's) decided the Mac has widgets (decision 9), and built them.

@@ -27,9 +27,10 @@ import VaultCore
 /// 4. Deletes every keychain item (`VaultIdentifiers.SecureStorageKey`): the killphrase and search passphrase HMAC
 ///    keyrings, this device's own keys and those restored backups brought, the backup password and its record, the
 /// count of attempts at the App Lock Password, the wrap stamp,
-///    which shows a password vault was used and about when, and the device key, which opens the vault while the
-///    password is off. All but the app lock's settings for the device, which the Mac keeps there: step 5 turns
-///    erasing off in them.
+///    which shows a password vault was used and about when, the device key, which opens the vault while the
+///    password is off, and the codes the Mac app hands its widgets and a widget's note of a copied code, if any were
+///    left. All but the app lock's settings for the device, which the Mac keeps there: step 5 turns erasing off in
+///    them.
 /// 5. Clears the vault's settings still kept on the device: the last backup event, the auto-backup configuration,
 ///    which says where the backups are, and the PDF backup's hint. Then whatever holds them in memory forgets them
 ///    too (a hook). It turns off erasing after failed passwords too, which only means anything with a password, if
@@ -91,6 +92,8 @@ public actor VaultEraser {
     private let attemptCounter: AppLockPasswordAttemptCounter
     private let wrapStamps: any VaultWrapStampStorage
     private let deviceKeyStore: any VaultDeviceKeyStoring
+    private let widgetCodes: WidgetCodeHandoffStore
+    private let widgetCopiedCodes: WidgetCopiedCodeStore
     private let appLockSettings: AppLockSettingsStore
     private let defaults: Defaults
     private let temporaryDirectory: URL
@@ -130,6 +133,8 @@ public actor VaultEraser {
             attemptCounter: attemptCounter,
             wrapStamps: VaultWrapStampKeychainStorage(),
             deviceKeyStore: VaultDeviceKeychainStore(),
+            widgetCodes: WidgetCodeHandoffStore(),
+            widgetCopiedCodes: WidgetCopiedCodeStore(),
             appLockSettings: appLockSettings,
             defaults: defaults,
             temporaryDirectory: temporaryDirectory,
@@ -150,6 +155,8 @@ public actor VaultEraser {
         attemptCounter: AppLockPasswordAttemptCounter,
         wrapStamps: any VaultWrapStampStorage,
         deviceKeyStore: any VaultDeviceKeyStoring,
+        widgetCodes: WidgetCodeHandoffStore,
+        widgetCopiedCodes: WidgetCopiedCodeStore,
         appLockSettings: AppLockSettingsStore,
         defaults: Defaults,
         temporaryDirectory: URL,
@@ -163,6 +170,8 @@ public actor VaultEraser {
         self.attemptCounter = attemptCounter
         self.wrapStamps = wrapStamps
         self.deviceKeyStore = deviceKeyStore
+        self.widgetCodes = widgetCodes
+        self.widgetCopiedCodes = widgetCopiedCodes
         self.appLockSettings = appLockSettings
         self.defaults = defaults
         self.temporaryDirectory = temporaryDirectory
@@ -329,6 +338,13 @@ extension VaultEraser {
             // vault's, and step 5 turns erasing off. Deleting them would have the Mac read them from its defaults
             // again, where something other than Vault could have put them (`AppLockSettingsStore`).
             break
+        case .widgetCodes:
+            // The codes the Mac app hands its widgets. They're withdrawn whenever the vault locks, and an erase only
+            // runs while it's locked, but any left behind go too.
+            try widgetCodes.remove()
+        case .widgetCopiedCode:
+            // A widget's note of a code it copied, which the app takes as soon as it can. It shows a widget was used.
+            try widgetCopiedCodes.remove()
         }
     }
 

@@ -67,8 +67,8 @@ Lock Password set:
 
 ## Checking a build on a Mac
 
-The Mac app's use of the real Touch ID, screen capture and AutoFill is checked
-by hand, on a Mac with Touch ID, before each release of the Mac app, and on
+The Mac app's use of the real Touch ID, screen capture, AutoFill and widgets is
+checked by hand, on a Mac with Touch ID, before each release of the Mac app, and on
 each new version of macOS.
 
 **Capture.** With Hide While Recording on, take a screenshot (⇧⌘3), a screen
@@ -105,6 +105,20 @@ Vault, then in Safari, on a page with a one-time code field:
   searching for a killphrase deletes nothing.
 - With the sheet unlocked, go to another app and back: the sheet is locked.
 - Lock the Mac with the sheet open, then unlock it: the sheet is locked.
+
+**Widgets.** Add Vault's widget to the desktop, and set it up with a code:
+
+- Its settings list no codes while Vault is locked, and only codes a widget may
+  show (not locked or hidden ones, and no counter-based ones) while it's
+  unlocked.
+- With Vault unlocked, the widget shows the code the app shows, and it changes
+  with each period. Click the code: it's on the clipboard, and gone after the
+  Clear Clipboard time, or as soon as Vault locks.
+- Lock Vault (⌃⌘L), quit it, and lock the Mac, in turn: each time, the widget
+  shows Vault locked straight away, or within five minutes at most.
+- With Require Unlock at 5 Minutes, go to another app: the widget shows codes
+  until Vault locks, then shows it locked.
+- Click the widget anywhere but its code: Vault opens.
 
 ## Shipping a build
 

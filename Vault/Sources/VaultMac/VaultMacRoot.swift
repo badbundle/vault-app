@@ -4,11 +4,13 @@ import FoundationExtensions
 import SwiftSecurity
 import VaultFeed
 import VaultSettings
+import WidgetKit
 
 /// The composition root of the Mac app, as `VaultRoot` is of the iOS app (docs/mac-app.md).
 ///
-/// It wires the shared services as the iOS app does, without what the Mac doesn't have: a SQLite store, widgets,
-/// QuickType and Spotlight. The Mac's vault is only ever the encrypted vault file. Until the App Lock Password is set,
+/// It wires the shared services as the iOS app does, without what the Mac doesn't have: a SQLite store, QuickType and
+/// Spotlight. Its widgets never read the vault: it hands them codes while it's unlocked (`VaultMacWidgetCodes`). The
+/// Mac's vault is only ever the encrypted vault file. Until the App Lock Password is set,
 /// at the first launch or after an erase, the store session reads an empty store in memory, and setting the password
 /// encrypts it into the vault file (`VaultEncryptionConverter`), as it converts the iOS app's SQLite store.
 @MainActor
@@ -218,11 +220,14 @@ enum VaultMacRoot {
         authenticationService: deviceAuthenticationService,
         passwordService: vaultPasswordService,
         purgeSensitiveData: {
+            // The widgets' codes first, before anything else can run.
+            widgetCodes.withdraw()
             // Straight away, then everything read from the vault. No item's page or tag is open when it's unlocked
             // again, which could be into another vault, so nothing shows which was open before (C2).
             feedModel.selectedItemID = nil
             feedModel.sidebarSelection = .items
-            // What Vault copied doesn't outlast the vault it came from.
+            // What Vault copied doesn't outlast the vault it came from, nor does a code a widget copied.
+            widgetCopies.takeOver()
             pasteboard.clearNow()
             // Nor does a save, open or print panel showing a backup, or the folder it was choosing.
             if NSApplication.shared.modalWindow != nil {
@@ -316,6 +321,37 @@ enum VaultMacRoot {
     /// Which Help page is open.
     static let help = VaultMacHelpModel()
 
+    // MARK: - Widgets
+
+    /// The codes the widgets may show, handed over while the vault's unlocked and taken back as it locks (G98).
+    static let widgetCodes = VaultMacWidgetCodes(
+        store: WidgetCodeHandoffStore(),
+        isUnlocked: { !appLockService.isLocked },
+        retrieveItems: { [vaultStore] in
+            // Only an unlocked encrypted vault's: before the App Lock Password is first set, there's no vault.
+            guard case .encrypted = await vaultStore.openVault else { return nil }
+            return try await vaultStore.retrieve(query: VaultStoreQuery()).items
+        },
+        reloadWidgets: {
+            WidgetCenter.shared.reloadAllTimelines()
+        },
+    )
+
+    /// Clears the codes widgets copy, as Vault's own copies are cleared (G87).
+    static let widgetCopies = VaultMacWidgetCopies(notes: WidgetCopiedCodeStore(), pasteboard: pasteboard)
+
+    /// Hands the widgets codes, or takes them back, whenever the app locks or unlocks.
+    private static func updateWidgetCodesWhenTheLockChanges() {
+        _ = withObservationTracking {
+            appLockService.isLocked
+        } onChange: {
+            Task { @MainActor in
+                updateWidgetCodesWhenTheLockChanges()
+            }
+        }
+        widgetCodes.update()
+    }
+
     // MARK: - Backups
 
     static let encryptedVaultDecoder: some EncryptedVaultDecoder<KeyData<32>> = EncryptedVaultDecoderImpl()
@@ -386,6 +422,9 @@ enum VaultMacRoot {
                 await interruptedErase.finish()
             }
         }
+        // Whatever an earlier run left, which stopped without locking if there's any. Every launch starts locked.
+        widgetCodes.withdrawLeftovers()
+        widgetCopies.start()
         lockTriggers = VaultMacLockTriggers(appLock: appLockService, authentication: deviceAuthenticationService)
         let windowPrivacy = VaultMacWindowPrivacy(localSettings: localSettings, appLock: appLockService)
         windowPrivacy.start(windows: NSApplication.shared.windows)
@@ -394,7 +433,12 @@ enum VaultMacRoot {
         // A change to the vault backs it up, if Auto-Backup is on.
         vaultDataModel.onDataChanged = {
             autoBackupService.notifyDataChanged()
+            widgetCodes.update()
         }
+        vaultDataModel.onVaultDeleted = {
+            widgetCodes.update()
+        }
+        updateWidgetCodesWhenTheLockChanges()
         // The Backups page goes first, because auto-backup waits for a backup of the previous vault to finish.
         let vaultChanges = vaultStore
         Task {
@@ -402,6 +446,7 @@ enum VaultMacRoot {
                 await openVaultBackupSettings.reload()
                 await vaultDataModel.openVaultDidChange()
                 await autoBackupService.vaultDidChange()
+                widgetCodes.update()
             }
         }
     }

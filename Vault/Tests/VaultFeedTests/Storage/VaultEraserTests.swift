@@ -29,6 +29,8 @@ struct VaultEraserTests {
                 "remove the killphrase key from the keychain",
                 "reset the attempt count",
                 "remove the wrap stamp",
+                "remove the widgets' codes",
+                "remove the widget's copied code",
                 "forget the vault's settings",
                 "clear QuickType",
                 "reload widgets",
@@ -323,6 +325,8 @@ extension VaultEraserTests {
                 "remove the backup password from the keychain",
                 "reset the attempt count",
                 "remove the wrap stamp",
+                "remove the widgets' codes",
+                "remove the widget's copied code",
                 "clear QuickType",
                 "create the plain store",
             ] {
@@ -493,6 +497,9 @@ struct VaultEraseHarness {
     let wrapStamps: FaultInjectingWrapStampStorage
     /// The device key, in memory. The eraser reaches it through `fileSystem`'s steps.
     let deviceKeys: InMemoryDeviceKeyStore
+    /// The codes the Mac app hands its widgets, and a widget's note of a copied code, in memory.
+    let widgetCodes: FaultInjectingWidgetKeychainItem
+    let widgetCopiedCode: FaultInjectingWidgetKeychainItem
     let userDefaults: UserDefaults
     let defaults: Defaults
     /// Where erasing after failed passwords is kept, as on the Mac.
@@ -512,6 +519,8 @@ struct VaultEraseHarness {
         attemptStorage = FaultInjectingAttemptStorage(faults: fileSystem, directory: directory)
         wrapStamps = FaultInjectingWrapStampStorage(faults: fileSystem)
         self.deviceKeys = deviceKeys
+        widgetCodes = FaultInjectingWidgetKeychainItem(name: "the widgets' codes", faults: fileSystem)
+        widgetCopiedCode = FaultInjectingWidgetKeychainItem(name: "the widget's copied code", faults: fileSystem)
         userDefaults = try testUserDefaults()
         defaults = Defaults(userDefaults: userDefaults)
         let deviceSettings = InMemoryAppLockDeviceSettingsStorage()
@@ -611,6 +620,10 @@ struct VaultEraseHarness {
                 _ = try deviceKeys.makeNewDeviceKey()
             case .appLockDeviceSettings:
                 try appLockSettings.setErasesAfterFailedPasswords(true)
+            case .widgetCodes:
+                try widgetCodes.save(Data(key.rawValue.utf8))
+            case .widgetCopiedCode:
+                try widgetCopiedCode.save(Data(key.rawValue.utf8))
             }
         }
         try defaults.set(
@@ -656,6 +669,8 @@ struct VaultEraseHarness {
             attemptCounter: AppLockPasswordAttemptCounter(storage: attemptStorage, clock: FakeAppLockClock()),
             wrapStamps: wrapStamps,
             deviceKeyStore: FaultInjectingDeviceKeyStore(wrapping: deviceKeys, steps: fileSystem),
+            widgetCodes: WidgetCodeHandoffStore(keychain: widgetCodes),
+            widgetCopiedCodes: WidgetCopiedCodeStore(keychain: widgetCopiedCode, notify: {}),
             appLockSettings: appLockSettings,
             defaults: defaults,
             temporaryDirectory: temporaryDirectory,
@@ -740,6 +755,10 @@ struct VaultEraseHarness {
             deviceKeys.key != nil
         case .appLockDeviceSettings:
             deviceSettings.settings != nil
+        case .widgetCodes:
+            widgetCodes.hasData
+        case .widgetCopiedCode:
+            widgetCopiedCode.hasData
         }
     }
 
@@ -850,7 +869,8 @@ actor FaultInjectingSecureStorage: SecureStorage {
         case .searchPassphraseBackupKeys: "the search passphrase keys from backups"
         case .backupPassword: "the backup password"
         case .backupPasswordMetadata: "the backup password's record"
-        case .appLockPasswordAttempts, .vaultWrapStamp, .vaultDeviceKey, .appLockDeviceSettings, nil: key
+        case .appLockPasswordAttempts, .vaultWrapStamp, .vaultDeviceKey, .appLockDeviceSettings, .widgetCodes,
+             .widgetCopiedCode, nil: key
         }
     }
 }
@@ -898,6 +918,35 @@ final class FaultInjectingAttemptStorage: AppLockPasswordAttemptStorage {
     func remove() throws {
         try faults.step("reset the attempt count")
         record.modify { $0 = nil }
+    }
+}
+
+/// One of the widgets' keychain items, in memory, whose removal is a step of a `FaultInjectingSlotFileSystem`.
+final class FaultInjectingWidgetKeychainItem: WidgetKeychainStoring {
+    private let data = SharedMutex<Data?>(nil)
+    private let name: String
+    private let faults: FaultInjectingSlotFileSystem
+
+    init(name: String, faults: FaultInjectingSlotFileSystem) {
+        self.name = name
+        self.faults = faults
+    }
+
+    var hasData: Bool {
+        data.get { $0 != nil }
+    }
+
+    func read() throws -> Data? {
+        data.get { $0 }
+    }
+
+    func save(_ newData: Data) throws {
+        data.modify { $0 = newData }
+    }
+
+    func remove() throws {
+        try faults.step("remove \(name)")
+        data.modify { $0 = nil }
     }
 }
 

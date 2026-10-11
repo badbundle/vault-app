@@ -137,13 +137,28 @@ const macAutofillEntitlements = [
   "keychain-access-groups",
 ];
 
+/**
+ * The entitlements the Mac app's widget extension may have: the same table's, and its profile's. No App Group, which
+ * would also make it a member of the App Group's keychain access group, and no keychain access group but the widgets'
+ * own.
+ */
+const macWidgetsEntitlements = [
+  "com.apple.application-identifier",
+  "com.apple.developer.team-identifier",
+  "com.apple.security.app-sandbox",
+  "com.apple.security.get-task-allow",
+  "keychain-access-groups",
+];
+
 const appGroup = "442P244AFS.com.badbundle.vault";
 
 /**
  * Builds the Mac app as it runs, rather than for testing, which adds entitlements of Xcode's own, and fails unless
- * the app and its AutoFill extension are each signed with the hardened runtime, sandboxed in the App Group, with only
- * their own keychain access groups, and with no entitlement the design doesn't list. The app's own group isn't the
- * extension's, so the extension can't read the app's keychain items.
+ * the app and its AutoFill and widget extensions are each signed with the hardened runtime and sandboxed, with only
+ * their own keychain access groups, and with no entitlement the design doesn't list. The app and its AutoFill
+ * extension are in the App Group; the widget extension isn't, as an App Group is also a keychain access group. The
+ * app's own group is neither extension's, so neither can read the app's keychain items, and the widgets' group, which
+ * holds the codes the app hands them, is only the widget extension's and the app's.
  */
 async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promise<void> {
   await ctx.exec([
@@ -162,7 +177,11 @@ async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promi
     "-skipPackageUpdates",
   ]);
   const app = `${derivedData}/Build/Products/Debug/Vault.app`;
-  await checkSignedEntitlements(ctx, app, "Vault.app", macAppEntitlements, [`${appGroup}.private`, appGroup]);
+  await checkSignedEntitlements(ctx, app, "Vault.app", macAppEntitlements, [
+    `${appGroup}.private`,
+    appGroup,
+    `${appGroup}.widgets`,
+  ]);
   await checkSignedEntitlements(
     ctx,
     `${app}/Contents/PlugIns/VaultMacAutofill.appex`,
@@ -170,14 +189,27 @@ async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promi
     macAutofillEntitlements,
     [appGroup],
   );
+  await checkSignedEntitlements(
+    ctx,
+    `${app}/Contents/PlugIns/VaultMacWidgets.appex`,
+    "VaultMacWidgets.appex",
+    macWidgetsEntitlements,
+    [`${appGroup}.widgets`],
+    [],
+  );
 }
 
+/**
+ * Fails unless `bundle` is signed with the hardened runtime and sandboxed, has no entitlement but those `allowed`, and
+ * has exactly these App Groups (none, if empty) and keychain access groups.
+ */
 async function checkSignedEntitlements(
   ctx: Context,
   bundle: string,
   name: string,
   allowed: string[],
   keychainGroups: string[],
+  appGroups: string[] = [appGroup],
 ): Promise<void> {
   const signature = await ctx.capture(["codesign", "--display", "--verbose", bundle]);
   if (!/flags=0x[0-9a-f]+\(runtime\)/.test(signature.stderr)) {
@@ -191,9 +223,10 @@ async function checkSignedEntitlements(
   if (unlisted.length > 0) {
     throw new Error(`${name} has entitlements docs/mac-app.md doesn't list: ${unlisted.join(", ")}`);
   }
-  const groups = JSON.stringify(entitlements["com.apple.security.application-groups"]);
-  if (entitlements["com.apple.security.app-sandbox"] !== true || groups !== JSON.stringify([appGroup])) {
-    throw new Error(`${name} isn't sandboxed in its App Group: ${JSON.stringify(entitlements)}`);
+  const groups = JSON.stringify(entitlements["com.apple.security.application-groups"] ?? []);
+  if (entitlements["com.apple.security.app-sandbox"] !== true || groups !== JSON.stringify(appGroups)) {
+    const expected = JSON.stringify(appGroups);
+    throw new Error(`${name} isn't sandboxed with App Groups ${expected}: ${JSON.stringify(entitlements)}`);
   }
   const keychain = JSON.stringify(entitlements["keychain-access-groups"]);
   if (keychain !== JSON.stringify(keychainGroups)) {

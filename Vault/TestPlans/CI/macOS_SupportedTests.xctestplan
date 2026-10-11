@@ -112,6 +112,13 @@
     {
       "target" : {
         "containerPath" : "container:",
+        "identifier" : "VaultiOSWidgetsTests",
+        "name" : "VaultiOSWidgetsTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:",
         "identifier" : "VaultMacTests",
         "name" : "VaultMacTests"
       }

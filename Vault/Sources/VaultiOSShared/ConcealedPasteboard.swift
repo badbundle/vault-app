@@ -41,4 +41,36 @@ public enum ConcealedPasteboard {
         return options
     }
 }
+
+#elseif canImport(AppKit)
+import AppKit
+import Foundation
+
+/// Puts a code the Mac's widget copies on the clipboard as the Mac app puts its own (`VaultMacPasteboard`, G87):
+/// marked concealed so clipboard managers don't show it, and transient so they don't keep it, and kept to this Mac
+/// unless it's allowed on Universal Clipboard.
+///
+/// AppKit's clipboard has no expiry date, so whatever copies has to clear it later, if nothing else has been copied
+/// since: `copy(_:localOnly:to:)` returns the change count to tell.
+public enum ConcealedPasteboard {
+    /// Clipboard managers don't show a value marked with this (nspasteboard.org).
+    static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
+    /// Clipboard managers don't keep a value marked with this at all (nspasteboard.org).
+    static let transientType = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
+
+    /// Copies `string`, replacing whatever was on the clipboard.
+    ///
+    /// - Parameter localOnly: When `true`, it isn't offered to the user's other devices over Universal Clipboard.
+    /// - Returns: The clipboard's change count once `string` is on it. Anything copied since changes it.
+    @discardableResult
+    public static func copy(_ string: String, localOnly: Bool, to pasteboard: NSPasteboard = .general) -> Int {
+        pasteboard.prepareForNewContents(with: localOnly ? .currentHostOnly : [])
+        let item = NSPasteboardItem()
+        item.setString(string, forType: .string)
+        item.setString(string, forType: concealedType)
+        item.setString("", forType: transientType)
+        pasteboard.writeObjects([item])
+        return pasteboard.changeCount
+    }
+}
 #endif

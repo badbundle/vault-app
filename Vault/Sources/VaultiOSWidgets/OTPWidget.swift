@@ -10,6 +10,9 @@ import WidgetKit
 ///     var body: some Widget { OTPWidget() }
 /// }
 /// ```
+///
+/// The iOS and Mac widget extensions both embed it. The Mac's has the small
+/// size only: the Lock Screen's sizes aren't on the Mac.
 public struct OTPWidget: Widget {
     /// Stable kind identifier used by `WidgetCenter` to reload timelines.
     public nonisolated static let kind = "com.badbundle.vault.OTPWidget"
@@ -27,10 +30,16 @@ public struct OTPWidget: Widget {
         }
         .configurationDisplayName("OTP Code")
         .description("Show a one-time code from your vault.")
-        .supportedFamilies([
-            .systemSmall,
-            .accessoryRectangular,
-            .accessoryCircular,
-        ])
+        .supportedFamilies(Self.families)
     }
+
+    #if os(macOS)
+    static let families: [WidgetFamily] = [.systemSmall]
+    #else
+    static let families: [WidgetFamily] = [
+        .systemSmall,
+        .accessoryRectangular,
+        .accessoryCircular,
+    ]
+    #endif
 }

@@ -12,8 +12,11 @@ public final class VaultMacAppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
-    /// Clears what Vault copied, if it's still on the clipboard: quitting ends the timer that would have (G50).
+    /// Takes the widgets' codes back, and clears what Vault or a widget copied, if it's still on the clipboard:
+    /// quitting ends the timer that would have (G50, G98).
     public func applicationWillTerminate(_: Notification) {
+        VaultMacRoot.widgetCodes.withdraw()
+        VaultMacRoot.widgetCopies.takeOver()
         VaultMacRoot.pasteboard.clearNow()
     }
 }
