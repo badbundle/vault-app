@@ -91,6 +91,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Setting a duress password asks for the current App Lock Password, which waits after wrong ones as changing the password does
 - Encrypted items, recovery phrases and backups are encrypted with Apple's CryptoKit instead of the CryptoSwift library. It's the same AES-GCM, so everything encrypted before opens as it always has, and saving a backup is faster. All of Vault's encryption is now Apple's
 - Help and the privacy policy say more exactly where Vault's data goes: the iPhone's own backups include the vault, and Vault has no analytics. The Duress Password page explains killphrases, and what can still give a duress vault away
+- Backup passwords and encrypted items' passwords are turned into keys with Argon2id, using 512 MB and 256 MB of memory, so each guess at a leaked backup or a copied item costs far more. Setting a backup password, or restoring a backup made with a new one, takes seconds rather than minutes, and says it can take up to a minute. A backup password set before is strengthened in the background the first time Backups opens, without asking for it again, and backups made with it before still restore with it. An encrypted item is strengthened the first time its password opens it, with nothing else about it changed. A backup or item made by a newer version of Vault says to update Vault
 
 ### Removed
 

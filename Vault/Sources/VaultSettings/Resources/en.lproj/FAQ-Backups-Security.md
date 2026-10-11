@@ -13,8 +13,10 @@ The longer and more complex the better.
 
 ## What if my backup is leaked?
 
-The KDF we use for backups in optimized builds of Vault is extremely strong, which is why it takes so long to generate your key initially (from several seconds to a few minutes, depending on your device).
-This dramatically increases the cost for an attacker to bruteforce your password in the event that your backup document is leaked, because they will have to do this long generation for every bruteforce attempt.
+The KDF we use for backups in optimized builds of Vault is extremely strong: Argon2id, using 512 MB of memory, which is why it takes several seconds to generate your key (up to a minute on an older iPhone).
+This dramatically increases the cost for an attacker to bruteforce your password in the event that your backup document is leaked, because they will have to do this long generation, and find that much memory, for every bruteforce attempt.
+
+A backup password set in an earlier version of Vault used a different KDF. Vault never stores your password, so it strengthens the key it keeps instead: the first time you open Backups after updating, it runs the new KDF on that key in the background, without asking for your password. Backups made from then on need both, so restoring one takes a little longer. Backups made before keep the older protection, and the same salt, so someone with one of those can still try guesses at its cost.
 
 Once you have chosen a sufficiently secure password, it should be infeasible that an attacker will be able to bruteforce your password within your lifetime (assuming the underlying encryption algorithms are not broken).
 

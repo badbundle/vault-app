@@ -6,14 +6,14 @@ Your password is turned into an encryption key on this device, and Vault keeps t
 
 Without an App Lock Password, the key is in the device's keychain, protected by Face ID, Touch ID or your passcode. With one, it's inside your encrypted vault, and a duress vault has its own.
 
-Preparing the key is deliberately slow: it can take up to 3 minutes, even on a fast device.
+Preparing the key is deliberately slow, and needs a lot of memory: it takes several seconds, and up to a minute on an older iPhone.
 Anyone trying to guess your password from a leaked backup has to go through the same slow step for every single guess, which makes guessing a strong password impractical.
 
 ## Is my password shared with my other devices?
 
 No. The key isn't synced to your other devices. Each device you make backups from has its own backup password, and they don't have to match.
 
-To restore a backup, on this device or another, you enter the password that backup was made with, and Vault prepares the key from it. Vault asks for it every time, even for a backup made with the password set now: the key it keeps is only used to make backups, never to open them.
+To restore a backup, on this device or another, you enter the password that backup was made with, and Vault prepares the key from it. Vault asks for it every time, even for a backup made with the password set now: the key it keeps is only used to make backups, never to open them. If Vault closes while it prepares the key, which can happen on an iPhone short of memory, close some other apps and try again.
 
 ## Choosing a password
 
