@@ -1,3 +1,5 @@
+// The Lock Screen's sizes aren't on the Mac (`OTPWidget.families`).
+#if !os(macOS)
 import SwiftUI
 import VaultiOSShared
 import WidgetKit
@@ -46,3 +48,4 @@ struct OTPWidgetAccessoryCircularView: View {
         }
     }
 }
+#endif

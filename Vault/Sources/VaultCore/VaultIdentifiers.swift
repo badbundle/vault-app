@@ -45,6 +45,15 @@ public enum VaultIdentifiers {
         /// Require Unlock delay. Only the Mac keeps them here. Kept on this device only, and readable once it's been
         /// unlocked after starting up, with no biometric prompt.
         case appLockDeviceSettings = "vault.secure-storage.app-lock-device-settings.v1"
+        /// The time-based codes the Mac app hands its widgets while the vault's unlocked (`WidgetCodeHandoffStore`),
+        /// never a secret. Kept on this Mac only, readable only while it's unlocked, in a keychain access group only
+        /// the app and its widget extension have. Withdrawn whenever the vault locks. The iOS app never stores it.
+        case widgetCodes = "vault.secure-storage.widget-codes.v1"
+        /// A note of the code a Mac widget last copied, for the app to clear from the clipboard (`WidgetCopiedCode`):
+        /// the clipboard's change count and when, nothing of the code. In the widgets' keychain access group, kept on
+        /// this Mac only, and readable once it's been unlocked after starting up, so the app can read it as the Mac
+        /// locks. The iOS app never stores it.
+        case widgetCopiedCode = "vault.secure-storage.widget-copied-code.v1"
     }
 
     public enum Backup {

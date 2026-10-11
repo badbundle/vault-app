@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import AppIntents
 import Foundation
 import SwiftUI
@@ -141,3 +142,4 @@ struct OTPWidgetLockScreenPrivacyTests {
         )
     }
 }
+#endif

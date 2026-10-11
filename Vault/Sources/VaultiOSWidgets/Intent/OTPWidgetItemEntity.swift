@@ -18,6 +18,17 @@ public struct OTPWidgetItemEntity: AppEntity, Identifiable, Hashable {
         self.accountName = accountName
     }
 
+    /// The vault's code, or `nil` if the item isn't a code.
+    init?(item: VaultItem) {
+        guard case let .otpCode(otp) = item.item else { return nil }
+        self.init(id: item.id.rawValue, issuer: otp.data.issuer, accountName: otp.data.accountName)
+    }
+
+    /// A code the Mac app handed over.
+    init(item: WidgetCodeHandoff.Item) {
+        self.init(id: item.id, issuer: item.issuer, accountName: item.accountName)
+    }
+
     public var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(
             title: "\(displayTitle)",
@@ -36,42 +47,34 @@ public struct OTPWidgetItemEntity: AppEntity, Identifiable, Hashable {
 
 /// Provides the dynamic options shown in the widget configuration picker.
 /// Only eligible OTP items are returned — see `VaultItemWidgetEligibility`.
+/// While Vault is locked, it lists none (G44, G98).
 public struct OTPWidgetItemEntityQuery: EntityQuery, Sendable {
     public typealias Entity = OTPWidgetItemEntity
 
-    private let loader: WidgetVaultLoader
+    private let source: OTPWidgetSource
 
     public init() {
-        loader = .shared
+        source = .platform
     }
 
     public init(loader: WidgetVaultLoader) {
-        self.loader = loader
+        source = .vault(loader)
+    }
+
+    public init(handoff: WidgetCodeHandoffStore) {
+        source = .handoff(handoff)
     }
 
     public func entities(for identifiers: [OTPWidgetItemEntity.ID]) async throws -> [OTPWidgetItemEntity] {
         let lookup = Set(identifiers)
-        guard let items = try? await loader.eligibleItems() else { return [] }
-        return items
-            .filter { lookup.contains($0.id.rawValue) }
-            .compactMap(Self.makeEntity(from:))
+        return await source.entities(now: Date()).filter { lookup.contains($0.id) }
     }
 
     public func suggestedEntities() async throws -> [OTPWidgetItemEntity] {
-        guard let items = try? await loader.eligibleItems() else { return [] }
-        return items.compactMap(Self.makeEntity(from:))
+        await source.entities(now: Date())
     }
 
     public func defaultResult() async -> OTPWidgetItemEntity? {
         try? await suggestedEntities().first
-    }
-
-    private static func makeEntity(from item: VaultItem) -> OTPWidgetItemEntity? {
-        guard case let .otpCode(otp) = item.item else { return nil }
-        return OTPWidgetItemEntity(
-            id: item.id.rawValue,
-            issuer: otp.data.issuer,
-            accountName: otp.data.accountName,
-        )
     }
 }

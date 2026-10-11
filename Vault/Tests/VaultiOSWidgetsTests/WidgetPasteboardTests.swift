@@ -1,3 +1,5 @@
+// The Mac's widget copies with a version of its own (`OTPWidgetMacTests`).
+#if canImport(UIKit)
 import Foundation
 import FoundationExtensions
 import TestHelpers
@@ -63,3 +65,4 @@ extension WidgetPasteboardTests {
         return try #require(copies.first)
     }
 }
+#endif

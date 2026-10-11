@@ -20,6 +20,10 @@ import WidgetKit
 /// While the app lock is on, or the vault is encrypted with the App Lock
 /// Password, every widget renders as `.locked`, whatever it was set up to
 /// show.
+///
+/// On the Mac, the widget shows only the codes the unlocked app hands it
+/// (`WidgetCodeHandoff`): one entry for each period until they run out, then
+/// `.locked`. While the app hands over none, it renders as `.locked`.
 public struct OTPWidgetProvider: AppIntentTimelineProvider {
     public typealias Entry = OTPWidgetEntry
     public typealias Intent = OTPWidgetIntent
@@ -29,10 +33,19 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
     /// failures without spinning the CPU.
     private static let unavailableRefreshInterval: TimeInterval = 15 * 60
 
-    private let loader: WidgetVaultLoader
+    private let source: OTPWidgetSource
 
-    public init(loader: WidgetVaultLoader = .shared) {
-        self.loader = loader
+    /// This platform's widgets: the vault on iOS, the codes the app hands over on the Mac.
+    public init() {
+        source = .platform
+    }
+
+    public init(loader: WidgetVaultLoader) {
+        source = .vault(loader)
+    }
+
+    public init(handoff: WidgetCodeHandoffStore) {
+        source = .handoff(handoff)
     }
 
     public func placeholder(in _: Context) -> OTPWidgetEntry {
@@ -52,7 +65,19 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
         await makeTimeline(for: configuration)
     }
 
-    func makeTimeline(for configuration: OTPWidgetIntent) async -> Timeline<OTPWidgetEntry> {
+    func makeTimeline(for configuration: OTPWidgetIntent, now: Date = Date()) async -> Timeline<OTPWidgetEntry> {
+        switch source {
+        case let .vault(loader):
+            await vaultTimeline(for: configuration, loader: loader)
+        case let .handoff(store):
+            handoffTimeline(for: configuration, handoff: store.current(at: now), now: now)
+        }
+    }
+
+    private func vaultTimeline(
+        for configuration: OTPWidgetIntent,
+        loader: WidgetVaultLoader,
+    ) async -> Timeline<OTPWidgetEntry> {
         // Checked before anything else, so no item is read. The app reloads
         // every timeline when the lock or the password is turned on or off.
         if loader.isLocked {
@@ -73,7 +98,12 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
         case let .totp(period):
             return totpTimeline(itemID: item.id.rawValue, otp: otp, period: period)
         case let .hotp(counter):
-            return hotpTimeline(itemID: item.id.rawValue, otp: otp, counter: counter)
+            return hotpTimeline(
+                itemID: item.id.rawValue,
+                otp: otp,
+                counter: counter,
+                advancesInTheApp: loader.advancesHOTPInTheApp,
+            )
         }
     }
 
@@ -141,6 +171,7 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
         itemID: UUID,
         otp: OTPAuthCode,
         counter _: UInt64,
+        advancesInTheApp: Bool,
     ) -> Timeline<OTPWidgetEntry> {
         let entry = OTPWidgetEntry(
             date: Date(),
@@ -149,12 +180,59 @@ public struct OTPWidgetProvider: AppIntentTimelineProvider {
                 issuer: otp.data.issuer,
                 accountName: otp.data.accountName,
                 digits: Int(otp.data.digits.value),
-                advancesInTheApp: loader.advancesHOTPInTheApp,
+                advancesInTheApp: advancesInTheApp,
             )),
         )
         // HOTP only refreshes when the app pings `WidgetCenter.reloadAllTimelines()`
         // after the user increments the counter via deep link.
         return Timeline(entries: [entry], policy: .never)
+    }
+
+    // MARK: - Handed over by the Mac app
+
+    /// A widget on the Mac: each of the item's codes the app handed over, in turn, until they run out, and then
+    /// `.locked`, so the widget never shows a code once the app stops handing them over, even if it isn't reloaded.
+    /// The app reloads it whenever it hands codes over or takes them back.
+    private func handoffTimeline(
+        for configuration: OTPWidgetIntent,
+        handoff: WidgetCodeHandoff?,
+        now: Date,
+    ) -> Timeline<OTPWidgetEntry> {
+        guard let handoff else {
+            return lockedTimeline()
+        }
+        guard let itemID = configuration.item?.id, let item = handoff.item(id: itemID) else {
+            // Missing, or no longer one a widget may show, which look the same (manifesto C2).
+            return Timeline(
+                entries: [
+                    OTPWidgetEntry(date: now, snapshot: .unavailable),
+                    OTPWidgetEntry(date: handoff.expiresAt, snapshot: .locked),
+                ],
+                policy: .after(handoff.expiresAt),
+            )
+        }
+        let codes = item.codes.filter { $0.end > now && $0.start < handoff.expiresAt }
+        guard let last = codes.last else {
+            return lockedTimeline()
+        }
+        let entries = codes.map { code in
+            OTPWidgetEntry(
+                date: max(code.start, now),
+                snapshot: .totp(.init(
+                    itemID: item.id,
+                    issuer: item.issuer,
+                    accountName: item.accountName,
+                    code: code.code,
+                    digits: item.digits,
+                    periodStart: code.start,
+                    periodEnd: code.end,
+                )),
+            )
+        }
+        return Timeline(
+            entries: entries + [OTPWidgetEntry(date: min(handoff.expiresAt, last.end), snapshot: .locked)],
+            policy: .after(handoff.expiresAt),
+        )
     }
 
     // MARK: - Unavailable

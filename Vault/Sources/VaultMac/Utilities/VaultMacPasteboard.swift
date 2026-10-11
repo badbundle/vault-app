@@ -8,7 +8,8 @@ import VaultSettings
 /// managers, kept to this Mac unless Universal Clipboard is allowed for that kind of text, and cleared after the Clear
 /// Clipboard time.
 ///
-/// Every copy Vault makes on the Mac goes through here.
+/// Every copy Vault makes on the Mac goes through here. A code a widget copies is put on the clipboard by the widget
+/// extension, which the app then clears as it clears its own (`adoptWidgetCopy(_:now:)`).
 @MainActor
 @Observable
 final class VaultMacPasteboard {
@@ -51,6 +52,28 @@ final class VaultMacPasteboard {
         }
     }
 
+    /// Takes over clearing a code a widget copied, as if Vault had copied it: once the Clear Clipboard time is up,
+    /// counted from when the widget copied it, or when Vault locks or quits, unless something else has been copied
+    /// since. Does nothing if something has already.
+    func adoptWidgetCopy(_ copy: WidgetCopiedCode, now: Date = Date()) {
+        let contents = VaultMacPasteboardContents(changeCount: copy.changeCount)
+        guard system.adopt(contents) else { return }
+        pendingClear?.cancel()
+        guard let duration = localSettings.state.pasteTimeToLive.duration else {
+            pendingClear = nil
+            return
+        }
+        let timeToLive = max(0, copy.copiedAt.addingTimeInterval(duration).timeIntervalSince(now))
+        pendingClear = Task { [system, sleep] in
+            do {
+                try await sleep(.seconds(timeToLive))
+            } catch {
+                return
+            }
+            system.clear(ifStill: contents)
+        }
+    }
+
     /// Clears the clipboard now, if it still holds what Vault copied last: when Vault quits, which ends the timer that
     /// would have cleared it.
     func clearNow() {
@@ -75,6 +98,9 @@ protocol VaultMacSystemPasteboard: Sendable {
     func clear(ifStill contents: VaultMacPasteboardContents)
     /// Clears the clipboard, if what Vault copied last is still on it.
     func clearIfStillCopiedByVault()
+    /// Takes `contents`, which a widget copied, as what Vault copied last, if nothing else has been copied since.
+    /// Returns whether it did.
+    func adopt(_ contents: VaultMacPasteboardContents) -> Bool
 }
 
 /// The Mac's general pasteboard.
@@ -113,5 +139,11 @@ final class NSPasteboardSystemPasteboard: VaultMacSystemPasteboard {
     func clearIfStillCopiedByVault() {
         guard let lastCopied else { return }
         clear(ifStill: lastCopied)
+    }
+
+    func adopt(_ contents: VaultMacPasteboardContents) -> Bool {
+        guard pasteboard.changeCount == contents.changeCount else { return false }
+        lastCopied = contents
+        return true
     }
 }
