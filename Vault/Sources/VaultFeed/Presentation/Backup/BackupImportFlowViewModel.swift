@@ -70,9 +70,17 @@ public final class BackupImportFlowViewModel {
                 )
             }
             let pdfData = try data.get()
-            guard let pdf = PDFDocument(data: pdfData) else { throw InvalidURLError() }
-            return try backupPDFDetatcher.detachEncryptedVault(fromPDF: pdf)
+            return try await Self.detachEncryptedVault(fromPDF: pdfData, using: backupPDFDetatcher)
         }
+    }
+
+    /// Reads the backup in a PDF off the main actor: a large vault's PDF takes a while to read.
+    private nonisolated static func detachEncryptedVault(
+        fromPDF pdfData: Data,
+        using backupPDFDetatcher: any VaultBackupPDFDetatcher,
+    ) async throws -> EncryptedVault {
+        guard let pdf = PDFDocument(data: pdfData) else { throw InvalidURLError() }
+        return try backupPDFDetatcher.detachEncryptedVault(fromPDF: pdf)
     }
 
     public func handleImport(fromEncryptedVault encryptedVault: EncryptedVault) async {
@@ -82,12 +90,12 @@ public final class BackupImportFlowViewModel {
         }
     }
 
-    private func performImport(getEncryptedVault: () throws -> EncryptedVault) async {
+    private func performImport(getEncryptedVault: () async throws -> EncryptedVault) async {
         do {
             isImporting = true
             defer { isImporting = false }
 
-            let encryptedVault = try getEncryptedVault()
+            let encryptedVault = try await getEncryptedVault()
             payloadState = .needsPasswordEntry(encryptedVault)
         } catch let error as any LocalizedError {
             payloadState = .error(.init(localizedError: error))
@@ -113,8 +121,8 @@ public final class BackupImportFlowViewModel {
 
     /// Clears the last import's error as the user goes to choose another backup, so the screen asks for one again.
     ///
-    /// Done as they choose, not once the backup is read: reading a PDF doesn't wait for anything, so the same error
-    /// again would replace the last one before the UI saw it go, and nothing would react to it.
+    /// Done as they choose, not once the backup is read: the same error again could replace the last one before the
+    /// UI saw it go, and nothing would react to it.
     public func clearError() {
         guard payloadState.isError else { return }
         payloadState = .none

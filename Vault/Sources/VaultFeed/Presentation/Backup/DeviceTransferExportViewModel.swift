@@ -69,21 +69,18 @@ public final class DeviceTransferExportViewModel {
             let payload = try await dataModel.makeExport(userDescription: "")
             guard generation == self.generation else { return }
 
-            // Encrypt and encode
-            let encryptedVault = try await encryptPayload(payload: payload)
+            let shards = try await makeShards(payload: payload)
             guard generation == self.generation else { return }
-
-            // Convert to data
-            let coder = EncryptedVaultCoder()
-            let vaultData = try coder.encode(vault: encryptedVault)
-
-            // Split into shards
-            let shardBuilder = DataShardBuilder()
-            shards = shardBuilder.makeShards(from: vaultData)
+            var image: PlatformImage?
+            if let first = shards.first {
+                image = await Self.renderQRCode(of: first)
+                guard generation == self.generation else { return }
+            }
 
             // Start displaying first QR code
+            self.shards = shards
             state = .displayingQR(currentIndex: 0, totalCount: shards.count)
-            renderCurrentQRCode()
+            currentQRCodeImage = image
             startCycling()
         } catch {
             guard generation == self.generation else { return }
@@ -115,7 +112,7 @@ public final class DeviceTransferExportViewModel {
                 do {
                     try await intervalTimer.wait(for: 2.0)
                     guard !Task.isCancelled, let self else { break }
-                    advanceToNextShard()
+                    await advanceToNextShard()
                 } catch {
                     break
                 }
@@ -123,33 +120,30 @@ public final class DeviceTransferExportViewModel {
         }
     }
 
-    private func advanceToNextShard() {
-        guard case let .displayingQR(currentIndex, totalCount) = state else { return }
+    private func advanceToNextShard() async {
+        guard case let .displayingQR(currentIndex, totalCount) = state, currentIndex < shards.count else { return }
+        let generation = generation
 
         let nextIndex = (currentIndex + 1) % totalCount
+        let image = await Self.renderQRCode(of: shards[nextIndex])
+        // Stopped, or started again, while it rendered.
+        guard generation == self.generation else { return }
         state = .displayingQR(currentIndex: nextIndex, totalCount: totalCount)
-        renderCurrentQRCode()
+        currentQRCodeImage = image
     }
 
-    private func renderCurrentQRCode() {
-        guard case let .displayingQR(currentIndex, _) = state else { return }
-        guard currentIndex < shards.count else { return }
-
-        let shard = shards[currentIndex]
-
-        do {
-            let coder = EncryptedVaultCoder()
-            let shardData = try coder.encode(shard: shard)
-            let renderer = QRCodeImageRenderer()
-            currentQRCodeImage = renderer.makeImage(fromData: shardData)
-        } catch {
-            currentQRCodeImage = nil
-        }
-    }
-
-    private nonisolated func encryptPayload(payload: VaultApplicationPayload) async throws -> EncryptedVault {
+    /// Encrypts the vault, encodes it and splits it into shards, off the main actor.
+    private nonisolated func makeShards(payload: VaultApplicationPayload) async throws -> [DataShard] {
         // Nothing is saved, so a random amount of padding is enough, and the transfer stays quick.
         let backupExporter = EncryptedVaultEncoder(clock: clock, backupPassword: backupPassword, padding: .random)
-        return try backupExporter.encryptAndEncode(payload: payload)
+        let encryptedVault = try backupExporter.encryptAndEncode(payload: payload)
+        let vaultData = try EncryptedVaultCoder().encode(vault: encryptedVault)
+        return DataShardBuilder().makeShards(from: vaultData)
+    }
+
+    /// Renders a shard's QR code off the main actor, where it would hold up the window each time the code changes.
+    private nonisolated static func renderQRCode(of shard: DataShard) async -> sending PlatformImage? {
+        guard let shardData = try? EncryptedVaultCoder().encode(shard: shard) else { return nil }
+        return QRCodeImageRenderer().makeImage(fromData: shardData)
     }
 }

@@ -3,7 +3,7 @@ import PDFKit
 import VaultCore
 
 /// @mockable
-public protocol VaultBackupPDFDetatcher {
+public protocol VaultBackupPDFDetatcher: Sendable {
     /// Detatches the `EncryptedVault` from the PDF if it is able.
     func detachEncryptedVault(fromPDF pdf: PDFDocument) throws -> EncryptedVault
 }

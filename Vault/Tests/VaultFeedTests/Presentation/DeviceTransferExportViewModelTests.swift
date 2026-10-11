@@ -275,12 +275,14 @@ extension DeviceTransferExportViewModelTests {
         )
     }
 
+    /// Waits up to a few seconds, as each code is rendered off the main actor before it shows.
     private func waitForDisplayingIndex(_ expectedIndex: Int, in sut: DeviceTransferExportViewModel) async {
-        for _ in 0 ..< 100 {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while ContinuousClock.now < deadline {
             if case let .displayingQR(currentIndex, _) = sut.state, currentIndex == expectedIndex {
                 return
             }
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(5))
         }
         Issue.record("Expected displayingQR index \(expectedIndex), got \(sut.state)")
     }

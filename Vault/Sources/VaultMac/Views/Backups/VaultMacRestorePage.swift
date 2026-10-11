@@ -251,8 +251,13 @@ struct VaultMacImportSheet: View {
         viewModel.clearError()
         guard let url = choosePDF() else { return }
         Task {
-            await viewModel.handleImport(fromPDF: Result { try Data(contentsOf: url) })
+            await viewModel.handleImport(fromPDF: Self.read(url))
         }
+    }
+
+    /// Reads the file off the main actor: it could be large, or in iCloud Drive and not downloaded yet.
+    private nonisolated static func read(_ url: URL) async -> Result<Data, any Error> {
+        Result { try Data(contentsOf: url) }
     }
 
     private func importPayload(_ payload: VaultApplicationPayload) {

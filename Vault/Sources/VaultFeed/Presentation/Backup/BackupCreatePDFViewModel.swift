@@ -156,12 +156,17 @@ public final class BackupCreatePDFViewModel {
             let currentDate = clock.currentDate
             state = .loading
             let payload = try await dataModel.makeExport(userDescription: userDescriptionEncrypted)
-            let document = try await makeBackupPDFDocument(payload: payload)
-            let hash = try DigestHasher().sha256(value: payload)
-            generatedPDFSubject.send(.init(
-                document: document,
+            let size = size
+            let rendered = try await makeBackupPDF(
+                payload: payload,
                 size: size,
-                dataHash: hash,
+                authorName: authorName,
+                userHint: userHint,
+            )
+            generatedPDFSubject.send(.init(
+                document: rendered.document,
+                size: size,
+                dataHash: rendered.hash,
                 createdDate: currentDate,
                 vaultToken: vaultToken,
             ))
@@ -189,26 +194,28 @@ public final class BackupCreatePDFViewModel {
 // MARK: - PDF Generation
 
 extension BackupCreatePDFViewModel {
-    /// Exports and encrypts the full vault from storage, rendering to a PDF
-    private func makeBackupPDFDocument(payload: VaultApplicationPayload) async throws -> PDFDocument {
+    /// Encrypts the vault and renders it to a PDF, off the main actor: rendering every QR code is slow, and would
+    /// otherwise freeze the app until it's done.
+    private nonisolated func makeBackupPDF(
+        payload: VaultApplicationPayload,
+        size: Size,
+        authorName: String,
+        userHint: String,
+    ) async throws -> sending (document: PDFDocument, hash: Digest<VaultApplicationPayload>.SHA256) {
+        let backupExporter = EncryptedVaultEncoder(clock: clock, backupPassword: backupPassword)
+        let exportPayload = try VaultExportPayload(
+            encryptedVault: backupExporter.encryptAndEncode(payload: payload),
+            userDescription: userHint,
+            created: clock.currentDate,
+        )
         let pdfCreator = VaultBackupPDFGenerator(
             size: size.documentSize,
             documentTitle: "Backup",
             applicationName: "Vault",
             authorName: authorName,
         )
-        let exportPayload = try await makeExportPayload(payload: payload)
-        return try pdfCreator.makePDF(payload: exportPayload)
-    }
-
-    /// Encrypt on background thread.
-    private nonisolated func makeExportPayload(payload: VaultApplicationPayload) async throws -> VaultExportPayload {
-        let backupExporter = EncryptedVaultEncoder(clock: clock, backupPassword: backupPassword)
-        let encryptedVault = try backupExporter.encryptAndEncode(payload: payload)
-        return await VaultExportPayload(
-            encryptedVault: encryptedVault,
-            userDescription: userHint,
-            created: clock.currentDate,
-        )
+        let document = try pdfCreator.makePDF(payload: exportPayload)
+        let hash = try DigestHasher().sha256(value: payload)
+        return (document, hash)
     }
 }

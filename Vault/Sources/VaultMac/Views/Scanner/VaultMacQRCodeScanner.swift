@@ -156,8 +156,9 @@ enum VaultMacQRCodeScannerFailure: Equatable {
 
 /// Reads the QR codes in an image file the user picked.
 enum VaultMacQRCodeImageReader {
-    /// The text of every QR code in the image, or none if it isn't an image Vault can read.
-    static func codes(in url: URL) -> [String] {
+    /// The text of every QR code in the image, or none if it isn't an image Vault can read. Read off the main actor,
+    /// as finding the codes in a large image takes a while.
+    nonisolated static func codes(in url: URL) async -> [String] {
         let request = VNDetectBarcodesRequest()
         request.symbologies = [.qr]
         let handler = VNImageRequestHandler(url: url)
@@ -175,6 +176,6 @@ enum VaultMacQRCodeImageReader {
         panel.canChooseDirectories = false
         panel.message = "Choose an image of a QR code."
         guard await panel.begin() == .OK, let url = panel.url else { return nil }
-        return codes(in: url)
+        return await codes(in: url)
     }
 }
