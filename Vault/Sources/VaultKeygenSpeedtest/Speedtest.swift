@@ -107,16 +107,29 @@ func milliseconds(_ duration: Duration) -> String {
     return String(format: "%.1f ms", milliseconds)
 }
 
-/// Runs the app lock calibration, then times a derivation with the parameters it chose.
+/// Runs the app lock calibration, showing what it measured for each number of lanes and which it chose, then times
+/// a derivation with the parameters it chose.
 func calibrateAppLock() throws {
     print("🚦 Calibrating the app lock key derivation")
-    let calibration = try AppLockKeyDerivationCalibrator().calibrate()
+    let start = ContinuousClock.now
+    let measurements = try AppLockKeyDerivationCalibrator().measureLanes()
+    let calibrationTime = ContinuousClock.now - start
+    for measurement in measurements {
+        let lanes = measurement.lanes == 1 ? "1 lane: " : "\(measurement.lanes) lanes:"
+        print(
+            "   \(lanes) \(milliseconds(measurement.timePerPass)) a pass, so \(measurement.passes) passes",
+            "in \(milliseconds(measurement.expectedDuration))",
+        )
+    }
+    let calibration = AppLockKeyDerivationCalibrator.calibration(choosingFrom: measurements)
     let parameters = calibration.parameters
-    print("✅ Chose \(parameters.iterations) passes over \(parameters.memoryKiB / 1024) MiB")
-    print("   Expected derivation: \(calibration.expectedDerivationDuration)")
-    print("   Unlock deadline: \(calibration.unlockDeadline)")
+    let lanes = parameters.parallelism == 1 ? "1 lane" : "\(parameters.parallelism) lanes"
+    print("✅ Chose \(lanes) and \(parameters.iterations) passes over \(parameters.memoryKiB / 1024) MiB")
+    print("   Calibrating took \(milliseconds(calibrationTime))")
+    print("   Expected derivation: \(milliseconds(calibration.expectedDerivationDuration))")
+    print("   Unlock deadline: \(milliseconds(calibration.unlockDeadline))")
     let actual = try Argon2idDerivationTimer().timeDerivation(parameters: parameters)
-    print("   One derivation with these parameters took \(actual)")
+    print("   One derivation with these parameters took \(milliseconds(actual))")
 }
 
 func buildConfigString() -> String {

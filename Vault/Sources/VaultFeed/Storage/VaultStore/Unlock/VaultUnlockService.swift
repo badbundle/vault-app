@@ -28,10 +28,11 @@ import os
 /// slower iPhone, the deadline is raised to 1.5 times that, for that attempt and every later one, up to
 /// `maximumDeadline`. It's never lowered.
 ///
-/// - The work is timed in the thread's CPU time, not on a clock, so time the app spends suspended, or the device
-///   asleep, doesn't count. The work is one thread's computation, so its CPU time is how long it takes when it isn't
-///   held up. When the device is busy, an attempt can overrun the deadline without raising it. That shows how busy
-///   the device is, not what the password opened.
+/// - The work is timed in CPU time, not on a clock, so time the app spends suspended, or the device asleep, doesn't
+///   count. With one lane, the work is one thread's computation, so its CPU time is how long it takes when it isn't
+///   held up. With more, the lanes run side by side, and their CPU time is divided between them
+///   (`VaultUnlockWork.cpuTime(lanes:)`). When the device is busy, an attempt can overrun the deadline without
+///   raising it. That shows how busy the device is, not what the password opened.
 /// - Only an attempt whose work finished and that's still wanted raises it.
 /// - Only work that's the same whatever the password counts. Opening and decoding a vault doesn't: the deadline is
 ///   saved and every later attempt waits for it, so counting a large vault's decode would make every attempt, a
@@ -51,9 +52,10 @@ public actor VaultUnlockService {
     static let deadlineMultiplier = 1.5
     /// The longest the deadline goes: raised no further, and a longer one read from storage is taken as this.
     ///
-    /// The derivation's passes are capped at 32 (`AppLockKeyDerivation.passesRange`). Those take about 0.7 s on an
-    /// M5 Max, and perhaps 3 s on an iPhone four times slower; 1.5 times that is about 4.5 s. A deadline beyond this
-    /// hides nothing a real device needs hiding, and would make every unlock wait.
+    /// Calibration aims for a derivation of about a second (`AppLockKeyDerivation.targetDuration`), so the deadline
+    /// starts at about 1.5 s. Restored onto an iPhone three times slower than the one that set the password, the
+    /// derivation takes about 3 s, and 1.5 times that is about 4.5 s. A deadline beyond this hides nothing a real
+    /// device needs hiding, and would make every unlock wait.
     static let maximumDeadline = Duration.seconds(5)
 
     private let file: EncryptedVaultFile
@@ -431,8 +433,8 @@ extension VaultUnlockService {
     }
 
     private struct Attempt: Sendable {
-        /// The thread CPU time deriving the key and trying the slots took, or `nil` if the key couldn't be derived.
-        /// It's the same whatever the password.
+        /// The CPU time deriving the key and trying the slots took (`VaultUnlockWork.cpuTime(lanes:)`), or `nil` if
+        /// the key couldn't be derived. It's the same whatever the password.
         var workDuration: Duration?
         /// Every slot the password opened.
         var openedSlots: [Int] = []
@@ -449,14 +451,16 @@ extension VaultUnlockService {
         var state: VaultRecordState
     }
 
-    /// Derives the key, tries every slot, and, if `opensBody`, opens one body. Runs off the actor, all on one thread.
+    /// Derives the key, tries every slot, and, if `opensBody`, opens one body. Runs off the actor, all on one thread,
+    /// apart from the lanes of a derivation that has more than one.
     private static func attempt(
         password: String,
         contents: VaultSlotFile,
         work: any VaultUnlockWork,
         opensBody: Bool,
     ) -> Attempt {
-        let start = work.threadCPUTime()
+        let lanes = contents.header.kdfParameters.parallelism
+        let start = work.cpuTime(lanes: lanes)
         let opened: [VaultSlotFile.OpenedSlot]
         do {
             let key = try work.passwordKey(for: password, header: contents.header)
@@ -465,7 +469,7 @@ extension VaultUnlockService {
         } catch {
             return Attempt(workDuration: nil, outcome: .failure(error))
         }
-        let workDuration = work.threadCPUTime() - start
+        let workDuration = work.cpuTime(lanes: lanes) - start
         let openedSlots = opened.map(\.index)
         guard opensBody else {
             return Attempt(workDuration: workDuration, openedSlots: openedSlots, outcome: .success(nil))

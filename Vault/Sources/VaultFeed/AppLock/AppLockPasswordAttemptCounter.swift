@@ -131,7 +131,7 @@ public actor AppLockPasswordAttemptCounter {
     /// | 7 or 8 | 15 minutes |
     /// | 9 or more | 1 hour |
     ///
-    /// On top of that, every attempt takes the time the key derivation is calibrated to, about half a second.
+    /// On top of that, every attempt takes the time the key derivation is calibrated to, about a second.
     static func delay(afterAttempts attempts: Int) -> Duration {
         switch attempts {
         case ..<5: .zero

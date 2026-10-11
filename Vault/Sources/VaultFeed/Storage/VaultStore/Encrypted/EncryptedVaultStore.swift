@@ -266,7 +266,7 @@ extension EncryptedVaultStore {
     ///   accepted: refusing it would be an oracle. If a password opens more than one slot, unlocking opens the most
     ///   recently wrapped, which is this new vault: its wrap is stamped by `VaultWrapStamping`, later than every wrap
     ///   this device has made and than this vault's own, whatever the device's clock says.
-    /// - It derives the password's key as unlocking does, which takes about half a second.
+    /// - It derives the password's key as unlocking does, which takes about a second.
     ///
     /// Never log, print or measure anything about it (MANIFESTO C3).
     ///

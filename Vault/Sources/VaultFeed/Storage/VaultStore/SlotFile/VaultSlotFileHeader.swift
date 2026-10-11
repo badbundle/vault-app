@@ -34,9 +34,12 @@ extension VaultSlotFile {
         static let argon2idKDF: UInt16 = 1
 
         /// Argon2id parameters are refused outside these, before anything is derived, so a changed header can't
-        /// make unlocking run for hours or ask for gigabytes. Calibration picks from well inside them.
+        /// make unlocking run for hours or ask for gigabytes. Calibration picks from inside them
+        /// (`AppLockKeyDerivation`).
         static let memoryKiBRange: ClosedRange<UInt32> = 8 ... 1 << 20
-        static let passesRange: ClosedRange<UInt32> = 1 ... 32
+        /// Up to calibration's ceiling. It was 1–32 before VAULT-128 raised the ceiling, so an older Vault refuses a
+        /// file with more passes.
+        static let passesRange: ClosedRange<UInt32> = 1 ... 128
         static let lanesRange: ClosedRange<UInt32> = 1 ... 8
 
         /// The size of every slot, in bytes: 1 MiB × 2^k.
@@ -138,9 +141,9 @@ extension VaultSlotFile.Header {
     /// keyboard put its accents together. Setting, trying and changing a password all derive through here, so they
     /// always agree.
     ///
-    /// It takes as long as calibration chose, about half a second on the device that created the file, so call it
-    /// off the main actor. The key goes straight from the derivation's wiped buffer into a `SymmetricKey`, which is
-    /// zeroed when it's released, and the password's bytes are wiped.
+    /// It takes as long as calibration chose, about a second on the device that created the file (half a second for a
+    /// file made before VAULT-128), so call it off the main actor. The key goes straight from the derivation's wiped
+    /// buffer into a `SymmetricKey`, which is zeroed when it's released, and the password's bytes are wiped.
     public func passwordKey(for password: String) throws -> VaultSlotRootKey {
         var bytes = Data(password.precomposedStringWithCanonicalMapping.utf8)
         defer { SlotRandom.wipe(&bytes) }

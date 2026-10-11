@@ -56,7 +56,7 @@ extension VaultSlotFileTests {
             Argon2idParameters(memoryKiB: 4, iterations: 1, parallelism: 1),
             Argon2idParameters(memoryKiB: 2 << 20, iterations: 1, parallelism: 1),
             Argon2idParameters(memoryKiB: 64, iterations: 0, parallelism: 1),
-            Argon2idParameters(memoryKiB: 64, iterations: 33, parallelism: 1),
+            Argon2idParameters(memoryKiB: 64, iterations: 129, parallelism: 1),
             Argon2idParameters(memoryKiB: 64, iterations: 1, parallelism: 0),
             Argon2idParameters(memoryKiB: 64, iterations: 1, parallelism: 9),
             Argon2idParameters(memoryKiB: 32, iterations: 1, parallelism: 8),
@@ -67,6 +67,18 @@ extension VaultSlotFileTests {
                 try VaultSlotFile(kdfParameters: parameters)
             }
         }
+    }
+
+    /// Calibration's ceiling. Before VAULT-128 the format stopped at 32.
+    @Test
+    func init_acceptsUpTo128Passes() throws {
+        let file = try VaultSlotFile(kdfParameters: Argon2idParameters(memoryKiB: 64, iterations: 128, parallelism: 4))
+
+        let read = try VaultSlotFile(bytes: file.bytes)
+
+        #expect(read.header.kdfParameters == Argon2idParameters(memoryKiB: 64, iterations: 128, parallelism: 4))
+        #expect(file.bytes[22 ..< 26] == Data([0x00, 0x00, 0x00, 0x80]))
+        #expect(file.bytes[26] == 0x04)
     }
 
     @Test
@@ -1042,7 +1054,7 @@ extension VaultSlotFileTests {
             HeaderChange(name: "memory 4 KiB", offset: 18, bytes: [0x00, 0x00, 0x00, 0x04]),
             HeaderChange(name: "memory 2 GiB", offset: 18, bytes: [0x00, 0x20, 0x00, 0x00]),
             HeaderChange(name: "passes 0", offset: 22, bytes: [0x00, 0x00, 0x00, 0x00]),
-            HeaderChange(name: "passes 33", offset: 22, bytes: [0x00, 0x00, 0x00, 0x21]),
+            HeaderChange(name: "passes 129", offset: 22, bytes: [0x00, 0x00, 0x00, 0x81]),
             HeaderChange(name: "lanes 0", offset: 26, bytes: [0x00]),
             HeaderChange(name: "lanes 9", offset: 26, bytes: [0x09]),
             HeaderChange(name: "gap not zero", offset: 27, bytes: [0x01]),
@@ -1055,6 +1067,7 @@ extension VaultSlotFileTests {
             HeaderChange(name: "memory 128 KiB", offset: 18, bytes: [0x00, 0x00, 0x00, 0x80]),
             HeaderChange(name: "passes 2", offset: 22, bytes: [0x00, 0x00, 0x00, 0x02]),
             HeaderChange(name: "passes 32", offset: 22, bytes: [0x00, 0x00, 0x00, 0x20]),
+            HeaderChange(name: "passes 128", offset: 22, bytes: [0x00, 0x00, 0x00, 0x80]),
             HeaderChange(name: "lanes 2", offset: 26, bytes: [0x02]),
             HeaderChange(name: "lanes 8", offset: 26, bytes: [0x08]),
         ]

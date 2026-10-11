@@ -191,7 +191,7 @@ extension SlotFilePersistence {
         work: any VaultUnlockWork,
     ) async throws {
         guard let (header, _) = try file.readHeader() else { throw EncryptedVaultStoreError.fileMissing }
-        // The derivation unlocking uses, off the actor: about half a second on the device that created the file.
+        // The derivation unlocking uses, off the actor: about a second on the device that created the file.
         let key = try await Task.detached(priority: .userInitiated) {
             try work.passwordKey(for: password, header: header)
         }.value

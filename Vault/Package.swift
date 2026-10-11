@@ -217,8 +217,8 @@ let package = Package(
             plugins: targetPlugins,
         ),
         // The Argon2 reference implementation (CC0), vendored unmodified. Provenance and the upstream commit are in
-        // its README. With more than one lane, each lane runs on a thread of its own; with one, as the App Lock
-        // Password's derivation has, it never starts a thread.
+        // its README. With more than one lane, each lane runs on a thread of its own, as the App Lock Password's
+        // derivation does when calibration chooses more than one; with one, it never starts a thread.
         .target(
             name: "CArgon2",
             exclude: ["LICENSE", "README.md"],
