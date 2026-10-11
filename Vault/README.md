@@ -88,6 +88,46 @@ A composition key deriver, using the same salt at each step, in this order:
 1. scrypt, 256 bit key length, N = 1 << 8, r = 4, p = 1
 2. PBKDF2, 256 bit key length, SHA2 (SHA384), 372002 iterations
 
+### `vault.keygen.backup.fast.v2`
+
+Argon2id (RFC 9106, version 0x13), 256 bit key length, m = 8 MiB, t = 2 passes, p = 4 lanes.
+
+### `vault.keygen.backup.secure.v2`
+
+Argon2id (RFC 9106, version 0x13), 256 bit key length, m = 512 MiB, t = 32 passes, p = 4 lanes.
+Every backup password set or changed from v2 on derives with it. It only runs in the app, never in an extension.
+
+### `vault.keygen.backup.fast.v1-then-v2`
+
+`vault.keygen.backup.fast.v1`, carried on with `vault.keygen.backup.fast.v2`'s Argon2id:
+
+1. `vault.keygen.backup.fast.v1`, from the password and salt.
+2. Argon2id with `vault.keygen.backup.fast.v2`'s parameters, whose password is the key from step 1 and whose salt is
+   this signature's ID in UTF-8 (`vault.keygen.backup.fast.v1-then-v2`) followed by the salt.
+
+### `vault.keygen.backup.secure.v1-then-v2`
+
+A backup password set before v2, carried on to v2 without the password, which Vault never stores:
+
+1. `vault.keygen.backup.secure.v1`, from the password and salt.
+2. Argon2id with `vault.keygen.backup.secure.v2`'s parameters, whose password is the key from step 1 and whose salt
+   is this signature's ID in UTF-8 (`vault.keygen.backup.secure.v1-then-v2`) followed by the salt.
+
+The app stores only step 1's key, so the first time it loads a stored `vault.keygen.backup.secure.v1` key it runs step
+2 on it and stores the result in its place, with the same salt. A backup made with it carries the one salt, and
+restoring it runs both steps from the password.
+
+### `vault.keygen.item.fast.v2`
+
+Argon2id (RFC 9106, version 0x13), 256 bit key length, m = 4 MiB, t = 2 passes, p = 4 lanes.
+
+### `vault.keygen.item.secure.v2`
+
+Argon2id (RFC 9106, version 0x13), 256 bit key length, m = 256 MiB, t = 4 passes, p = 4 lanes.
+Every item password set or changed from v2 on derives with it, and an item encrypted with
+`vault.keygen.item.secure.v1` is encrypted again with it, from the password just entered, the next time it opens.
+It only runs in the app, never in an extension.
+
 ### `vault.keygen.testing`
 
 Only for use during testing.
