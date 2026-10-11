@@ -66,9 +66,16 @@ struct VaultMacBackupPasswordSheet: View {
                 if viewModel.newPassword.isLoading {
                     ProgressView()
                         .controlSize(.small)
-                    Text("Securing your password. This can take up to 3 minutes.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
+                    Group {
+                        switch viewModel.keyDerivationTime {
+                        case .upToAMinute:
+                            Text("Securing your password. This can take up to a minute.")
+                        case .upToThreeMinutes:
+                            Text("Securing your password. This can take up to 3 minutes.")
+                        }
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 }
                 Spacer()
                 if viewModel.newPassword == .success {

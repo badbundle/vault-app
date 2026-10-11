@@ -57,7 +57,7 @@ struct BackupKeyDecryptorView: View {
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
                 // Deliberately enabled while the key is recreated: with interactive dismissal disabled, this is
-                // the only way out of the up-to-3-minute derivation.
+                // the only way out of the derivation, which can take minutes.
                 Button {
                     decryptionTask?.cancel()
                     dismiss()
@@ -127,7 +127,12 @@ struct BackupKeyDecryptorView: View {
         if viewModel.isDecrypting {
             HStack(alignment: .center, spacing: 4) {
                 ProgressView()
-                Text("Decrypting the backup. This can take up to 3 minutes.")
+                switch viewModel.keyDerivationTime {
+                case .upToAMinute:
+                    Text("Decrypting the backup. This can take up to a minute.")
+                case .upToThreeMinutes:
+                    Text("Decrypting the backup. This can take up to 3 minutes.")
+                }
             }
         } else if case let .error(error) = viewModel.decryptionKeyState {
             Label(error.userTitle, systemImage: "xmark.octagon.fill")

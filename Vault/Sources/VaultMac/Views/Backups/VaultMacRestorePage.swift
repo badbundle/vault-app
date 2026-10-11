@@ -281,7 +281,8 @@ struct VaultMacImportSheet: View {
     }
 }
 
-/// Asks for the backup's own password, and decrypts it. Deriving its key can take a few minutes.
+/// Asks for the backup's own password, and decrypts it. Deriving its key can take up to a minute, or a few for a
+/// backup made before v2.
 struct VaultMacBackupDecryptView: View {
     @State var viewModel: BackupKeyDecryptorViewModel
     var cancel: () -> Void
@@ -301,9 +302,16 @@ struct VaultMacBackupDecryptView: View {
                     if viewModel.isDecrypting {
                         ProgressView()
                             .controlSize(.small)
-                        Text("Decrypting the backup. This can take up to 3 minutes.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
+                        Group {
+                            switch viewModel.keyDerivationTime {
+                            case .upToAMinute:
+                                Text("Decrypting the backup. This can take up to a minute.")
+                            case .upToThreeMinutes:
+                                Text("Decrypting the backup. This can take up to 3 minutes.")
+                            }
+                        }
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
                     }
                     Spacer()
                     Button("Back", role: .cancel) {

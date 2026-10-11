@@ -255,7 +255,12 @@ struct BackupKeyChangeView: View {
         case .creating:
             HStack(alignment: .center, spacing: 4) {
                 ProgressView()
-                Text("Securing your password. This can take up to 3 minutes.")
+                switch viewModel.keyDerivationTime {
+                case .upToAMinute:
+                    Text("Securing your password. This can take up to a minute.")
+                case .upToThreeMinutes:
+                    Text("Securing your password. This can take up to 3 minutes.")
+                }
             }
         case .passwordConfirmError:
             Label("Passwords do not match", systemImage: "xmark")

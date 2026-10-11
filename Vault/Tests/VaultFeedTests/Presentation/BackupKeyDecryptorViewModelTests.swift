@@ -159,6 +159,81 @@ struct BackupKeyDecryptorViewModelTests {
     }
 }
 
+// MARK: - Key derivations
+
+extension BackupKeyDecryptorViewModelTests {
+    @Test @LeakTracked
+    func keyDerivationTime_isTheBackupsDerivations() throws {
+        let times: [VaultKeyDeriver.Signature: BackupKeyDerivationTime] = [
+            .backupSecureV2: .upToAMinute,
+            .backupFastV2: .upToAMinute,
+            .backupSecureV1: .upToThreeMinutes,
+            .backupSecureV1ThenV2: .upToThreeMinutes,
+            .backupFastV1: .upToThreeMinutes,
+        ]
+        for (signature, time) in times {
+            var vault = anyEncryptedVault()
+            vault.keygenSignature = signature.rawValue
+            let sut = makeSUT(encryptedVault: vault)
+
+            #expect(sut.keyDerivationTime == time, "\(signature)")
+        }
+    }
+
+    @Test @LeakTracked
+    func keyDerivationTime_ofADerivationThisVersionDoesntKnow_isTheLonger() throws {
+        var vault = anyEncryptedVault()
+        vault.keygenSignature = "vault.keygen.backup.secure.v3"
+        let sut = makeSUT(encryptedVault: vault)
+
+        #expect(sut.keyDerivationTime == .upToThreeMinutes)
+    }
+
+    /// Made by a newer version of Vault: it says so, rather than "Missing Key Deriver", without deriving anything.
+    @Test @LeakTracked
+    func attemptDecryption_backupFromANewerVersion_saysToUpdateVault() async throws {
+        var vault = anyEncryptedVault()
+        vault.keygenSignature = "vault.keygen.backup.secure.v3"
+        let factory = VaultKeyDeriverFactoryMock()
+        let sut = makeSUT(encryptedVault: vault, keyDeriverFactory: factory)
+        sut.enteredPassword = "hello"
+
+        await sut.attemptDecryption()
+
+        guard case let .error(error) = sut.decryptionKeyState else {
+            Issue.record("Unexpected state \(sut.decryptionKeyState)")
+            return
+        }
+        #expect(error.userTitle == "Needs a Newer Version of Vault")
+        #expect(error.userDescription == "This was made by a newer version of Vault. Update Vault, then try again.")
+        #expect(factory.lookupVaultKeyDeriverCallCount == 0)
+    }
+
+    /// A backup made with a stored v1 key moved on to v2 restores from the password: v1, then v2.
+    @Test @LeakTracked
+    func attemptDecryption_backupMadeWithAKeyMovedOnToV2_recreatesThatKey() async throws {
+        let stored = try VaultKeyDeriver.Backup.Fast.v1.createEncryptionKey(password: "correct horse")
+        let upgraded = try VaultKeyDeriver.Backup.Fast.v1ThenV2.continueDerivation(from: stored)
+        var vault = anyEncryptedVault(salt: upgraded.salt)
+        vault.keygenSignature = upgraded.keyDervier.rawValue
+        let decoder = EncryptedVaultDecoderMock()
+        decoder.decryptAndDecodeHandler = { key, _ in
+            guard key == upgraded.key else { throw TestError() }
+            return anyVaultApplicationPayload()
+        }
+        let sut = makeSUT(
+            encryptedVault: vault,
+            keyDeriverFactory: VaultKeyDeriverFactoryImpl(),
+            encryptedVaultDecoder: decoder,
+        )
+        sut.enteredPassword = "correct horse"
+
+        await sut.attemptDecryption()
+
+        #expect(sut.decryptionKeyState == .validDecryptionKey)
+    }
+}
+
 // MARK: - Helpers
 
 extension BackupKeyDecryptorViewModelTests {

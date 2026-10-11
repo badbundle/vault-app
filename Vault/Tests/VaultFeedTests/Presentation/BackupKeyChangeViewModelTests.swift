@@ -18,6 +18,15 @@ struct BackupKeyChangeViewModelTests {
         #expect(store.setCallCount == 0)
     }
 
+    /// Every new backup password derives with v2, which takes seconds, so that's what the page says.
+    @Test
+    func keyDerivationTime_withTheAppsDerivation_isUpToAMinute() {
+        let sut = makeSUT(deriverFactory: VaultKeyDeriverFactoryImpl())
+
+        #expect(sut.encryptionKeyDeriverSignature == .backupFastV2)
+        #expect(sut.keyDerivationTime == .upToAMinute)
+    }
+
     @Test
     func init_initialPermissionStateLoading() {
         let sut = makeSUT()
