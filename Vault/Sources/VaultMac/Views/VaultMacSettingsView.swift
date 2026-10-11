@@ -9,13 +9,14 @@ struct VaultMacSettingsView: View {
     var appLock: AppLockService
     var dataModel: VaultDataModel
     var authentication: DeviceAuthenticationService
+    var backupExclusion: VaultStorageBackupExclusion
 
     /// How wide the window is.
     static let width = 540.0
     /// How tall the General tab is: enough for all its rows at the default text size. At larger sizes it scrolls.
     static let generalHeight = 520.0
     /// How tall the Security tab is, likewise.
-    static let securityHeight = 600.0
+    static let securityHeight = 728.0
 
     /// The window's root, as the Mac's settings window only puts the tabs in its toolbar for a root `TabView`. Each tab
     /// has its own size, which the window takes as the tab is chosen, and shows only that Vault is locked while it is.
@@ -34,6 +35,7 @@ struct VaultMacSettingsView: View {
                         appLock: appLock,
                         dataModel: dataModel,
                         authentication: authentication,
+                        backupExclusion: backupExclusion,
                     )
                 }
                 .frame(width: Self.width, height: Self.securityHeight)
@@ -96,12 +98,13 @@ struct VaultMacGeneralSettings: View {
     }
 }
 
-/// The lock, the App Lock Password, Hide While Recording and Delete All Data.
+/// The lock, the App Lock Password, Hide While Recording, Keep Out of Time Machine and Delete All Data.
 struct VaultMacSecuritySettings: View {
     @Bindable var localSettings: LocalSettings
     var appLock: AppLockService
     var dataModel: VaultDataModel
     var authentication: DeviceAuthenticationService
+    var backupExclusion: VaultStorageBackupExclusion
 
     /// Where the user has just moved the delay, held there while they authenticate.
     @State private var requestedDelay: AppLockDelay?
@@ -166,6 +169,20 @@ struct VaultMacSecuritySettings: View {
             } footer: {
                 footnote(
                     "Vault on the Mac always has an App Lock Password. Changing it, setting a duress password or erasing after failed passwords needs the current one.",
+                )
+            }
+            Section {
+                Toggle("Keep Out of Time Machine", isOn: Binding(
+                    get: { backupExclusion.isExcluded },
+                    // If it can't be changed, it shows what it still is.
+                    set: { try? backupExclusion.setExcluded($0) },
+                ))
+                .accessibilityIdentifier("settings.keep-out-of-time-machine")
+            } header: {
+                Text("Time Machine")
+            } footer: {
+                footnote(
+                    "Time Machine doesn't back up your vaults, so keep your own backups from Backups. Its local snapshots, and backups it made before, still hold them as they were.",
                 )
             }
             Section {

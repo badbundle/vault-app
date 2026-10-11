@@ -217,7 +217,7 @@ struct AppLockPasswordUnlockerTests {
         sut.eraser.onNextErase = {
             deadlineStore.startErasing()
             try storage.remove()
-            settings.erasesAfterFailedPasswords = false
+            try settings.setErasesAfterFailedPasswords(false)
             throw EraseSpy.Failure()
         }
         await #expect(throws: EraseSpy.Failure.self) {
@@ -231,6 +231,59 @@ struct AppLockPasswordUnlockerTests {
         #expect(result == .erased)
         #expect(sut.log.value == ["count the attempt", "erase", "reset the count", "erase"])
         #expect(await sut.session.isLocked)
+    }
+
+    // MARK: - Erasing that can't be read, as on the Mac
+
+    /// An erase that's due is neither done nor skipped when whether erasing is on can't be read: nothing is tried.
+    @Test(arguments: [false, true])
+    func unlock_eraseDueWithErasingUnreadable_throwsWithoutErasingOrTrying(erases: Bool) async throws {
+        let storage = InMemoryAppLockDeviceSettingsStorage()
+        let sut = try makeSUT(
+            erasesAfterFailedPasswords: erases,
+            wrongAttempts: AppLockPasswordAttemptCounter.eraseThreshold,
+            deviceSettings: storage,
+        )
+        storage.failToLoad()
+
+        await #expect(throws: InMemoryAppLockDeviceSettingsStorage.Failure.self) {
+            try await sut.unlocker.unlock(password: Self.password)
+        }
+
+        #expect(sut.log.value.isEmpty)
+        #expect(await sut.session.isLocked)
+    }
+
+    /// The tenth wrong password in a row is counted, but neither erases nor is answered as wrong on a guess at
+    /// whether erasing is on. The next attempt finds the erase due.
+    @Test(arguments: [false, true])
+    func unlock_tenthWrongWithErasingUnreadable_throwsWithoutErasing(erases: Bool) async throws {
+        let storage = InMemoryAppLockDeviceSettingsStorage()
+        let sut = try makeSUT(
+            erasesAfterFailedPasswords: erases,
+            wrongAttempts: Self.lastAttempt,
+            deviceSettings: storage,
+        )
+        storage.failToLoad()
+
+        await #expect(throws: InMemoryAppLockDeviceSettingsStorage.Failure.self) {
+            try await sut.unlocker.unlock(password: "wrong")
+        }
+
+        #expect(sut.log.value == ["count the attempt"])
+    }
+
+    /// Before the threshold, erasing decides nothing, so the right password opens the vault whether or not it can be
+    /// read.
+    @Test
+    func unlock_rightPasswordBeforeTheThresholdWithErasingUnreadable_isAccepted() async throws {
+        let storage = InMemoryAppLockDeviceSettingsStorage()
+        let sut = try makeSUT(erasesAfterFailedPasswords: true, wrongAttempts: 3, deviceSettings: storage)
+        storage.failToLoad()
+
+        let result = try await sut.unlocker.unlock(password: Self.password)
+
+        #expect(result == .accepted)
     }
 }
 
@@ -273,11 +326,13 @@ extension AppLockPasswordUnlockerTests {
     }
 
     /// A file with the real vault in one slot and a duress vault in another. `wrongAttempts` wrong passwords in a row
-    /// have been tried already, just now, and the wait after them is over unless `waitedOut` is false.
+    /// have been tried already, just now, and the wait after them is over unless `waitedOut` is false. Erasing is kept
+    /// in `deviceSettings`, as on the Mac, if they're given.
     private func makeSUT(
         erasesAfterFailedPasswords: Bool = false,
         wrongAttempts: Int = 0,
         waitedOut: Bool = true,
+        deviceSettings: InMemoryAppLockDeviceSettingsStorage? = nil,
     ) throws -> SUT {
         var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
         try contents.createVault(
@@ -323,8 +378,9 @@ extension AppLockPasswordUnlockerTests {
             availableMemory: { nil },
             wrapStamper: .inMemory(),
         )
-        let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
-        settings.erasesAfterFailedPasswords = erasesAfterFailedPasswords
+        let settings = try deviceSettings.map { try AppLockSettingsStore.keepingDeviceSettings(in: $0) }
+            ?? AppLockSettingsStore(userDefaults: .nonPersistent())
+        try settings.setErasesAfterFailedPasswords(erasesAfterFailedPasswords)
         let eraser = EraseSpy(log: log)
         let unlocker = AppLockPasswordUnlocker(
             unlockService: unlockService,

@@ -41,6 +41,10 @@ public enum VaultIdentifiers {
         /// The device key, which wraps the encrypted vault's key while the App Lock Password is off. Readable once
         /// the device has been unlocked after starting up, and restored with a backup.
         case vaultDeviceKey = "vault.secure-storage.vault-device-key.v1"
+        /// The app lock's settings for the device that protect the vault: erasing after failed passwords and the
+        /// Require Unlock delay. Only the Mac keeps them here. Kept on this device only, and readable once it's been
+        /// unlocked after starting up, with no biometric prompt.
+        case appLockDeviceSettings = "vault.secure-storage.app-lock-device-settings.v1"
     }
 
     public enum Backup {
@@ -85,9 +89,11 @@ public enum VaultIdentifiers {
         /// AutoFill and widget extensions can read them too.
         public enum AppLock {
             public static let isEnabled = "vault.preferences.app-lock.is-enabled"
-            /// Seconds, as an `AppLockDelay` raw value.
+            /// Seconds, as an `AppLockDelay` raw value. On the Mac, only until it moves to the keychain
+            /// (`SecureStorageKey.appLockDeviceSettings`).
             public static let delay = "vault.preferences.app-lock.delay"
             /// Whether too many wrong App Lock Passwords in a row erase every vault. Only ever stored while it's on.
+            /// On the Mac, only until it moves to the keychain, as `delay` does.
             public static let erasesAfterFailedPasswords = "vault.preferences.app-lock.erases-after-failed-passwords"
         }
     }

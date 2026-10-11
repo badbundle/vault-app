@@ -184,9 +184,10 @@ public final class EncryptedVaultPasswordService: AppLockPasswordService {
         switch mode {
         case .plain:
             guard let converter = makeConverter() else { throw VaultEncryptionError.plainStoreDidNotOpen }
+            // A new password starts with erasing off, whatever was left from before. Turned off first, as it means
+            // nothing without a password, so a password is never set with it left on.
+            try settings.setErasesAfterFailedPasswords(false)
             try await converter.encrypt(password: password, deletingArchives: deletingSetAsideVaults)
-            // A new password starts with erasing off, whatever was left from before.
-            settings.erasesAfterFailedPasswords = false
         case .deviceKey:
             try await changeService.turnOnPassword(password)
         case .password:

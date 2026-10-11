@@ -673,7 +673,7 @@ extension VaultPasswordChangeServiceTests {
     @Test(arguments: [true, false])
     func setErasesAfterFailedPasswords_withTheCurrentPassword_setsItAndChangesNoFile(erases: Bool) async throws {
         let sut = try await makeSUT()
-        sut.settings.erasesAfterFailedPasswords = !erases
+        try sut.settings.setErasesAfterFailedPasswords(!erases)
         let before = try sut.bytes()
         sut.log.modify { $0.removeAll() }
 
@@ -692,7 +692,7 @@ extension VaultPasswordChangeServiceTests {
     @Test(arguments: [true, false])
     func setErasesAfterFailedPasswords_fromADuressVault_setsItForTheDevice(erases: Bool) async throws {
         let sut = try await makeSUT(openedWith: "duress")
-        sut.settings.erasesAfterFailedPasswords = !erases
+        try sut.settings.setErasesAfterFailedPasswords(!erases)
 
         let result = try await sut.service.setErasesAfterFailedPasswords(erases, current: "duress")
 
@@ -774,7 +774,7 @@ extension VaultPasswordChangeServiceTests {
     @Test(arguments: ["real", "duress"])
     func turnOffPassword_turnsErasingOff(vault: String) async throws {
         let sut = try await makeSUT(openedWith: vault)
-        sut.settings.erasesAfterFailedPasswords = true
+        try sut.settings.setErasesAfterFailedPasswords(true)
 
         _ = try await sut.service.turnOffPassword(current: vault)
 
@@ -784,7 +784,7 @@ extension VaultPasswordChangeServiceTests {
     @Test
     func turnOffPassword_wrong_leavesErasingOn() async throws {
         let sut = try await makeSUT()
-        sut.settings.erasesAfterFailedPasswords = true
+        try sut.settings.setErasesAfterFailedPasswords(true)
 
         _ = try await sut.service.turnOffPassword(current: "wrong")
 
@@ -795,7 +795,7 @@ extension VaultPasswordChangeServiceTests {
     @Test
     func turnOnPassword_startsWithErasingOff() async throws {
         let sut = try await makeSUT(mode: .deviceKey)
-        sut.settings.erasesAfterFailedPasswords = true
+        try sut.settings.setErasesAfterFailedPasswords(true)
 
         try await sut.service.turnOnPassword("new")
 

@@ -839,7 +839,7 @@ extension AppLockServicePasswordTests {
     ) throws -> AppLockService {
         let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
         settings.isEnabled = isEnabled
-        settings.delay = delay
+        try settings.setDelay(delay)
         return AppLockService(
             settings: settings,
             authenticationService: DeviceAuthenticationService(policy: policy),

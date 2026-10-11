@@ -128,7 +128,7 @@ extension AppLockContainerTests {
     ) throws -> AppLockService {
         let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
         settings.isEnabled = isEnabled
-        settings.delay = .immediately
+        try settings.setDelay(.immediately)
         return AppLockService(
             settings: settings,
             authenticationService: DeviceAuthenticationService(policy: authentication),

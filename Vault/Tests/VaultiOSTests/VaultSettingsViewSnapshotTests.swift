@@ -180,7 +180,7 @@ extension VaultSettingsViewSnapshotTests {
     ) throws -> AppLockService {
         let appLockSettings = try AppLockSettingsStore(userDefaults: .nonPersistent())
         appLockSettings.isEnabled = isEnabled
-        appLockSettings.delay = delay
+        try appLockSettings.setDelay(delay)
         return AppLockService(
             settings: appLockSettings,
             authenticationService: authenticationService,

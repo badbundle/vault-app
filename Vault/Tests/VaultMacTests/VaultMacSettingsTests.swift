@@ -13,6 +13,10 @@ struct VaultMacSettingsTests {
     func defaults_areiOSs() throws {
         let settings = try LocalSettings(defaults: .nonPersistent())
         let appLock = try AppLockSettingsStore(userDefaults: .nonPersistent())
+        let directory = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let backupExclusion = VaultStorageBackupExclusion(directory: directory, settings: appLock)
+        backupExclusion.apply()
 
         #expect(settings.state.hidesVaultWhileScreenCaptured)
         #expect(!settings.state.allowUniversalClipboardForOTPs)
@@ -23,6 +27,9 @@ struct VaultMacSettingsTests {
         #expect(!settings.state.lockNewItems)
         #expect(appLock.delay == .immediately)
         #expect(!appLock.erasesAfterFailedPasswords)
+        // The Mac's own: Keep Out of Time Machine, on until the user turns it off, as C7 has it.
+        #expect(try !appLock.loadIncludesVaultInBackups())
+        #expect(backupExclusion.isExcluded)
     }
 
     @Test(arguments: MacAppearance.allCases)
@@ -46,6 +53,11 @@ struct VaultMacSettingsTests {
         let authentication = DeviceAuthenticationService(policy: DeviceAuthenticationPolicyAlwaysAllow())
         let lockSettings = try AppLockSettingsStore(userDefaults: .nonPersistent())
         lockSettings.isEnabled = true
+        let directory = try Self.temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // Kept out of Time Machine, as it is until the user turns it off.
+        let backupExclusion = VaultStorageBackupExclusion(directory: directory, settings: lockSettings)
+        backupExclusion.apply()
         let view = try VaultMacSecuritySettings(
             localSettings: LocalSettings(defaults: .nonPersistent()),
             appLock: AppLockService(
@@ -56,6 +68,7 @@ struct VaultMacSettingsTests {
             ),
             dataModel: dataModel,
             authentication: authentication,
+            backupExclusion: backupExclusion,
         )
 
         assertSnapshot(
@@ -85,6 +98,16 @@ struct VaultMacSettingsTests {
         )
 
         assertSnapshot(of: view, as: .macWindow(width: 480, height: 420))
+    }
+
+    /// A new, empty directory, standing in for the App Group's container. The caller removes it.
+    private static func temporaryDirectory() throws -> URL {
+        let directory = URL.temporaryDirectory.appending(
+            path: "Settings-\(UUID().uuidString)",
+            directoryHint: .isDirectory,
+        )
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
     }
 
     @Test

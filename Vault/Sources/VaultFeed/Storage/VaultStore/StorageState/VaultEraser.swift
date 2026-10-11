@@ -28,10 +28,12 @@ import VaultCore
 ///    keyrings, this device's own keys and those restored backups brought, the backup password and its record, the
 /// count of attempts at the App Lock Password, the wrap stamp,
 ///    which shows a password vault was used and about when, and the device key, which opens the vault while the
-///    password is off.
+///    password is off. All but the app lock's settings for the device, which the Mac keeps there: step 5 turns
+///    erasing off in them.
 /// 5. Clears the vault's settings still kept on the device: the last backup event, the auto-backup configuration,
 ///    which says where the backups are, and the PDF backup's hint. Then whatever holds them in memory forgets them
-///    too (a hook). It turns off erasing after failed passwords too, which only means anything with a password.
+///    too (a hook). It turns off erasing after failed passwords too, which only means anything with a password, if
+///    it can: a new password turns it off before it's set anyway.
 /// 6. Removes the plain store's pending rehash files, which hold phrases in plaintext, backup PDFs left in the app's
 ///    temporary directory, and the file the count of attempts at the App Lock Password takes its lock on, which step
 ///    4 makes if it isn't there. Nothing makes that file again until a password is set.
@@ -207,7 +209,10 @@ extension VaultEraser {
         try await removeEveryVault()
         try await deleteKeychainItems()
         await Self.clearVaultSettings(in: defaults)
-        appLockSettings.erasesAfterFailedPasswords = false
+        // Attempted, not required, so a keychain that can't be written never stops an erase. Left on, it decides
+        // nothing: with no password, there are no attempts to count or erase after, and setting a password turns it
+        // off first, or throws and sets none (`EncryptedVaultPasswordService.setPassword(_:deletingSetAsideVaults:)`).
+        try? appLockSettings.setErasesAfterFailedPasswords(false)
         await hooks.forgetVaultSettings()
         try removeFilesLeftBehind(stateFile: stateFile)
         try await attemptCounter.removeLockFile()
@@ -299,9 +304,9 @@ extension VaultEraser {
         }
     }
 
-    /// Deletes a keychain item, wherever it's kept. Every item is erased, and none kept: they all belong to the vault
-    /// or show it existed. An item added to `SecureStorageKey` doesn't build until it's decided here what an erase
-    /// does with it.
+    /// Deletes a keychain item, wherever it's kept. Every item is erased but one: the rest belong to the vault or show
+    /// it existed. An item added to `SecureStorageKey` doesn't build until it's decided here what an erase does with
+    /// it.
     private func delete(_ key: VaultIdentifiers.SecureStorageKey) async throws {
         switch key {
         case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey:
@@ -319,6 +324,11 @@ extension VaultEraser {
             // It opens the vault while the password is off. With the file gone it opens nothing, but it shows the
             // password was turned off.
             try deviceKeyStore.removeDeviceKey()
+        case .appLockDeviceSettings:
+            // Kept, as the App Group's defaults that iOS keeps them in are: they're the device's settings, not a
+            // vault's, and step 5 turns erasing off. Deleting them would have the Mac read them from its defaults
+            // again, where something other than Vault could have put them (`AppLockSettingsStore`).
+            break
         }
     }
 

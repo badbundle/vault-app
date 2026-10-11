@@ -95,7 +95,7 @@ extension VaultRootAppLockTests {
     private func makeAppLock(passwordService: (any AppLockPasswordService)?) throws -> AppLockService {
         let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
         settings.isEnabled = true
-        settings.delay = .fifteenMinutes
+        try settings.setDelay(.fifteenMinutes)
         return AppLockService(
             settings: settings,
             authenticationService: DeviceAuthenticationService(policy: .alwaysAllow),

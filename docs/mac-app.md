@@ -60,8 +60,8 @@ Mine, for Bradley to review:
    (see [Signing](#signing)).
 8. **Secure Keyboard Entry while a Vault field has focus.** On the Mac, other apps can watch the keyboard, if the user
    has allowed them to (Input Monitoring), and that includes the search field, where killphrases and search
-   passphrases are typed. So Vault turns on secure event input whenever one of its text fields has focus, as
-   Terminal's Secure Keyboard Entry does, and not only in password fields.
+   passphrases are typed. So Vault turns on secure event input whenever one of its text fields has focus and Vault is
+   the active app, as Terminal's Secure Keyboard Entry does, and not only in password fields.
 9. **No widgets, recommended.** With the App Lock Password always on, iOS's widgets only ever show Vault as locked
    (G44), so a Mac widget would only ever say "Locked". VAULT-115 decides, after the first release.
 
@@ -116,8 +116,9 @@ sizes:
 - **General:** Tap a Code To, Show Next Code, the Clear Clipboard time, Universal Clipboard for codes and for notes
   (both off), and Lock New Items.
 - **Security:** Require Unlock, Hide While Recording, the App Lock Password (Change Password, Set Duress Password and
-  Erase Vault After 10 Failed Passwords, each with the current password, in a sheet), and the Danger Zone's Delete All
-  Data, which asks first and then for Touch ID or the Mac's password (G15).
+  Erase Vault After 10 Failed Passwords, each with the current password, in a sheet), Keep Out of Time Machine (see
+  [Time Machine](#time-machine)), and the Danger Zone's Delete All Data, which asks first and then for Touch ID or the
+  Mac's password (G15).
 
 Not on the Mac: Turn Off Password (G85), App Lock itself, which the password keeps on, Show in Spotlight, which is
 always off with the password on (G49), and Show New Codes in QuickType, as there's no QuickType to fill (see
@@ -283,8 +284,10 @@ setting up of the field editor as editing starts can't turn any of the above bac
 again (`VaultMacFieldEditor.keepPrivate(_:)`). A note's editor has an undo history of its own, which it forgets as the
 sheet closes.
 
-Decision 8: Secure Keyboard Entry (`EnableSecureEventInput`) is on while a `VaultMacFieldEditor` has focus, and off
-again as soon as it loses focus or leaves its window. A secure field turns it on itself.
+Decision 8: Secure Keyboard Entry (`EnableSecureEventInput`) is on while a `VaultMacFieldEditor` has focus and Vault
+is the active app (`VaultMacSecureInput`). It's off again as soon as the field loses focus or leaves its window, or
+another app comes to the front, as it's for the whole Mac while it's on, and on again once Vault is back with the field
+still focused, as AppKit's secure fields have it. A secure field turns it on itself.
 
 A field's menu offers only Cut, Copy, Paste and Select All, Cut and Copy go through Vault's clipboard as details that
 never leave this Mac (G51, G87), and text can't be dragged out of a field.
@@ -309,11 +312,23 @@ app has `keychain-access-groups`, and its App Group is a keychain access group t
   which the AutoFill extension can't read. `VaultMacRoot.keychain` names that group, so the app never reads one of
   its own items from the App Group either. The backup password is inside each encrypted vault, as on iOS with the
   password on;
-- the attempt counter, the device key and the wrap stamp name the App Group, `442P244AFS.com.badbundle.vault`, which
-  the extension shares, and which is its only keychain access group.
+- the attempt counter, the device key, the wrap stamp and the app lock's device settings name the App Group,
+  `442P244AFS.com.badbundle.vault`, which the extension shares, and which is its only keychain access group.
 
 The app's own group isn't named for the app, as the iOS app's is, because on the Mac that name is the App Group's, and
 the extension would read it too (found in VAULT-112).
+
+Erasing after failed passwords and the Require Unlock delay, the settings that protect the vault and only weaken with
+the password or Touch ID, are kept in the keychain too, in one item on this Mac only
+(`AppLockDeviceSettingsKeychainStorage`), rather than in the App Group's defaults, where iOS keeps them. A process the
+user allows into the App Group's container could change its defaults, but not Vault's keychain items (VAULT-118). The
+first time they're read, what an earlier version kept in the defaults moves into the keychain, and the defaults are
+never read for them again. If the keychain can't be read, each reads as its safer value: the delay as Immediately,
+erasing as on in Settings, and an attempt at the password that depends on erasing isn't made
+(`AppLockSettingsStore`, `AppLockPasswordUnlocker`). An erase keeps the item, with erasing off, so they're never read
+from the defaults again. The item also keeps whether the user has turned Keep Out of Time Machine off (see
+[Time Machine](#time-machine)). Vault's other settings, such as Hide While Recording, which anyone at the unlocked Vault can
+change, stay in the defaults.
 
 The keyrings stay on this Mac: moving to another Mac, with Migration Assistant or a Time Machine restore, brings the
 vault file but not them, so its killphrases and search passphrases would stop working there. Moving to another Mac is
@@ -479,6 +494,21 @@ The sandbox keeps other sandboxed apps out of both. Since macOS 14, other apps r
 user first, and since macOS 15 that covers Group Containers too. A process running as the user with Full Disk Access
 can still copy the vault file. It's encrypted, so, as with a copy of an iPhone's files, they can only guess at the
 password offline (G33, G64).
+
+### Time Machine
+
+Time Machine backs up the App Group's container as it does other apps' data, so its backups, and the local snapshots
+it keeps on the Mac's own disk, would hold the vault file as it was then: an item a killphrase deleted, or a vault an
+erase removed, could come back from one with the App Lock Password it had then (C6). So Vault keeps the container out
+of Time Machine's backups: Keep Out of Time Machine, in Settings, is on by default (C7), for vaults made before it as
+well. Every launch sets `isExcludedFromBackup` on the container itself (`VaultStorageBackupExclusion.apply()`, G97),
+unless the user has turned it off, so every file in it, the vault file included however often a save replaces it, is
+left out. Turning it off is kept with erasing and the delay, in the keychain item only Vault can change (see
+[Keychain](#keychain)), and if that can't be read, the vault is kept out.
+
+A lost Mac's vault comes back from a backup made in Vault, which the FAQ's About Backups page says. Local snapshots are
+of the whole disk, so the vault can't be kept out of them, nor out of Time Machine backups made before, or while the
+setting was off: an accepted limit.
 
 ### Signing
 

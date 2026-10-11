@@ -46,6 +46,7 @@ public struct VaultMacScene: Scene {
                 appLock: VaultMacRoot.appLockService,
                 dataModel: VaultMacRoot.vaultDataModel,
                 authentication: VaultMacRoot.deviceAuthenticationService,
+                backupExclusion: VaultMacRoot.vaultBackupExclusion,
             )
         }
         .restorationBehavior(.disabled)

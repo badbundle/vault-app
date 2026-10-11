@@ -235,7 +235,7 @@ struct VaultMacLockTriggersTests {
         init(delay: AppLockDelay, unlocked: Bool = true) async throws {
             let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
             settings.isEnabled = true
-            settings.delay = delay
+            try settings.setDelay(delay)
             authentication = DeviceAuthenticationService(policy: prompts)
             appLock = AppLockService(
                 settings: settings,
