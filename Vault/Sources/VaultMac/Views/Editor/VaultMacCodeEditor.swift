@@ -171,7 +171,7 @@ struct VaultMacCodeEditor: View {
     }
 
     /// The code in a scanned QR code, checked as the iOS app checks it (G77), or `nil` if it isn't one Vault can use.
-    static func code(scanned text: String) -> OTPAuthCode? {
+    nonisolated static func code(scanned text: String) -> OTPAuthCode? {
         guard case let .endScanning(.dataRetrieved(code)) = OTPCodeScanningHandler().decode(data: text) else {
             return nil
         }

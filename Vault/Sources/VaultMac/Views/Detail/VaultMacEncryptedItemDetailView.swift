@@ -29,7 +29,7 @@ struct VaultMacEncryptedItemDetailView: View {
     /// does, whatever its stored lock state: its password protects it from someone coercing the user, and Touch ID or
     /// the Mac's password from someone at an unattended Mac (G41). A note needs them only when its item is locked,
     /// which its page has already asked for.
-    static func requiresDeviceAuthentication(_ payload: VaultItem.Payload) -> Bool {
+    nonisolated static func requiresDeviceAuthentication(_ payload: VaultItem.Payload) -> Bool {
         switch payload {
         case .recoveryPhrase: true
         case .secureNote, .otpCode, .encryptedItem: false

@@ -14,6 +14,7 @@ enum VaultMacPanels {
     }
 
     /// Starts `panel` in the starting folder.
+    @MainActor
     static func prepare(_ panel: NSSavePanel) {
         panel.directoryURL = startingFolder
     }
