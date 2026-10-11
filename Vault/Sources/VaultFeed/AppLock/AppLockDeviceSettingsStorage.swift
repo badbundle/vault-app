@@ -1,0 +1,112 @@
+import Foundation
+import Security
+import SwiftSecurity
+
+/// The app lock's settings that protect the vault and belong to the device, not to a vault: erasing after failed
+/// passwords, and the Require Unlock delay. Weakening either needs the App Lock Password or the user's
+/// authentication, so on the Mac, `AppLockSettingsStore` keeps them where only Vault can change them.
+struct AppLockDeviceSettings: Codable, Equatable, Sendable {
+    /// Whether `AppLockPasswordAttemptCounter.eraseThreshold` wrong App Lock Passwords in a row erase every vault.
+    var erasesAfterFailedPasswords: Bool
+    /// The Require Unlock delay in seconds, as an `AppLockDelay` raw value. Kept as a number, so a value this version
+    /// doesn't know reads as Immediately rather than failing to decode.
+    var delaySeconds: Int
+
+    var delay: AppLockDelay {
+        AppLockDelay(rawValue: delaySeconds) ?? .default
+    }
+}
+
+/// Where `AppLockSettingsStore` keeps `AppLockDeviceSettings`, when not in the defaults.
+protocol AppLockDeviceSettingsStorage: Sendable {
+    /// The settings, or `nil` if none have been stored.
+    func load() throws -> AppLockDeviceSettings?
+    /// Stores the settings if none are stored yet. `false`, changing nothing, if some are.
+    func add(_ settings: AppLockDeviceSettings) throws -> Bool
+    /// Replaces the settings, or stores them if there are none. They're in storage by the time this returns.
+    func save(_ settings: AppLockDeviceSettings) throws
+}
+
+/// Keeps `AppLockDeviceSettings` in the keychain, on this device only (VAULT-118).
+///
+/// On the Mac, a process running as the user can be allowed into Vault's App Group, and change its defaults. It can't
+/// change Vault's keychain items: only apps of Vault's team that are given its access group can. So these settings are
+/// kept here, beside the count of wrong passwords (`AppLockPasswordAttemptKeychainStorage`).
+///
+/// The item is readable once the device has been unlocked after starting up, as the defaults are, so a launch while
+/// the screen is locked still reads the user's settings. It never syncs to iCloud Keychain, and never moves to another
+/// device with a backup. It's in the App Group's access group, so the AutoFill extension reads the same settings.
+struct AppLockDeviceSettingsKeychainStorage: AppLockDeviceSettingsStorage {
+    let accessGroup: String?
+
+    init(accessGroup: String? = VaultSharedStorage.appGroupID) {
+        self.accessGroup = accessGroup
+    }
+
+    func load() throws -> AppLockDeviceSettings? {
+        var query = Self.itemQuery(accessGroup: accessGroup)
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: AnyObject?
+        switch SecItemCopyMatching(query as CFDictionary, &result) {
+        case errSecSuccess:
+            guard let data = result as? Data else { throw SwiftSecurityError.invalidParameter }
+            return try JSONDecoder().decode(AppLockDeviceSettings.self, from: data)
+        case errSecItemNotFound:
+            return nil
+        case let status:
+            throw SwiftSecurityError(rawValue: status)
+        }
+    }
+
+    func add(_ settings: AppLockDeviceSettings) throws -> Bool {
+        let item = try Self.itemQuery(accessGroup: accessGroup).merging(Self.attributes(for: settings)) { $1 }
+        switch SecItemAdd(item as CFDictionary, nil) {
+        case errSecSuccess:
+            return true
+        case errSecDuplicateItem:
+            return false
+        case let status:
+            throw SwiftSecurityError(rawValue: status)
+        }
+    }
+
+    /// Updates the item in place, so there's never a moment without it.
+    func save(_ settings: AppLockDeviceSettings) throws {
+        let query = Self.itemQuery(accessGroup: accessGroup)
+        let attributes = try Self.attributes(for: settings)
+        switch SecItemUpdate(query as CFDictionary, attributes as CFDictionary) {
+        case errSecSuccess:
+            return
+        case errSecItemNotFound:
+            let status = SecItemAdd(query.merging(attributes) { $1 } as CFDictionary, nil)
+            guard status == errSecSuccess else { throw SwiftSecurityError(rawValue: status) }
+        case let status:
+            throw SwiftSecurityError(rawValue: status)
+        }
+    }
+
+    /// Identifies the item: a password item for the settings, in `accessGroup`, that doesn't sync.
+    static func itemQuery(accessGroup: String?) -> [String: Any] {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: VaultIdentifiers.SecureStorageKey.appLockDeviceSettings.keychainService,
+            kSecAttrSynchronizable as String: false,
+            // Makes macOS use the same keychain as iOS.
+            kSecUseDataProtectionKeychain as String: true,
+        ]
+        if let accessGroup {
+            query[kSecAttrAccessGroup as String] = accessGroup
+        }
+        return query
+    }
+
+    /// What's stored in the item: the settings, readable once the device has been unlocked after starting up, on this
+    /// device only.
+    static func attributes(for settings: AppLockDeviceSettings) throws -> [String: Any] {
+        try [
+            kSecValueData as String: JSONEncoder().encode(settings),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+    }
+}

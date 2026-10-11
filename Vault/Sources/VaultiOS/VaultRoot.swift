@@ -457,7 +457,11 @@ public enum VaultRoot {
         #if DEBUG
         // UI tests set how soon the app locks as they launch it.
         if let delay = UITestVault.appLockDelay {
-            settings.delay = delay
+            do {
+                try settings.setDelay(delay)
+            } catch {
+                fatalError("Unable to set the UI test's Require Unlock: \(error)")
+            }
         }
         #endif
         return settings

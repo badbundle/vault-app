@@ -439,9 +439,12 @@ struct VaultEraseHarness {
         "reload widgets",
         "forget the vault's settings",
     ]
-    /// Keychain items an erase keeps on purpose, and why. There are none: every item belongs to a vault, or shows one
-    /// existed. Every other `SecureStorageKey` must be gone after an erase.
-    static let keptKeychainItems: [VaultIdentifiers.SecureStorageKey: String] = [:]
+    /// Keychain items an erase keeps on purpose, and why. Every other `SecureStorageKey` must be gone after an erase:
+    /// it belongs to a vault, or shows one existed.
+    static let keptKeychainItems: [VaultIdentifiers.SecureStorageKey: String] = [
+        .appLockDeviceSettings: "The device's own settings, with erasing turned off. Deleting them would read them "
+            + "from the defaults again.",
+    ]
     /// The vault's settings still kept in the app's defaults, which an erase clears.
     static let vaultSettingsKeys = [
         VaultIdentifiers.Backup.lastBackupEvent,
@@ -466,6 +469,8 @@ struct VaultEraseHarness {
     let deviceKeys: InMemoryDeviceKeyStore
     let userDefaults: UserDefaults
     let defaults: Defaults
+    /// Where erasing after failed passwords is kept, as on the Mac.
+    let deviceSettings: InMemoryAppLockDeviceSettingsStorage
     let appLockSettings: AppLockSettingsStore
     let session: VaultStoreSession
 
@@ -483,7 +488,9 @@ struct VaultEraseHarness {
         self.deviceKeys = deviceKeys
         userDefaults = try testUserDefaults()
         defaults = Defaults(userDefaults: userDefaults)
-        appLockSettings = try AppLockSettingsStore(userDefaults: .nonPersistent())
+        let deviceSettings = InMemoryAppLockDeviceSettingsStorage()
+        self.deviceSettings = deviceSettings
+        appLockSettings = try AppLockSettingsStore.keepingDeviceSettings(in: deviceSettings)
         self.session = session
         try FileManager.default.createDirectory(at: temporaryDirectory, withIntermediateDirectories: true)
     }
@@ -562,8 +569,8 @@ struct VaultEraseHarness {
     }
 
     /// Puts everything an erase clears outside the vault's directory on the device: every keychain item, including ten
-    /// wrong attempts in a row, the vault's settings, and a backup PDF left in the temporary directory. And a setting
-    /// an erase keeps.
+    /// wrong attempts in a row and erasing turned on, the vault's settings, and a backup PDF left in the temporary
+    /// directory. And a setting an erase keeps.
     func seedDevice() async throws {
         for key in VaultIdentifiers.SecureStorageKey.allCases {
             switch key {
@@ -576,6 +583,8 @@ struct VaultEraseHarness {
                 try wrapStamps.save(1_790_000_000_000)
             case .vaultDeviceKey:
                 _ = try deviceKeys.makeNewDeviceKey()
+            case .appLockDeviceSettings:
+                try appLockSettings.setErasesAfterFailedPasswords(true)
             }
         }
         try defaults.set(
@@ -600,7 +609,6 @@ struct VaultEraseHarness {
         )
         try defaults.set("My old hint", for: Key<String>(VaultIdentifiers.Preferences.PDF.userHint))
         try defaults.set("kept", for: Self.unrelatedSetting)
-        appLockSettings.erasesAfterFailedPasswords = true
         _ = try BackupPDFTemporaryFiles(fileManager: .default, directory: temporaryDirectory).write(anyGeneratedPDF())
     }
 
@@ -704,6 +712,8 @@ struct VaultEraseHarness {
             wrapStamps.hasStamp
         case .vaultDeviceKey:
             deviceKeys.key != nil
+        case .appLockDeviceSettings:
+            deviceSettings.settings != nil
         }
     }
 
@@ -814,7 +824,7 @@ actor FaultInjectingSecureStorage: SecureStorage {
         case .searchPassphraseBackupKeys: "the search passphrase keys from backups"
         case .backupPassword: "the backup password"
         case .backupPasswordMetadata: "the backup password's record"
-        case .appLockPasswordAttempts, .vaultWrapStamp, .vaultDeviceKey, nil: key
+        case .appLockPasswordAttempts, .vaultWrapStamp, .vaultDeviceKey, .appLockDeviceSettings, nil: key
         }
     }
 }

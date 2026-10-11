@@ -837,6 +837,20 @@ struct AppLockServiceTests {
         #expect(policy.authenticateWithBiometricsCallCount == 1)
     }
 
+    /// A delay that can't be stored isn't followed either, so the lock never keeps one the next launch wouldn't.
+    @Test(arguments: [AppLockDelay.immediately, .fifteenMinutes])
+    func setDelay_cantBeStored_staysTheSame(newDelay: AppLockDelay) async throws {
+        let storage = InMemoryAppLockDeviceSettingsStorage()
+        let (sut, settings) = try makeSUT(isEnabled: true, delay: .fiveMinutes, deviceSettings: storage)
+        await activate(sut)
+        storage.failToStore()
+
+        await sut.setDelay(newDelay)
+
+        #expect(sut.delay == .fiveMinutes)
+        #expect(settings.delay == .fiveMinutes)
+    }
+
     @Test
     func setDelay_takesEffectOnTheNextTripToTheBackground() async throws {
         let clock = FakeAppLockClock()
@@ -903,10 +917,12 @@ extension AppLockServiceTests {
         clock: FakeAppLockClock = FakeAppLockClock(),
         purge: CallCounter = CallCounter(),
         didChangeSettings: CallCounter = CallCounter(),
+        deviceSettings: InMemoryAppLockDeviceSettingsStorage? = nil,
     ) throws -> (AppLockService, AppLockSettingsStore) {
-        let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
+        let settings = try deviceSettings.map { try AppLockSettingsStore.keepingDeviceSettings(in: $0) }
+            ?? AppLockSettingsStore(userDefaults: .nonPersistent())
         settings.isEnabled = isEnabled
-        settings.delay = delay
+        try settings.setDelay(delay)
         let sut = AppLockService(
             settings: settings,
             authenticationService: authenticationService ?? DeviceAuthenticationService(policy: policy),

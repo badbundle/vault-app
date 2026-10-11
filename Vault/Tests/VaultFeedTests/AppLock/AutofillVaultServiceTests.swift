@@ -516,7 +516,7 @@ extension AutofillVaultServiceTests {
         }
         let deadlineStore = FakeUnlockDeadlineStore(deadline: .seconds(1))
         let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
-        settings.erasesAfterFailedPasswords = erasesAfterFailedPasswords
+        try settings.setErasesAfterFailedPasswords(erasesAfterFailedPasswords)
         let service = AutofillVaultService(
             file: file,
             session: session,

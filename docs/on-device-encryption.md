@@ -1100,9 +1100,10 @@ kept has `recentWrong` and `recentWrongAt` as well, which are ignored, so it rea
 - **Step 2** deletes every keychain item: the killphrase and search passphrase HMAC keyrings, this device's own keys
   and those restored backups brought, the backup password and its record, the attempt count, the wrap stamp
   (VAULT-51), which shows a password vault was used and about when, and the device key (VAULT-48), which opens the
-  vault while the password is off, and would show it had been turned off. `VaultIdentifiers.SecureStorageKey` lists
-  every item, however it's stored, and the erase switches over all of them, so a new one doesn't build until it's
-  decided what an erase does with it.
+  vault while the password is off, and would show it had been turned off. Only the Mac's app lock settings item is
+  kept, as the device's own, with step 3 turning erasing off in it. `VaultIdentifiers.SecureStorageKey` lists every
+  item, however it's stored, and the erase switches over all of them, so a new one doesn't build until it's decided
+  what an erase does with it.
 - **Step 3** clears the vault's settings still kept on the device: the last backup event, the auto-backup
   configuration, and the PDF backup's hint. They'd show a vault had been erased, and the auto-backup configuration
   says where its backups are: once a new backup password is set, auto-backup would write there, and its retention
@@ -1136,9 +1137,10 @@ takes the current App Lock Password (`VaultPasswordChangeService.setErasesAfterF
 as changing the password checks it: counted and held to the deadline, but it never erases, as the vault is open.
 
 It's a setting of the device, not of a vault, like the attempt count (`AppLockSettingsStore.erasesAfterFailedPasswords`,
-in the shared defaults, stored only while it's on). Every vault's lock screen erases by it, every vault shows it the
-same, and each vault's own App Lock Password turns it on or off for all of them, a duress vault's included (see
-"Consequences to accept"). Turning the password off, or back on, turns it off. The erase removes it.
+in the shared defaults, stored only while it's on; on the Mac, in a keychain item on that Mac only, with the Require
+Unlock delay, as `docs/mac-app.md` says under Keychain). Every vault's lock screen erases by it, every vault shows it
+the same, and each vault's own App Lock Password turns it on or off for all of them, a duress vault's included (see
+"Consequences to accept"). Turning the password off, or back on, turns it off. The erase turns it off.
 
 **The lock screen** shows only how long to wait, never how many attempts are left. When the tenth wrong password in
 a row comes back and the device's setting is on, the app's password service (through `AppLockPasswordUnlocker`)
@@ -1255,7 +1257,7 @@ configuration, which the app can't edit. Turning on the password should tell use
 | Failed-open archives | Plaintext copies of the vault | Removed, with confirmation |
 | `UserDefaults` and keychain settings | Dates, a payload hash, auto-backup configuration, the PDF hint, the backup key | No backup settings: each vault's are in its payload (VAULT-70). App preferences stay. |
 | Wrap stamp (keychain, this device only) | Not there | When the device was last unlocked, or a key last wrapped: the same as the file's modification time |
-| Erasing after failed passwords (shared `UserDefaults`, VAULT-34) | Not there | Whether it's on, stored only while it is. Nothing about which vault turned it on or off. In device backups too. |
+| Erasing after failed passwords (shared `UserDefaults`, VAULT-34; a keychain item on the Mac) | Not there | Whether it's on, stored only while it is, or on the Mac, always, with the Require Unlock delay. Nothing about which vault turned it on or off. In device backups too, but not the Mac's keychain item. |
 | Keyboard learning | Nothing from Apple's keyboard: every field turns off autocorrection and Writing Tools (VAULT-54). A third-party keyboard sees what's typed outside secure fields | Same |
 | Spotlight index | Site names of visible, unlocked codes, only while Show in Spotlight is on and App Lock is off. Readable only while the device is unlocked | Empty: App Lock turns it off |
 | App switcher snapshot | The screen as it was, while App Lock is off | The vault door cover |

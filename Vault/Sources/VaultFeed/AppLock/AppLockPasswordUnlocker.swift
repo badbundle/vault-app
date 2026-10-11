@@ -17,6 +17,9 @@ import Foundation
 ///   (`VaultUnlockError.erasing`), so the next attempt, whatever the password, erases again.
 /// - **Before the threshold, a right password never erases,** a duress one included: it opens its vault and resets
 ///   the count, as `VaultUnlockService` does.
+/// - **If whether erasing is on can't be read, nothing is done on a guess.** Where it would decide anything, this
+///   throws instead: it neither erases when the user never turned erasing on, nor tries a password when an erase is
+///   due. Only the Mac's keychain can fail to read it (`AppLockSettingsStore`).
 ///
 /// The AutoFill extension never erases: `AutofillVaultService` leaves that attempt to the app.
 ///
@@ -50,11 +53,12 @@ public struct AppLockPasswordUnlocker {
     /// or instead of trying it, if an erase is due already.
     ///
     /// - Throws: As `VaultUnlockService.unlock(password:stoppingBeforeEraseThreshold:)` does, or the erase's error, if
-    ///   it failed. No vault can open then, and the next attempt finishes the erase.
+    ///   it failed. No vault can open then, and the next attempt finishes the erase. Or, if whether erasing is on
+    ///   can't be read where it matters, what reading it threw.
     public func unlock(password: String) async throws -> AppLockPasswordResult {
         // The count is read every time, erasing on or off, so an attempt takes the same time either way (C2).
         let isEraseDue = try await attemptCounter.hasReachedEraseThreshold()
-        if isEraseDue, settings.erasesAfterFailedPasswords {
+        if isEraseDue, try settings.loadErasesAfterFailedPasswords() {
             try await erase()
             return .erased
         }
@@ -71,7 +75,7 @@ public struct AppLockPasswordUnlocker {
         case let .mustWait(remaining):
             return .delayed(remaining)
         case let .wrongPassword(reachesEraseThreshold):
-            guard reachesEraseThreshold, settings.erasesAfterFailedPasswords else { return .wrong }
+            guard reachesEraseThreshold, try settings.loadErasesAfterFailedPasswords() else { return .wrong }
             try await erase()
             return .erased
         }

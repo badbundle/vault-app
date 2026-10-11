@@ -513,7 +513,7 @@ extension VaultAutofillViewModelTests {
     func appLock_locksStraightAway() throws {
         let settings = try AppLockSettingsStore(userDefaults: .nonPersistent())
         settings.isEnabled = true
-        settings.delay = .fifteenMinutes
+        try settings.setDelay(.fifteenMinutes)
 
         let sut = try makeSUT(storage: .plain, appLockSettings: settings)
 

@@ -190,12 +190,17 @@ enum VaultMacRoot {
         return .init(policy: .default)
     }()
 
-    /// In the App Group's defaults, so the AutoFill extension follows the lock too.
+    /// In the App Group's defaults, so the AutoFill extension follows the lock too, with erasing after failed passwords
+    /// and the Require Unlock delay in the keychain item they share, where only Vault can change them.
     static let appLockSettingsStore: AppLockSettingsStore = {
         let settings = AppLockSettingsStore.shared()
         #if DEBUG
         if let delay = VaultMacUITestVault.appLockDelay {
-            settings.delay = delay
+            do {
+                try settings.setDelay(delay)
+            } catch {
+                fatalError("Unable to set the UI test's Require Unlock: \(error)")
+            }
         }
         #endif
         return settings

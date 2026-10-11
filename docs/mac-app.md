@@ -309,11 +309,22 @@ app has `keychain-access-groups`, and its App Group is a keychain access group t
   which the AutoFill extension can't read. `VaultMacRoot.keychain` names that group, so the app never reads one of
   its own items from the App Group either. The backup password is inside each encrypted vault, as on iOS with the
   password on;
-- the attempt counter, the device key and the wrap stamp name the App Group, `442P244AFS.com.badbundle.vault`, which
-  the extension shares, and which is its only keychain access group.
+- the attempt counter, the device key, the wrap stamp and the app lock's device settings name the App Group,
+  `442P244AFS.com.badbundle.vault`, which the extension shares, and which is its only keychain access group.
 
 The app's own group isn't named for the app, as the iOS app's is, because on the Mac that name is the App Group's, and
 the extension would read it too (found in VAULT-112).
+
+Erasing after failed passwords and the Require Unlock delay, the settings that protect the vault and only weaken with
+the password or Touch ID, are kept in the keychain too, in one item on this Mac only
+(`AppLockDeviceSettingsKeychainStorage`), rather than in the App Group's defaults, where iOS keeps them. A process the
+user allows into the App Group's container could change its defaults, but not Vault's keychain items (VAULT-118). The
+first time they're read, what an earlier version kept in the defaults moves into the keychain, and the defaults are
+never read for them again. If the keychain can't be read, each reads as its safer value: the delay as Immediately,
+erasing as on in Settings, and an attempt at the password that depends on erasing isn't made
+(`AppLockSettingsStore`, `AppLockPasswordUnlocker`). An erase keeps the item, with erasing off, so they're never read
+from the defaults again. Vault's other settings, such as Hide While Recording, which anyone at the unlocked Vault can
+change, stay in the defaults.
 
 The keyrings stay on this Mac: moving to another Mac, with Migration Assistant or a Time Machine restore, brings the
 vault file but not them, so its killphrases and search passphrases would stop working there. Moving to another Mac is

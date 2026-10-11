@@ -179,8 +179,9 @@ extension VaultPasswordChangeService {
             try await rekey(vault, journaling: .turningOff, becoming: .deviceKey) {
                 try .device(deviceKeyStore.makeNewDeviceKey())
             }
-            // Erasing after failed passwords means nothing without one.
-            settings.erasesAfterFailedPasswords = false
+            // Erasing after failed passwords means nothing without one. Attempted, not required: the password is off
+            // by now, and turning it on again turns erasing off before anything else.
+            try? settings.setErasesAfterFailedPasswords(false)
             return .changed
         }
     }
@@ -194,12 +195,13 @@ extension VaultPasswordChangeService {
     public func turnOnPassword(_ password: String) async throws {
         try await whileChanging {
             let vault = try await openVault(inMode: .deviceKey, orThrow: .passwordIsNotOff)
+            // A password turned back on starts with erasing off, as a new one does. Turned off first, as it means
+            // nothing while the password is off, so the password is never back on with it left on.
+            try settings.setErasesAfterFailedPasswords(false)
             try await attemptCounter.reset()
             let key = try await passwordKey(for: password)
             // Settling deletes the device key, once it's shown to open nothing.
             try await rekey(vault, journaling: .turningOn, becoming: .password) { key }
-            // A password turned back on starts with erasing off, as a new one does.
-            settings.erasesAfterFailedPasswords = false
         }
     }
 
@@ -209,7 +211,7 @@ extension VaultPasswordChangeService {
     /// (MANIFESTO.md C2). See "Consequences to accept" in `docs/on-device-encryption.md`.
     ///
     /// A wrong password counts toward an erase like any other, but this never erases: the vault is open. Only the
-    /// lock screen erases (`AppLockPasswordUnlocker`).
+    /// lock screen erases (`AppLockPasswordUnlocker`). If the setting can't be stored, this throws, and it's as it was.
     public func setErasesAfterFailedPasswords(
         _ erases: Bool,
         current: String,
@@ -219,7 +221,7 @@ extension VaultPasswordChangeService {
             if let refused = try await check(current, opens: vault.store) {
                 return refused
             }
-            settings.erasesAfterFailedPasswords = erases
+            try settings.setErasesAfterFailedPasswords(erases)
             return .changed
         }
     }

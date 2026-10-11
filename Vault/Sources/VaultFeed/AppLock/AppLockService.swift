@@ -433,13 +433,18 @@ public final class AppLockService {
 
     /// Change how long the app can be in the background before it locks.
     ///
-    /// A longer delay weakens the lock, so it needs authentication first. A shorter one doesn't.
+    /// A longer delay weakens the lock, so it needs authentication first. A shorter one doesn't. If it can't be
+    /// stored, it stays as it was, so the lock never follows a delay the next launch wouldn't.
     public func setDelay(_ newDelay: AppLockDelay) async {
         guard isEnabled, newDelay != delay, !isChangingSettings, !isLocked else { return }
         if newDelay > delay {
             guard await authenticateToChangeSettings(reason: "Lock Vault Less Often") else { return }
         }
-        settings.delay = newDelay
+        do {
+            try settings.setDelay(newDelay)
+        } catch {
+            return
+        }
         delay = newDelay
     }
 
