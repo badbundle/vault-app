@@ -297,7 +297,8 @@ struct BackupPasswordStoreImplTests {
         #expect(try await sut.fetchPassword() == nil)
     }
 
-    /// The password first: it's what decrypts backups. Removing never reads it, so never asks the user.
+    /// An upgraded key's copy first, so it can't come back as the password, then the password: it's what decrypts
+    /// backups. Removing never reads it, so never asks the user.
     @Test
     func removePassword_removesThePasswordBeforeItsRecordWithoutReadingIt() async throws {
         let storage = SecureStorageMock()
@@ -305,7 +306,7 @@ struct BackupPasswordStoreImplTests {
 
         try await sut.removePassword()
 
-        #expect(storage.removeArgValues == [passwordKey, metadataKey])
+        #expect(storage.removeArgValues == [upgradeKey, passwordKey, metadataKey])
         #expect(storage.retrieveCallCount == 0)
     }
 
@@ -313,12 +314,127 @@ struct BackupPasswordStoreImplTests {
     func removePassword_errorRemovingThePasswordRethrowsAndKeepsTheRecord() async {
         let storage = SecureStorageMock()
         let sut = makeSUT(secureStorage: storage)
+        let passwordKey = passwordKey
+        storage.removeHandler = { key in
+            if key == passwordKey {
+                throw TestError()
+            }
+        }
+
+        await #expect(throws: TestError.self) {
+            try await sut.removePassword()
+        }
+        #expect(storage.removeArgValues == [upgradeKey, passwordKey])
+    }
+
+    @Test
+    func removePassword_errorRemovingAnUpgradedKeyRethrowsAndKeepsThePassword() async throws {
+        let storage = SecureStorageMock()
+        let sut = makeSUT(secureStorage: storage)
         storage.removeHandler = { _ in throw TestError() }
 
         await #expect(throws: TestError.self) {
             try await sut.removePassword()
         }
-        #expect(storage.removeArgValues == [passwordKey])
+        #expect(storage.removeArgValues == [upgradeKey])
+    }
+
+    // MARK: - Upgrade
+
+    @Test
+    func upgradePassword_replacesTheKeyAndKeepsWhenItWasSet() async throws {
+        let storage = InMemorySecureStorage()
+        let sut = makeSUT(secureStorage: storage, clock: EpochClockMock(currentTime: 1_700_000_000))
+        let old = anyBackupPassword()
+        try await sut.set(password: old)
+        let new = upgradedPassword(of: old)
+
+        try await sut.upgradePassword(from: old, to: new)
+
+        #expect(try await sut.fetchPassword() == new)
+        #expect(try await sut.fetchPasswordMetadata() == BackupPasswordMetadata(
+            lastSetDate: Date(timeIntervalSince1970: 1_700_000_000),
+        ))
+        #expect(await !storage.contains(key: upgradeKey))
+    }
+
+    /// Reading the old key would ask the user to authenticate, in the middle of using the app.
+    @Test
+    func upgradePassword_neverReadsThePassword() async throws {
+        let storage = InMemorySecureStorage()
+        let sut = makeSUT(secureStorage: storage)
+        let old = anyBackupPassword()
+        try await sut.set(password: old)
+
+        try await sut.upgradePassword(from: old, to: upgradedPassword(of: old))
+
+        #expect(await storage.authenticatedRetrieveCount == 0)
+    }
+
+    @Test
+    func upgradePassword_failingToKeepTheNewKey_changesNothing() async throws {
+        let storage = SecureStorageMock()
+        let sut = makeSUT(secureStorage: storage)
+        let upgradeKey = upgradeKey
+        storage.storeHandler = { _, key in
+            if key == upgradeKey {
+                throw TestError()
+            }
+        }
+
+        await #expect(throws: TestError.self) {
+            try await sut.upgradePassword(from: anyBackupPassword(), to: upgradedPassword(of: anyBackupPassword()))
+        }
+        #expect(storage.storeArgValues.map(\.1) == [upgradeKey])
+        #expect(storage.removeCallCount == 0)
+    }
+
+    /// Replacing an item removes it, then adds the new one, and the add can fail, as it does while the device is
+    /// locked. Then the password's gone, but the next load puts the new key back.
+    @Test
+    func upgradePassword_stoppingWithThePasswordRemoved_nextLoadRestoresTheNewKey() async throws {
+        let storage = FailingAddSecureStorage(failingKey: passwordKey)
+        let sut = makeSUT(secureStorage: storage)
+        let old = anyBackupPassword()
+        try await storage.underlying.store(data: encoded(old), forKey: passwordKey)
+        let new = upgradedPassword(of: old)
+
+        await #expect(throws: TestError.self) {
+            try await sut.upgradePassword(from: old, to: new)
+        }
+        #expect(await !storage.underlying.contains(key: passwordKey))
+
+        await storage.stopFailing()
+        #expect(try await sut.fetchPassword() == new)
+        #expect(await storage.underlying.contains(key: passwordKey))
+        #expect(await !storage.underlying.contains(key: upgradeKey))
+    }
+
+    /// A new password removes the copy an interrupted upgrade left, so the copy can't come back in its place.
+    @Test
+    func setPassword_removesAnUpgradedKeyLeftBehindFirst() async throws {
+        let storage = InMemorySecureStorage()
+        let sut = makeSUT(secureStorage: storage)
+        let old = anyBackupPassword()
+        try await storage.store(data: encoded(upgradedPassword(of: old)), forKey: upgradeKey)
+        let other = DerivedEncryptionKey(key: .random(), salt: .random(count: 48), keyDervier: .backupFastV2)
+
+        try await sut.set(password: other)
+        await storage.remove(key: passwordKey)
+
+        #expect(try await sut.fetchPassword() == nil)
+    }
+
+    @Test
+    func removePassword_removesAnUpgradedKeyLeftBehind() async throws {
+        let storage = InMemorySecureStorage()
+        let sut = makeSUT(secureStorage: storage)
+        try await storage.store(data: encoded(upgradedPassword(of: anyBackupPassword())), forKey: upgradeKey)
+
+        try await sut.removePassword()
+
+        #expect(try await sut.fetchPassword() == nil)
+        #expect(await !storage.contains(key: upgradeKey))
     }
 
     @Test
@@ -345,6 +461,10 @@ extension BackupPasswordStoreImplTests {
         VaultIdentifiers.SecureStorageKey.backupPasswordMetadata.rawValue
     }
 
+    private var upgradeKey: String {
+        VaultIdentifiers.SecureStorageKey.backupPasswordUpgrade.rawValue
+    }
+
     private func makeSUT(
         secureStorage: any SecureStorage = SecureStorageMock(),
         clock: any EpochClock = EpochClockMock(currentTime: 100),
@@ -354,5 +474,60 @@ extension BackupPasswordStoreImplTests {
 
     private func anyBackupPassword() -> DerivedEncryptionKey {
         DerivedEncryptionKey(key: .zero(), salt: Data(), keyDervier: .testing)
+    }
+
+    private func upgradedPassword(of password: DerivedEncryptionKey) -> DerivedEncryptionKey {
+        DerivedEncryptionKey(key: .random(), salt: password.salt, keyDervier: .backupFastV1ThenV2)
+    }
+
+    /// The password as the store keeps it in the keychain.
+    private func encoded(_ password: DerivedEncryptionKey) async throws -> Data {
+        let storage = InMemorySecureStorage()
+        try await makeSUT(secureStorage: storage).set(password: password)
+        return try #require(await storage.retrieve(key: passwordKey))
+    }
+}
+
+/// Keeps items in memory, but fails to add the item with `failingKey` until told to stop, after removing whatever was
+/// there, as `SecureStorageImpl` does when the keychain won't add it.
+private actor FailingAddSecureStorage: SecureStorage {
+    let underlying = InMemorySecureStorage()
+    private let failingKey: String
+    private var isFailing = true
+
+    init(failingKey: String) {
+        self.failingKey = failingKey
+    }
+
+    func stopFailing() {
+        isFailing = false
+    }
+
+    func store(data: Data, forKey key: String) async throws {
+        if isFailing, key == failingKey {
+            await underlying.remove(key: key)
+            throw TestError()
+        }
+        await underlying.store(data: data, forKey: key)
+    }
+
+    func retrieve(key: String) async -> Data? {
+        await underlying.retrieve(key: key)
+    }
+
+    func storeSilent(data: Data, forKey key: String) async {
+        await underlying.storeSilent(data: data, forKey: key)
+    }
+
+    func retrieveSilent(key: String) async -> Data? {
+        await underlying.retrieveSilent(key: key)
+    }
+
+    func attributes(key: String) async throws -> SecureStorageAttributes? {
+        try await underlying.attributes(key: key)
+    }
+
+    func remove(key: String) async {
+        await underlying.remove(key: key)
     }
 }

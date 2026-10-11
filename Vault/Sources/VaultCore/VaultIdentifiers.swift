@@ -18,6 +18,10 @@ public enum VaultIdentifiers {
         /// with `.whenUnlocked` access (no biometric), unlike the password
         /// itself, so the status can be shown without authenticating.
         case backupPasswordMetadata = "vault.secure-storage.backup-password-metadata.v1"
+        /// The backup password's key carried on to a stronger derivation (VAULT-128), kept while it replaces the
+        /// password's own item, so an upgrade that stops part way never leaves no password. Stored like the
+        /// password, needing user presence, and removed once the password holds it.
+        case backupPasswordUpgrade = "vault.secure-storage.backup-password-upgrade.v1"
         /// HMAC key for per-item killphrase digests. Stored with
         /// `.whenUnlocked` access (no biometric) so the killphrase
         /// match path works as soon as the device is unlocked.

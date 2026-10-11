@@ -74,6 +74,25 @@ extension OpenVaultBackupSettingsTests {
         #expect(device.authentications.value == 0)
     }
 
+    /// Moving the key to a stronger derivation isn't a new password: when it was set stays.
+    @Test
+    func plain_upgradePassword_replacesTheKeyAndKeepsWhenItWasSet() async throws {
+        let device = try TestDeviceBackupSettings(clock: EpochClockMock(currentTime: 1000))
+        let sut = try makeSUT(session: VaultStoreSession(target: .plain(GatedVaultStore())), device: device)
+        await sut.reload()
+        let old = anyBackupPassword()
+        try await device.passwordStore.set(password: old)
+        let new = DerivedEncryptionKey(key: .random(), salt: old.salt, keyDervier: .backupFastV1ThenV2)
+
+        try await sut.upgradePassword(from: old, to: new)
+
+        #expect(try await device.passwordStore.fetchPassword() == new)
+        #expect(try await sut.fetchPasswordMetadata() == BackupPasswordMetadata(
+            lastSetDate: Date(timeIntervalSince1970: 1000),
+        ))
+        #expect(device.authentications.value == 0)
+    }
+
     /// An erase, or a conversion, locks the session, then deletes the plain store's settings. A change meant for the
     /// plain store as it was open before is dropped, so it can't put them back, even once the session has switched
     /// back to the same store.
@@ -333,6 +352,56 @@ extension OpenVaultBackupSettingsTests {
         #expect(try first.savedState().vault.settings.autoBackup == .written(["first.pdf"]))
         #expect(try second.savedState().vault.settings.autoBackup == .written(["second.pdf"]))
         #expect(try second.savedState().vault.settings.pdfUserHint == nil)
+    }
+
+    @Test
+    func unlocked_upgradePassword_replacesTheKeyAndKeepsWhenItWasSet() async throws {
+        let old = anyBackupPassword()
+        let setDate = Date(timeIntervalSince1970: 1000)
+        let fixture = try EncryptedVaultFixture(state: .empty(with: VaultBackupSettings(
+            backupPassword: StoredBackupPassword(password: old, lastSetDate: setDate),
+        )))
+        let device = try TestDeviceBackupSettings()
+        let sut = try await makeSUT(session: VaultStoreSession(target: .unlocked(fixture.openStore())), device: device)
+        await sut.reload()
+        let new = DerivedEncryptionKey(key: .random(), salt: old.salt, keyDervier: .backupFastV1ThenV2)
+
+        try await sut.upgradePassword(from: old, to: new)
+
+        let stored = StoredBackupPassword(password: new, lastSetDate: setDate)
+        #expect(try fixture.savedState().vault.settings.backupPassword == stored)
+        #expect(try await sut.fetchPassword() == new)
+        #expect(try await sut.fetchPasswordMetadata() == BackupPasswordMetadata(lastSetDate: setDate))
+        #expect(try await device.passwordStore.fetchPassword() == nil)
+    }
+
+    /// Checked in the same save: a password set since the key was loaded, here or by another writer, stays.
+    @Test
+    func unlocked_upgradePassword_afterAnotherPasswordWasSet_keepsThatPassword() async throws {
+        let fixture = try EncryptedVaultFixture()
+        let sut = try await makeSUT(session: VaultStoreSession(target: .unlocked(fixture.openStore())))
+        await sut.reload()
+        let old = anyBackupPassword()
+        let other = DerivedEncryptionKey(key: .random(), salt: .random(count: 48), keyDervier: .backupFastV2)
+        try await sut.set(password: other)
+
+        try await sut.upgradePassword(
+            from: old,
+            to: DerivedEncryptionKey(key: .random(), salt: old.salt, keyDervier: .backupFastV1ThenV2),
+        )
+
+        #expect(try fixture.savedState().vault.settings.backupPassword?.password == other)
+        #expect(try await sut.fetchPassword() == other)
+    }
+
+    @Test
+    func locked_upgradePassword_throws() async throws {
+        let sut = try makeSUT(session: VaultStoreSession(target: .locked))
+        await sut.reload()
+
+        await #expect(throws: VaultStoreSessionError.locked) {
+            try await sut.upgradePassword(from: anyBackupPassword(), to: anyBackupPassword())
+        }
     }
 
     /// The session has switched, and this hasn't reloaded yet: a change meant for the vault that was open is

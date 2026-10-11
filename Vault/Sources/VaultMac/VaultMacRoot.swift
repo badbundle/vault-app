@@ -150,6 +150,9 @@ enum VaultMacRoot {
         searchPassphraseKeyStore: searchPassphraseKeyStore,
         searchPassphraseRehashService: nil,
         backupEventLogger: backupEventLogger,
+        // The app moves a backup key to a stronger derivation once it's loaded. The AutoFill extension, which has its
+        // own data model, never does.
+        backupPasswordUpgrader: BackupPasswordUpgrader(keyDeriverFactory: vaultKeyDeriverFactory),
     )
 
     // MARK: - Items

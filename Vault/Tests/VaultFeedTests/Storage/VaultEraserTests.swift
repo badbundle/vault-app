@@ -609,7 +609,7 @@ struct VaultEraseHarness {
     func seedDevice() async throws {
         for key in VaultIdentifiers.SecureStorageKey.allCases {
             switch key {
-            case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey,
+            case .backupPassword, .backupPasswordMetadata, .backupPasswordUpgrade, .killphraseKey, .searchPassphraseKey,
                  .killphraseBackupKeys, .searchPassphraseBackupKeys:
                 await keychain.store(data: Data(key.rawValue.utf8), forKey: key.rawValue)
             case .appLockPasswordAttempts:
@@ -744,7 +744,7 @@ struct VaultEraseHarness {
     /// Whether the keychain item is there, wherever it's kept.
     func isStored(_ key: VaultIdentifiers.SecureStorageKey) async -> Bool {
         switch key {
-        case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey,
+        case .backupPassword, .backupPasswordMetadata, .backupPasswordUpgrade, .killphraseKey, .searchPassphraseKey,
              .killphraseBackupKeys, .searchPassphraseBackupKeys:
             await keychain.keys().contains(key.rawValue)
         case .appLockPasswordAttempts:
@@ -869,6 +869,7 @@ actor FaultInjectingSecureStorage: SecureStorage {
         case .searchPassphraseBackupKeys: "the search passphrase keys from backups"
         case .backupPassword: "the backup password"
         case .backupPasswordMetadata: "the backup password's record"
+        case .backupPasswordUpgrade: "the backup password's upgraded key"
         case .appLockPasswordAttempts, .vaultWrapStamp, .vaultDeviceKey, .appLockDeviceSettings, .widgetCodes,
              .widgetCopiedCode, nil: key
         }

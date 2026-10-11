@@ -173,6 +173,29 @@ extension OpenVaultBackupSettings: BackupPasswordStore {
         }
     }
 
+    /// It takes its turn after any save still underway, like `set(password:)`, and replaces only `old`. An encrypted
+    /// vault's password is checked in the same save. The plain store's can't be read without asking the user, but
+    /// it's only ever set through here, and `VaultDataModel` only upgrades a key it loaded with no password set or
+    /// removed since. When the password was set doesn't change.
+    public func upgradePassword(from old: DerivedEncryptionKey, to new: DerivedEncryptionKey) async throws {
+        switch open?.vault {
+        case let .plain(opening):
+            let passwordStore = device.passwordStore
+            try await whileOpen(.plain(opening)) {
+                try await passwordStore.upgradePassword(from: old, to: new)
+            }.value
+        case let .encrypted(store):
+            let update: @Sendable (inout VaultBackupSettings) -> Void = { settings in
+                guard settings.backupPassword?.password == old else { return }
+                settings.backupPassword?.password = new
+            }
+            try await save(update, to: .encrypted(store)).value
+            apply(update, to: .encrypted(store))
+        case .locked, nil:
+            throw VaultStoreSessionError.locked
+        }
+    }
+
     public func removePassword() async throws {
         switch open?.vault {
         case let .plain(opening):
