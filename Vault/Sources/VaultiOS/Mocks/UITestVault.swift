@@ -44,8 +44,8 @@ enum UITestVault {
     /// Require Unlock, if a UI test sets it.
     static let appLockDelay: AppLockDelay? = arguments.appLockDelay
 
-    /// Cheap key derivation for a UI test's App Lock Password, so its vault opens in moments rather than half a
-    /// second a try.
+    /// Cheap key derivation for a UI test's App Lock Password, so its vault opens in moments rather than a second a
+    /// try.
     static let keyDerivationCalibration: AppLockKeyDerivationCalibration? = arguments.isEnabled
         ? AppLockKeyDerivationCalibration(
             parameters: Argon2idParameters(memoryKiB: 64, iterations: 1, parallelism: 1),

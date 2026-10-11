@@ -2,26 +2,34 @@ import CryptoEngine
 import Foundation
 import FoundationExtensions
 
-/// How the app lock password derives its key: Argon2id over 64 MiB, with the number of passes calibrated on the
-/// device that creates the encrypted vault (see `docs/on-device-encryption.md`, "Key derivation").
+/// How the app lock password derives its key: Argon2id over 64 MiB, with the number of lanes and passes calibrated on
+/// the device that creates the encrypted vault (see `docs/on-device-encryption.md`, "Key derivation").
 ///
 /// The parameters are chosen once, when the encrypted file is created, and stored in its header. Every vault in the
-/// file derives with them from then on, so they can't be tuned per vault or raised later.
+/// file derives with them from then on, so they can't be tuned per vault or raised later. A file made before VAULT-128
+/// keeps the half second, single lane and at most 32 passes it was calibrated with then.
 public enum AppLockKeyDerivation {
     /// The memory every derivation uses: 64 MiB, which the AutoFill extension can spare.
     public static let memoryKiB: UInt32 = 64 * 1024
-    /// The passes calibration can choose. The floor is RFC 9106's recommended 3 passes at 64 MiB. The ceiling keeps
-    /// unlocking bounded if a very fast device calibrates and the file is later restored to a slower one.
-    public static let passesRange: ClosedRange<UInt32> = 3 ... 32
+    /// The passes calibration can choose. The floor is RFC 9106's recommended 3 passes at 64 MiB, which a device too
+    /// slow to fit them in the target still gets. The ceiling keeps unlocking bounded if a very fast device calibrates
+    /// and the file is later restored to a slower one.
+    ///
+    /// A Vault older than VAULT-128 reads files with at most 32 passes, so it can't open a file with more. The app and
+    /// its extensions always ship together, so they always agree.
+    public static let passesRange: ClosedRange<UInt32> = 3 ... 128
+    /// The numbers of lanes calibration chooses between. Each lane runs on a thread of its own, so a device with the
+    /// cores to run them side by side fits more passes in the target.
+    public static let laneCounts: [UInt32] = [1, 2, 4]
     /// How long calibration aims for one derivation to take.
-    public static let targetDuration: Duration = .milliseconds(500)
+    public static let targetDuration: Duration = .seconds(1)
     /// The unlock deadline, as a multiple of the expected derivation time. The rest is time to try the vault slots
     /// and decode the vault.
     public static let deadlineMultiplier = 1.5
-    /// The number of timed derivations calibration makes. It uses the fastest, so a moment when the device is busy
-    /// can't make it choose too few passes.
+    /// The number of timed derivations calibration makes with each number of lanes. It uses the fastest, so a moment
+    /// when the device is busy can't make it choose too few passes.
     public static let calibrationRuns = 3
-    /// The passes each timed derivation makes.
+    /// The passes each timed derivation makes: a short run, which calibration extrapolates from.
     public static let calibrationPasses: UInt32 = 3
 
     /// The key deriver for the given parameters, as read from an encrypted vault's header.
@@ -69,36 +77,82 @@ public struct Argon2idDerivationTimer: Argon2idDerivationTiming {
 
 /// Chooses the app lock key derivation parameters for this device.
 ///
-/// It times a few derivations over the full 64 MiB, works out how long one pass takes, and chooses as many passes
-/// as fit in `AppLockKeyDerivation.targetDuration`, within `AppLockKeyDerivation.passesRange`.
+/// For each number of lanes in `AppLockKeyDerivation.laneCounts`, it times a few short derivations over the full
+/// 64 MiB and works out how long one pass takes. Each gets as many passes as fit in
+/// `AppLockKeyDerivation.targetDuration`, within `AppLockKeyDerivation.passesRange`, and it chooses the lanes that fit
+/// the most. Every pass works through all 64 MiB however many lanes share it, so the most passes is the most work for
+/// anyone guessing the password. If more than one fits as many, as at the floor or the ceiling, it chooses the
+/// quickest.
 public struct AppLockKeyDerivationCalibrator: Sendable {
+    /// What calibration measured for one number of lanes.
+    public struct LaneMeasurement: Equatable, Sendable {
+        public var lanes: UInt32
+        /// How long one pass takes with these lanes, from the fastest timed derivation.
+        public var timePerPass: Duration
+
+        /// As many whole passes as fit in the target with these lanes, within the allowed range.
+        public var passes: UInt32 {
+            AppLockKeyDerivationCalibrator.passes(timePerPass: timePerPass)
+        }
+
+        /// How long a derivation with these lanes and `passes` should take.
+        public var expectedDuration: Duration {
+            timePerPass * Int(passes)
+        }
+
+        /// Whether these lanes fit more passes than the other's, or as many more quickly.
+        func isBetterChoice(than other: LaneMeasurement) -> Bool {
+            passes == other.passes ? expectedDuration < other.expectedDuration : passes > other.passes
+        }
+    }
+
     private let timer: any Argon2idDerivationTiming
 
     public init(timer: any Argon2idDerivationTiming = Argon2idDerivationTimer()) {
         self.timer = timer
     }
 
-    /// Times the derivations and chooses the parameters. This takes a few tenths of a second to a couple of
-    /// seconds, so run it off the main actor.
+    /// Times the derivations and chooses the parameters. This takes a few tenths of a second to a second or so, so
+    /// run it off the main actor.
     public func calibrate() throws -> AppLockKeyDerivationCalibration {
-        let runParameters = Argon2idParameters(
-            memoryKiB: AppLockKeyDerivation.memoryKiB,
-            iterations: AppLockKeyDerivation.calibrationPasses,
-            parallelism: 1,
-        )
-        var fastest: Duration?
+        try Self.calibration(choosingFrom: measureLanes())
+    }
+
+    /// Times `AppLockKeyDerivation.calibrationRuns` short derivations with each number of lanes, and measures how long
+    /// a pass takes with each, in the order of `AppLockKeyDerivation.laneCounts`.
+    ///
+    /// The runs take turns between the numbers of lanes, so a moment when the device is busy slows one run of each
+    /// rather than every run of one.
+    public func measureLanes() throws -> [LaneMeasurement] {
+        var fastest = [UInt32: Duration]()
         for _ in 0 ..< AppLockKeyDerivation.calibrationRuns {
-            let duration = try timer.timeDerivation(parameters: runParameters)
-            fastest = min(fastest ?? duration, duration)
+            for lanes in AppLockKeyDerivation.laneCounts {
+                let duration = try timer.timeDerivation(parameters: Argon2idParameters(
+                    memoryKiB: AppLockKeyDerivation.memoryKiB,
+                    iterations: AppLockKeyDerivation.calibrationPasses,
+                    parallelism: lanes,
+                ))
+                fastest[lanes] = min(fastest[lanes] ?? duration, duration)
+            }
         }
-        let timePerPass = (fastest ?? .zero) / Int(AppLockKeyDerivation.calibrationPasses)
-        let passes = Self.passes(timePerPass: timePerPass)
-        let expectedDuration = timePerPass * Int(passes)
+        return AppLockKeyDerivation.laneCounts.map { lanes in
+            LaneMeasurement(
+                lanes: lanes,
+                timePerPass: (fastest[lanes] ?? .zero) / Int(AppLockKeyDerivation.calibrationPasses),
+            )
+        }
+    }
+
+    /// The parameters of the lanes that fit the most passes, or as many most quickly, and the times that go with them.
+    public static func calibration(choosingFrom measurements: [LaneMeasurement]) -> AppLockKeyDerivationCalibration {
+        precondition(measurements.isNotEmpty, "Calibration chooses from at least one number of lanes")
+        let chosen = measurements.dropFirst().reduce(measurements[0]) { $1.isBetterChoice(than: $0) ? $1 : $0 }
+        let expectedDuration = chosen.expectedDuration
         return AppLockKeyDerivationCalibration(
             parameters: Argon2idParameters(
                 memoryKiB: AppLockKeyDerivation.memoryKiB,
-                iterations: passes,
-                parallelism: 1,
+                iterations: chosen.passes,
+                parallelism: chosen.lanes,
             ),
             expectedDerivationDuration: expectedDuration,
             unlockDeadline: expectedDuration * AppLockKeyDerivation.deadlineMultiplier,

@@ -85,6 +85,7 @@ final class SpyUnlockWork: VaultUnlockWork {
 
     private struct State {
         var cpuTime = Duration.zero
+        var cpuTimeLanes = [UInt32]()
         var bodyLengths = [Int]()
         var failsDerivation = false
     }
@@ -108,6 +109,11 @@ final class SpyUnlockWork: VaultUnlockWork {
         state.get { $0.bodyLengths }
     }
 
+    /// The lanes each reading of the CPU time was for, in order.
+    var cpuTimeLanes: [UInt32] {
+        state.get { $0.cpuTimeLanes }
+    }
+
     func failDerivation() {
         state.modify { $0.failsDerivation = true }
     }
@@ -129,8 +135,12 @@ final class SpyUnlockWork: VaultUnlockWork {
         }
     }
 
-    func threadCPUTime() -> Duration {
-        state.get { $0.cpuTime }
+    /// The time the steps have spent, however many lanes the derivation has.
+    func cpuTime(lanes: UInt32) -> Duration {
+        state.modify { state in
+            state.cpuTimeLanes.append(lanes)
+            return state.cpuTime
+        }
     }
 
     func passwordKey(for password: String, header: VaultSlotFile.Header) throws -> VaultSlotRootKey {

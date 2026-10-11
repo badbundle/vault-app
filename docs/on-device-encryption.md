@@ -17,9 +17,10 @@ the encrypted vault doesn't use SwiftData at all.
   vault as plain records, which are decoded into an in-memory record store while the vault is unlocked. There's
   a random data key per vault, wrapped by a key derived from the password with Argon2id. Every change is written
   as an atomic, verified replacement of the whole file.
-- Deriving the key is calibrated to about 0.5 s on the device that creates the file. On an M5 Max, 8 passes take
-  170 ms. Trying all sixteen slots takes about 0.04 ms, and loading a 1,000-item vault about 9 ms. Saving a
-  change takes about 19 ms at 1,000 items and 90 ms at 5,000, including a full `F_FULLFSYNC`.
+- Deriving the key is calibrated to about 1 s on the device that creates the file, with the 1, 2 or 4 lanes that
+  fit the most passes (VAULT-128; it was 0.5 s with one lane before). On an M5 Max that's 4 lanes and 128 passes,
+  the ceiling, in about 0.85 s. Trying all sixteen slots takes about 0.04 ms, and loading a 1,000-item vault about
+  9 ms. Saving a change takes about 19 ms at 1,000 items and 90 ms at 5,000, including a full `F_FULLFSYNC`.
 - Users who never set an app lock password keep today's SQLite store, unchanged.
 
 What Bradley has to accept is listed under [Consequences](#consequences-to-accept). The main ones:
@@ -48,7 +49,9 @@ Recorded after review. They supersede anything in the first draft that differs.
 2. **Calibrated on the device, when the file is created.** The KDF parameters live in the file header, so they're
    chosen on the device that creates the file, not fixed in advance:
    - Memory stays at 64 MiB.
-   - Passes are calibrated to target about 0.5 s, with a floor of 3 and a ceiling of 32.
+   - Lanes and passes are calibrated to target about 1 s: calibration chooses whichever of 1, 2 or 4 lanes fits the
+     most passes, with a floor of 3 and a ceiling of 128 (VAULT-128). Before that, it was 0.5 s, one lane, and
+     3–32 passes, which the files made then keep.
    - The unlock deadline is set at the same time.
    - The file has one parameter set, so the AutoFill extension checks its memory headroom before deriving.
 
@@ -307,30 +310,46 @@ derivation test every slot. It also means the parameters can't be raised later f
 
 ### Key derivation
 
-**Argon2id, m = 64 MiB, p = 1, with the number of passes `t` calibrated on the device that creates the file.**
-It comes from the PHC reference implementation, vendored unmodified as the `CArgon2` target (CC0 or Apache-2.0,
-about 3,800 lines, no warnings). It's compiled with `-O3` in every configuration: with Xcode's default `-Os`, a
-pass took about 1.7 times as long on the M5 Max, which would buy that much less attacker cost in the same half
-second.
+**Argon2id, m = 64 MiB, with the number of lanes `p` and passes `t` calibrated on the device that creates the
+file.** It comes from the PHC reference implementation, vendored unmodified as the `CArgon2` target (CC0 or
+Apache-2.0, about 3,800 lines, no warnings). It's compiled with `-O3` in every configuration: with Xcode's default
+`-Os`, a pass took about 1.7 times as long on the M5 Max, which would buy that much less attacker cost in the same
+second. It's built with threads, so each lane runs on a thread of its own.
 
 **Calibration.** The parameters live in the file header, so they're chosen when the file is created: at the
-first conversion (sub-issue 8), and again after an erase if a password is set anew. On that device:
+first conversion (sub-issue 8), and again after an erase if a password is set anew. Nothing else makes a new file:
+changing a password, adding a duress vault, and turning the password off and on again all keep the file, and its
+parameters. On the device that creates it (`AppLockKeyDerivationCalibrator`):
 
-1. Run Argon2id with m = 64 MiB and t = 3 on a throwaway password and salt, three times. Take the fastest run,
-   so a busy moment can't make the choice too cheap. The time per pass is that run's time divided by 3.
-2. Choose `t` = clamp(⌊0.5 s ÷ time per pass⌋, 3, 32).
-   - The floor, 3 passes at 64 MiB, is RFC 9106's recommended profile for memory-constrained environments.
+1. For each of 1, 2 and 4 lanes, run Argon2id with m = 64 MiB and t = 3 on a throwaway password and salt, three
+   times, taking turns between the numbers of lanes. These are short runs, which the rest extrapolates from, so
+   calibrating stays quick. Take each one's fastest run, so a busy moment can't make the choice too cheap. Its time
+   per pass is that run's time divided by 3.
+2. For each, `t` = clamp(⌊1 s ÷ time per pass⌋, 3, 128).
+   - The floor, 3 passes at 64 MiB, is RFC 9106's recommended profile for memory-constrained environments (with 4
+     lanes). A device too slow to fit them in 1 s still gets them.
    - The ceiling bounds unlock time if the file is later restored onto a slower iPhone, or if a much faster
      device calibrates.
-   - At the M5 Max's roughly 21 ms per pass, this picks about 24 passes.
-3. Set the unlock deadline to 1.5 × `t` × the time per pass. That leaves about 0.25 s at the target for trying
+3. Choose the lanes that fit the most passes. Every pass works through all 64 MiB however many lanes share it, so
+   the most passes costs anyone guessing the password the most work. They run guesses side by side anyway, so it's
+   the work in each guess that limits them, not how long one takes. If more than one number of lanes fits as many,
+   as at the floor or the ceiling, choose the quickest.
+   - On the M5 Max, a pass takes about 22 ms with 1 lane, 11 ms with 2 and 6 ms with 4, so 4 lanes fit the
+     ceiling of 128 passes, in about 0.85 s (see the [appendix](#app-lock-calibration)).
+4. Set the unlock deadline to 1.5 × `t` × the time per pass. That leaves about 0.5 s at the target for trying
    the slots and decoding the vault (about 45 ms at 5,000 items). The deadline is device-local and kept in the
    storage state file, not the header. If a derivation ever takes longer than the deadline, for example after a
    restore onto a slower phone, the deadline is raised to 1.5 × the observed time. It never goes down. Real,
    duress and wrong passwords derive identically, so this adjustment reveals nothing.
-4. Write m, `t` and p into the header. Every slot in the file uses them for the life of the file.
+5. Write m, `t` and p into the header. Every slot in the file uses them for the life of the file.
 
-Calibration adds about 0.3–1.5 s, once, to setting the password. It runs behind the setup flow's progress state.
+Calibration adds about 0.4–1.5 s, once, to setting the password: about 0.4 s on the M5 Max. It runs behind the
+setup flow's progress state.
+
+**Files made before VAULT-128** were calibrated to 0.5 s, with one lane and at most 32 passes, and keep those
+parameters for life: a file's header is never rewritten. A file with more than 32 passes, which this version can
+write, can't be opened by an older Vault, which refuses passes above 32. The app and its extensions always ship
+together, so they always agree.
 
 **Memory and the AutoFill extension.**
 
@@ -341,7 +360,8 @@ Calibration adds about 0.3–1.5 s, once, to setting the password. It runs behin
   So before deriving, the AutoFill extension checks `os_proc_available_memory()` against m plus a margin (16 MiB).
   If there isn't enough headroom, the sheet tells the user to open Vault instead of risking a crash. The app can
   always unlock.
-- It derives before building any vault UI, and releases the working memory straight after.
+- It derives before building any vault UI, and releases the working memory straight after. More lanes don't need
+  more memory: they share the 64 MiB, and each adds only its thread's stack.
 - The unlock service (sub-issue 7) exposes the check, `hasMemoryHeadroomToUnlock()`: m, plus the file, which is
   read before deriving, plus the margin. It reads only the file's header and size. Sub-issue 10 uses it. On an
   iPhone, `os_proc_available_memory()` returning 0 means the process is already over its limit, so the check
@@ -360,6 +380,11 @@ Calibration adds about 0.3–1.5 s, once, to setting the password. It runs behin
   before writing, the extension checks `os_proc_available_memory()` against twice the file's size plus four
   times the JSON's plus the same margin, and otherwise asks the user to open Vault (VAULT-49). Mapping the file
   instead of reading it wouldn't help: slot writes modify the bytes, and writing to a mapped `Data` crashes.
+- **Time.** Unlocking in the sheet takes as long as in the app, about 1 s on the device that set the password.
+  Nothing in the sheet has a time limit: it derives off the main thread while it shows its progress, as the app
+  does. The only wait with a limit is for `vault-slots.lock` (10 s), which a write from the sheet takes. Saves hold
+  it for milliseconds, and setting the password holds it through calibration and two derivations, about 3 s on the
+  device calibrating.
 
 **Why Argon2id.**
 
@@ -368,7 +393,8 @@ Calibration adds about 0.3–1.5 s, once, to setting the password. It runs behin
   scrypt N = 2¹⁶, r = 8, p = 3 (about 384 MiB) moves in about the same time (197 ms). Argon2id also resists
   time–memory trade-offs better.
 - A GPU guessing at 8 passes is bandwidth-bound at roughly 650 guesses per second per TB/s. At the calibrated
-  ~0.5 s it's proportionally fewer. That's a rough upper bound, not a measurement.
+  ~1 s it's proportionally fewer: about 40 per second per TB/s at 128 passes. That's a rough upper bound, not a
+  measurement.
 
 **API.** It's a new `Argon2idKeyDeriver` in `CryptoEngine`, parameterized by the header. It isn't a fixed
 `VaultKeyDeriver.Signature`, because its parameters differ from file to file.
@@ -389,7 +415,7 @@ Header (plaintext; same layout on every install, only the salt differs)
   10  2  slot count = 16
   12  4  slot size in bytes (1 MiB × 2^k)
   16  2  KDF id (1 = Argon2id)
-  18  4  Argon2 memory KiB (65,536)   22 4  Argon2 passes t (calibrated, 3–32)   26 1  Argon2 lanes (1)
+  18  4  Argon2 memory KiB (65,536)   22 4  Argon2 passes t (calibrated, 3–128)   26 1  Argon2 lanes (1, 2 or 4)
   32  32 salt
   64  64 reserved, zero
 
@@ -411,8 +437,9 @@ changes it for slots the app can't open, and `i` is 2 bytes. It's `VaultSlotFile
   Changes to the payload don't need one: the body records its payload version and compression (0 = none,
   1 = lzfse).
 - **Header limits.** Before deriving anything, a reader refuses Argon2id parameters outside 8 KiB–1 GiB of memory,
-  1–32 passes and 1–8 lanes, and a slot size that isn't 1 MiB × 2^k up to 4 MiB or doesn't match the file's
-  length. A changed header can't make unlocking run for hours or ask for gigabytes.
+  1–128 passes and 1–8 lanes, and a slot size that isn't 1 MiB × 2^k up to 4 MiB or doesn't match the file's
+  length. A changed header can't make unlocking run for hours or ask for gigabytes. Before VAULT-128 the limit was
+  1–32 passes, so an older Vault refuses a file with more (see [Calibration](#key-derivation)).
 - **Generations and wrap times.** Creating a vault starts its generation at a random value between 1 and 2³² − 1,
   so a new vault's doesn't show how new it is, and every save and rekey increments it. A write is refused if the
   slot's current key box doesn't open at the generation the writer loaded. The wrapped-at time is set when a vault
@@ -749,10 +776,13 @@ the same deadline. What differs afterwards is decoding time, which is proportion
 - **An attempt whose derivation and slot trials take more than two thirds of the deadline** raises it to 1.5
   times that before the attempt waits, so that attempt is held to the raised deadline too. Only that work counts,
   because it's the same whatever the password: the deadline is saved, so counting a vault's decode would make every
-  later attempt, a duress one included, show how large the largest vault opened is. The work is timed in the thread's CPU time, so time the app spends suspended,
-  or the device asleep, doesn't count; only an attempt that finished its work and is still wanted raises it; and
-  it goes no higher than 5 s, about 1.5 times 32 passes on an iPhone four times slower than an M5 Max. A stored
-  deadline above that is taken as 5 s.
+  later attempt, a duress one included, show how large the largest vault opened is. The work is timed in CPU
+  time, so time the app spends suspended, or the device asleep, doesn't count. With one lane that's the thread's.
+  With more, the lanes run side by side on threads of their own, so it's the calling thread's plus an even share of
+  the rest of the process's (`VaultUnlockWork.cpuTime(lanes:)`): the calling thread's alone would miss nearly all
+  of it, and the deadline would never be raised. Only an attempt that finished its work and is still wanted raises
+  it, and it goes no higher than 5 s: about 1.5 times a derivation calibrated to 1 s, restored onto an iPhone three
+  times slower than the one that set the password. A stored deadline above that is taken as 5 s.
 - **Ties** in the most recently wrapped slot go to the lowest index. Wrap times are stamped by the device that
   wrapped the key, and only ever go forward on that device (see [Same passwords](#same-passwords)). A file restored
   from another device keeps that device's stamps.
@@ -1066,9 +1096,10 @@ reset it too.
 
 So someone who knows a duress password can make four wrong guesses at another vault's password with no wait, open
 the duress vault, and do it again, as often as they like: neither the waits nor the erase limit their guessing on
-the device, only the key derivation, about half a second a guess (VAULT-93). That's accepted. The counter can't
-tell the real password from a duress one (C2), and keeping the waits growing across a right password (a separate
-count of recent wrong ones, going down by one an hour) was tried and dropped: it made a user who'd got their own
+the device, only the key derivation, about a second a guess, or half a second on a file made before VAULT-128
+(VAULT-93). That's accepted. The counter can't tell the real password from a duress one (C2), and keeping the waits
+growing across a right password (a separate count of recent wrong ones, going down by one an hour) was tried and
+dropped: it made a user who'd got their own
 password wrong a few times wait after a single slip, hours after they'd unlocked. A record saved while that count was
 kept has `recentWrong` and `recentWrongAt` as well, which are ignored, so it reads as its attempts in a row.
 
@@ -1270,11 +1301,11 @@ configuration, which the app can't edit. Turning on the password should tell use
 ## Residual limits
 
 1. **Offline guessing.** The password is only as strong as its entropy. With derivation calibrated to about
-   0.5 s, an attacker with the file can make, as a rough upper bound, a few guesses per second per CPU core and
-   hundreds per second per GPU. A 6-digit PIN falls in about half an hour on one GPU. A random 4-word passphrase
-   takes more than 10,000 GPU-years. VAULT-22 requires at least 8 characters, not only numbers, and says why
-   (`AppLockPasswordRules`). That rules out a PIN, not a common word. A device-bound secret
-   would remove this, at the cost of restoring to a new iPhone; it's rejected above.
+   1 s, an attacker with the file can make, as a rough upper bound, a guess or two per second per CPU core and
+   tens to hundreds per second per GPU. A 6-digit PIN falls in an hour or more on one GPU. A random 4-word
+   passphrase takes more than 10,000 GPU-years. VAULT-22 requires at least 8 characters, not only numbers, and says
+   why (`AppLockPasswordRules`). That rules out a PIN, not a common word. A device-bound secret would remove this,
+   at the cost of restoring to a new iPhone; it's rejected above.
 2. **Multiple snapshots.** Two copies of the file from different times, for example two iCloud backups or a
    seized phone plus an older backup, show which slot's bytes changed. Combined with a coerced duress password,
    which identifies the duress vault's slot, a change in another slot shows another vault is in use. Slots the
@@ -1297,8 +1328,11 @@ configuration, which the app can't edit. Turning on the password should tell use
 5. **Fixed KDF parameters.** They're calibrated once, on the device that creates the file.
    - Raising them later needs a new format version whose unlock derives under both parameter sets (twice the
      time) during a transition, or an erase and re-create.
-   - Restoring the file onto a slower iPhone makes unlocking proportionally slower. The 32-pass ceiling bounds
-     it.
+   - Restoring the file onto a slower iPhone makes unlocking proportionally slower, and slower still if it has
+     fewer cores to run the file's lanes side by side. The 128-pass ceiling bounds it. So does the deadline's 5 s
+     cap, beyond which an attempt overruns by the time it takes to decode the vault.
+   - A file keeps the parameters it was made with, so files made before VAULT-128 keep their 0.5 s, single lane
+     and at most 32 passes.
 6. **Memory.** Decrypted items can't be reliably zeroed after locking (see above).
 
    Nor can a test show that every buffer the storage code zeroes is zeroed. Where the code allocates the memory
@@ -1339,18 +1373,22 @@ configuration, which the app can't edit. Turning on the password should tell use
   of working memory, and a memory high-water check: with the App Lock Password's 64 MiB, a derivation holds that one
   block and nothing more. A derivation can't be cancelled once it has started, as it's one call into the reference
   implementation: an unlock cancelled while it waits for its deadline throws its result away instead.
-- **The shipped parameters.** One test sets a password with 64 MiB and passes calibrated on the machine it runs on,
-  then unlocks and refuses a wrong password. Every other test uses cheap parameters.
+- **The shipped parameters.** One test sets a password with 64 MiB and the lanes and passes calibrated on the
+  machine it runs on, then unlocks and refuses a wrong password. Every other test uses cheap parameters.
 - **Calibration**, with an injected timer:
-  - Floor and ceiling clamping.
-  - The fastest of three runs is used.
-  - The deadline is computed and only ever raised.
+  - Floor and ceiling clamping, at 3 and 128 passes, and the 1 s target.
+  - The fastest of three runs is used for each number of lanes, and the runs take turns between them.
+  - The lanes that fit the most passes are chosen, and of those that fit as many, the quickest.
+  - The deadline is computed and only ever raised. With more than one lane, the work it's raised for is timed with
+    the lanes' share of the CPU time, and a real derivation with four lanes counts their work.
   - The header carries exactly the chosen parameters.
   - A file created with one set of parameters opens on a "device" that would have calibrated differently: the slot
     file fixture, below.
 - **Format.**
   - Round-trip every field.
   - Wrong password, wrong slot and wrong header all fail closed.
+  - A header with parameters outside its limits is refused before anything is derived: it accepts up to 128 passes,
+    and refuses 129.
   - Flipping any single byte of the header, key box or body makes the slot fail to open.
   - Growth preserves other slots, and they still open.
   - Every slot has identical length.
@@ -1443,8 +1481,9 @@ configuration, which the app can't edit. Turning on the password should tell use
 3. Offline guessing is bounded only by the password's strength. As built, an App Lock Password, a duress password
    and a new backup password need at least 8 characters, and not only numbers (`AppLockPasswordRules`). That rules
    out a PIN, not a common word, so the screens that set one say to use a long password.
-4. Unlocking adds the derivation, calibrated to about 0.5 s on the device that set the password, and finishes at
-   a fixed deadline of about 0.75 s. That's on top of device authentication.
+4. Unlocking adds the derivation, calibrated to about 1 s on the device that set the password, and finishes at
+   a fixed deadline of about 1.5 s (0.5 s and 0.75 s for a file made before VAULT-128). That's on top of device
+   authentication.
 5. The encrypted file is at least 16 MiB. Every change rewrites it: about 19 ms at 1,000 items on the M5 Max,
    and likely somewhat more on a phone.
 6. Turning the password off keeps the encrypted file with a device-key wrap. Widgets, AutoFill and QuickType
@@ -1493,7 +1532,8 @@ These are in implementation order. Each is one PR with its own tests. Keys and o
 4. **VAULT-43: Add the Argon2id KDF with on-device calibration.** Storage core.
    - The vendored PHC reference C target and an `Argon2idKeyDeriver` parameterized by the header.
    - The calibration routine (fastest of three t = 3 runs, `t` clamped to 3–32 for about 0.5 s, and the
-     deadline) behind an injectable timer.
+     deadline) behind an injectable timer. VAULT-128 later made it about 1 s, with 1, 2 or 4 lanes and up to 128
+     passes.
    - Zeroing of working memory.
    - **Tests:** RFC 9106 vectors and the reference known-answer tests.
 5. **VAULT-44: Add the slot file format.** Storage core.
@@ -1598,7 +1638,25 @@ of about 12 before and 85–105 after, so the after figures are if anything slow
 | Argon2id m=64 MiB, t=3, p=4 | 97 ms | 33 ms |
 
 Four lanes add four thread stacks of a few KiB each: a 64 MiB derivation's peak footprint grew by 64 KiB. With one
-lane, as the App Lock Password uses, no thread is started.
+lane, as every App Lock file made before VAULT-128 has, no thread is started.
+
+### App Lock calibration
+
+VAULT-128 calibrates the App Lock Password to about 1 s, choosing among 1, 2 and 4 lanes. `make calibrate-app-lock`
+on the M5 Max, three runs in a row while other builds ran, at a load average (`uptime`) of about 24:
+
+| Lanes | Time per pass | Passes that fit 1 s | Expected derivation |
+| --- | ---: | ---: | ---: |
+| 1 | 20.6–24.0 ms | 41–48 | 985–990 ms |
+| 2 | 10.4–12.4 ms | 80–96 | 991–996 ms |
+| 4 | 5.4–6.6 ms | 128, the ceiling | 693–849 ms |
+
+Every run chose 4 lanes and 128 passes, with an unlock deadline of 1.04–1.27 s. Calibrating took 356–398 ms. A
+derivation with the chosen parameters then took 820–902 ms, about a tenth more than the short runs predicted: a pass
+over memory that's already full, as every pass after the first is, takes a little longer than the first. So the
+first unlock is likely to raise the deadline to 1.5 times what it took, once (see
+[Unlocking and locking](#unlocking-and-locking)). An earlier run at a load of about 10 chose the same, expecting
+981 ms and taking 1,064 ms.
 
 ### Payload sizes
 

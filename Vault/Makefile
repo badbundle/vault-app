@@ -5,7 +5,9 @@ benchmark-keygen:
 	swift run -c release vault-keygen-speedtest
 
 # Calibrates the app lock key derivation (Argon2id) for this machine, as the
-# app does on the device when it creates an encrypted vault.
+# app does on the device when it creates an encrypted vault. It prints the
+# passes each number of lanes fits in the target, the lanes and passes it
+# chose, and how long a derivation with them takes.
 .PHONY: calibrate-app-lock
 calibrate-app-lock:
 	swift run -c release vault-keygen-speedtest --app-lock

@@ -1,3 +1,4 @@
+import CryptoEngine
 import CryptoKit
 import Foundation
 import FoundationExtensions
@@ -323,6 +324,20 @@ extension VaultUnlockServiceTests {
         #expect(try await sut.service.unlock(password: "real") == .unlocked)
 
         #expect(sut.deadlineStore.current == deadline)
+    }
+
+    /// A derivation with more than one lane runs them on threads of their own, so the work is timed with the file's
+    /// lanes (`LiveVaultUnlockWork.cpuTime(lanes:)`).
+    @Test
+    func unlock_timesTheWorkForTheFilesLanes() async throws {
+        let sut = try makeSUT(
+            vaults: [.init(password: "real", slot: realSlot, items: [])],
+            kdfParameters: Argon2idParameters(memoryKiB: 64, iterations: 1, parallelism: 4),
+        )
+
+        _ = try await sut.service.unlock(password: "real")
+
+        #expect(sut.work.cpuTimeLanes == [4, 4])
     }
 
     @Test
@@ -884,6 +899,7 @@ extension VaultUnlockServiceTests {
     /// A file with the given vaults and every other slot random, and a service to unlock it, starting locked.
     private func makeSUT(
         vaults: [TestVault],
+        kdfParameters: Argon2idParameters = EncryptedVaultFixture.kdfParameters,
         fileSystem: any SlotFileSystem = InMemorySlotFileSystem(),
         timings: SpyUnlockWork.Timings = .init(),
         availableMemory: Int? = nil,
@@ -892,7 +908,7 @@ extension VaultUnlockServiceTests {
         backgroundTime: VaultBackgroundTime = .none,
         attemptLog: SharedMutex<[String]> = SharedMutex([String]()),
     ) throws -> SUT {
-        var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
+        var contents = try VaultSlotFile(kdfParameters: kdfParameters)
         for vault in vaults {
             var state = try EncryptedVaultStoreTests.state(items: vault.items)
             state.vault.duressSlots = vault.duressSlots

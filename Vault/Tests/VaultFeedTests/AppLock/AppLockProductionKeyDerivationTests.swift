@@ -4,9 +4,9 @@ import TestHelpers
 import Testing
 @testable import VaultFeed
 
-/// The App Lock Password with the key derivation the app ships: Argon2id with 64 MiB, and passes calibrated on this
-/// device. It takes seconds and the memory, so this is the only test that does: every other one uses cheap parameters
-/// (`EncryptedVaultFixture.kdfParameters`).
+/// The App Lock Password with the key derivation the app ships: Argon2id with 64 MiB, and lanes and passes calibrated
+/// on this device. It takes seconds and the memory, so this is the only test that does: every other one uses cheap
+/// parameters (`EncryptedVaultFixture.kdfParameters`).
 @MainActor
 @Suite(.serialized)
 struct AppLockProductionKeyDerivationTests {
@@ -50,6 +50,7 @@ struct AppLockProductionKeyDerivationTests {
             let header = try #require(read).header
             #expect(header.kdfParameters.memoryKiB == AppLockKeyDerivation.memoryKiB)
             #expect(AppLockKeyDerivation.passesRange.contains(header.kdfParameters.iterations))
+            #expect(AppLockKeyDerivation.laneCounts.contains(header.kdfParameters.parallelism))
             await unlockService.lock()
 
             #expect(try await unlockService.unlock(password: "wrong password") == .wrongPassword(

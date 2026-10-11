@@ -168,8 +168,9 @@ Locking Vault closes the sheet, and what was typed into it is dropped.
   (`VaultEncryptionConverter`). The Mac's first launch converts an empty in-memory store the same way, so it reuses the
   converter's verified, crash-safe commit, and no SQLite store is ever written to disk. After an erase, the Mac goes
   back to its first launch, and the fresh store the erase leaves is in memory too.
-- **Key derivation** is calibrated on the Mac that sets the password, as on iOS (G64): 64 MiB, 3–32 passes, about half
-  a second. On an M5 Max, that's about 24 passes.
+- **Key derivation** is calibrated on the Mac that sets the password, as on iOS (G64): 64 MiB, and the 1, 2 or 4 lanes
+  and 3–128 passes that fit the most work in about a second. On an M5 Max, that's 4 lanes and 128 passes, the
+  ceiling, in about 0.85 s. A vault set up before VAULT-128 keeps its half second, one lane and 3–32 passes.
 
 ### Locking
 
