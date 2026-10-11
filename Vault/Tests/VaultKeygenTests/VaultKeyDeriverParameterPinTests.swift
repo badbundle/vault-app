@@ -139,8 +139,14 @@ struct VaultKeyDeriverParameterPinTests {
 /// The secure v2 derivations with the parameters they ship with, against known answers from another build of the
 /// Argon2 reference (argon2-cffi 25.1.0). They take seconds and hundreds of MiB each, so these are the only tests
 /// that run them, one at a time: every other test uses the fast derivations or `testing`.
+///
+/// The backup's takes a minute under the Thread Sanitizer, which slows every memory access, so it's left to the other
+/// configuration. The item's runs the same code, lanes and all, in both.
 @Suite(.serialized)
 struct VaultKeyDeriverRealParameterTests {
+    /// Whether the Thread Sanitizer's runtime is in the process.
+    static let isThreadSanitized = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "__tsan_init") != nil
+
     @Test(.timeLimit(.minutes(2)))
     func itemSecureV2_derivesTheKnownAnswer() throws {
         let key = try VaultKeyDeriver.Item.Secure.v2.recreateEncryptionKey(
@@ -151,7 +157,7 @@ struct VaultKeyDeriverRealParameterTests {
         #expect(key.key.data.toHexString() == "d7c60e09632c0cbd13d44a4433f2298254f83f499a0b1efd3c577964f72b9b61")
     }
 
-    @Test(.timeLimit(.minutes(5)))
+    @Test(.timeLimit(.minutes(5)), .disabled(if: isThreadSanitized, "A minute under the Thread Sanitizer"))
     func backupSecureV1ThenV2_carryingOnAStoredKey_derivesTheKnownAnswer() throws {
         // How the app moves a stored v1 key on, and the second half of every restore of a backup made with one.
         let storedKey = try DerivedEncryptionKey(
