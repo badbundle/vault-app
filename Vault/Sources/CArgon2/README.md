@@ -27,8 +27,9 @@ Left out:
 It's built with threads (VAULT-128): with more than one lane, the reference fills each lane's segment on a pthread
 of its own, joining them at every sync point, so the lanes run in parallel. That gives the same output as filling
 them one after another, which is what it did before, when `Package.swift` defined `ARGON2_NO_THREADS`. With one
-lane it never starts a thread, and the App Lock Password always uses one. A thread only needs a few KiB of its
-stack, and the working memory is the same one block however many lanes share it.
+lane it never starts a thread. The App Lock Password uses 1, 2 or 4 lanes, as calibration chooses on the device that
+sets it (a file made before VAULT-128 keeps its one), and backup and item passwords' v2 derivations always use 4. A
+thread only needs a few KiB of its stack, and the working memory is the same one block however many lanes share it.
 
 The reference wipes its working memory before freeing it (`FLAG_clear_internal_memory`, on by default), and wipes
 the password copy it's given when `ARGON2_FLAG_CLEAR_PASSWORD` is set. `Argon2idKeyDeriver` relies on both, and

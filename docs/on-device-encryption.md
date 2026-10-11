@@ -1705,7 +1705,7 @@ of about 12 before and 85–105 after, so the after figures are if anything slow
 | PBKDF2-SHA384, 5,452,351 iterations | 13.6 s | 2.1 s |
 | `Item.Secure.v1` | 1,006 ms | 139 ms |
 | `Backup.Secure.v1` | 15.4 s | 2.8 s |
-| Argon2id m=64 MiB, t=3, p=1 (the App Lock Password's) | 99 ms | 92 ms (the same code) |
+| Argon2id m=64 MiB, t=3, p=1 (an App Lock file made before VAULT-128) | 99 ms | 92 ms (the same code) |
 | Argon2id m=64 MiB, t=3, p=4 | 97 ms | 33 ms |
 
 Four lanes add four thread stacks of a few KiB each: a 64 MiB derivation's peak footprint grew by 64 KiB. With one
