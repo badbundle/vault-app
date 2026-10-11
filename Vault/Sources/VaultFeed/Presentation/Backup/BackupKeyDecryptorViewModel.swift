@@ -80,10 +80,11 @@ public final class BackupKeyDecryptorViewModel {
             // Cancelling only stops the key deriver between its stages, so a cancelled attempt can still finish
             // deriving the key. Drop it here, before it decrypts the backup or reaches the import.
             try Task.checkCancellation()
-            let vaultApplicationPayload = try encryptedVaultDecoder.decryptAndDecode(
-                key: generatedKey.key,
-                encryptedVault: encryptedVault,
-            )
+            // Decrypting a large backup takes a while too.
+            let vaultApplicationPayload = try await Task.background { [encryptedVaultDecoder, encryptedVault] in
+                try encryptedVaultDecoder.decryptAndDecode(key: generatedKey.key, encryptedVault: encryptedVault)
+            }
+            try Task.checkCancellation()
             decryptionKeyState = .validDecryptionKey
             decryptedVaultSubject.send(vaultApplicationPayload)
         } catch is CancellationError {

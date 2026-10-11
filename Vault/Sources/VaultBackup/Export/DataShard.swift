@@ -1,7 +1,7 @@
 import Foundation
 
 /// A shard/block of data from a larger group.
-public struct DataShard: Equatable, Codable {
+public struct DataShard: Equatable, Codable, Sendable {
     /// Information about the group that this data is part of.
     public var group: GroupInfo
     /// The partial data, which should be concatented with all the other blocks in order.
@@ -14,7 +14,7 @@ public struct DataShard: Equatable, Codable {
 }
 
 extension DataShard {
-    public struct GroupInfo: Equatable, Hashable, Codable, Identifiable {
+    public struct GroupInfo: Equatable, Hashable, Codable, Identifiable, Sendable {
         /// An ID shared by all of the `SplitDataBlock` instances in this series.
         ///
         /// This ensures we can detect if a block is not in the group.
