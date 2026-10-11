@@ -46,15 +46,17 @@ is always.
 
 Keep fixtures cheap to read. A format that stores its key derivation's parameters, as the slot file's header does,
 gets cheap ones, which is realistic, since the file carries whatever it was made with. One that names a derivation,
-as encrypted items and backups do, uses the fast one debug builds use.
+as encrypted items and backups do, uses the fast one debug builds use: each secure derivation has a fast one of the
+same shape, which runs the same code.
 
 Keep them small, too. Store the bytes the format gives meaning to, and rebuild in the test what's only random, as the
 slot file's unused slots are. Rebuild it at the same offsets, so the tests still open a whole file.
 
 ## Fixtures
 
-All three were recorded on 28 September 2026 by `GoldenFixtureRecorder`, from `main` at `32f26d33`. Their formats
-are the ones released in v2.0.0 (build 100012): nothing that writes or reads them has changed since that tag.
+The first three were recorded on 28 September 2026 by `GoldenFixtureRecorder`, from `main` at `32f26d33`. Their
+formats are the ones released in v2.0.0 (build 100012): nothing that writes or reads them has changed since that tag.
+`encrypted-note-keygen-v2.json` was recorded on 11 October 2026 for VAULT-128, by the same recorder.
 
 ### `slot-file-v1-vault-slots.bin`
 
@@ -108,6 +110,14 @@ A recovery phrase, which is always stored encrypted, in the same form, with the 
 decrypts to "Hardware wallet": BIP39's first test vector, twelve words with the passphrase `TREZOR`, which no one's
 wallet uses (`EncryptedItemFixture.recoveryPhrase`).
 
-Release builds derive item keys with `vault.keygen.item.secure.v1` rather than the fast derivation. That takes seconds
-in a debug build, so the fixtures don't use it. `VaultKeyDeriverParameterPinTests` pins its parameters, and
-`CryptoEngineTests` has known answers for the derivations it chains.
+### `encrypted-note-keygen-v2.json`
+
+`encrypted-note-v1.json`'s note, as opening it with its password in a version with v2 key derivations leaves it
+(VAULT-128). The recorder put the stored note in a store of its own and opened it through its page
+(`EncryptedItemDetailViewModel`), which derived a key with `vault.keygen.item.fast.v2` from the password and a new
+48-byte salt, encrypted the same bytes again with a new 32-byte IV, and had the store replace the item's encryption.
+Everything else about it, its id, dates and lock among them, is the v1 note's, and it still opens with `open sesame`.
+
+Release builds derive item keys with `vault.keygen.item.secure.v1` or `.v2` rather than the fast derivations. Those
+take seconds, so the fixtures don't use them. `VaultKeyDeriverParameterPinTests` pins their parameters, with known
+answers for v2's at the real ones, and `CryptoEngineTests` has known answers for the derivations they use.

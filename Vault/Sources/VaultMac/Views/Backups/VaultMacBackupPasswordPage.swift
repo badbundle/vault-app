@@ -66,7 +66,7 @@ struct VaultMacBackupPasswordSheet: View {
                 if viewModel.newPassword.isLoading {
                     ProgressView()
                         .controlSize(.small)
-                    Text("Securing your password. This can take up to 3 minutes.")
+                    Text("Securing your password. This can take up to a minute.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }

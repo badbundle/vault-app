@@ -81,6 +81,7 @@ struct VaultDetailEditView<
                     item: item,
                     metadata: storedItem.metadata,
                     keyDeriverFactory: injector.vaultKeyDeriverFactory,
+                    itemStore: dataModel,
                 ),
                 openDetailSubject: openDetailSubject,
                 presentationMode: presentationMode,

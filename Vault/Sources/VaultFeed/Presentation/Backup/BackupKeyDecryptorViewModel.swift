@@ -74,14 +74,15 @@ public final class BackupKeyDecryptorViewModel {
             let keyDeriver = keyDeriverFactory.lookupVaultKeyDeriver(signature: signature)
             let password = enteredPassword
             let salt = encryptedVault.keygenSalt
-            let generatedKey = try await Task.background {
+            // The user is waiting, so not at background priority, which an iPhone can keep to its efficiency cores.
+            let generatedKey = try await Task.userInitiated {
                 try keyDeriver.recreateEncryptionKey(password: password, salt: salt)
             }
             // Cancelling only stops the key deriver between its stages, so a cancelled attempt can still finish
             // deriving the key. Drop it here, before it decrypts the backup or reaches the import.
             try Task.checkCancellation()
             // Decrypting a large backup takes a while too.
-            let vaultApplicationPayload = try await Task.background { [encryptedVaultDecoder, encryptedVault] in
+            let vaultApplicationPayload = try await Task.userInitiated { [encryptedVaultDecoder, encryptedVault] in
                 try encryptedVaultDecoder.decryptAndDecode(key: generatedKey.key, encryptedVault: encryptedVault)
             }
             try Task.checkCancellation()

@@ -50,6 +50,8 @@ struct BackupCorpusEntry: Sendable, CustomTestStringConvertible {
     var padding: Padding
     /// The ciphertext's length, recorded.
     var encryptedLength: Int
+    /// The derivation its key was made with.
+    var keygen: VaultKeyDeriver.Signature = .backupFastV1
 
     var testDescription: String {
         name
@@ -146,9 +148,34 @@ extension BackupCorpusEntry {
         encryptedLength: 32764,
     )
 
+    /// An auto-backup made with a backup password set with v2 key derivation (VAULT-128): `autoBackup`, with its key
+    /// derived with `vault.keygen.backup.fast.v2`.
+    static let autoBackupKeygenV2 = BackupCorpusEntry(
+        name: "Backups/auto-backup-keygen-v2.json",
+        form: .encryptedVault,
+        format: .current,
+        padding: .toFixedSize,
+        encryptedLength: 32768,
+        keygen: .backupFastV2,
+    )
+
+    /// An auto-backup made with a backup password set before v2, whose stored key the app then moved on to v2
+    /// (VAULT-128): `autoBackup`, with its key `vault.keygen.backup.fast.v1`'s carried on to
+    /// `vault.keygen.backup.fast.v1-then-v2`, with the same salt.
+    static let autoBackupKeygenV1ThenV2 = BackupCorpusEntry(
+        name: "Backups/auto-backup-keygen-v1-then-v2.json",
+        form: .encryptedVault,
+        format: .current,
+        padding: .toFixedSize,
+        encryptedLength: 32768,
+        keygen: .backupFastV1ThenV2,
+    )
+
     /// The backups restored from a file.
     static let backups = [
         autoBackup,
+        autoBackupKeygenV2,
+        autoBackupKeygenV1ThenV2,
         pdfWithRandomPadding,
         pdfMadeOnTheMac,
         pdfBeforeQuickTypeAndPreview,

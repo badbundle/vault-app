@@ -100,6 +100,16 @@ extension GuardedPlainVaultStore: VaultStoreHOTPIncrementer {
     }
 }
 
+extension GuardedPlainVaultStore: VaultStoreEncryptedItemReplacer {
+    public func replaceEncryptedItem(
+        id: Identifier<VaultItem>,
+        _ old: EncryptedItem,
+        with new: EncryptedItem,
+    ) async throws -> Bool {
+        try await whileStillPlain { try await store.replaceEncryptedItem(id: id, old, with: new) }
+    }
+}
+
 extension GuardedPlainVaultStore: VaultStoreReorderable {
     public func reorder(items: Set<Identifier<VaultItem>>, to position: VaultReorderingPosition) async throws {
         try await whileStillPlain { try await store.reorder(items: items, to: position) }

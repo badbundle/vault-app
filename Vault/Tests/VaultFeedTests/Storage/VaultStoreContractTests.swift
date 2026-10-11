@@ -1653,6 +1653,57 @@ struct VaultStoreContractTests {
         #expect(item.item.otpCode?.type == .hotp(counter: largest))
     }
 
+    /// Moving an item to a stronger key derivation changes its encryption and nothing else (VAULT-128).
+    @Test(arguments: VaultStoreEngine.allCases)
+    func replaceEncryptedItem_replacesOnlyTheEncryptionAndKeepsTheDates(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
+        await sut.updateCurrentDate { Date(timeIntervalSince1970: 100) }
+        let old = anyEncryptedItem(title: "Safe")
+        let tag = try await sut.insertTag(item: anyVaultItemTag().makeWritable())
+        var write = uniqueVaultItem(item: .encryptedItem(old)).makeWritable()
+        write.userDescription = "Safe"
+        write.tags = [tag]
+        write.lockState = .lockedWithNativeSecurity
+        let id = try await sut.insert(item: write)
+        let before = try #require(try await sut.retrieve(query: .init()).items.first)
+        await sut.updateCurrentDate { Date(timeIntervalSince1970: 200) }
+        let new = anyEncryptedItem(title: "Safe")
+
+        let replaced = try await sut.replaceEncryptedItem(id: id, old, with: new)
+
+        #expect(replaced)
+        let after = try #require(try await sut.retrieve(query: .init()).items.first)
+        #expect(after.item == .encryptedItem(new))
+        #expect(after.metadata == before.metadata)
+        #expect(after.metadata.updated == Date(timeIntervalSince1970: 100))
+    }
+
+    /// It's been edited, or replaced, since it was opened: the edit stays.
+    @Test(arguments: VaultStoreEngine.allCases)
+    func replaceEncryptedItem_whenItsNotTheOldOneAnyMore_leavesIt(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
+        let stored = anyEncryptedItem()
+        let id = try await sut.insert(item: uniqueVaultItem(item: .encryptedItem(stored)).makeWritable())
+
+        let replaced = try await sut.replaceEncryptedItem(id: id, anyEncryptedItem(), with: anyEncryptedItem())
+
+        #expect(!replaced)
+        let after = try #require(try await sut.retrieve(query: .init()).items.first)
+        #expect(after.item == .encryptedItem(stored))
+    }
+
+    @Test(arguments: VaultStoreEngine.allCases)
+    func replaceEncryptedItem_withNoSuchItem_returnsFalse(engine: VaultStoreEngine) async throws {
+        let sut = try await engine.makeStore()
+        let id = try await sut.insert(item: uniqueVaultItem().makeWritable())
+
+        let replaced = try await sut.replaceEncryptedItem(id: .new(), anyEncryptedItem(), with: anyEncryptedItem())
+        let replacedCode = try await sut.replaceEncryptedItem(id: id, anyEncryptedItem(), with: anyEncryptedItem())
+
+        #expect(!replaced)
+        #expect(!replacedCode)
+    }
+
     @Test(arguments: VaultStoreEngine.allCases)
     func importAndMergeVault_importsEmptyToEmptyVault(engine: VaultStoreEngine) async throws {
         let sut = try await engine.makeStore()

@@ -318,7 +318,7 @@ extension VaultEraser {
     /// it.
     private func delete(_ key: VaultIdentifiers.SecureStorageKey) async throws {
         switch key {
-        case .backupPassword, .backupPasswordMetadata, .killphraseKey, .searchPassphraseKey:
+        case .backupPassword, .backupPasswordMetadata, .backupPasswordUpgrade, .killphraseKey, .searchPassphraseKey:
             try await secureStorage.remove(key: key.keychainService)
         case .killphraseBackupKeys, .searchPassphraseBackupKeys:
             // The rest of the keyrings, the keys restored backups brought: they check the erased vaults' phrases, and

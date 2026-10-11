@@ -37,7 +37,7 @@ What Vault uses, and whether it's encryption:
 | The keychain and iOS Data Protection | iOS | Yes, Apple's |
 | PBKDF2, which turns a password into a key | CommonCrypto (Apple's) | No: key derivation is one-way and can't decrypt anything |
 | scrypt and HKDF, which do the same | CryptoSwift | No, as above |
-| Argon2id, which turns the App Lock Password into a key | `CArgon2`, the reference C implementation | No, as above |
+| Argon2id, which turns the App Lock Password, and since VAULT-128 backup and item passwords, into a key | `CArgon2`, the reference C implementation | No, as above |
 | HMAC for HOTP and TOTP codes | CryptoSwift | No: that's authentication |
 | SHA digests | CryptoSwift | No: that's data integrity |
 | HMAC-SHA256 digests of killphrases and search passphrases, and recovery phrase checksums | CryptoKit | No, and Apple's anyway |

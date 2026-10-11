@@ -191,6 +191,8 @@ public final class VaultDataModel {
     private let searchPassphraseKeyStore: any SearchPassphraseKeyStore<KeyData<32>>
     private let searchPassphraseRehashService: SearchPassphraseRehashService?
     private let backupEventLogger: any BackupEventLogger
+    /// Moves a loaded backup key to a stronger derivation, or `nil` where that mustn't happen: in an extension.
+    private let backupPasswordUpgrader: (any BackupPasswordUpgrading)?
     private var observationBag = Set<AnyCancellable>()
     /// Counts `purgeVaultContents()` calls. A reload that started before the
     /// latest one is out of date by the time it finishes, so it's dropped.
@@ -198,6 +200,11 @@ public final class VaultDataModel {
     /// Counts `openVaultDidChange()` calls, so what one reads for a vault that's
     /// no longer open is dropped.
     @ObservationIgnored private var openVaultChanges = 0
+    /// Counts the backup passwords set or removed, so an upgraded key never replaces one set since the key it came
+    /// from was loaded.
+    @ObservationIgnored private var backupPasswordWrites = 0
+    /// The backup key being moved to a stronger derivation, if one is.
+    @ObservationIgnored private var backupPasswordUpgrade: Task<Void, Never>?
 
     public init(
         vaultStore: any VaultStore,
@@ -213,6 +220,7 @@ public final class VaultDataModel {
         searchPassphraseRehashService: SearchPassphraseRehashService?,
         backupEventLogger: any BackupEventLogger,
         itemCaches: [any VaultItemCache] = [],
+        backupPasswordUpgrader: (any BackupPasswordUpgrading)? = nil,
     ) {
         self.vaultStore = vaultStore
         self.vaultTagStore = vaultTagStore
@@ -227,6 +235,7 @@ public final class VaultDataModel {
         self.searchPassphraseRehashService = searchPassphraseRehashService
         self.backupEventLogger = backupEventLogger
         self.itemCaches = itemCaches
+        self.backupPasswordUpgrader = backupPasswordUpgrader
 
         monitorBackupEvents()
     }
@@ -442,6 +451,7 @@ extension VaultDataModel {
             guard change == openVaultChanges else { return }
             if let password {
                 backupPassword = .fetched(password)
+                upgradeBackupPasswordIfNeeded(password, change: change)
                 await markBackupPasswordStatusSet(change: change)
             } else {
                 backupPassword = .notCreated
@@ -476,10 +486,45 @@ extension VaultDataModel {
 
     public func store(backupPassword: DerivedEncryptionKey) async throws {
         let change = openVaultChanges
+        backupPasswordWrites += 1
         try await backupPasswordStore.set(password: backupPassword)
         guard change == openVaultChanges else { return }
         self.backupPassword = .fetched(backupPassword)
         await markBackupPasswordStatusSet(change: change)
+    }
+
+    /// Moves the backup key just loaded to a stronger derivation, if Vault has one for it (VAULT-128), and stores it in
+    /// place of the old one: the next time a backup password is loaded after the update, in the app.
+    ///
+    /// It takes seconds, so it runs in the background, while backups go on using `password`, which stays valid: a
+    /// backup made with it restores as it always has. The new key is stored only if the same vault is open and no
+    /// password has been set or removed since `password` was loaded, and the store replaces it all at once or not at
+    /// all. If anything fails, the old key stays, nothing is said or logged, and it's tried again the next time it's
+    /// loaded.
+    private func upgradeBackupPasswordIfNeeded(_ password: DerivedEncryptionKey, change: Int) {
+        guard let backupPasswordUpgrader, backupPasswordUpgrade == nil,
+              password.keyDervier.storedBackupKeyUpgrade != nil
+        else { return }
+        let writes = backupPasswordWrites
+        // At utility priority, as the derivation runs: awaiting it from a task of higher priority would raise it.
+        backupPasswordUpgrade = Task(priority: .utility) { [weak self] in
+            defer { self?.backupPasswordUpgrade = nil }
+            guard let upgraded = try? await backupPasswordUpgrader.upgraded(password) else { return }
+            guard let self, change == openVaultChanges, writes == backupPasswordWrites else { return }
+            do {
+                try await backupPasswordStore.upgradePassword(from: password, to: upgraded)
+            } catch {
+                return
+            }
+            // Backups use the new key from now on, unless the password has been forgotten or replaced meanwhile.
+            guard change == openVaultChanges, backupPassword == .fetched(password) else { return }
+            backupPassword = .fetched(upgraded)
+        }
+    }
+
+    /// Waits for the backup key being moved to a stronger derivation, if one is.
+    func finishUpgradingBackupPassword() async {
+        await backupPasswordUpgrade?.value
     }
 
     /// Marks the backup password as set, once it's known to exist, unless another vault has opened since `change`.
@@ -680,6 +725,24 @@ extension VaultDataModel: VaultStoreHOTPIncrementer {
     }
 }
 
+extension VaultDataModel: VaultStoreEncryptedItemReplacer {
+    /// Encrypts an item again without changing anything else about it, as `EncryptedItemDetailViewModel` does to move
+    /// it to a stronger key derivation (VAULT-128). Then the vault has changed, so it's handled as any other change,
+    /// auto-backup included. Encrypted items are never offered to AutoFill, so its suggestions stay as they are.
+    public func replaceEncryptedItem(
+        id: Identifier<VaultItem>,
+        _ old: EncryptedItem,
+        with new: EncryptedItem,
+    ) async throws -> Bool {
+        guard try await vaultStore.replaceEncryptedItem(id: id, old, with: new) else { return false }
+        await invalidateCaches(itemID: id)
+        await reloadItems()
+        await updateCurrentPayloadHash()
+        onDataChanged?()
+        return true
+    }
+}
+
 // MARK: - Import
 
 extension VaultDataModel {
@@ -769,6 +832,7 @@ extension VaultDataModel {
 
     private func removeBackupPassword() async throws {
         let change = openVaultChanges
+        backupPasswordWrites += 1
         try await backupPasswordStore.removePassword()
         guard change == openVaultChanges else { return }
         backupPassword = .notCreated

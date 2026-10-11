@@ -337,6 +337,10 @@ public enum VaultRoot {
         searchPassphraseKeyStore: searchPassphraseKeyStore,
         searchPassphraseRehashService: searchPassphraseRehashService,
         backupEventLogger: backupEventLogger,
+        // Only the app moves a backup key to a stronger derivation, which needs 512 MiB. AutoFill never loads the
+        // backup password, but its data model can't, either.
+        backupPasswordUpgrader: isAppExtension ? nil :
+            BackupPasswordUpgrader(keyDeriverFactory: vaultKeyDeriverFactory),
     )
 
     // MARK: - Previews

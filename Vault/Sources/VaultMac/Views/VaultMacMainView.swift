@@ -63,6 +63,7 @@ struct VaultMacMainView: View {
                     tags: dataModel.allTags.filter { item.metadata.tags.contains($0.id) },
                     authentication: authentication,
                     keyDeriverFactory: keyDeriverFactory,
+                    itemStore: dataModel,
                 )
                 .id(item.id)
             } else {

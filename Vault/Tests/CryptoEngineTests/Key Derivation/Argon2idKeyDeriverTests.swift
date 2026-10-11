@@ -32,7 +32,8 @@ struct Argon2idKeyDeriverTests {
         #expect(key.data == Data(hex: answer.hex))
     }
 
-    /// The App Lock Password's memory and passes, over one lane, as it uses, and over four, which run in parallel.
+    /// The App Lock Password's memory and passes, over one lane, as a file made before VAULT-128 has, and over four,
+    /// which run in parallel, as calibration can choose now.
     /// The keys are the ones derived before VAULT-128, when the reference was built to run lanes one after another
     /// (`ARGON2_NO_THREADS`). argon2-cffi, built with threads, derives the same.
     @Test(arguments: [

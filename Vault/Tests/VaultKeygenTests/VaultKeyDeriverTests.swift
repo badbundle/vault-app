@@ -111,6 +111,144 @@ struct VaultKeyDeriverTests {
         #expect(result.keyDervier == .itemSecureV1)
     }
 
+    @Test
+    func Backup_Fast_v2() {
+        let fast = VaultKeyDeriver.Backup.Fast.v2
+
+        #expect(fast.signature == .backupFastV2)
+        #expect(fast.signature.userVisibleDescription == "Vault Backup (Fast, v2)")
+        #expect(fast.uniqueAlgorithmIdentifier == """
+        ARGON2ID<keyLength=32;memoryKiB=8192;iterations=2;parallelism=4;version=19>
+        """)
+    }
+
+    @Test
+    func Backup_Secure_v2() {
+        let secure = VaultKeyDeriver.Backup.Secure.v2
+
+        #expect(secure.signature == .backupSecureV2)
+        #expect(secure.signature.userVisibleDescription == "Vault Backup (Secure, v2)")
+        #expect(secure.uniqueAlgorithmIdentifier == """
+        ARGON2ID<keyLength=32;memoryKiB=524288;iterations=32;parallelism=4;version=19>
+        """)
+    }
+
+    @Test
+    func Backup_v1ThenV2_descriptions() {
+        #expect(VaultKeyDeriver.Backup.Fast.v1ThenV2.signature == .backupFastV1ThenV2)
+        #expect(VaultKeyDeriver.Backup.Secure.v1ThenV2.signature == .backupSecureV1ThenV2)
+        #expect(VaultKeyDeriver.Signature.backupFastV1ThenV2
+            .userVisibleDescription == "Vault Backup (Fast, v1 then v2)")
+        #expect(
+            VaultKeyDeriver.Signature.backupSecureV1ThenV2.userVisibleDescription ==
+                "Vault Backup (Secure, v1 then v2)",
+        )
+    }
+
+    @Test
+    func Item_v2_descriptions() {
+        #expect(VaultKeyDeriver.Item.Fast.v2.signature == .itemFastV2)
+        #expect(VaultKeyDeriver.Item.Secure.v2.signature == .itemSecureV2)
+        #expect(VaultKeyDeriver.Signature.itemFastV2.userVisibleDescription == "Vault Item (Fast, v2)")
+        #expect(VaultKeyDeriver.Signature.itemSecureV2.userVisibleDescription == "Vault Item (Secure, v2)")
+    }
+
+    // Known answers from another build of the Argon2 reference (argon2-cffi 25.1.0), and for v1 from Python's
+    // PBKDF2 and the cryptography package's HKDF and scrypt, which match the v1 vectors above.
+
+    @Test
+    func Backup_Fast_v2_recreatesExpectedKeyForSamePasswordAndSalt() throws {
+        let result = try VaultKeyDeriver.Backup.Fast.v2.recreateEncryptionKey(
+            password: "hello world",
+            salt: Data("somesalt".utf8),
+        )
+
+        #expect(result.key.data.toHexString() == """
+        d5c027e2ea1b3a747415985fa8b4a5b43c7292f03d1050f615ace99469e0d82b
+        """)
+        #expect(result.keyDervier == .backupFastV2)
+    }
+
+    @Test
+    func Item_Fast_v2_recreatesExpectedKeyForSamePasswordAndSalt() throws {
+        let result = try VaultKeyDeriver.Item.Fast.v2.recreateEncryptionKey(
+            password: "hello world",
+            salt: Data("somesalt".utf8),
+        )
+
+        #expect(result.key.data.toHexString() == """
+        0973cee10290701b1cfb8c8a939c93aaf36d386d04e43d94463576d6524c3c93
+        """)
+        #expect(result.keyDervier == .itemFastV2)
+    }
+
+    @Test
+    func Backup_Fast_v1ThenV2_recreatesExpectedKeyForSamePasswordAndSalt() throws {
+        // v1 from the password, then v2's Argon2id over v1's key, with the salt behind the signature's ID.
+        let result = try VaultKeyDeriver.Backup.Fast.v1ThenV2.recreateEncryptionKey(
+            password: "hello world",
+            salt: Data("somesalt".utf8),
+        )
+
+        #expect(result.key.data.toHexString() == """
+        4841b68dca52e560665455a81757aef3af4f62dda2c59d9d92082f2959385ac9
+        """)
+        #expect(result.salt == Data("somesalt".utf8))
+        #expect(result.keyDervier == .backupFastV1ThenV2)
+    }
+
+    @Test
+    func continueDerivation_fromAStoredV1Key_isTheKeyThePasswordRecreates() throws {
+        let salt = Data("somesalt".utf8)
+        let stored = try VaultKeyDeriver.Backup.Fast.v1.recreateEncryptionKey(password: "hello world", salt: salt)
+        #expect(stored.key.data.toHexString() == """
+        38a40574c9816c6b68933b06bc7f2e56436300ffc4d8297ac3e57d6e143e6333
+        """)
+
+        let continued = try VaultKeyDeriver.Backup.Fast.v1ThenV2.continueDerivation(from: stored)
+
+        let recreated = try VaultKeyDeriver.Backup.Fast.v1ThenV2.recreateEncryptionKey(
+            password: "hello world",
+            salt: salt,
+        )
+        #expect(continued == recreated)
+        #expect(continued.salt == salt)
+        #expect(continued.keyDervier == .backupFastV1ThenV2)
+    }
+
+    @Test
+    func continueDerivation_fromAKeyOfAnotherDerivation_throws() throws {
+        let stored = try VaultKeyDeriver.Backup.Fast.v2.createEncryptionKey(password: "hello world")
+
+        #expect(throws: VaultKeyDeriver.NotAContinuationError.self) {
+            try VaultKeyDeriver.Backup.Fast.v1ThenV2.continueDerivation(from: stored)
+        }
+        #expect(throws: VaultKeyDeriver.NotAContinuationError.self) {
+            try VaultKeyDeriver.Backup.Secure.v1ThenV2.continueDerivation(from: stored)
+        }
+    }
+
+    @Test
+    func continueDerivation_withADerivationThatCarriesNothingOn_throws() throws {
+        let stored = try VaultKeyDeriver.Backup.Fast.v1.createEncryptionKey(password: "hello world")
+
+        for deriver in [VaultKeyDeriver.Backup.Fast.v2, .Backup.Fast.v1, .testing] {
+            #expect(throws: VaultKeyDeriver.NotAContinuationError.self) {
+                try deriver.continueDerivation(from: stored)
+            }
+        }
+    }
+
+    @Test
+    func tryFromString_aSignatureThisVersionDoesntKnow_saysToUpdateVault() {
+        let error = #expect(throws: VaultKeyDeriver.MissingKeyDeriverError.self) {
+            try VaultKeyDeriver.Signature(tryFromString: "vault.keygen.backup.secure.v3")
+        }
+
+        #expect(error?.errorDescription == "Needs a Newer Version of Vault")
+        #expect(error?.failureReason == "This was made by a newer version of Vault. Update Vault, then try again.")
+    }
+
     @Test(arguments: VaultKeyDeriver.Signature.allCases)
     func lookupSignature_looksUpCorrect(signature: VaultKeyDeriver.Signature) {
         let result = VaultKeyDeriver.lookup(signature: signature)

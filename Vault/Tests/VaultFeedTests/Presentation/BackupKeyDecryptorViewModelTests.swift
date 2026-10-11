@@ -1,6 +1,7 @@
 import Combine
 import CryptoEngine
 import Foundation
+import FoundationExtensions
 import TestHelpers
 import Testing
 import VaultBackup
@@ -156,6 +157,76 @@ struct BackupKeyDecryptorViewModelTests {
         #expect(sut.decryptionKeyState == .none)
         #expect(sut.failedAttemptCount == 0)
         #expect(sut.isDecrypting == false)
+    }
+}
+
+// MARK: - Key derivations
+
+extension BackupKeyDecryptorViewModelTests {
+    /// Made by a newer version of Vault: it says so, rather than "Missing Key Deriver", without deriving anything.
+    @Test @LeakTracked
+    func attemptDecryption_backupFromANewerVersion_saysToUpdateVault() async throws {
+        var vault = anyEncryptedVault()
+        vault.keygenSignature = "vault.keygen.backup.secure.v3"
+        let factory = VaultKeyDeriverFactoryMock()
+        let sut = makeSUT(encryptedVault: vault, keyDeriverFactory: factory)
+        sut.enteredPassword = "hello"
+
+        await sut.attemptDecryption()
+
+        guard case let .error(error) = sut.decryptionKeyState else {
+            Issue.record("Unexpected state \(sut.decryptionKeyState)")
+            return
+        }
+        #expect(error.userTitle == "Needs a Newer Version of Vault")
+        #expect(error.userDescription == "This was made by a newer version of Vault. Update Vault, then try again.")
+        #expect(factory.lookupVaultKeyDeriverCallCount == 0)
+    }
+
+    /// The user is waiting, so deriving and decrypting run at user-initiated priority: at background priority an
+    /// iPhone can keep them, and Argon2id's lane threads, to its efficiency cores.
+    @Test @LeakTracked
+    func attemptDecryption_derivesAndDecryptsAtUserInitiatedPriority() async throws {
+        let deriver = QoSRecordingKeyDeriver()
+        let factory = VaultKeyDeriverFactoryMock()
+        factory.lookupVaultKeyDeriverHandler = { VaultKeyDeriver(deriver: deriver, signature: $0) }
+        let decoder = EncryptedVaultDecoderMock()
+        let decodingQoS = SharedMutex<qos_class_t?>(nil)
+        decoder.decryptAndDecodeHandler = { _, _ in
+            decodingQoS.modify { $0 = qos_class_self() }
+            return anyVaultApplicationPayload()
+        }
+        let sut = makeSUT(keyDeriverFactory: factory, encryptedVaultDecoder: decoder)
+        sut.enteredPassword = "hello"
+
+        await sut.attemptDecryption()
+
+        #expect(deriver.qualitiesOfService == [QOS_CLASS_USER_INITIATED])
+        #expect(decodingQoS.value == QOS_CLASS_USER_INITIATED)
+    }
+
+    /// A backup made with a stored v1 key moved on to v2 restores from the password: v1, then v2.
+    @Test @LeakTracked
+    func attemptDecryption_backupMadeWithAKeyMovedOnToV2_recreatesThatKey() async throws {
+        let stored = try VaultKeyDeriver.Backup.Fast.v1.createEncryptionKey(password: "correct horse")
+        let upgraded = try VaultKeyDeriver.Backup.Fast.v1ThenV2.continueDerivation(from: stored)
+        var vault = anyEncryptedVault(salt: upgraded.salt)
+        vault.keygenSignature = upgraded.keyDervier.rawValue
+        let decoder = EncryptedVaultDecoderMock()
+        decoder.decryptAndDecodeHandler = { key, _ in
+            guard key == upgraded.key else { throw TestError() }
+            return anyVaultApplicationPayload()
+        }
+        let sut = makeSUT(
+            encryptedVault: vault,
+            keyDeriverFactory: VaultKeyDeriverFactoryImpl(),
+            encryptedVaultDecoder: decoder,
+        )
+        sut.enteredPassword = "correct horse"
+
+        await sut.attemptDecryption()
+
+        #expect(sut.decryptionKeyState == .validDecryptionKey)
     }
 }
 

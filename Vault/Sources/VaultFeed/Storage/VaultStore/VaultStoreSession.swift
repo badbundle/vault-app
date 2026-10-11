@@ -242,6 +242,18 @@ extension VaultStoreSession: VaultStoreHOTPIncrementer {
     }
 }
 
+extension VaultStoreSession: VaultStoreEncryptedItemReplacer {
+    public func replaceEncryptedItem(
+        id: Identifier<VaultItem>,
+        _ old: EncryptedItem,
+        with new: EncryptedItem,
+    ) async throws -> Bool {
+        try await withStore { store in
+            try await store.replaceEncryptedItem(id: id, old, with: new)
+        }
+    }
+}
+
 extension VaultStoreSession: VaultStoreReorderable {
     public func reorder(items: Set<Identifier<VaultItem>>, to position: VaultReorderingPosition) async throws {
         try await withStore { store in

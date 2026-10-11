@@ -16,6 +16,7 @@ public final class VaultStoreStub: VaultStore {
         case delete
         case export
         case reorder
+        case replaceEncryptedItem
         case retrieveTags
         case insertTag
         case updateTag
@@ -95,6 +96,21 @@ public final class VaultStoreStub: VaultStore {
     public func incrementCounter(id: Identifier<VaultItem>) async throws {
         incrementCounterCallCount += 1
         incrementCounterArgValues.append(id)
+    }
+
+    public private(set) var replaceEncryptedItemArgValues = [(Identifier<VaultItem>, EncryptedItem, EncryptedItem)]()
+    public var replaceEncryptedItemHandler: (Identifier<VaultItem>, EncryptedItem, EncryptedItem) throws -> Bool = {
+        _, _, _ in true
+    }
+
+    public func replaceEncryptedItem(
+        id: Identifier<VaultItem>,
+        _ old: EncryptedItem,
+        with new: EncryptedItem,
+    ) async throws -> Bool {
+        calledMethods.append(.replaceEncryptedItem)
+        replaceEncryptedItemArgValues.append((id, old, new))
+        return try replaceEncryptedItemHandler(id, old, new)
     }
 }
 

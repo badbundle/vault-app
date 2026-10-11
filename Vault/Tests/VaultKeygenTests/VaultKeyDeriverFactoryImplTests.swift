@@ -10,7 +10,7 @@ struct VaultKeyDeriverFactoryImplTests {
 
         let result = sut.makeVaultBackupKeyDeriver()
 
-        #expect(result.signature == .backupFastV1, "We assume tests are run in DEBUG")
+        #expect(result.signature == .backupFastV2, "We assume tests are run in DEBUG")
     }
 
     @Test
@@ -19,7 +19,7 @@ struct VaultKeyDeriverFactoryImplTests {
 
         let result = sut.makeVaultItemKeyDeriver()
 
-        #expect(result.signature == .itemFastV1, "We assume tests are run in DEBUG")
+        #expect(result.signature == .itemFastV2, "We assume tests are run in DEBUG")
     }
 
     @Test(arguments: VaultKeyDeriver.Signature.allCases)

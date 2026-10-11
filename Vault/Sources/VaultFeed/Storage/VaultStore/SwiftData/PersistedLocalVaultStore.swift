@@ -289,6 +289,33 @@ extension PersistedLocalVaultStore: VaultStoreHOTPIncrementer {
     }
 }
 
+// MARK: - VaultStoreEncryptedItemReplacer
+
+extension PersistedLocalVaultStore: VaultStoreEncryptedItemReplacer {
+    /// Then scrubs the store's files, as for a changed killphrase, so the old encryption, with its weaker key
+    /// derivation, doesn't linger in them.
+    public func replaceEncryptedItem(
+        id: Identifier<VaultItem>,
+        _ old: EncryptedItem,
+        with new: EncryptedItem,
+    ) async throws -> Bool {
+        do {
+            guard let existing = try modelContext.fetchVaultItemIfPresent(id: id.rawValue) else { return false }
+            var record = existing.makeRecord()
+            guard record.encryptedItemDetails == VaultItemRecord.EncryptedItemDetails(old) else { return false }
+            record.encryptedItemDetails = VaultItemRecord.EncryptedItemDetails(new)
+            try modelContext.store(record: record)
+
+            try modelContext.save()
+        } catch {
+            modelContext.rollback()
+            throw error
+        }
+        scrubDeletedContent()
+        return true
+    }
+}
+
 extension Int64? {
     fileprivate mutating func safeIncrement() {
         switch self {

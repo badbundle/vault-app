@@ -518,6 +518,8 @@ final class ScreenshotBackupPasswordStore: BackupPasswordStore {
 
     func set(password _: DerivedEncryptionKey) async throws {}
 
+    func upgradePassword(from _: DerivedEncryptionKey, to _: DerivedEncryptionKey) async throws {}
+
     func removePassword() async throws {}
 
     func fetchPasswordMetadata() async throws -> BackupPasswordMetadata? {

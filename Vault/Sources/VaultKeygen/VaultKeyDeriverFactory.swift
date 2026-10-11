@@ -14,20 +14,19 @@ public struct VaultKeyDeriverFactoryImpl: VaultKeyDeriverFactory {
     public init() {}
     public func makeVaultBackupKeyDeriver() -> VaultKeyDeriver {
         #if DEBUG
-        // A fast key dervier that is relatively insecure, but runs in <5s in DEBUG on any reasonable hardware.
-        return VaultKeyDeriver.Backup.Fast.v1
+        // The secure deriver's shape with a fraction of its memory and passes, so a debug build's backups and
+        // restores take milliseconds, and a debug build exercises the same code.
+        return VaultKeyDeriver.Backup.Fast.v2
         #else
-        // This is very slow to run in DEBUG, due to lack of optimizations.
-        return VaultKeyDeriver.Backup.Secure.v1
+        return VaultKeyDeriver.Backup.Secure.v2
         #endif
     }
 
     public func makeVaultItemKeyDeriver() -> VaultKeyDeriver {
         #if DEBUG
-        return VaultKeyDeriver.Item.Fast.v1
+        return VaultKeyDeriver.Item.Fast.v2
         #else
-        // Very slow in DEBUG
-        return VaultKeyDeriver.Item.Secure.v1
+        return VaultKeyDeriver.Item.Secure.v2
         #endif
     }
 

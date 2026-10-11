@@ -10,11 +10,11 @@ import VaultKeygen
 // This is tested by this command: `make benchmark-keygen`
 
 // Latest results (M5 Max, the fastest of 3 runs with `--runs 3`, VAULT-128):
-//   - Item Fast v1 = ~1 ms
-//   - Item Secure v1 = ~140 ms
-//   - Backup Fast v1 = ~1 ms
-//   - Backup Secure v1 = ~3 s
-//   - Argon2id over 64 MiB, 3 passes = ~90 ms with 1 lane, ~30 ms with 4
+//   - Item Fast v1 / v2 = ~1 ms
+//   - Item Secure v1 = ~130 ms, v2 = ~110 ms
+//   - Backup Fast v1 / v2 / v1 then v2 = ~1–3 ms
+//   - Backup Secure v1 = ~2.6 s, v2 = ~1.7 s, v1 then v2 = ~4.4 s, or ~1.7 s from a stored v1 key
+//   - Argon2id over 64 MiB, 3 passes = ~65–90 ms with 1 lane, ~17–30 ms with 4
 
 @main
 struct KeygenSpeedtest: ParsableCommand {
@@ -47,28 +47,65 @@ struct Benchmark {
     var keyDeriver: any KeyDeriver<KeyData<32>>
     /// The salt to derive with. Argon2id needs at least 8 bytes, so its rows use a longer one.
     var salt = "salt"
+    /// For a derivation that carries on from a stored key, as the app moves a stored backup key to v2: the derivation
+    /// that made the stored key. It's derived first, untimed, and only carrying it on is timed.
+    var carryingOnFrom: VaultKeyDeriver?
 
     /// Derives the key `times` times, printing each run, and returns the fastest.
     func run(times: Int) throws -> (description: String, fastest: Duration) {
         print("🚦 Starting '\(description)' derivation")
+        let storedKey = try carryingOnFrom?.recreateEncryptionKey(password: "hello world", salt: Data(salt.utf8))
         var fastest: Duration?
         for _ in 0 ..< times {
             let start = ContinuousClock.now
-            let key = try keyDeriver.key(password: Data("hello world".utf8), salt: Data(salt.utf8))
+            let key = try derive(carryingOn: storedKey)
             let time = ContinuousClock.now - start
             fastest = min(fastest ?? time, time)
             print("✅ Derived '\(description)' key \(key.data.toHexString()) in \(milliseconds(time))")
         }
         return (description, fastest ?? .zero)
     }
+
+    private func derive(carryingOn storedKey: DerivedEncryptionKey?) throws -> KeyData<32> {
+        if let storedKey, let continuing = keyDeriver as? VaultKeyDeriver {
+            return try continuing.continueDerivation(from: storedKey).key
+        }
+        return try keyDeriver.key(password: Data("hello world".utf8), salt: Data(salt.utf8))
+    }
 }
 
 /// The app's key derivers, then the steps that cost the most on their own, so a change to one shows up.
 let benchmarks: [Benchmark] = [
     Benchmark(description: "Item Fast v1", keyDeriver: VaultKeyDeriver.Item.Fast.v1),
+    Benchmark(description: "Item Fast v2", keyDeriver: VaultKeyDeriver.Item.Fast.v2, salt: "somesalt"),
     Benchmark(description: "Item Secure v1", keyDeriver: VaultKeyDeriver.Item.Secure.v1),
+    Benchmark(description: "Item Secure v2", keyDeriver: VaultKeyDeriver.Item.Secure.v2, salt: "somesalt"),
     Benchmark(description: "Backup Fast v1", keyDeriver: VaultKeyDeriver.Backup.Fast.v1),
+    Benchmark(description: "Backup Fast v2", keyDeriver: VaultKeyDeriver.Backup.Fast.v2, salt: "somesalt"),
+    Benchmark(
+        description: "Backup Fast v1 then v2",
+        keyDeriver: VaultKeyDeriver.Backup.Fast.v1ThenV2,
+        salt: "somesalt",
+    ),
+    Benchmark(
+        description: "Backup Fast v1 then v2, from a stored v1 key",
+        keyDeriver: VaultKeyDeriver.Backup.Fast.v1ThenV2,
+        salt: "somesalt",
+        carryingOnFrom: VaultKeyDeriver.Backup.Fast.v1,
+    ),
     Benchmark(description: "Backup Secure v1", keyDeriver: VaultKeyDeriver.Backup.Secure.v1),
+    Benchmark(description: "Backup Secure v2", keyDeriver: VaultKeyDeriver.Backup.Secure.v2, salt: "somesalt"),
+    Benchmark(
+        description: "Backup Secure v1 then v2 (a restore)",
+        keyDeriver: VaultKeyDeriver.Backup.Secure.v1ThenV2,
+        salt: "somesalt",
+    ),
+    Benchmark(
+        description: "Backup Secure v1 then v2, from a stored v1 key (the upgrade)",
+        keyDeriver: VaultKeyDeriver.Backup.Secure.v1ThenV2,
+        salt: "somesalt",
+        carryingOnFrom: VaultKeyDeriver.Backup.Secure.v1,
+    ),
     Benchmark(
         description: "PBKDF2-SHA384, 372,002 iterations (Item Secure v1's)",
         keyDeriver: PBKDF2KeyDeriver<32>(parameters: .init(iterations: 372_002, variant: .sha384)),
@@ -78,12 +115,12 @@ let benchmarks: [Benchmark] = [
         keyDeriver: PBKDF2KeyDeriver<32>(parameters: .init(iterations: 5_452_351, variant: .sha384)),
     ),
     Benchmark(
-        description: "Argon2id, 64 MiB, 3 passes, 1 lane (the App Lock's)",
+        description: "Argon2id, 64 MiB, 3 passes, 1 lane (the App Lock's memory)",
         keyDeriver: Argon2idKeyDeriver<32>(parameters: .init(memoryKiB: 64 * 1024, iterations: 3, parallelism: 1)),
         salt: "somesalt",
     ),
     Benchmark(
-        description: "Argon2id, 64 MiB, 3 passes, 4 lanes",
+        description: "Argon2id, 64 MiB, 3 passes, 4 lanes (the App Lock's memory)",
         keyDeriver: Argon2idKeyDeriver<32>(parameters: .init(memoryKiB: 64 * 1024, iterations: 3, parallelism: 4)),
         salt: "somesalt",
     ),

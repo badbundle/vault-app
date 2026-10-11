@@ -67,7 +67,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - QuickType no longer suggests locked codes
 - Settings has a heading and short footer for every section, with icons colored by section, and Universal Clipboard opens its own sheet
 - The App Lock Password shows the lock screen's vault door wherever it's set, changed or managed, so it's plainly the password the lock screen asks for. The backup password has a shield wherever it's set, entered or changed
-- Decrypting a backup asks for its password under the backup password's shield, with the field ready to type in and Return to decrypt. While it works, it says it can take up to 3 minutes, and Cancel stops it. A wrong password shakes the field, and the right one opens the lock
+- Decrypting a backup asks for its password under the backup password's shield, with the field ready to type in and Return to decrypt. While it works, it says how long it can take, and Cancel stops it. A wrong password shakes the field, and the right one opens the lock
 - The Danger Zone is a sheet that says what deleting removes and what's kept, and asks you to confirm before it deletes anything. Deleting all data also deletes the backup password, so restoring an old backup afterwards needs its password
 - Item pages look like the editor: the item's badge at the top and cards beneath it, with a larger live code on a code's page
 - Tapping + opens one sheet that starts with the kinds of item to choose from, under its New Item title, and slides straight into the editor for the one chosen
@@ -91,6 +91,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Setting a duress password asks for the current App Lock Password, which waits after wrong ones as changing the password does
 - Encrypted items, recovery phrases and backups are encrypted with Apple's CryptoKit instead of the CryptoSwift library. It's the same AES-GCM, so everything encrypted before opens as it always has, and saving a backup is faster. All of Vault's encryption is now Apple's
 - Help and the privacy policy say more exactly where Vault's data goes: the iPhone's own backups include the vault, and Vault has no analytics. The Duress Password page explains killphrases, and what can still give a duress vault away
+- Backup passwords and encrypted items' passwords are turned into keys with Argon2id, using 512 MB and 256 MB of memory, so each guess at a leaked backup or a copied item costs far more. Setting a backup password, or restoring a backup, takes seconds rather than minutes, and says it can take up to a minute. A backup password set before is strengthened in the background the first time Backups opens, without asking for it again, and backups made with it before still restore with it. An encrypted item is strengthened the first time its password opens it, with nothing else about it changed. A backup or item made by a newer version of Vault says to update Vault
 
 ### Removed
 

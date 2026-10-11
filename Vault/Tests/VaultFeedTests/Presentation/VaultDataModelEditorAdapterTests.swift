@@ -222,6 +222,22 @@ struct VaultDataModelEditorAdapterTests {
         }
     }
 
+    /// The user is waiting for the save, so the new password's key is derived at user-initiated priority.
+    @Test
+    func createNote_withANewPassword_derivesAtUserInitiatedPriority() async throws {
+        let deriver = QoSRecordingKeyDeriver()
+        let keyDeriverFactory = VaultKeyDeriverFactoryMock()
+        keyDeriverFactory.makeVaultItemKeyDeriverHandler = { VaultKeyDeriver(deriver: deriver, signature: .testing) }
+        let sut = makeSUT(keyDeriverFactory: keyDeriverFactory)
+        var edits = SecureNoteDetailEdits.new(defaults: NewItemDefaults())
+        edits.contents = "first line"
+        edits.newEncryptionPassword = "new password"
+
+        try await sut.createNote(initialEdits: edits)
+
+        #expect(deriver.qualitiesOfService == [QOS_CLASS_USER_INITIATED])
+    }
+
     @Test
     func createNote_createsEncryptedNoteWithNewPassword() async throws {
         let store = VaultStoreStub()

@@ -402,7 +402,85 @@ together, so they always agree.
 For comparison, the existing per-item password KDF (`Item.Secure.v1`) took 733 ms on the M5 Max. The backup's
 `Secure.v1` spent about 13 s on PBKDF2 alone there, and minutes on an iPhone. Both used CryptoSwift's PBKDF2 until
 VAULT-128 moved them to CommonCrypto's, which derives exactly the same keys: `Item.Secure.v1` now takes about 140 ms,
-and `Secure.v1`'s PBKDF2 about 2 s (see [Key derivation](#key-derivation-1) in the appendix).
+and `Secure.v1`'s PBKDF2 about 2 s (see [Key derivation](#key-derivation-1) in the appendix). New item and backup
+passwords derive with Argon2id, with more memory, since then: see
+[Backup and item passwords](#backup-and-item-passwords-vault-128).
+
+### Backup and item passwords (VAULT-128)
+
+Backup passwords and items' own passwords derive their keys with fixed derivations that each key names
+(`VaultKeyDeriver.Signature`), never parameters calibrated per device, because a backup or an item has to open on any
+device. v2 replaces v1's PBKDF2, HKDF and scrypt chains with the same Argon2id as the App Lock Password, with more
+memory, because they only ever run in the app:
+
+| Signature | Argon2id | M5 Max | iPhone 11, estimated |
+| --- | --- | ---: | ---: |
+| `vault.keygen.item.secure.v2` | m = 256 MiB, t = 4, p = 4 | 0.11 s | about 1 s at most |
+| `vault.keygen.backup.secure.v2` | m = 512 MiB, t = 32, p = 4 | 1.7 s | about 14 s at most |
+| `vault.keygen.backup.secure.v1-then-v2` | v1, then v2's Argon2id | 4.4 s from the password, 1.7 s from a stored v1 key | v1's seconds, then about 14 s at most |
+
+The M5 Max figures are the fastest of three runs of `vault-keygen-speedtest`, with the lanes on threads of their own
+(see the [appendix](#key-derivation-1)). No iPhone was measured. VAULT-128 accepted about 14 seconds for a v2 restore
+on an iPhone 11, estimated before the lanes ran in parallel, so it's an upper bound: an iPhone 11 has two performance
+cores for four lanes. The item's figure is scaled from it. Backup derivations the user waits for say they can take up
+to a minute, a few times the estimate for the slowest iPhone Vault runs on. Every new item password, and every edit that sets one,
+derives with `item.secure.v2`, and every backup password set or changed with `backup.secure.v2`. Debug builds use the
+`fast` ones, which have the same shape with a fraction of the memory and passes, so they run the same code.
+
+**Stored backup keys.** The app keeps only the key a backup password derives, never the password, so a key from
+`backup.secure.v1` can't be derived again with v2. It's carried on instead: `backup.secure.v1-then-v2`'s key is v2's
+Argon2id with the v1 key as its password. Its salt is the signature's ID in UTF-8, `vault.keygen.backup.secure.v1-then-v2`,
+followed by the v1 salt, so the two stages never derive with the same salt, and the key, and every backup made with it,
+still carries one salt: the v1 one. Guessing a password for such a backup costs v1 and v2 together. Restoring one runs
+v1 from the password, then v2.
+
+- **When.** The first time a Backups page loads the password in the app (`VaultDataModel.loadBackupPassword()`). Auto-
+  backup only has the key after that (VAULT-117), so it's the same moment. The derivation runs in the background,
+  off the main actor, for seconds, and backups made meanwhile use the v1 key, which stays valid.
+- **All or nothing.** The new key replaces the old only if the same vault is still open and no password has been set
+  or removed since the old one was loaded. An encrypted vault's settings are replaced in one save, which checks the
+  password is still the old one. The keychain replaces an item by removing it and adding the new one, and the add can
+  fail, as while the device is locked, so the new key goes into an item of its own first
+  (`SecureStorageKey.backupPasswordUpgrade`), then into the password's place. If the password goes missing part way,
+  the next load puts the new key back. Setting or removing a password, Delete All Data and an erase remove that item
+  first. When the password was set doesn't change.
+- **Failure.** Anything that fails leaves the v1 key, says nothing and logs nothing, and the next load tries again.
+
+**Items.** An item encrypted with `item.secure.v1` is encrypted again with v2 the next time its password opens it
+(`EncryptedItemDetailViewModel`): a v2 key from the password just entered, with a new salt, and the same bytes
+encrypted again with a new IV, never decoded, so nothing in the item changes. The store replaces only the item's
+encryption, and only if it's still what was opened (`VaultStoreEncryptedItemReplacer`), keeping its dates and
+everything else. It's done off the main actor before the item shows, a moment more, once, so the item's page and
+editor use the v2 key. Anything that fails opens the item as before, silently. The SQLite store scrubs its files
+afterwards, so the v1 encryption doesn't linger in them.
+
+**Older copies stay as they were.** Backups made before an upgrade keep their v1 key, and an iPhone backup or an
+earlier backup PDF keeps v1 items. Anyone with one of those guesses at v1's cost. Only new copies are stronger.
+
+**A newer signature.** A backup or item whose signature this version doesn't know was made by a newer one, so it
+says "Needs a Newer Version of Vault" instead of failing to derive.
+
+**Priority.** Every derivation the user waits on runs at user-initiated priority (`Task.userInitiated`): restoring a
+backup, setting a backup password, and opening an item or saving it with a new password. At background priority an
+iPhone can keep the work, and the threads Argon2id starts for its lanes, which take the starting thread's quality of
+service, to its efficiency cores, which could turn seconds into minutes. Moving a stored backup key to v2, which
+nobody waits on, runs at utility priority, not background, so its 512 MiB isn't held for minutes.
+
+**Memory.** 256 MiB and 512 MiB are far more than an extension can have (AutoFill about 120 MiB, widgets about
+30 MiB), so v2 derivations only ever run in the app:
+
+- Items open only in the app's item pages, and restoring and setting a backup password happen only on the app's
+  Backups pages. AutoFill only fills codes, and widgets never derive anything.
+- Only the apps' data models are given a `BackupPasswordUpgrader`. The iOS AutoFill extension shares `VaultRoot`, so
+  its data model is made without one (`VaultRoot.isAppExtension`), and the Mac's has its own root.
+- In the app, a backup derivation holds 515 MiB at its peak, measured on the Mac, and an item's 259 MiB. Restoring a
+  `v1-then-v2` backup frees scrypt's 256 MiB before Argon2id takes 512 MiB, though on macOS the freed memory stays in
+  malloc's cache, for a peak of 771 MiB (515 MiB with `MallocLargeCache=0`). Moving a stored key on runs only the
+  Argon2id, so it holds 515 MiB. Running the lanes on threads adds only their stacks. The oldest iPhone Vault runs on, the iPhone 11, has
+  4 GB, and a foreground app there can typically use around 2 GB before jetsam ends it, so there's room, but a
+  restore, or the first load of a v1 backup key, on a phone short of free memory is the case to watch. Nothing checks
+  `os_proc_available_memory()` first, as AutoFill does for the App Lock Password. Measure on an iPhone 11 before a
+  release.
 
 ### On-disk format (`vault-slots.v1`)
 
@@ -1071,8 +1149,8 @@ What's left:
 order, idempotently, and journaled so a crash mid-erase finishes at next launch:
 
 1. Unlink `vault-slots.v1`, the temp files and the lock file.
-2. Delete the keychain items: device key, killphrase and search passphrase HMAC keyrings, backup password and its
-   record, attempt counter, wrap stamp.
+2. Delete the keychain items: device key, killphrase and search passphrase HMAC keyrings, backup password, its
+   record and any upgraded key left from moving it to v2 (VAULT-128), attempt counter, wrap stamp.
 3. Clear the storage state and the per-device settings Delete All Data clears.
 4. Clear the QuickType store and reload widgets.
 5. Create a fresh, empty `plain` store.
@@ -1238,7 +1316,7 @@ configuration, which the app can't edit. Turning on the password should tell use
   That stored key only makes backups: restoring one always asks for the password it was made with, even when it's
   the password set now. Auto-backup is only ever triggered by changes in the running app, and no background task
   exists (no `BGTaskScheduler`), so nothing needs the vault while it's locked. The backup format keeps its own KDF
-  and container.
+  and container: Argon2id since VAULT-128 (see [Backup and item passwords](#backup-and-item-passwords-vault-128)).
 - **Backup sizes (VAULT-75).** A saved backup, a PDF or an auto-backup, is padded to just under a fixed size: 32 KiB
   of ciphertext, about 130 typical items, or the first power of two times that it fits. So a backup doesn't show
   how much its vault holds, and one found next to a duress vault with few items can't show that a bigger vault
@@ -1634,11 +1712,27 @@ of about 12 before and 85–105 after, so the after figures are if anything slow
 | PBKDF2-SHA384, 5,452,351 iterations | 13.6 s | 2.1 s |
 | `Item.Secure.v1` | 1,006 ms | 139 ms |
 | `Backup.Secure.v1` | 15.4 s | 2.8 s |
-| Argon2id m=64 MiB, t=3, p=1 (the App Lock Password's) | 99 ms | 92 ms (the same code) |
+| Argon2id m=64 MiB, t=3, p=1 (an App Lock file made before VAULT-128) | 99 ms | 92 ms (the same code) |
 | Argon2id m=64 MiB, t=3, p=4 | 97 ms | 33 ms |
 
 Four lanes add four thread stacks of a few KiB each: a 64 MiB derivation's peak footprint grew by 64 KiB. With one
 lane, as every App Lock file made before VAULT-128 has, no thread is started.
+
+**The v2 derivations** (VAULT-128), with PBKDF2 from CommonCrypto and the lanes on threads, measured with
+`vault-keygen-speedtest --runs 3` on the M5 Max on 11 October 2026 at a load average (`uptime`) of 3–6. The peak
+footprints are of a process making only that derivation, three times each with the same result:
+
+| Derivation | Memory | Fastest of 3 | Peak footprint |
+| --- | ---: | ---: | ---: |
+| `Item.Secure.v1` | 128 KiB | 128 ms | 3 MiB |
+| `Item.Secure.v2` | 256 MiB | 108 ms | 259 MiB |
+| `Backup.Secure.v1` | 256 MiB | 2.6 s | 259 MiB |
+| `Backup.Secure.v2` | 512 MiB | 1.7 s | 515 MiB |
+| `Backup.Secure.v1ThenV2`, restoring from the password | 256, then 512 MiB | 4.4 s | 771 MiB, or 515 MiB with `MallocLargeCache=0` |
+| `Backup.Secure.v1ThenV2`, moving a stored v1 key on | 512 MiB | 1.7 s | 515 MiB |
+
+Before the lanes ran on threads, with the four run one after another, `Item.Secure.v2` took 0.41 s and
+`Backup.Secure.v2` 6.9 s, at a load average of 4–22.
 
 ### App Lock calibration
 

@@ -7,6 +7,13 @@ import VaultKeygen
 public protocol BackupPasswordStore: Observable, Sendable {
     func fetchPassword() async throws -> DerivedEncryptionKey?
     func set(password: DerivedEncryptionKey) async throws
+    /// Replaces the stored key, `old`, with `new`: the same password's key carried on to a stronger derivation
+    /// (`BackupPasswordUpgrader`, VAULT-128). Unlike `set(password:)`, it's not a new password, so when the password
+    /// was set doesn't change.
+    ///
+    /// All or nothing: afterwards the store has `new`, or, if it throws, `old` or `new`, never no password. It never
+    /// replaces a password other than `old` that's been set since, and never asks the user to authenticate.
+    func upgradePassword(from old: DerivedEncryptionKey, to new: DerivedEncryptionKey) async throws
     /// Removes the password, and the record that one is set. Does nothing if none is set.
     ///
     /// Unlike `fetchPassword()`, this never asks the user to authenticate: it doesn't read the password.
