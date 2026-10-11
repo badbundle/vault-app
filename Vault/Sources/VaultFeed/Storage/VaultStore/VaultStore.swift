@@ -2,9 +2,8 @@ import Foundation
 import FoundationExtensions
 import VaultCore
 
-public typealias VaultStore = VaultStoreExporter & VaultStoreHOTPIncrementer & VaultStoreReader &
-    VaultStoreReorderable &
-    VaultStoreWriter
+public typealias VaultStore = VaultStoreEncryptedItemReplacer & VaultStoreExporter & VaultStoreHOTPIncrementer &
+    VaultStoreReader & VaultStoreReorderable & VaultStoreWriter
 
 public protocol VaultStoreReader: Sendable {
     /// Retrieve items matching the given query.
@@ -54,6 +53,18 @@ public protocol VaultStoreWriter: Sendable {
 /// @mockable
 public protocol VaultStoreHOTPIncrementer: Sendable {
     func incrementCounter(id: Identifier<VaultItem>) async throws
+}
+
+/// @mockable
+public protocol VaultStoreEncryptedItemReplacer: Sendable {
+    /// Replaces the encrypted item with `id`, if it's still `old`, with `new`: the same item encrypted again, as when
+    /// it
+    /// moves to a stronger key derivation (VAULT-128). Nothing else about the item changes, not even its dates.
+    ///
+    /// - Returns: Whether it replaced it: `false` if there's no item with `id`, or it isn't `old` any more, such as
+    ///   when it's been edited since.
+    func replaceEncryptedItem(id: Identifier<VaultItem>, _ old: EncryptedItem, with new: EncryptedItem) async throws
+        -> Bool
 }
 
 /// @mockable

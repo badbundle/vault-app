@@ -724,6 +724,24 @@ extension VaultDataModel: VaultStoreHOTPIncrementer {
     }
 }
 
+extension VaultDataModel: VaultStoreEncryptedItemReplacer {
+    /// Encrypts an item again without changing anything else about it, as `EncryptedItemDetailViewModel` does to move
+    /// it to a stronger key derivation (VAULT-128). Then the vault has changed, so it's handled as any other change,
+    /// auto-backup included. Encrypted items are never offered to AutoFill, so its suggestions stay as they are.
+    public func replaceEncryptedItem(
+        id: Identifier<VaultItem>,
+        _ old: EncryptedItem,
+        with new: EncryptedItem,
+    ) async throws -> Bool {
+        guard try await vaultStore.replaceEncryptedItem(id: id, old, with: new) else { return false }
+        await invalidateCaches(itemID: id)
+        await reloadItems()
+        await updateCurrentPayloadHash()
+        onDataChanged?()
+        return true
+    }
+}
+
 // MARK: - Import
 
 extension VaultDataModel {

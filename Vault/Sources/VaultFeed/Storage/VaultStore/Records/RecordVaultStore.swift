@@ -276,6 +276,26 @@ extension RecordVaultStore: VaultStoreHOTPIncrementer {
     }
 }
 
+// MARK: - VaultStoreEncryptedItemReplacer
+
+extension RecordVaultStore: VaultStoreEncryptedItemReplacer {
+    /// Checked in the change, so if another writer saved first, it's checked against what that writer saved.
+    func replaceEncryptedItem(
+        id: Identifier<VaultItem>,
+        _ old: EncryptedItem,
+        with new: EncryptedItem,
+    ) async throws -> Bool {
+        let oldDetails = VaultItemRecord.EncryptedItemDetails(old)
+        return try await change { state in
+            guard let index = state.items.firstIndex(where: { $0.id == id.rawValue }),
+                  state.items[index].encryptedItemDetails == oldDetails
+            else { return false }
+            state.items[index].encryptedItemDetails = VaultItemRecord.EncryptedItemDetails(new)
+            return true
+        }
+    }
+}
+
 // MARK: - VaultStoreReorderable
 
 extension RecordVaultStore: VaultStoreReorderable {

@@ -207,14 +207,21 @@ extension PersistedVaultItemEncoder {
 
 extension PersistedVaultItemEncoder {
     private func encodeEncryptedItemDetails(newData: EncryptedItem) -> VaultItemRecord.EncryptedItemDetails {
-        VaultItemRecord.EncryptedItemDetails(
-            version: newData.version.stringValue,
-            title: newData.title,
-            data: newData.data,
-            authentication: newData.authentication,
-            encryptionIV: newData.encryptionIV,
-            keygenSalt: newData.keygenSalt,
-            keygenSignature: newData.keygenSignature,
+        VaultItemRecord.EncryptedItemDetails(newData)
+    }
+}
+
+extension VaultItemRecord.EncryptedItemDetails {
+    /// The details as they're stored for `item`.
+    init(_ item: EncryptedItem) {
+        self.init(
+            version: item.version.stringValue,
+            title: item.title,
+            data: item.data,
+            authentication: item.authentication,
+            encryptionIV: item.encryptionIV,
+            keygenSalt: item.keygenSalt,
+            keygenSignature: item.keygenSignature,
         )
     }
 }

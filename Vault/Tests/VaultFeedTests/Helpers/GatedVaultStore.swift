@@ -82,6 +82,15 @@ actor GatedVaultStore: CompleteVaultStore {
         await enter("incrementCounter")
     }
 
+    func replaceEncryptedItem(
+        id _: Identifier<VaultItem>,
+        _: EncryptedItem,
+        with _: EncryptedItem,
+    ) async throws -> Bool {
+        await enter("replaceEncryptedItem")
+        return false
+    }
+
     func reorder(items _: Set<Identifier<VaultItem>>, to _: VaultReorderingPosition) async throws {
         await enter("reorder")
     }

@@ -8,6 +8,8 @@ public final class EncryptedItemDetailViewModel {
     public let item: EncryptedItem
     public let metadata: VaultItem.Metadata
     private let keyDeriverFactory: any VaultKeyDeriverFactory
+    /// Saves the item encrypted again with a stronger key derivation, or `nil` if it's never to be.
+    private let itemStore: (any VaultStoreEncryptedItemReplacer)?
     public var enteredEncryptionPassword = ""
     public private(set) var state: State = .base
 
@@ -32,10 +34,19 @@ public final class EncryptedItemDetailViewModel {
         }
     }
 
-    public init(item: EncryptedItem, metadata: VaultItem.Metadata, keyDeriverFactory: any VaultKeyDeriverFactory) {
+    /// - Parameter itemStore: Where an item encrypted with a key derivation Vault has replaced is saved, encrypted
+    ///   again with the stronger one, once its password opens it (VAULT-128). Only the app's data model: items are
+    ///   only ever opened in the app, and the stronger derivation needs 256 MiB.
+    public init(
+        item: EncryptedItem,
+        metadata: VaultItem.Metadata,
+        keyDeriverFactory: any VaultKeyDeriverFactory,
+        itemStore: (any VaultStoreEncryptedItemReplacer)? = nil,
+    ) {
         self.item = item
         self.metadata = metadata
         self.keyDeriverFactory = keyDeriverFactory
+        self.itemStore = itemStore
     }
 
     /// Once the item is decrypted it's on its way to being shown, so there's nothing more to decrypt.
@@ -92,7 +103,8 @@ public final class EncryptedItemDetailViewModel {
                     debugDescription: "promptForDifferentPassword",
                 )
             case let .decrypted(item):
-                state = .decrypted(item, generatedPassword)
+                let upgradedKey = await upgradedKey(signature: signature, password: password, key: generatedPassword)
+                state = .decrypted(item, upgradedKey ?? generatedPassword)
             }
         } catch let localized as any LocalizedError {
             state = .decryptionError(PresentationError(localizedError: localized))
@@ -102,6 +114,37 @@ public final class EncryptedItemDetailViewModel {
                 userDescription: "Unable to decrypt this item. Please try again.",
                 debugDescription: error.localizedDescription,
             ))
+        }
+    }
+
+    /// Encrypts the item again with a key from the stronger derivation that replaces its own, if Vault has one, from
+    /// the password that's just opened it, and saves it in the old one's place, with nothing else about it changed
+    /// (VAULT-128). It's done before the item shows, off the main actor, so the item's page, and its editor, use the
+    /// new key. That takes a moment more, once.
+    ///
+    /// - Returns: The new key, or `nil` if there's nothing stronger, or anything fails. Then the item stays as it was,
+    ///   and nothing is said or logged: it's tried again the next time it's opened.
+    private func upgradedKey(
+        signature: VaultKeyDeriver.Signature,
+        password: String,
+        key: DerivedEncryptionKey,
+    ) async -> DerivedEncryptionKey? {
+        guard let itemStore, let upgrade = signature.itemUpgrade else { return nil }
+        let keyDeriver = keyDeriverFactory.lookupVaultKeyDeriver(signature: upgrade)
+        let item = item
+        do {
+            let newKey = try await Task.background {
+                try keyDeriver.createEncryptionKey(password: password)
+            }
+            let reencrypted = try await Task.background {
+                try VaultItemReencryptor().reencrypt(item, from: key, to: newKey)
+            }
+            guard try await itemStore.replaceEncryptedItem(id: metadata.id, item, with: reencrypted) else {
+                return nil
+            }
+            return newKey
+        } catch {
+            return nil
         }
     }
 

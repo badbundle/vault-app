@@ -66,4 +66,12 @@ public final class VaultStoreErroring: VaultStore, VaultTagStoreReader, VaultTag
     public func incrementCounter(id _: Identifier<VaultItem>) async throws {
         throw error
     }
+
+    public func replaceEncryptedItem(
+        id _: Identifier<VaultItem>,
+        _: EncryptedItem,
+        with _: EncryptedItem,
+    ) async throws -> Bool {
+        throw error
+    }
 }

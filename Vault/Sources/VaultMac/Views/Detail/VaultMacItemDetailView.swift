@@ -11,6 +11,8 @@ struct VaultMacItemDetailView: View {
     var tags: [VaultItemTag]
     var authentication: DeviceAuthenticationService
     var keyDeriverFactory: any VaultKeyDeriverFactory
+    /// Where an encrypted item is saved once it's encrypted again with a stronger key derivation: the app's data model.
+    var itemStore: (any VaultStoreEncryptedItemReplacer)?
 
     var body: some View {
         VaultMacAuthenticationGate(
@@ -41,12 +43,14 @@ struct VaultMacItemDetailView: View {
                     item: encrypted,
                     metadata: item.metadata,
                     keyDeriverFactory: keyDeriverFactory,
+                    itemStore: itemStore,
                 ),
                 tags: tags,
                 authentication: authentication,
             )
             // Made anew once the item is saved, so its page asks for the password again rather than showing what it
-            // held before (G42).
+            // held before (G42). Encrypting it again with a stronger key derivation keeps its dates, so its page stays
+            // open.
             .id(item.metadata.updated)
         case .recoveryPhrase:
             // Only ever stored encrypted: a decrypted one only shows once its encrypted item is opened.
