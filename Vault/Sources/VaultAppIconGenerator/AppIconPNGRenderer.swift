@@ -35,15 +35,15 @@ enum AppIconPNGRenderer {
         return try encodePNG(image)
     }
 
-    /// Renders the Mac's icon, `pixelSize` square. It keeps its alpha channel: the Mac shows the corners and the
-    /// shadow around the rounded square on whatever is behind it.
+    /// Renders the door and wheel in one appearance, `pixelSize` square on transparency: a layer of the Mac's Icon
+    /// Composer document, which gives it its background and its shape.
     @MainActor
-    static func macPNGData(pixelSize: Int) throws -> Data {
+    static func glyphPNGData(appearance: VaultAppIconAppearance, pixelSize: Int) throws -> Data {
         try encodePNG(render(
-            VaultMacAppIconView(),
+            VaultLockGlyphView(appearance: appearance).aspectRatio(1, contentMode: .fit),
             pixelSize: pixelSize,
             isOpaque: false,
-            failure: .renderFailed(.light),
+            failure: .renderFailed(appearance),
         ))
     }
 

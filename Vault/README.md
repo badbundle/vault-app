@@ -158,12 +158,30 @@ The app icon is not a hand-made image: it is a SwiftUI view.
 - `Sources/VaultAppIconGenerator` renders that view with `ImageRenderer` into
   `VaultApp/VaultApp/Assets.xcassets/AppIcon.appiconset` as three 1024px PNGs
   (default, dark and tinted appearances) and rewrites the set's `Contents.json`.
+- With `--mac`, it writes the Mac's icon instead, as an [Icon Composer](https://developer.apple.com/icon-composer/)
+  document, `VaultApp/VaultMacApp/AppIcon.icon`: the door and wheel in each
+  appearance as 1024px PNGs on transparency, and an `icon.json` that puts them on a
+  white fill, or near black in the dark appearance, with no glass. macOS 26 masks
+  the document to its own rounded square, as iOS masks the iOS icon, where an image
+  with its own corners would be shrunk onto a grey tile. Xcode compiles it into
+  every size the Mac app and the App Store take.
 
 Run `make app-icon` after changing the drawing and commit the result. For a quick
 look without touching the catalog, point it elsewhere and shrink it:
 
 ```sh
 swift run -c release vault-app-icon-generator --output /tmp/icon-preview --size 256
+```
+
+To see the Mac's icon as the system draws it (`Default`, `Dark`, `ClearLight`,
+`ClearDark`, `TintedLight` or `TintedDark`), render the document with Icon
+Composer's command-line tool. Don't edit the document in Icon Composer: the next
+`make app-icon` overwrites it.
+
+```sh
+"$(xcode-select -p)/../Applications/Icon Composer.app/Contents/Executables/ictool" \
+  ../VaultApp/VaultMacApp/AppIcon.icon --export-image --output-file /tmp/icon.png \
+  --platform macOS --rendition Dark --width 1024 --height 1024 --scale 1
 ```
 
 The same drawing is the padlock on a locked item's detail screen, where it spins
