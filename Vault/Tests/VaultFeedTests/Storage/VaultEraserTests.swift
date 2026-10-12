@@ -106,6 +106,42 @@ struct VaultEraserTests {
         }
     }
 
+    /// The count of wrong attempts and the wrap stamp go from both keychain access groups: the one the app shares
+    /// with the AutoFill extension, and the App Group's, where an earlier version kept them, if they haven't moved yet
+    /// (VAULT-129).
+    @Test
+    func erase_deletesTheAttemptsAndWrapStampFromBothKeychainGroups() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try await VaultEraseHarness.encryptedDevice(in: directory)
+            let keychain = InMemoryKeychain()
+            let keys: [VaultIdentifiers.SecureStorageKey] = [.appLockPasswordAttempts, .vaultWrapStamp]
+            let groups = [VaultSharedStorage.appGroupID, VaultSharedStorage.keychainGroupID]
+            for key in keys {
+                for group in groups {
+                    keychain.set(.init(data: Data(key.rawValue.utf8)), for: key, in: group)
+                }
+            }
+            let eraser = harness.makeEraser(
+                attemptStorage: AppLockPasswordAttemptKeychainStorage(
+                    item: SharedKeychainItem(key: .appLockPasswordAttempts, keychain: keychain),
+                    lockFileURL: { directory.appending(path: AppLockPasswordAttemptKeychainStorage.lockFileName) },
+                ),
+                wrapStamps: VaultWrapStampKeychainStorage(item: SharedKeychainItem(
+                    key: .vaultWrapStamp,
+                    keychain: keychain,
+                )),
+            )
+
+            try await eraser.erase()
+
+            for key in keys {
+                for group in groups {
+                    #expect(keychain.item(key, in: group) == nil, "\(key) in \(group)")
+                }
+            }
+        }
+    }
+
     /// With the App Lock Password off, the device key opens the vault. It goes with the file and every other key, so
     /// nothing on the device shows the password was ever turned off.
     @Test
@@ -655,9 +691,13 @@ struct VaultEraseHarness {
     ///
     /// - Parameter whileReloadingWidgets: Runs as the widgets reload, after the vault is first removed.
     /// - Parameter plainStoreInMemory: Makes the fresh store in memory, as the Mac app does.
+    /// - Parameter attemptStorage: Where the count of wrong attempts is, if not `attemptStorage`.
+    /// - Parameter wrapStamps: Where the wrap stamp is, if not `wrapStamps`.
     func makeEraser(
         whileReloadingWidgets: @escaping @Sendable () -> Void = {},
         plainStoreInMemory: Bool = false,
+        attemptStorage: (any AppLockPasswordAttemptStorage)? = nil,
+        wrapStamps: (any VaultWrapStampStorage)? = nil,
     ) -> VaultEraser {
         let fileSystem = fileSystem
         let directory = directory
@@ -666,8 +706,11 @@ struct VaultEraseHarness {
             fileSystem: fileSystem,
             session: session,
             secureStorage: keychain,
-            attemptCounter: AppLockPasswordAttemptCounter(storage: attemptStorage, clock: FakeAppLockClock()),
-            wrapStamps: wrapStamps,
+            attemptCounter: AppLockPasswordAttemptCounter(
+                storage: attemptStorage ?? self.attemptStorage,
+                clock: FakeAppLockClock(),
+            ),
+            wrapStamps: wrapStamps ?? self.wrapStamps,
             deviceKeyStore: FaultInjectingDeviceKeyStore(wrapping: deviceKeys, steps: fileSystem),
             widgetCodes: WidgetCodeHandoffStore(keychain: widgetCodes),
             widgetCopiedCodes: WidgetCopiedCodeStore(keychain: widgetCopiedCode, notify: {}),
@@ -886,7 +929,7 @@ final class FaultInjectingAttemptStorage: AppLockPasswordAttemptStorage {
 
     init(faults: FaultInjectingSlotFileSystem, directory: URL) {
         self.faults = faults
-        lock = AppLockPasswordAttemptKeychainStorage(accessGroup: nil, lockFileURL: {
+        lock = AppLockPasswordAttemptKeychainStorage(lockFileURL: {
             directory.appending(path: AppLockPasswordAttemptKeychainStorage.lockFileName)
         })
     }

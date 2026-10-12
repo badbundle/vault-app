@@ -25,8 +25,10 @@ public protocol VaultDeviceKeyStoring: Sendable {
 ///   stricter class would break that; a looser one would add nothing they need.
 /// - **Restored with a backup**, not `ThisDeviceOnly`, like the encrypted file itself: restoring a backup onto a new
 ///   iPhone keeps a vault whose password is off openable. It never syncs to iCloud Keychain.
-/// - **In the App Group's access group**, like the attempt counter, so the extensions can read it once they're given
-///   access (VAULT-50).
+/// - **In the App Group's access group**, which the AutoFill and widget extensions both have, as both open the vault
+///   with it while the password is off (VAULT-50). The items only the app and the AutoFill extension read, like the
+///   attempt counter, are in a group the widget extension doesn't have (`SharedKeychainItem`, VAULT-129). The key
+///   only opens the vault while the password is off, when the widgets read it anyway.
 /// - **Made new every time the password is turned off**, and deleted when it's turned back on, so it only ever opens
 ///   copies of the file written while the password was off.
 public struct VaultDeviceKeychainStore: VaultDeviceKeyStoring {

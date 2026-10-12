@@ -420,10 +420,13 @@ enum VaultMacRoot {
     static func setup() {
         // At every launch, so the vault stays out of Time Machine unless the user lets it in, whenever it was made.
         vaultBackupExclusion.apply()
-        if let interruptedErase {
-            Task {
-                await interruptedErase.finish()
-            }
+        // The keychain items an earlier version kept in the App Group's access group move to the one only the app and
+        // its AutoFill extension have, before an erase the app was stopped in the middle of finishes, which deletes
+        // them wherever they are.
+        let interruptedErase = interruptedErase
+        Task {
+            await SharedKeychainItems.moveFromTheAppGroup()
+            await interruptedErase?.finish()
         }
         // Whatever an earlier run left, which stopped without locking if there's any. Every launch starts locked.
         widgetCodes.withdrawLeftovers()

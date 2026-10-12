@@ -53,14 +53,15 @@ struct AppLockPasswordAttemptAccess: Sendable {
 ///
 /// The keychain outlives the app: relaunching it, or installing a new version over the top, keeps the count. The item
 /// is readable only while the device is unlocked, never syncs to iCloud Keychain, and never moves to another device
-/// with a backup. It's in the App Group's access group, so the AutoFill extension can count attempts made there
-/// against the same record.
+/// with a backup. It's in the keychain access group the app shares with the AutoFill extension only
+/// (`SharedKeychainItem`), so the AutoFill extension can count attempts made there against the same record, and the
+/// widget extension can't read it.
 ///
 /// This talks to the keychain directly, rather than through `SecureStorage`, so that it can update the item in
 /// place. `SecureStorage` removes an item and then adds it again, and an app stopped in between would forget every
 /// wrong attempt.
 struct AppLockPasswordAttemptKeychainStorage: AppLockPasswordAttemptStorage {
-    let accessGroup: String?
+    let item: SharedKeychainItem
     /// The file whose lock the app and its extensions take around each change to the record.
     private let lockFileURL: @Sendable () -> URL
     /// How long to wait for another process to let go of the lock before giving up.
@@ -70,13 +71,13 @@ struct AppLockPasswordAttemptKeychainStorage: AppLockPasswordAttemptStorage {
     static let lockFileName = "app-lock-password-attempts.lock"
 
     init(
-        accessGroup: String? = VaultSharedStorage.appGroupID,
+        item: SharedKeychainItem = SharedKeychainItem(key: .appLockPasswordAttempts),
         lockFileURL: @escaping @Sendable () -> URL = {
             VaultSharedStorage.directory().appending(path: lockFileName)
         },
         lockTimeout: Duration = .seconds(5),
     ) {
-        self.accessGroup = accessGroup
+        self.item = item
         self.lockFileURL = lockFileURL
         self.lockTimeout = lockTimeout
     }
@@ -126,55 +127,27 @@ struct AppLockPasswordAttemptKeychainStorage: AppLockPasswordAttemptStorage {
     }
 
     func load() throws -> AppLockPasswordAttemptRecord? {
-        var query = Self.itemQuery(accessGroup: accessGroup)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: AnyObject?
-        switch SecItemCopyMatching(query as CFDictionary, &result) {
-        case errSecSuccess:
-            guard let data = result as? Data else { throw SwiftSecurityError.invalidParameter }
-            return try JSONDecoder().decode(AppLockPasswordAttemptRecord.self, from: data)
-        case errSecItemNotFound:
-            return nil
-        case let status:
-            throw SwiftSecurityError(rawValue: status)
-        }
+        guard let data = try item.data() else { return nil }
+        return try JSONDecoder().decode(AppLockPasswordAttemptRecord.self, from: data)
     }
 
     func save(_ record: AppLockPasswordAttemptRecord) throws {
-        let query = Self.itemQuery(accessGroup: accessGroup)
-        let attributes = try Self.attributes(for: record)
-        switch SecItemUpdate(query as CFDictionary, attributes as CFDictionary) {
-        case errSecSuccess:
-            return
-        case errSecItemNotFound:
-            let status = SecItemAdd(query.merging(attributes) { $1 } as CFDictionary, nil)
-            guard status == errSecSuccess else { throw SwiftSecurityError(rawValue: status) }
-        case let status:
-            throw SwiftSecurityError(rawValue: status)
-        }
+        try item.save(Self.attributes(for: record))
     }
 
     func remove() throws {
-        let status = SecItemDelete(Self.itemQuery(accessGroup: accessGroup) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw SwiftSecurityError(rawValue: status)
-        }
+        try item.remove()
     }
 
-    /// Identifies the item: a password item for the attempt record, in `accessGroup`, that doesn't sync.
-    static func itemQuery(accessGroup: String?) -> [String: Any] {
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: VaultIdentifiers.SecureStorageKey.appLockPasswordAttempts.keychainService,
-            kSecAttrSynchronizable as String: false,
-            // Makes macOS use the same keychain as iOS.
-            kSecUseDataProtectionKeychain as String: true,
-        ]
-        if let accessGroup {
-            query[kSecAttrAccessGroup as String] = accessGroup
-        }
-        return query
+    /// Moves the record out of the App Group's keychain access group, where versions before VAULT-129 kept it
+    /// (`SharedKeychainItem.moveFromTheAppGroup()`), holding the lock, so no attempt is counted or forgotten meanwhile,
+    /// in this process or another. The lock is only taken if there's a record to move, as its file shows a password
+    /// was tried on this device (`removeLockFile()`).
+    func moveFromTheAppGroup() async throws {
+        guard try item.isInTheAppGroup() else { return }
+        let access = try await acquireExclusiveAccess()
+        defer { access.release() }
+        try item.moveFromTheAppGroup()
     }
 
     /// What's stored in the item: the record, readable only while the device is unlocked, on this device only.

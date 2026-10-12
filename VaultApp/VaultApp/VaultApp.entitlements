@@ -13,6 +13,7 @@
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)com.badbundle.vault</string>
+		<string>$(TeamIdentifierPrefix)com.badbundle.vault.shared</string>
 	</array>
 </dict>
 </plist>

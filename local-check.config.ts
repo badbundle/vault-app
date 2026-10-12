@@ -56,6 +56,12 @@ export default (({ xcode }) => {
         flags: ["-skipMacroValidation", "-skipPackagePluginValidation", "-skipPackageUpdates"],
       }),
       ios.testWithoutBuilding({ name: "UI tests" }),
+      {
+        name: "iOS app entitlements",
+        async run(ctx) {
+          await checkIOSAppEntitlements(ctx, ios.derivedData(ctx), ios.destination);
+        },
+      },
       // The shared modules, built and tested for the Mac as well, so work on either platform can't break the other
       // (docs/mac-app.md). Last, so its .xctestrun is the newest when its tests run.
       ios.buildForTesting({
@@ -140,7 +146,7 @@ const macAutofillEntitlements = [
 /**
  * The entitlements the Mac app's widget extension may have: the same table's, and its profile's. No App Group, which
  * would also make it a member of the App Group's keychain access group, and no keychain access group but the widgets'
- * own.
+ * own: not the one the app shares with its AutoFill extension.
  */
 const macWidgetsEntitlements = [
   "com.apple.application-identifier",
@@ -153,12 +159,19 @@ const macWidgetsEntitlements = [
 const appGroup = "442P244AFS.com.badbundle.vault";
 
 /**
+ * The keychain access group the app shares with its AutoFill extension, and nothing else, on iOS and the Mac. It holds
+ * the attempt counter, the wrap stamp and the Mac's app lock settings (VAULT-129).
+ */
+const sharedKeychainGroup = "442P244AFS.com.badbundle.vault.shared";
+
+/**
  * Builds the Mac app as it runs, rather than for testing, which adds entitlements of Xcode's own, and fails unless
  * the app and its AutoFill and widget extensions are each signed with the hardened runtime and sandboxed, with only
  * their own keychain access groups, and with no entitlement the design doesn't list. The app and its AutoFill
  * extension are in the App Group; the widget extension isn't, as an App Group is also a keychain access group. The
- * app's own group is neither extension's, so neither can read the app's keychain items, and the widgets' group, which
- * holds the codes the app hands them, is only the widget extension's and the app's.
+ * app's own group is neither extension's, so neither can read the app's keychain items; the shared group, which holds
+ * the attempt counter, is only the AutoFill extension's and the app's; and the widgets' group, which holds the codes
+ * the app hands them, is only the widget extension's and the app's.
  */
 async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promise<void> {
   await ctx.exec([
@@ -180,6 +193,7 @@ async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promi
   await checkSignedEntitlements(ctx, app, "Vault.app", macAppEntitlements, [
     `${appGroup}.private`,
     appGroup,
+    sharedKeychainGroup,
     `${appGroup}.widgets`,
   ]);
   await checkSignedEntitlements(
@@ -187,7 +201,7 @@ async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promi
     `${app}/Contents/PlugIns/VaultMacAutofill.appex`,
     "VaultMacAutofill.appex",
     macAutofillEntitlements,
-    [appGroup],
+    [appGroup, sharedKeychainGroup],
   );
   await checkSignedEntitlements(
     ctx,
@@ -227,6 +241,108 @@ async function checkSignedEntitlements(
   if (entitlements["com.apple.security.app-sandbox"] !== true || groups !== JSON.stringify(appGroups)) {
     const expected = JSON.stringify(appGroups);
     throw new Error(`${name} isn't sandboxed with App Groups ${expected}: ${JSON.stringify(entitlements)}`);
+  }
+  const keychain = JSON.stringify(entitlements["keychain-access-groups"]);
+  if (keychain !== JSON.stringify(keychainGroups)) {
+    throw new Error(`${name}'s keychain access groups aren't ${JSON.stringify(keychainGroups)}: ${keychain}`);
+  }
+  ctx.log(`${name}'s entitlements: ${Object.keys(entitlements).join(", ")}`);
+}
+
+/** The iOS app's App Group, which every iOS target shares, as the widget extension reads the vault from it. */
+const iosAppGroup = "group.com.badbundle.vault-group";
+
+/** The entitlements the iOS app may have, from its entitlements file, and the identifier its signing adds. */
+const iosAppEntitlements = [
+  "application-identifier",
+  "com.apple.developer.authentication-services.autofill-credential-provider",
+  "com.apple.developer.default-data-protection",
+  "com.apple.security.application-groups",
+  "keychain-access-groups",
+];
+
+/** The entitlements the iOS AutoFill extension may have: its file's, and the identifier its signing adds. */
+const iosAutofillEntitlements = [
+  "application-identifier",
+  "com.apple.developer.authentication-services.autofill-credential-provider",
+  "com.apple.security.application-groups",
+  "keychain-access-groups",
+];
+
+/**
+ * The entitlements the iOS widget extension may have: the App Group, which it reads the vault from, and the identifier
+ * its signing adds. No keychain access group of its own, so its keychain is only its own and the App Group's, which
+ * holds the device key it opens the vault with while the App Lock Password is off.
+ */
+const iosWidgetsEntitlements = ["application-identifier", "com.apple.security.application-groups"];
+
+/**
+ * Builds the iOS app for the simulator as it runs, rather than for testing, and fails unless the app and its AutoFill
+ * and widget extensions each have only the App Group, only their own keychain access groups, and no entitlement their
+ * lists don't have. The shared group, which holds the attempt counter and the wrap stamp, is only the app's and the
+ * AutoFill extension's: the widget extension has the App Group, which is also a keychain access group, and no other
+ * (VAULT-129). A simulator build is signed ad hoc, with its entitlements in its executable, which the simulator keeps
+ * to as a device keeps to a signature's.
+ */
+async function checkIOSAppEntitlements(ctx: Context, derivedData: string, destination: string): Promise<void> {
+  await ctx.exec([
+    "xcodebuild",
+    "build",
+    "-workspace",
+    "Vault.xcworkspace",
+    "-scheme",
+    "VaultApp",
+    "-destination",
+    destination,
+    "-derivedDataPath",
+    derivedData,
+    "-skipMacroValidation",
+    "-skipPackagePluginValidation",
+    "-skipPackageUpdates",
+  ]);
+  const app = `${derivedData}/Build/Products/Debug-iphonesimulator/VaultApp.app`;
+  await checkSimulatorEntitlements(ctx, `${app}/VaultApp`, "VaultApp.app", iosAppEntitlements, [
+    "442P244AFS.com.badbundle.vault",
+    sharedKeychainGroup,
+  ]);
+  await checkSimulatorEntitlements(
+    ctx,
+    `${app}/PlugIns/VaultAppAutofill.appex/VaultAppAutofill`,
+    "VaultAppAutofill.appex",
+    iosAutofillEntitlements,
+    ["442P244AFS.com.badbundle.vault.VaultAutofill", sharedKeychainGroup],
+  );
+  await checkSimulatorEntitlements(
+    ctx,
+    `${app}/PlugIns/VaultWidgetsExtension.appex/VaultWidgetsExtension`,
+    "VaultWidgetsExtension.appex",
+    iosWidgetsEntitlements,
+    undefined,
+  );
+}
+
+/**
+ * Fails unless the simulator build's `executable` has no entitlement but those `allowed`, exactly the iOS App Group,
+ * and exactly these keychain access groups (none, if `undefined`).
+ */
+async function checkSimulatorEntitlements(
+  ctx: Context,
+  executable: string,
+  name: string,
+  allowed: string[],
+  keychainGroups: string[] | undefined,
+): Promise<void> {
+  const plist = `${ctx.cacheDir}/${name}-simulator-entitlements.plist`;
+  await ctx.exec(["xcrun", "segedit", executable, "-extract", "__TEXT", "__entitlements", plist]);
+  const { stdout } = await ctx.capture(["plutil", "-convert", "json", "-o", "-", plist]);
+  const entitlements = JSON.parse(stdout) as Record<string, unknown>;
+  const unlisted = Object.keys(entitlements).filter((key) => !allowed.includes(key));
+  if (unlisted.length > 0) {
+    throw new Error(`${name} has entitlements it shouldn't: ${unlisted.join(", ")}`);
+  }
+  const groups = JSON.stringify(entitlements["com.apple.security.application-groups"] ?? []);
+  if (groups !== JSON.stringify([iosAppGroup])) {
+    throw new Error(`${name}'s App Groups aren't ${JSON.stringify([iosAppGroup])}: ${groups}`);
   }
   const keychain = JSON.stringify(entitlements["keychain-access-groups"]);
   if (keychain !== JSON.stringify(keychainGroups)) {

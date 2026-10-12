@@ -76,7 +76,8 @@ public protocol WidgetKeychainStoring: Sendable {
 ///
 /// - **In the widgets' own keychain access group**, `…vault.widgets`, which only the app and the widget extension
 ///   have. The widget extension has no other, and no App Group, so it can't read the App Group's items, such as the
-///   attempt counter or the device key, and the AutoFill extension can't read these.
+///   device key, nor those the app shares with the AutoFill extension, such as the attempt counter, and the AutoFill
+///   extension can't read these.
 /// - **Kept on this Mac only**: never synced, and never restored to another Mac.
 ///
 /// On iOS there's no such group, and nothing is ever stored: the iOS widgets read the vault themselves while the App
