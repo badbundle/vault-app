@@ -65,6 +65,9 @@ struct VaultMacCodeEditor: View {
             )
         }
         .frame(width: 520, height: 620)
+        #if DEBUG
+        .onAppear { VaultMacScreenshotMode.showEditorScene(in: viewModel) }
+        #endif
         .onReceive(viewModel.isFinishedPublisher()) { close() }
         .vaultMacEditorErrorAlert(viewModel.didEncounterErrorPublisher())
         .sheet(isPresented: $isScanning) {

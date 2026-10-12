@@ -25,7 +25,13 @@ final class VaultMacWindowPrivacy {
 
     /// The sharing type every window has while Hide While Recording says so.
     var sharingType: NSWindow.SharingType {
-        localSettings.state.hidesVaultWhileScreenCaptured ? .none : .readOnly
+        #if DEBUG
+        // The App Store screenshots capture the demo vault's windows (`VaultMacScreenshotMode`).
+        if VaultMacScreenshotMode.isEnabled {
+            return .readOnly
+        }
+        #endif
+        return localSettings.state.hidesVaultWhileScreenCaptured ? .none : .readOnly
     }
 
     /// Starts keeping every window private: those already open, and each one as it opens or changes.

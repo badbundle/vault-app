@@ -9,6 +9,9 @@ import VaultFeed
 struct VaultMacRootView: View {
     @State private var appLock = VaultMacRoot.appLockService
     @State private var interruptedErase = VaultMacRoot.interruptedErase
+    #if DEBUG
+    @Environment(\.openSettings) private var openSettings
+    #endif
 
     var body: some View {
         Group {
@@ -45,5 +48,10 @@ struct VaultMacRootView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 480)
+        #if DEBUG
+        .task {
+            await VaultMacScreenshotMode.run(openSettings: openSettings)
+        }
+        #endif
     }
 }

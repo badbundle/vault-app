@@ -13,13 +13,13 @@ struct VaultMacMainView: View {
     /// Goes up each time Find (⌘F) asks for the search field.
     @State private var searchFocusRequest = 0
     /// The Backups page that's open, while Backups is chosen in the sidebar.
-    @State private var backupsPage: VaultMacBackupsPage?
+    @State private var backupsPage: VaultMacBackupsPage? = Self.initialBackupsPage
     private var backupServices: VaultMacBackupServices {
         .live
     }
 
     /// The item editor that's open, if one is.
-    @State private var editorRequest: VaultMacEditorRequest?
+    @State private var editorRequest: VaultMacEditorRequest? = Self.initialEditorRequest
     /// The item that's asking whether to delete it, if one is.
     @State private var pendingDeletion: VaultItem.Metadata?
     @State private var deletionProblem: String?
@@ -40,6 +40,22 @@ struct VaultMacMainView: View {
 
     private var dataModel: VaultDataModel {
         feed.dataModel
+    }
+
+    private static var initialBackupsPage: VaultMacBackupsPage? {
+        #if DEBUG
+        VaultMacScreenshotMode.backupsPage
+        #else
+        nil
+        #endif
+    }
+
+    private static var initialEditorRequest: VaultMacEditorRequest? {
+        #if DEBUG
+        VaultMacScreenshotMode.editorRequest
+        #else
+        nil
+        #endif
     }
 
     var body: some View {
@@ -88,6 +104,11 @@ struct VaultMacMainView: View {
                 close: { editorRequest = nil },
             )
         }
+        #if DEBUG
+        .onReceive(NotificationCenter.default.publisher(for: VaultMacScreenshotMode.closeSheets)) { _ in
+            editorRequest = nil
+        }
+        #endif
         .environment(\.vaultMacEdit, openEditor)
         .environment(\.vaultMacDelete, VaultMacDeleteAction { pendingDeletion = $0 })
         // There's no undo and no history: once deleted, an item is gone (C6).
