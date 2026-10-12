@@ -19,6 +19,10 @@ enum VaultMacRoot {
 
     static let defaults: Defaults = {
         #if DEBUG
+        // The App Store screenshots start from clean settings and leave the real ones untouched.
+        if VaultMacScreenshotMode.isEnabled {
+            return VaultMacScreenshotMode.makeDefaults()
+        }
         // UI tests keep their defaults with their vault.
         if let uiTestVault = UITestVaultStorage.current {
             return .init(userDefaults: uiTestVault.defaults)
@@ -28,11 +32,30 @@ enum VaultMacRoot {
     }()
 
     /// The App Group's defaults, for the settings the AutoFill extension reads too.
-    static let sharedDefaults: Defaults = .init(userDefaults: VaultSharedStorage.userDefaults())
+    static let sharedDefaults: Defaults = {
+        #if DEBUG
+        // The screenshots keep every setting in their own suite, away from the real ones.
+        if VaultMacScreenshotMode.isEnabled {
+            return defaults
+        }
+        #endif
+        return .init(userDefaults: VaultSharedStorage.userDefaults())
+    }()
 
     static let localSettings = LocalSettings(defaults: defaults, sharedDefaults: sharedDefaults)
 
-    static let clock: some EpochClock = EpochClockImpl()
+    static let clock: some EpochClock = EpochClockImpl(offset: clockOffset)
+
+    /// How far the clock runs ahead of the Mac's time: not at all, apart from in screenshot mode, where every demo code
+    /// starts at the same point in its countdown.
+    private static var clockOffset: Double {
+        #if DEBUG
+        if VaultMacScreenshotMode.isEnabled {
+            return DemoVault.clockOffset()
+        }
+        #endif
+        return 0
+    }
 
     static let timer: some IntervalTimer = IntervalTimerImpl()
 
@@ -51,9 +74,24 @@ enum VaultMacRoot {
         nameID: "com.badbundle.vault.private",
     ))
 
-    static let secureStorage: some SecureStorage = SecureStorageImpl(keychain: keychain)
+    static let secureStorage: any SecureStorage = {
+        #if DEBUG
+        // The screenshots' demo vault keeps its keys in memory, never in the Mac's keychain.
+        if VaultMacScreenshotMode.isEnabled {
+            return VaultMacScreenshotMode.secureStorage
+        }
+        #endif
+        return SecureStorageImpl(keychain: keychain)
+    }()
 
-    static let vaultStorageDirectory: URL = VaultSharedStorage.directory(fileManager: fileManager)
+    static let vaultStorageDirectory: URL = {
+        #if DEBUG
+        if VaultMacScreenshotMode.isEnabled {
+            return VaultMacScreenshotMode.storageDirectory
+        }
+        #endif
+        return VaultSharedStorage.directory(fileManager: fileManager)
+    }()
 
     /// Keep Out of Time Machine, in Settings: whether the App Group's container, with the vault file, is left out of
     /// Time Machine's backups. On unless the user turns it off, which is kept with the app lock's device settings.
@@ -69,6 +107,12 @@ enum VaultMacRoot {
     /// the Mac means there's no vault yet, or `.password`. `.erasing` if the app was stopped in the middle of an erase,
     /// which `setup()` finishes before anything opens.
     static let storageMode: VaultStorageRecovery.Outcome = {
+        #if DEBUG
+        // The screenshots' demo vault is the empty store in memory, filled once the app's open.
+        if VaultMacScreenshotMode.isEnabled {
+            return .plain
+        }
+        #endif
         do {
             return try VaultStorageRecovery(directory: vaultStorageDirectory, plainStoreIsInMemory: true)
                 .recoverAtLaunch()
@@ -106,10 +150,20 @@ enum VaultMacRoot {
     /// The empty store's backup password and settings, which setting the password moves into the vault. There are
     /// never any: nothing can be backed up before the password is set.
     static let deviceBackupSettings = DeviceBackupSettings(
-        passwordStore: BackupPasswordStoreImpl(secureStorage: secureStorage, clock: clock),
+        passwordStore: deviceBackupPasswordStore,
         secureStorage: secureStorage,
         defaults: defaults,
     )
+
+    /// The empty store's backup password, in the keychain, or the screenshots' stand-in, which is never read.
+    private static var deviceBackupPasswordStore: any BackupPasswordStore {
+        #if DEBUG
+        if VaultMacScreenshotMode.isEnabled {
+            return VaultMacScreenshotMode.backupPasswordStore
+        }
+        #endif
+        return BackupPasswordStoreImpl(secureStorage: secureStorage, clock: clock)
+    }
 
     /// The open vault's backup password, last backup, auto-backup configuration and PDF hint.
     static let openVaultBackupSettings = OpenVaultBackupSettings(
@@ -198,7 +252,7 @@ enum VaultMacRoot {
 
     static let deviceAuthenticationService: DeviceAuthenticationService = {
         #if DEBUG
-        if let policy = VaultMacUITestVault.authenticationPolicy {
+        if let policy = VaultMacUITestVault.authenticationPolicy ?? VaultMacScreenshotMode.authenticationPolicy {
             return .init(policy: policy)
         }
         #endif
@@ -208,6 +262,12 @@ enum VaultMacRoot {
     /// In the App Group's defaults, so the AutoFill extension follows the lock too, with erasing after failed passwords
     /// and the Require Unlock delay in the keychain item they share, where only Vault can change them.
     static let appLockSettingsStore: AppLockSettingsStore = {
+        #if DEBUG
+        // The screenshots' lock is on, with the delay and erasing kept in defaults of their own, not the keychain.
+        if VaultMacScreenshotMode.isEnabled {
+            return VaultMacScreenshotMode.makeAppLockSettingsStore()
+        }
+        #endif
         let settings = AppLockSettingsStore.shared()
         #if DEBUG
         if let delay = VaultMacUITestVault.appLockDelay {
@@ -224,7 +284,7 @@ enum VaultMacRoot {
     static let appLockService: AppLockService = .init(
         settings: appLockSettingsStore,
         authenticationService: deviceAuthenticationService,
-        passwordService: vaultPasswordService,
+        passwordService: appLockPasswordService,
         purgeSensitiveData: {
             // The widgets' codes first, before anything else can run.
             widgetCodes.withdraw()
@@ -243,6 +303,16 @@ enum VaultMacRoot {
             Task { await vaultDataModel.purgeVaultContents() }
         },
     )
+
+    /// The App Lock Password the lock asks for: the vault's own, or for the screenshots, a stand-in that's set.
+    private static var appLockPasswordService: any AppLockPasswordService {
+        #if DEBUG
+        if VaultMacScreenshotMode.isEnabled {
+            return VaultMacScreenshotMode.makeAppLockPasswordService()
+        }
+        #endif
+        return vaultPasswordService
+    }
 
     /// The App Lock Password on the vault's storage: setting it at the first launch, unlocking with it, changing it,
     /// and making a duress vault. The Mac never turns it off.
@@ -332,7 +402,7 @@ enum VaultMacRoot {
 
     /// The codes the widgets may show, handed over while the vault's unlocked and taken back as it locks (G98).
     static let widgetCodes = VaultMacWidgetCodes(
-        store: WidgetCodeHandoffStore(),
+        store: WidgetCodeHandoffStore(keychain: widgetKeychain(.codes)),
         isUnlocked: { !appLockService.isLocked },
         retrieveItems: { [vaultStore] in
             // Only an unlocked encrypted vault's: before the App Lock Password is first set, there's no vault.
@@ -345,7 +415,20 @@ enum VaultMacRoot {
     )
 
     /// Clears the codes widgets copy, as Vault's own copies are cleared (G87).
-    static let widgetCopies = VaultMacWidgetCopies(notes: WidgetCopiedCodeStore(), pasteboard: pasteboard)
+    static let widgetCopies = VaultMacWidgetCopies(
+        notes: WidgetCopiedCodeStore(keychain: widgetKeychain(.copiedCode)),
+        pasteboard: pasteboard,
+    )
+
+    /// The widgets' keychain item, or for the screenshots, memory, so the Mac's widgets never see the demo vault.
+    private static func widgetKeychain(_ item: WidgetKeychainItem) -> any WidgetKeychainStoring {
+        #if DEBUG
+        if VaultMacScreenshotMode.isEnabled {
+            return VaultMacScreenshotWidgetKeychain()
+        }
+        #endif
+        return item
+    }
 
     /// Hands the widgets codes, or takes them back, whenever the app locks or unlocks.
     private static func updateWidgetCodesWhenTheLockChanges() {
@@ -416,6 +499,15 @@ enum VaultMacRoot {
 
     // MARK: - Setup
 
+    /// Whether the app was launched for the App Store screenshots (`VaultMacScreenshotMode`). Never in a release build.
+    private static var isTakingScreenshots: Bool {
+        #if DEBUG
+        VaultMacScreenshotMode.isEnabled
+        #else
+        false
+        #endif
+    }
+
     /// The lock triggers, kept for as long as the app runs.
     private static var lockTriggers: VaultMacLockTriggers?
     private static var windowPrivacy: VaultMacWindowPrivacy?
@@ -429,13 +521,19 @@ enum VaultMacRoot {
         // them wherever they are.
         let interruptedErase = interruptedErase
         Task {
-            await SharedKeychainItems.moveFromTheAppGroup()
+            // The screenshots never touch the Mac's keychain items.
+            if !isTakingScreenshots {
+                await SharedKeychainItems.moveFromTheAppGroup()
+            }
             await interruptedErase?.finish()
         }
         // Whatever an earlier run left, which stopped without locking if there's any. Every launch starts locked.
         widgetCodes.withdrawLeftovers()
         widgetCopies.start()
-        lockTriggers = VaultMacLockTriggers(appLock: appLockService, authentication: deviceAuthenticationService)
+        // The screenshots open the lock themselves, and stay open whichever app is in front.
+        if !isTakingScreenshots {
+            lockTriggers = VaultMacLockTriggers(appLock: appLockService, authentication: deviceAuthenticationService)
+        }
         let windowPrivacy = VaultMacWindowPrivacy(localSettings: localSettings, appLock: appLockService)
         windowPrivacy.start(windows: NSApplication.shared.windows)
         self.windowPrivacy = windowPrivacy

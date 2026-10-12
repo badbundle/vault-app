@@ -53,7 +53,7 @@ public enum VaultRoot {
     private static var clockOffset: Double {
         #if DEBUG
         if ScreenshotMode.isEnabled {
-            return ScreenshotMode.clockOffset()
+            return DemoVault.clockOffset()
         }
         #endif
         return 0

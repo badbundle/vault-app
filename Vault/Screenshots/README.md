@@ -1,20 +1,22 @@
 # Marketing Screenshots
 
 App Store screenshots are generated, not hand-made: the app is captured on
-fresh simulators in a fixed demo state, then each capture is put in a device
-frame with a title and subtitle by
+fresh simulators, and the Mac app on this Mac, in a fixed demo state, then
+each capture is put in a device frame, or shown as a Mac window, with a title
+and subtitle by
 [device-screenshot-framer](https://github.com/badbundle/device-screenshot-framer),
 a Swift package dependency of `Vault` (its `framer` executable is run through
 `swift run`).
 
 ```sh
-make screenshots           # capture + frame, both device classes
+make screenshots           # capture + frame: iPhone, iPad and Mac
 make screenshots-capture   # raw captures only
 make screenshots-frame     # frame existing captures only (fast; iterate on copy here)
 ```
 
 Run from `Vault/`. Framed output lands in `fastlane/screenshots/en-US/`,
-which is where `upload_to_app_store` looks. The next `fastlane ios release`
+which is where `upload_to_app_store` looks, and the Mac's in
+`fastlane/screenshots-mac/en-US/` (see [Mac](#mac)). The next `fastlane ios release`
 uploads whatever is there, or `bundle exec fastlane ios upload_screenshots`
 uploads only the screenshots, without a build (see
 [`RELEASE.md`](../../RELEASE.md#updating-the-screenshots)). Either replaces
@@ -31,8 +33,13 @@ image is renamed or dropped, delete its old file too.
    `-screenshot-scene <scene>`, in light and then dark appearance. Captures go
    to `.build/screenshots/raw/<class>/NN-<scene>[-dark].png`. The simulators
    are deleted afterwards (`SCREENSHOT_KEEP_SIMULATORS=1` keeps them).
-3. `framer render` reads `iphone.json` / `ipad.json` and writes the framed
-   images.
+3. For `mac` it builds `VaultMacApp` (Debug) into the same derived data and
+   launches it once per scene and appearance on this Mac (see [Mac](#mac)).
+   Captures go to `.build/screenshots/raw/mac/NN-<scene>[-dark].png`.
+4. `framer render` reads `iphone.json`, `ipad.json` and `mac.json` and writes
+   the framed images.
+
+`capture.sh iphone`, `capture.sh mac` and so on capture only those classes.
 
 The launch argument is handled by `Sources/VaultiOS/Mocks/ScreenshotMode.swift`
 (debug builds only). It swaps in an empty in-memory vault so the simulator's
@@ -40,7 +47,8 @@ real vault is never shown or touched, seeds the demo items and tags defined
 there, and opens the requested scene. Add a scene there and to `SCENES` in
 `capture.sh` to capture a new screen.
 
-It also moves the app's clock (`ScreenshotMode.clockOffset`) so every demo
+The demo vault itself, shared with the Mac app, is `DemoVault` in VaultFeed.
+It also moves the app's clock (`DemoVault.clockOffset`) so every demo
 code is 3 seconds into its 30-second period as the app launches. After the
 capture's wait the countdown bars show about 70% left in every shot, never a
 nearly empty bar, and the codes are still the right ones for the clock's time.
@@ -74,6 +82,7 @@ the layouts crop most of it off.
 | ------ | ---------------------- | --------- | -------------- |
 | iphone | iPhone 18 Pro Max      | 1320×2868 | iPhone 6.9"    |
 | ipad   | iPad Pro 13-inch (M5)  | 2064×2752 | iPad 13"       |
+| mac    | this Mac, at 2x        | main window 2240×1400, Settings 1080×1632 | Mac, 2880×1800 |
 
 Override with `SCREENSHOT_IPHONE_DEVICE`, `SCREENSHOT_IPAD_DEVICE` and
 `SCREENSHOT_RUNTIME`. Each capture waits `SCREENSHOT_SETTLE_SECONDS`
@@ -84,10 +93,62 @@ or tests alongside the capture, or raise the wait. The framer detects the
 frame from the pixel size, so a different simulator needs a matching `device`
 in the config (`swift run -c release framer list-devices`).
 
+## Mac
+
+The Mac app has its own screenshot mode,
+`Sources/VaultMac/Mocks/VaultMacScreenshotMode.swift` (debug builds only),
+on the same `DemoVault`. `-screenshot-scene <scene>` runs the app on the demo
+vault in memory, with defaults, keychain items, widget codes and a storage
+directory of its own, so the Mac's own vault, keychain and widgets are never
+read or written. Touch ID passes, the App Lock Password is a stand-in that's
+set, and the lock triggers are off, so the scene stays open whichever app is
+in front. The main window is 1120×700 points, 16:10.
+
+| Scene      | Shows |
+| ---------- | ----- |
+| `feed`     | The list of items, none open. |
+| `detail`   | The first item's page (GitHub), with its code and countdown. |
+| `editor`   | That item's editor sheet, scrolled to Privacy & Security: locked, hidden behind `blue heron`, with the killphrase `paper lantern`. Nothing is saved. |
+| `lock`     | The lock screen, asking for the App Lock Password. |
+| `backups`  | Backups, on the backup password's page. |
+| `settings` | The Settings window's Security tab, with the App Lock Password and erasing after failed passwords on. |
+
+Every Vault window is kept out of screen captures (Hide While Recording,
+`sharingType` `.none`), and capturing the screen would need the screen
+recording permission, so `capture.sh` doesn't capture the screen. The app
+captures its own window: once the scene has settled it comes to the front,
+asks ScreenCaptureKit for its own window (`SCShareableContent.currentProcess`,
+which needs no permission), and writes it as a PNG to a file descriptor that
+`capture.sh` opens for it (`-screenshot-fd 3`), then quits. For that, screenshot
+mode alone sets its windows' `sharingType` to `.readOnly`; nothing else about
+their privacy changes, and a release build has no screenshot mode. Drawing the
+window in the app instead (`cacheDisplay`) leaves out everything on Liquid
+Glass or drawn with vibrancy, such as the sidebar.
+
+macOS draws a window at its display's scale, so the capture needs the window
+on a Retina display, and the Mac unlocked: on a display at 1x the app says so
+and `capture.sh` stops. Each launch takes the front for about 5 seconds, so
+the window is drawn active, with the list's selection in the accent colour;
+if it can't get the front, it captures nothing and `capture.sh` stops. Leave
+the Mac alone while it runs. `capture.sh` passes
+`-ApplePersistenceIgnoreState YES`, as the Mac UI tests do: launched from a
+terminal, an app that was stopped before it quit otherwise opens no window
+at all, and `-AppleShowScrollBars WhenScrolling`, so the lists have no scroll
+bars.
+
+The Mac App Store takes 1280×800, 1440×900, 2560×1600 or 2880×1800. `mac.json`
+renders 2880×1800, with each capture as a frameless window (`"frame":
+"window"`) with rounded corners and the drop shadow, in the iOS set's style.
+deliver sends every image in a folder to the one platform's version, telling
+devices apart only by size, so the Mac set is kept in
+`fastlane/screenshots-mac/en-US/`, out of the iOS lanes' folder, and
+`bundle exec fastlane mac upload_screenshots` replaces the Mac app's
+screenshots with exactly those, as the iOS lane does.
+
 ## Layouts and copy
 
 Titles, subtitles, frame colours, the background, and where each device and
-callout sits live in `iphone.json` and `ipad.json`; the
+callout sits live in `iphone.json`, `ipad.json` and `mac.json`; the
 [config reference](https://github.com/badbundle/device-screenshot-framer#config-file-reference)
 documents every key, including the
 [layouts](https://github.com/badbundle/device-screenshot-framer#layouts).
@@ -136,6 +197,19 @@ it keeps, then what it does when someone makes you open it.
 6. **Backups you can hold:** the Backups page, with its last backup ("Exported
    to PDF") lifted out.
 7. **Private by design:** Settings in light and dark, overlapping.
+
+The Mac tells the same story in five, in the same order, each a window (or
+two) on the same background:
+
+1. **Every code. Every secret.** The GitHub item open beside the list, with
+   its code lifted out.
+2. **Forced to unlock it?:** the dark lock screen, with the Settings window's
+   Security tab over it and Set Duress Password lifted out.
+3. **One search deletes it:** the editor sheet, with the killphrase lifted out.
+4. **Backups you can hold:** Backups, with the last backup ("Exported to
+   PDF") lifted out.
+5. **Private by design:** the list, with Settings in dark over it and Hide
+   While Recording lifted out.
 
 `deliver` orders each device's screenshots by file name (naturally sorted),
 so the numbers in the names are the order on the App Store.

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import VaultFeed
 
 /// What the Mac app adds to, and takes out of, the standard menus.
 struct VaultMacCommands: Commands {

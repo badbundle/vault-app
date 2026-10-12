@@ -1,4 +1,5 @@
 import SwiftUI
+import VaultCore
 import VaultFeed
 
 /// A code's digits, in groups, monospaced: hidden as dots while it's locked or not ready.
@@ -53,9 +54,12 @@ struct VaultMacCodeTimer: View {
     var state: OTPCodeTimerPeriodState
     var size: CGFloat = 14
 
+    /// The clock the codes are made by, so the ring empties as the code runs out, whatever that clock says.
+    @Environment(\.vaultMacClock) private var clock
+
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.1)) { context in
-            let remaining = state.animationState.initialFraction(currentTime: context.date.timeIntervalSince1970)
+        TimelineView(.animation(minimumInterval: 0.1)) { _ in
+            let remaining = state.animationState.initialFraction(currentTime: clock.currentTime)
             ZStack {
                 Circle()
                     .stroke(.quaternary, lineWidth: 2)
@@ -68,4 +72,9 @@ struct VaultMacCodeTimer: View {
         }
         .accessibilityHidden(true)
     }
+}
+
+extension EnvironmentValues {
+    /// The clock codes are made and count down by: the app's (`VaultMacRoot.clock`), as on iOS.
+    @Entry var vaultMacClock: any EpochClock = EpochClockImpl()
 }

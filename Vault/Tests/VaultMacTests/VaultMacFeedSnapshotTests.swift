@@ -34,6 +34,21 @@ struct VaultMacFeedSnapshotTests {
         )
     }
 
+    /// In a list as narrow as the main window gives it, the name and account truncate, and the code stays on one line.
+    @Test
+    func narrowList_keepsTheCodeOnOneLine() {
+        let view = List([MacTestItems.code(
+            issuer: "Example",
+            account: "ada.lovelace@analytical-engine.example",
+        )]) { item in
+            VaultMacItemRow(item: item, showsNextCode: false, copiesOnClick: true)
+        }
+        .vaultMacItemRowHeight()
+        .environment(\.vaultMacItemPreviews, .fixed)
+
+        assertSnapshot(of: view, as: .macWindow(width: 230, height: 80))
+    }
+
     @Test(arguments: MacAppearance.allCases)
     func codePage(appearance: MacAppearance) {
         let view = detail(MacTestItems.code(issuer: "Example", account: "ada@example.com"))

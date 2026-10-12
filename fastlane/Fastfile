@@ -197,3 +197,27 @@ platform :ios do
     tag_name
   end
 end
+
+platform :mac do
+  desc "Replace the Mac App Store screenshots with fastlane/screenshots-mac (no build, no listing)"
+  lane :upload_screenshots do
+    upload_to_app_store(
+      username: "badbundlelimited@gmail.com",
+      team_id: "442P244AFS",
+      app_identifier: "com.badbundle.vault",
+      # The Mac app's version of the app, which has its own screenshots. deliver sends every image in the folder to
+      # the one platform's version, telling devices apart only by size, so the Mac's are kept out of
+      # fastlane/screenshots, which the iOS lanes upload.
+      platform: "osx",
+      screenshots_path: "./fastlane/screenshots-mac",
+      skip_binary_upload: true,
+      skip_metadata: true,
+      # As in the iOS lane: the version App Store Connect is editing.
+      skip_app_version_update: true,
+      # The version's screenshots become exactly those in fastlane/screenshots-mac.
+      overwrite_screenshots: true,
+      # Skip the Preview.html confirmation so the lane runs non-interactively.
+      force: true
+    )
+  end
+end

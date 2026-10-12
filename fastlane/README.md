@@ -68,6 +68,19 @@ Tag and push the current commit for an uploaded App Store build
 
 ----
 
+
+## Mac
+
+### mac upload_screenshots
+
+```sh
+[bundle exec] fastlane mac upload_screenshots
+```
+
+Replace the Mac App Store screenshots with fastlane/screenshots-mac (no build, no listing)
+
+----
+
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
 
 More information about _fastlane_ can be found on [fastlane.tools](https://fastlane.tools).
