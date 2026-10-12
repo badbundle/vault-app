@@ -12,6 +12,23 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 ### Added
 
+- A native Mac app, on the same App Store record as the iPhone and iPad app, free and with no in-app purchases. It keeps a vault of its own, with no sync: items move between devices with a backup or the QR transfer, as between iPhones. Its App Lock Password is always on, set at the first launch, and asked for after Touch ID or the Mac's password. It has the iPhone app's codes, notes and recovery phrases, search, duress passwords, hidden items, killphrases, backups and auto-backups, AutoFill of time-based codes in Safari, and a desktop widget that shows codes only while Vault is unlocked. Hide While Recording keeps its windows out of screenshots, recordings and screen sharing, and it locks when another app comes to the front (or once the Require Unlock delay has passed), when the Mac locks or sleeps, and when its window closes. See `docs/mac-app.md`
+
+### Fixed
+
+- With an App Lock Password, killphrases and search passphrases stopped working in a vault moved to another Mac with Migration Assistant or a Time Machine restore: the keys that check them were kept in the keychain, beside the vault rather than in it. Each vault now keeps its own inside its encryption, so they go wherever it goes, and a duress vault has keys of its own. A vault made before this takes its keys in the first time it's opened, so open each vault once before moving it. Without the password, the keys stay in the keychain, as the vault isn't encrypted
+- On a screen whose safe area is wider on one side than the other, such as the iPhone Duo's unfolded, the lock screen's vault door sat off-centre, as did the privacy and screen-capture covers'. The door is now in the middle of the screen, and the words and buttons beneath it move across to be under it as far as they can while staying clear of the screen's edges
+
+### Changed
+
+- Backup passwords and encrypted items' passwords are turned into keys with Argon2id, using 512 MB and 256 MB of memory, so each guess at a leaked backup or a copied item costs far more. Setting a backup password, or restoring a backup, takes seconds rather than minutes, and says it can take up to a minute. A backup password set before is strengthened in the background the first time Backups opens, without asking for it again, and backups made with it before still restore with it. An encrypted item is strengthened the first time its password opens it, with nothing else about it changed. A backup or item made by a newer version of Vault says to update Vault
+- The count of wrong App Lock Passwords is kept in the keychain where only Vault and its AutoFill extension can read it, and Vault's widgets can't. It moves there the first time Vault or AutoFill opens after updating, as it was
+- iOS and the Mac are released together, always with the same version and build number. Every target's version comes from `VaultApp/Version.xcconfig`, and `make validate` checks they all match
+
+## [2.0] - 2026-10-07
+
+### Added
+
 - Initial release
 - Minimum deployment target is iOS 26 (iOS 26.5 for the widgets)
 - Storage for secure notes
@@ -43,11 +60,9 @@ Only app binary versions >2.0 should be used in production for this reason.
 - The editor's Tags, Encryption and Password rows needed a second tap to open their sheets
 - VoiceOver read the editor's text fields and recovery phrase words without their names
 - Killphrases didn't delete anything, and items that only show for their passphrase couldn't be found, after restoring a backup on another iPhone or after an erase. Backups now carry the keys that check them, and restoring one adds them to this device. Backups made before this don't carry them, so their phrases only work on the device that made them
-- With an App Lock Password, killphrases and search passphrases stopped working in a vault moved to another Mac with Migration Assistant or a Time Machine restore: the keys that check them were kept in the keychain, beside the vault rather than in it. Each vault now keeps its own inside its encryption, so they go wherever it goes, and a duress vault has keys of its own. A vault made before this takes its keys in the first time it's opened, so open each vault once before moving it. Without the password, the keys stay in the keychain, as the vault isn't encrypted
 - Moving the vault to another device with QR codes counted as a backup, so the Backups page and the App Lock Password screen could show a recent backup when nothing had been saved. Transfers aren't counted any more, including one made before this change
 - At the largest text sizes, codes in the feed ran off the edge of the screen, and the item editor wrapped its titles a word to a line with "Continue" split in two. The feed now shows a card per row at those sizes, and the editor puts each step's icon above its title
 - Codes with a period other than 30 seconds, such as 60, came out wrong in AutoFill's QuickType bar and in widgets, which always worked them out as 30 second codes. They now use the code's own period, as the feed does
-- On a screen whose safe area is wider on one side than the other, such as the iPhone Duo's unfolded, the lock screen's vault door sat off-centre, as did the privacy and screen-capture covers'. The door is now in the middle of the screen, and the words and buttons beneath it move across to be under it as far as they can while staying clear of the screen's edges
 
 ### Changed
 
@@ -92,8 +107,6 @@ Only app binary versions >2.0 should be used in production for this reason.
 - Setting a duress password asks for the current App Lock Password, which waits after wrong ones as changing the password does
 - Encrypted items, recovery phrases and backups are encrypted with Apple's CryptoKit instead of the CryptoSwift library. It's the same AES-GCM, so everything encrypted before opens as it always has, and saving a backup is faster. All of Vault's encryption is now Apple's
 - Help and the privacy policy say more exactly where Vault's data goes: the iPhone's own backups include the vault, and Vault has no analytics. The Duress Password page explains killphrases, and what can still give a duress vault away
-- Backup passwords and encrypted items' passwords are turned into keys with Argon2id, using 512 MB and 256 MB of memory, so each guess at a leaked backup or a copied item costs far more. Setting a backup password, or restoring a backup, takes seconds rather than minutes, and says it can take up to a minute. A backup password set before is strengthened in the background the first time Backups opens, without asking for it again, and backups made with it before still restore with it. An encrypted item is strengthened the first time its password opens it, with nothing else about it changed. A backup or item made by a newer version of Vault says to update Vault
-- The count of wrong App Lock Passwords is kept in the keychain where only Vault and its AutoFill extension can read it, and Vault's widgets can't. It moves there the first time Vault or AutoFill opens after updating, as it was
 
 ### Removed
 
