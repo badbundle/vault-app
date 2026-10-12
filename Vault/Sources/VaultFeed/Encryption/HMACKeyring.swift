@@ -3,7 +3,7 @@ import Foundation
 import FoundationExtensions
 import VaultCore
 
-/// The HMAC keys on this device for one kind of phrase digest, killphrases or search passphrases.
+/// The HMAC keys in this device's keychain for one kind of phrase digest, killphrases or search passphrases.
 ///
 /// - **This device's own key** makes every new digest. It's made and stored the first time it's needed.
 /// - **Keys from backups** are those restored backups brought with them, which their items' digests were made with
@@ -13,6 +13,10 @@ import VaultCore
 /// Both are keychain items with `.whenUnlocked` access (no biometric prompt), never synced, so matching works as soon
 /// as the device is unlocked. Every backup carries every key, and every match tries every key
 /// (`anyKey(of:authenticates:message:)`). An erase deletes both items (`VaultEraser`).
+///
+/// They're the plain store's keys. An encrypted vault keeps its own in its payload (`VaultPhraseKeyrings`): turning
+/// encryption on moves these into it, and a vault made before vaults kept their own takes a copy of them the first
+/// time it opens (`OpenVaultPhraseKeyrings`).
 struct HMACKeyring: Sendable {
     private let secureStorage: any SecureStorage
     private let ownKeyItem: String
@@ -57,6 +61,30 @@ struct HMACKeyring: Sendable {
         guard keysFromBackups.count > existing.count else { return }
         let data = keysFromBackups.reduce(into: Data()) { $0.append($1.data) }
         try await secureStorage.storeSilent(data: data, forKey: backupKeysItem)
+    }
+
+    /// Every key on the keyring, this device's own first if there is one, without making one. Empty if there are
+    /// none.
+    func loadAllKeys() async throws -> [KeyData<32>] {
+        let ownKey = try await secureStorage.retrieveSilent(key: ownKeyItem).map { try KeyData<32>(data: $0) }
+        return try await (ownKey.map { [$0] } ?? []) + loadKeysFromBackups()
+    }
+
+    /// The keyring as it is, to move into a vault: this device's own key, or a new one if it has none yet, which
+    /// then has made no digest, and the keys from backups. Nothing is stored.
+    func loadForMoving() async throws -> VaultPhraseKeyrings.Keyring {
+        let ownKey = try await secureStorage.retrieveSilent(key: ownKeyItem).map { try KeyData<32>(data: $0) }
+        return try await VaultPhraseKeyrings.Keyring(
+            ownKey: ownKey ?? .random(),
+            keysFromBackups: loadKeysFromBackups(),
+        )
+    }
+
+    /// Deletes the keyring: the keys from backups first, then the device's own key, so one left behind is always the
+    /// key that makes digests.
+    func delete() async throws {
+        try await secureStorage.remove(key: backupKeysItem)
+        try await secureStorage.remove(key: ownKeyItem)
     }
 
     /// The keys stored one after another. Bytes left over that don't make a whole key are ignored.

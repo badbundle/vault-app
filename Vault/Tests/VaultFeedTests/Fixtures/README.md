@@ -97,6 +97,32 @@ slower: it derives with the header's.
 The items, tags and settings are `SlotFileFixture.real` and `SlotFileFixture.duress`. The salt, each key box's
 generation and each vault's duress slots were chosen at random, and are recorded there too.
 
+### `slot-file-v1-payload-v2-vault-slots.bin`
+
+A whole encrypted vault file, stored as `slot-file-v1-vault-slots.bin` is, with payload version 2, where each vault
+keeps its own killphrase and search passphrase keyrings in its payload (VAULT-127). Recorded on 12 October 2026 by
+`GoldenFixtureRecorder`. Its header has the same cheap Argon2id parameters. The fixture stores the header, then slot 9,
+then slot 11.
+
+| Slot | Password | Holds |
+| --- | --- | --- |
+| 9 | `correct horse battery staple` | The real vault. |
+| 11 | `café au lait`, with a composed `é` | The duress vault. |
+| The other 14 | None | Random bytes. |
+
+- **The real vault** was made as turning on the App Lock Password makes it from a plain store whose keychain held
+  these keyrings: killphrase keys of 32 bytes of `0xE1`, its own, and `0xE3`, which a restored backup brought, and a
+  search passphrase key of `0xE2`. It holds a TOTP code whose killphrase, `kill me`, is digested with `0xE1`, a note
+  hidden until its search passphrase, `find me`, digested with `0xE2`, is typed, and an HOTP code whose killphrase,
+  `kill me too`, is digested with `0xE3`.
+- **The duress vault** was made from the real vault by its store, which gave it keyrings of its own, then given a TOTP
+  code by importing it, whose killphrase, `duress kill`, is digested with its own killphrase key.
+
+The items and keyrings are `SlotFileKeyringsFixture.real` and `SlotFileKeyringsFixture.duress`. The salt, each key box's
+generation, each vault's duress slots, the duress vault's keys and its killphrase's salt and digest were chosen at
+random, and are recorded there too. The tests check each vault's phrases match with its own keyrings and no other's,
+and that a vault opened on a device whose keychain has none of its keys still finds its hidden note.
+
 ### `encrypted-note-v1.json`
 
 An encrypted note as the app stores it: a vault payload, version 1, which is the JSON a slot holds before it's

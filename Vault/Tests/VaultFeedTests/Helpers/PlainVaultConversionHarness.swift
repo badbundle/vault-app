@@ -22,6 +22,9 @@ struct PlainVaultConversionHarness {
     let wrapStamp = InMemoryWrapStampStorage()
     /// The plain store's backup settings, which the conversion moves into the vault.
     let deviceBackupSettings: FakeDeviceBackupSettings
+    /// The keychain the plain store's killphrase and search passphrase keyrings are in, which the conversion moves
+    /// into the vault.
+    let phraseKeyringStorage: InMemorySecureStorage
     let converter: VaultEncryptionConverter
 
     /// - Parameters:
@@ -60,8 +63,10 @@ struct PlainVaultConversionHarness {
         let log = SharedMutex([String]())
         let attemptStorage = LoggingAttemptStorage(log: log)
         let deviceBackupSettings = FakeDeviceBackupSettings(log: log)
+        let phraseKeyringStorage = InMemorySecureStorage()
         self.directory = directory
         self.deviceBackupSettings = deviceBackupSettings
+        self.phraseKeyringStorage = phraseKeyringStorage
         self.store = store
         self.session = session
         self.fileSystem = fileSystem
@@ -97,7 +102,13 @@ struct PlainVaultConversionHarness {
             },
             wrapStamper: wrapStamper,
             deviceBackupSettings: deviceBackupSettings,
+            devicePhraseKeyrings: DevicePhraseKeyrings(secureStorage: phraseKeyringStorage),
         )
+    }
+
+    /// The plain store's killphrase and search passphrase keyrings, in the keychain.
+    var devicePhraseKeyrings: DevicePhraseKeyrings {
+        DevicePhraseKeyrings(secureStorage: phraseKeyringStorage)
     }
 
     func encrypt(deletingArchives: Bool = false) async throws {

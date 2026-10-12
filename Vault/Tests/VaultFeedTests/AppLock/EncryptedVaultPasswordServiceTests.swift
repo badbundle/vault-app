@@ -527,6 +527,7 @@ extension EncryptedVaultPasswordServiceTests {
                     attemptCounter: attemptCounter,
                     deviceKeyStore: keychain.deviceKeys,
                     settings: settings,
+                    phraseKeyrings: DevicePhraseKeyrings(secureStorage: keychain.secureStorage),
                 ),
                 attemptCounter: attemptCounter,
                 settings: settings,
@@ -561,6 +562,7 @@ extension EncryptedVaultPasswordServiceTests {
                         },
                         wrapStamper: wrapStamper,
                         deviceBackupSettings: FakeDeviceBackupSettings(),
+                        devicePhraseKeyrings: DevicePhraseKeyrings(secureStorage: keychain.secureStorage),
                     )
                 },
             )

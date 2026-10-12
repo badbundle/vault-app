@@ -6,6 +6,11 @@ import Foundation
 /// { "items": [VaultItemRecord], "tags": [VaultTagRecord], "vault": VaultMetadata }
 /// ```
 ///
+/// - **Version 1** has no keyrings in `vault`.
+/// - **Version 2** adds `vault.keyrings`, the vault's own killphrase and search passphrase keys
+///   (`VaultPhraseKeyrings`). A version 1 payload reads with none. An app that only knew version 1 would drop them the
+///   next time it saved, and every phrase they check would stop working, so it refuses version 2 instead.
+///
 /// - **Keys** are the records' property names.
 /// - **Dates** are `Date`'s own encoding, seconds since 2001, which reads back exactly. Milliseconds since 1970 would
 ///   round about half of all dates, and a vault read back would no longer equal the one saved.
@@ -15,7 +20,7 @@ import Foundation
 /// fields, and must read every earlier one. This version refuses anything newer than itself, rather than dropping
 /// what it doesn't understand the next time it saves.
 enum EncryptedVaultPayload {
-    static let currentVersion: UInt32 = 1
+    static let currentVersion: UInt32 = 2
 
     static func encode(_ state: VaultRecordState) throws -> VaultSlotPayload {
         let contents = Contents(items: state.items, tags: state.tags, vault: state.vault)

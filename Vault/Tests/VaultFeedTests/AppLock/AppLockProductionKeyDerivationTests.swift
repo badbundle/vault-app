@@ -33,6 +33,7 @@ struct AppLockProductionKeyDerivationTests {
                 calibrate: { try AppLockKeyDerivationCalibrator().calibrate() },
                 wrapStamper: wrapStamper,
                 deviceBackupSettings: FakeDeviceBackupSettings(),
+                devicePhraseKeyrings: DevicePhraseKeyrings(secureStorage: InMemorySecureStorage()),
             )
             let unlockService = VaultUnlockService(
                 file: EncryptedVaultFile(directory: directory),

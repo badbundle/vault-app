@@ -233,6 +233,55 @@ extension DuressVaultTests {
         #expect(try fixture.state(ofSlot: realSlot, password: "real").vault.settings == settings)
     }
 
+    /// A duress vault has killphrase and search passphrase keyrings of its own, in its payload, from the start: none of
+    /// the vault it was made from's keys, so nothing in it checks that vault's phrases, and a backup of it carries
+    /// none of them (VAULT-127).
+    @Test
+    func makeDuressVault_startsWithKeyringsOfItsOwn() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot)
+        let real = try fixture.open(slot: realSlot, password: "real")
+        var withARestoredKey = try #require(await real.phraseKeyrings)
+        withARestoredKey.killphrase.add([.repeating(byte: 0x0B)])
+        let realKeyrings = withARestoredKey
+        try await real.updatePhraseKeyrings { _ in realKeyrings }
+        let target = await real.records.state.vault.duressSlots[0]
+
+        try await real.makeDuressVault(password: "duress")
+
+        let duressKeyrings = try #require(try fixture.state(ofSlot: target, password: "duress").vault.keyrings)
+        let realKeys = Set(realKeyrings.killphrase.allKeys + realKeyrings.searchPassphrase.allKeys)
+        let duressKeys = Set(duressKeyrings.killphrase.allKeys + duressKeyrings.searchPassphrase.allKeys)
+        #expect(realKeys.isDisjoint(with: duressKeys))
+        #expect(duressKeyrings.killphrase.keysFromBackups.isEmpty)
+        #expect(duressKeyrings.searchPassphrase.keysFromBackups.isEmpty)
+        #expect(try fixture.state(ofSlot: realSlot, password: "real").vault.keyrings == realKeyrings)
+    }
+
+    /// Adding keys to a duress vault's keyrings, as restoring a backup into it does, changes only its own slot.
+    @Test
+    func duressVault_addingKeysToItsKeyrings_changesOnlyItsSlot() async throws {
+        let fixture = try DuressFixture(realSlot: realSlot)
+        let real = try fixture.open(slot: realSlot, password: "real")
+        let target = await real.records.state.vault.duressSlots[0]
+        try await real.makeDuressVault(password: "duress")
+        let duress = try fixture.open(slot: target, password: "duress")
+        let before = try fixture.contents()
+
+        try await duress.updatePhraseKeyrings { keyrings in
+            var keyrings = keyrings ?? .random()
+            keyrings.killphrase.add([.repeating(byte: 0x0C)])
+            return keyrings
+        }
+
+        let after = try fixture.contents()
+        for index in VaultSlotFile.slotIndices where index != target {
+            #expect(after.bytes[after.slotRange(index)] == before.bytes[before.slotRange(index)])
+        }
+        #expect(try fixture.state(ofSlot: target, password: "duress").vault.keyrings?.killphrase.keysFromBackups == [
+            .repeating(byte: 0x0C),
+        ])
+    }
+
     /// Whatever a vault's backup settings hold, the section has the same keys at every level: a real vault with every
     /// setting set, and a new duress vault with none, look alike but for the values.
     @Test
@@ -565,6 +614,8 @@ private struct DuressFixture {
         var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
         var state = try EncryptedVaultStoreTests.state(items: items, tags: tags)
         state.vault.duressSlots = duressSlots ?? VaultDuressSlots.forFirstVault(inSlot: realSlot)
+        // As turning on the App Lock Password gives it.
+        state.vault.keyrings = .random()
         try contents.createVault(
             inSlot: realSlot,
             rootKey: contents.header.passwordKey(for: realPassword),

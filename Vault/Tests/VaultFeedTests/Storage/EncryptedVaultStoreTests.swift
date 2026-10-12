@@ -42,7 +42,9 @@ struct EncryptedVaultStoreTests {
     func init_refusesAVaultSavedByANewerVersion() async throws {
         let fixture = try EncryptedVaultFixture(payloadVersion: EncryptedVaultPayload.currentVersion + 1)
 
-        await #expect(throws: EncryptedVaultStoreError.unsupportedPayloadVersion(2)) {
+        await #expect(throws: EncryptedVaultStoreError
+            .unsupportedPayloadVersion(EncryptedVaultPayload.currentVersion + 1))
+        {
             try await fixture.openStore()
         }
     }

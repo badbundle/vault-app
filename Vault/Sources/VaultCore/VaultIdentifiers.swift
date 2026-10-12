@@ -36,6 +36,10 @@ public enum VaultIdentifiers {
         case killphraseBackupKeys = "vault.secure-storage.killphrase-backup-keys.v1"
         /// Search passphrase HMAC keys that restored backups brought with them, as `killphraseBackupKeys`.
         case searchPassphraseBackupKeys = "vault.secure-storage.search-passphrase-backup-keys.v1"
+        /// The killphrase and search passphrase keyrings of the encrypted vault the device key opens, while the App
+        /// Lock Password is off: turning it off moves them here from the vault's payload, and turning it back on moves
+        /// them back. Same access class as `killphraseKey`.
+        case phraseKeyringsWhilePasswordOff = "vault.secure-storage.phrase-keyrings-while-password-off.v1"
         /// Wrong attempts at the app lock password, and when the latest was made. Kept on this device only, and
         /// readable only while it's unlocked, with no biometric prompt.
         case appLockPasswordAttempts = "vault.secure-storage.app-lock-password-attempts.v1"

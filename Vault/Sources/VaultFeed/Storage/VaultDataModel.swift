@@ -146,14 +146,14 @@ public final class VaultDataModel {
     /// also brings it up to date.
     public private(set) var backupPasswordStatus: BackupPasswordStatus = .unknown
 
-    /// Derived from the unlocked vault key. Cached here so the killphrase
-    /// match and write paths can avoid redoing HKDF on every keystroke.
-    /// `nil` whenever the vault is not currently unlocked.
+    /// Made from the open vault's killphrase keyring (`OpenVaultPhraseKeyrings`). Cached here so the killphrase
+    /// match and write paths don't read the keys on every keystroke. Loaded on `setup()`, and again whenever the open
+    /// vault changes (`openVaultDidChange()`), as each vault has its own keys. `nil` while no vault is open, or its
+    /// keys couldn't be read.
     public private(set) var killphraseDigester: KillphraseDigester?
 
     /// Cached search-passphrase HMAC digester. Same lifecycle as
-    /// `killphraseDigester` — loaded on `setup()`, retained across the
-    /// unlocked-device session, used for both the live search predicate
+    /// `killphraseDigester`, used for both the live search predicate
     /// (passphrase-protected item match) and the editor write path.
     public private(set) var searchPassphraseDigester: SearchPassphraseDigester?
 
@@ -247,15 +247,18 @@ public final class VaultDataModel {
         await updateCurrentPayloadHash()
     }
 
-    /// Loads or generates the killphrase HMAC key and caches a digester
-    /// for the lifetime of the unlocked-device session. Safe to call
-    /// multiple times — no-op if digester is already built.
+    /// Loads or generates the open vault's killphrase HMAC key and caches a
+    /// digester while that vault is open. Safe to call multiple times —
+    /// no-op if digester is already built. One made for a vault that's no
+    /// longer open is dropped (`openVaultDidChange()`).
     public func loadKillphraseDigester() async {
         if killphraseDigester != nil {
             return
         }
+        let change = openVaultChanges
         do {
             let digester = try await makeKillphraseDigester()
+            guard change == openVaultChanges else { return }
             killphraseDigester = digester
             // Phase B of the V1 → V2 killphrase migration. Idempotent;
             // does nothing if there are no pending entries. Best-effort —
@@ -263,21 +266,24 @@ public final class VaultDataModel {
             await killphraseRehashService?.run(using: digester)
         } catch {
             // Silent failure: we don't want to surface an alert here. The
-            // killphrase deleter will simply remain a no-op until next
+            // killphrase deleter will simply remain a no-op until the keys
+            // are read again, when the open vault next changes or at the next
             // launch. No telemetry per MANIFESTO C3.
         }
     }
 
-    /// Loads or generates the search-passphrase HMAC key and caches a
-    /// digester for the lifetime of the unlocked-device session. Same
-    /// shape as `loadKillphraseDigester`; failure leaves passphrase
-    /// matching disabled until next launch.
+    /// Loads or generates the open vault's search-passphrase HMAC key and
+    /// caches a digester while that vault is open. Same shape as
+    /// `loadKillphraseDigester`; failure leaves passphrase matching disabled
+    /// until the keys are read again.
     public func loadSearchPassphraseDigester() async {
         if searchPassphraseDigester != nil {
             return
         }
+        let change = openVaultChanges
         do {
             let digester = try await makeSearchPassphraseDigester()
+            guard change == openVaultChanges else { return }
             searchPassphraseDigester = digester
             // Phase B of the V2 → V3 search-passphrase migration.
             await searchPassphraseRehashService?.run(using: digester)
@@ -368,10 +374,11 @@ extension VaultDataModel {
     public func purgeSensitiveData() {
         backupPassword = .notFetched
         backupPasswordLoadingState = .notLoading
-        // killphraseDigester is intentionally NOT cleared. The key it
-        // wraps is a device-bound HMAC key (not the user's password), is
-        // re-fetched silently from keychain on next launch, and clearing
-        // it would break killphrase deletion until the next setup call.
+        // The digesters are intentionally NOT cleared here: the plain store
+        // stays open behind the app lock, and clearing them would break
+        // killphrase deletion until they're read again. They follow the open
+        // vault instead, so an encrypted vault's go when it locks
+        // (`openVaultDidChange()`).
     }
 
     /// Forgets everything read from the vault, for when the app locks: the
@@ -406,9 +413,11 @@ extension VaultDataModel {
 extension VaultDataModel {
     /// Follows the vault that's open now, once its backup settings have
     /// reloaded (`OpenVaultBackupSettings`): forgets the backup password, its
-    /// status, the last backup event and the payload hash of the vault that was
-    /// open, and reads the open vault's. While the vault is locked there are
-    /// none, so the Backups page never shows one vault's backups in another.
+    /// status, the last backup event, the payload hash and the killphrase and
+    /// search passphrase digesters of the vault that was open, and reads the
+    /// open vault's. While the vault is locked there are none, so the Backups
+    /// page never shows one vault's backups in another, and no vault's
+    /// phrases are checked with another's keys.
     public func openVaultDidChange() async {
         openVaultChanges += 1
         let change = openVaultChanges
@@ -417,6 +426,12 @@ extension VaultDataModel {
         backupPasswordStatus = .unknown
         lastBackupEvent = backupEventLogger.lastBackupEvent()
         currentPayloadHash = nil
+        killphraseDigester = nil
+        searchPassphraseDigester = nil
+        // Each vault has keyrings of its own (`OpenVaultPhraseKeyrings`). A vault made before that takes its copy now.
+        await loadKillphraseDigester()
+        await loadSearchPassphraseDigester()
+        guard change == openVaultChanges else { return }
 
         let status: BackupPasswordStatus
         do {
@@ -766,21 +781,27 @@ extension VaultDataModel {
         onDataChanged?()
     }
 
-    /// Adds the keys a backup brought to this device's keyrings, before its items are imported, and makes the
+    /// Adds the keys a backup brought to the open vault's keyrings, before its items are imported, and makes the
     /// digesters again with them, so its killphrases and search passphrases match here as they did where it was made.
+    /// An encrypted vault keeps them in its payload, and the plain store in the keychain (`OpenVaultPhraseKeyrings`).
     /// If the keys can't be added, nothing's imported.
     ///
-    /// A backup made before the keys went with it brings none. Its phrases only match on a device that still has the
-    /// keys they were digested with.
+    /// A backup made before the keys went with it brings none. Its phrases only match where the keys they were
+    /// digested with are still on the vault's keyrings.
     private func addKeysFromBackup(of payload: VaultApplicationPayload) async throws {
         guard payload.killphraseKeys.isNotEmpty || payload.searchPassphraseKeys.isNotEmpty else { return }
+        let change = openVaultChanges
         try await killphraseKeyStore.addKeysFromBackup(payload.killphraseKeys)
         try await searchPassphraseKeyStore.addKeysFromBackup(payload.searchPassphraseKeys)
-        if let digester = try? await makeKillphraseDigester() {
-            killphraseDigester = digester
+        let killphraseDigester = try? await makeKillphraseDigester()
+        let searchPassphraseDigester = try? await makeSearchPassphraseDigester()
+        // Another vault's keys mustn't check this one's phrases.
+        guard change == openVaultChanges else { return }
+        if let killphraseDigester {
+            self.killphraseDigester = killphraseDigester
         }
-        if let digester = try? await makeSearchPassphraseDigester() {
-            searchPassphraseDigester = digester
+        if let searchPassphraseDigester {
+            self.searchPassphraseDigester = searchPassphraseDigester
         }
     }
 }
@@ -788,8 +809,8 @@ extension VaultDataModel {
 // MARK: - Export
 
 extension VaultDataModel {
-    /// The open vault, for a backup or a move to another device, with every key on this device's killphrase and
-    /// search passphrase keyrings. The keys go with the vault so its phrases still work wherever it's restored.
+    /// The open vault, for a backup or a move to another device, with every key on its killphrase and search
+    /// passphrase keyrings. The keys go with the vault so its phrases still work wherever it's restored.
     public func makeExport(userDescription: String) async throws -> VaultApplicationPayload {
         // No need to refetch items, this export is pulled directly from the store.
         var payload = try await vaultStore.exportVault(userDescription: userDescription)

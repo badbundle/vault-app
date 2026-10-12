@@ -7,9 +7,13 @@ import Foundation
 ///   neither: there's nothing to journal.
 /// - **Turn off** (`turnOffPassword(current:)`): checks the current password, makes a new device key, journals
 ///   `turningOff`, rekeys the slot to the device key, and settles the `deviceKey` mode. The file becomes readable
-///   after the first unlock, like the plain store, so the widgets can read it (VAULT-50).
+///   after the first unlock, like the plain store, so the widgets can read it (VAULT-50). The vault's killphrase and
+///   search passphrase keyrings move from its payload to the keychain (`DevicePhraseKeyrings`): stored there first,
+///   then taken out of the payload in the rekey's own write, so they're never only in a file the device key opens.
 /// - **Turn back on** (`turnOnPassword(_:)`), from the `deviceKey` mode: journals `turningOn`, rekeys the slot to the
-///   new password (same salt), settles the `password` mode, and deletes the device key.
+///   new password (same salt), settles the `password` mode, and deletes the device key. The keyrings move back into
+///   the payload in the rekey's write, and only then are they deleted from the keychain. A vault whose password was
+///   turned off before vaults kept their own takes a copy of this device's keyrings instead, which stay.
 /// - **Erasing after failed passwords** (`setErasesAfterFailedPasswords(_:current:)`, VAULT-34): checks the current
 ///   password, and turns it on or off. It's a setting of the device, not of a vault, so the open vault's own password
 ///   changes it, a duress vault's included. Turning the password off, or back on, turns it off.
@@ -65,12 +69,15 @@ public actor VaultPasswordChangeService {
     private let attemptCounter: AppLockPasswordAttemptCounter
     private let deviceKeyStore: any VaultDeviceKeyStoring
     private let settings: AppLockSettingsStore
+    private let phraseKeyrings: DevicePhraseKeyrings
     private let backgroundTime: VaultBackgroundTime
     private let hooks: Hooks
     private var isChanging = false
 
     /// - Parameters:
     ///   - settings: The app lock's settings, with erasing after failed passwords.
+    ///   - phraseKeyrings: The killphrase and search passphrase keyrings in the keychain, where turning the password
+    ///     off moves the vault's.
     ///   - backgroundTime: Keeps the app running until a change has finished: `.application` in the app.
     ///   - hooks: Brings the widgets, QuickType and AutoFill up to date with the password turned off or on.
     public init(
@@ -80,6 +87,7 @@ public actor VaultPasswordChangeService {
         attemptCounter: AppLockPasswordAttemptCounter,
         deviceKeyStore: any VaultDeviceKeyStoring = VaultDeviceKeychainStore(),
         settings: AppLockSettingsStore,
+        phraseKeyrings: DevicePhraseKeyrings,
         backgroundTime: VaultBackgroundTime,
         hooks: Hooks,
     ) {
@@ -91,6 +99,7 @@ public actor VaultPasswordChangeService {
             attemptCounter: attemptCounter,
             deviceKeyStore: deviceKeyStore,
             settings: settings,
+            phraseKeyrings: phraseKeyrings,
             backgroundTime: backgroundTime,
             hooks: hooks,
         )
@@ -104,6 +113,7 @@ public actor VaultPasswordChangeService {
         attemptCounter: AppLockPasswordAttemptCounter,
         deviceKeyStore: any VaultDeviceKeyStoring,
         settings: AppLockSettingsStore,
+        phraseKeyrings: DevicePhraseKeyrings,
         backgroundTime: VaultBackgroundTime = .none,
         hooks: Hooks = Hooks(passwordDidTurnOff: {}, passwordDidTurnOn: {}),
     ) {
@@ -114,6 +124,7 @@ public actor VaultPasswordChangeService {
         self.attemptCounter = attemptCounter
         self.deviceKeyStore = deviceKeyStore
         self.settings = settings
+        self.phraseKeyrings = phraseKeyrings
         self.backgroundTime = backgroundTime
         self.hooks = hooks
     }
@@ -176,7 +187,18 @@ extension VaultPasswordChangeService {
                 return refused
             }
             let deviceKeyStore = deviceKeyStore
-            try await rekey(vault, journaling: .turningOff, becoming: .deviceKey) {
+            let phraseKeyrings = phraseKeyrings
+            // The keyrings are kept in the keychain before the rekey takes them out of the payload, in its own write.
+            let keyrings = EncryptedVaultStore.KeyringsMove.out { keyrings in
+                if let keyrings {
+                    try await phraseKeyrings.storePasswordOffKeyrings(keyrings)
+                } else {
+                    // A vault made before vaults kept their own uses this device's keyrings, with the password off
+                    // too, and never the keyrings another vault left while the password was off.
+                    try await phraseKeyrings.deletePasswordOffKeyrings()
+                }
+            }
+            try await rekey(vault, journaling: .turningOff, becoming: .deviceKey, keyrings: keyrings) {
                 try .device(deviceKeyStore.makeNewDeviceKey())
             }
             // Erasing after failed passwords means nothing without one. Attempted, not required: the password is off
@@ -200,8 +222,20 @@ extension VaultPasswordChangeService {
             try settings.setErasesAfterFailedPasswords(false)
             try await attemptCounter.reset()
             let key = try await passwordKey(for: password)
+            // The vault's keyrings, as turning the password off left them. A vault turned off before vaults kept
+            // their own takes a copy of this device's, which other vaults made then may still need.
+            let passwordOffKeyrings = try await phraseKeyrings.passwordOffKeyrings()
+            let keyrings = if let passwordOffKeyrings {
+                passwordOffKeyrings
+            } else {
+                try await phraseKeyrings.copiesForAVault()
+            }
             // Settling deletes the device key, once it's shown to open nothing.
-            try await rekey(vault, journaling: .turningOn, becoming: .password) { key }
+            try await rekey(vault, journaling: .turningOn, becoming: .password, keyrings: .in(keyrings)) { key }
+            if passwordOffKeyrings != nil {
+                // They're in the payload now. If deleting them fails, the next turn off replaces them.
+                try? await phraseKeyrings.deletePasswordOffKeyrings()
+            }
         }
     }
 
@@ -339,9 +373,10 @@ extension VaultPasswordChangeService {
         }.value
     }
 
-    /// Journals the change of mode, rekeys the vault's slot to the key `rootKey` makes, then settles the mode from
-    /// what the file holds, as launch recovery would if the app stopped now, rather than from what the rekey
-    /// reported. So a rekey that failed leaves the mode as it was, and one that worked moves it on.
+    /// Journals the change of mode, rekeys the vault's slot to the key `rootKey` makes, moving its keyrings as
+    /// `keyrings` says in the same write, then settles the mode from what the file holds, as launch recovery would if
+    /// the app stopped now, rather than from what the rekey reported. So a rekey that failed leaves the mode as it
+    /// was, and one that worked moves it on.
     ///
     /// All of it runs as a call underway on the session, so a lock waits for it, and nothing starts if the vault has
     /// locked since it was opened. If settling can't save the state, it's tried again, and after that the journal is
@@ -350,6 +385,7 @@ extension VaultPasswordChangeService {
         _ vault: OpenVault,
         journaling transition: VaultStorageState.Transition,
         becoming mode: VaultStorageState.Mode,
+        keyrings: EncryptedVaultStore.KeyringsMove,
         to rootKey: @escaping @Sendable () throws -> VaultSlotRootKey,
     ) async throws {
         let stateFile = stateFile
@@ -360,7 +396,11 @@ extension VaultPasswordChangeService {
                 try await stateFile.update { $0.transition = transition }
                 var rekeyError: (any Error)?
                 do {
-                    try await vault.store.rekey(to: key, protection: EncryptedVaultFile.protection(for: mode))
+                    try await vault.store.rekey(
+                        to: key,
+                        protection: EncryptedVaultFile.protection(for: mode),
+                        keyrings: keyrings,
+                    )
                 } catch {
                     rekeyError = error
                 }

@@ -91,6 +91,50 @@ extension VaultEncryptionConverterTests {
         }
     }
 
+    /// The plain store's killphrase and search passphrase keyrings become the real vault's own, in its payload, so
+    /// they move with the vault file, and none are left in the keychain: the file holds no other vault that could
+    /// need them (VAULT-127). A killphrase set in the plain store still fires in the vault.
+    @Test
+    func encrypt_movesTheKeyringsIntoTheVaultThenDeletesThemFromTheKeychain() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try PlainVaultConversionHarness(directory: directory)
+            let device = harness.devicePhraseKeyrings
+            let killphraseKey = try await device.killphrase.loadOrCreateOwnKey()
+            let searchPassphraseKey = try await device.searchPassphrase.loadOrCreateOwnKey()
+            try await device.killphrase.addKeysFromBackup([.repeating(byte: 0xB1)])
+            let digest = KillphraseDigester(key: killphraseKey).makeDigest(phrase: "kill me")
+            _ = try await harness.store
+                .insert(item: anySecureNote().wrapInAnyVaultItem(killphrase: digest).makeWritable())
+
+            try await harness.encrypt()
+
+            let vault = try #require(try await harness.openEncryptedVault())
+            let keyrings = try #require(vault.state.vault.keyrings)
+            #expect(keyrings.killphrase == .init(ownKey: killphraseKey, keysFromBackups: [.repeating(byte: 0xB1)]))
+            #expect(keyrings.searchPassphrase == .init(ownKey: searchPassphraseKey))
+            #expect(try await device.killphrase.loadAllKeys().isEmpty)
+            #expect(try await device.searchPassphrase.loadAllKeys().isEmpty)
+            let digester = KillphraseDigester(key: keyrings.killphrase.ownKey)
+            #expect(digester.matches(query: "kill me", salt: digest.salt, digest: digest.digest))
+        }
+    }
+
+    /// With no keys in the keychain yet, the vault gets keyrings of its own all the same, so every vault has them.
+    @Test
+    func encrypt_withNoKeyringsYet_givesTheVaultNewOnes() async throws {
+        try await withTemporaryDirectory { directory in
+            let harness = try PlainVaultConversionHarness(directory: directory)
+
+            try await harness.encrypt()
+
+            let vault = try #require(try await harness.openEncryptedVault())
+            let keyrings = try #require(vault.state.vault.keyrings)
+            #expect(keyrings.killphrase.keysFromBackups.isEmpty)
+            #expect(keyrings.killphrase.ownKey != keyrings.searchPassphrase.ownKey)
+            #expect(try await harness.devicePhraseKeyrings.killphrase.loadAllKeys().isEmpty)
+        }
+    }
+
     /// A backup that finished while the user authenticated for the backup password is moved too.
     @Test
     func encrypt_movesBackupSettingsSavedWhileTheUserAuthenticated() async throws {

@@ -18,6 +18,14 @@ Yes, for backups made with this version of Vault or later. A backup carries the 
 
 A backup made with an earlier version doesn't carry them. Restored on another device, or after an erase, its killphrases won't delete anything, and items that only show for their passphrase can't be found. If the device that made it still has its vault, make a new backup there and restore that one instead.
 
+## Does the vault keep its killphrases if I move it another way?
+
+With an App Lock Password, which the Mac always has, the keys Vault checks killphrases and search passphrases with are kept inside the vault's encryption. So they go wherever the vault goes: to a new Mac with Migration Assistant or a Time Machine restore, or to an iPhone restored from its backup.
+
+A vault made with an earlier version of Vault takes its keys into its encryption the first time you open it after updating. Open each vault once, a duress vault included, before you move it this way. A vault that hasn't been opened since still relies on the keys kept on the device it was made on.
+
+Without an App Lock Password, the vault isn't encrypted, so the keys are kept in the iPhone's keychain instead of beside it, and the same goes while the password is off. A backup made in Vault carries them either way.
+
 ## Can I automate this with iCloud Drive?
 
 Partially. Vault supports **automatic backups to iCloud Drive** — you point Vault at a folder in your iCloud Drive once, and it will keep a fresh backup there for you.

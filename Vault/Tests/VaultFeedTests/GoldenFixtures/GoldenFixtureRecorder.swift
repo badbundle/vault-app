@@ -28,6 +28,9 @@ struct GoldenFixtureRecorder {
         if !GoldenFixture.isRecorded(SlotFileFixture.name) {
             try await recordSlotFile()
         }
+        if !GoldenFixture.isRecorded(SlotFileKeyringsFixture.name) {
+            try await recordSlotFileWithKeyrings()
+        }
     }
 }
 
@@ -168,5 +171,94 @@ extension GoldenFixtureRecorder {
         // Only when recording, which has to be asked for.
         // swiftlint:disable:next no_direct_standard_out_logs
         print(lines.joined(separator: "\n"))
+    }
+}
+
+// MARK: - Slot file with keyrings
+
+extension GoldenFixtureRecorder {
+    /// Makes the file as the app does once vaults keep their own keyrings (VAULT-127): the real vault as turning on
+    /// the App Lock Password creates it from a plain store with those keyrings, then a duress vault made from it by
+    /// its store, which gives it keyrings of its own, then given a code whose killphrase is digested with them, by
+    /// importing it. Every other slot stays random.
+    ///
+    /// It stores the header and the slots that hold the vaults, in the order they're in the file.
+    private func recordSlotFileWithKeyrings() async throws {
+        let real = SlotFileKeyringsFixture.real
+        let duress = SlotFileKeyringsFixture.duress
+        try await withTemporaryDirectory { directory in
+            let file = EncryptedVaultFile(directory: directory)
+            var contents = try VaultSlotFile(kdfParameters: SlotFileKeyringsFixture.kdfParameters)
+            var state = try EncryptedVaultStoreTests.state(items: real.items)
+            state.vault = VaultMetadata(
+                duressSlots: VaultDuressSlots.forFirstVault(inSlot: real.slot),
+                keyrings: real.keyrings,
+            )
+            let realSlot = try contents.createVault(
+                inSlot: real.slot,
+                rootKey: contents.header.passwordKey(for: real.password),
+                payload: EncryptedVaultPayload.encode(state),
+                wrappedAt: real.wrappedAt,
+            )
+            try contents.bytes.write(to: file.url)
+
+            let realStore = EncryptedVaultStore(
+                file: file,
+                slot: realSlot,
+                state: state,
+                wrapStamper: VaultDeviceWrapStamper.inMemory { duress.wrappedAt },
+            )
+            try await realStore.makeDuressVault(password: duress.password)
+
+            let withDuress = try #require(try await file.open())
+            let duressStore = try EncryptedVaultStore(
+                file: file,
+                contents: withDuress,
+                slot: withDuress.openSlot(
+                    state.vault.duressSlots[0],
+                    with: withDuress.header.passwordKey(for: duress.password),
+                ),
+                currentDate: { duress.wrappedAt },
+            )
+            let duressKeyrings = try #require(await duressStore.phraseKeyrings)
+            let digest = KillphraseDigester(key: duressKeyrings.killphrase.ownKey)
+                .makeDigest(phrase: SlotFileKeyringsFixture.duressKillphrase)
+            try await duressStore.importAndMergeVault(payload: VaultApplicationPayload(
+                userDescription: "",
+                items: [SlotFileKeyringsFixture.duressItem(killphrase: digest)],
+                tags: [],
+            ))
+
+            let recorded = try #require(try await file.open())
+            let vaultSlots = [real.slot, state.vault.duressSlots[0]].sorted()
+            var stored = recorded.bytes.prefix(VaultSlotFile.Header.length)
+            for index in vaultSlots {
+                stored.append(recorded.bytes[recorded.slotRange(index)])
+            }
+            try GoldenFixture.record(stored, named: SlotFileKeyringsFixture.name)
+            var lines = ["Recorded \(SlotFileKeyringsFixture.name). Copy into SlotFileKeyringsFixture:"]
+            lines.append("stored slots: \(vaultSlots)")
+            lines.append("salt: \(recorded.header.salt.toHexString())")
+            for vault in SlotFileKeyringsFixture.vaults {
+                let key = try recorded.header.passwordKey(for: vault.password)
+                for index in VaultSlotFile.slotIndices {
+                    guard let slot = try? recorded.openSlot(index, with: key) else { continue }
+                    let duressSlots = try EncryptedVaultPayload.decode(slot: slot, in: recorded).vault.duressSlots
+                    lines
+                        .append(
+                            "\(vault.name): slot \(index), generation \(slot.generation), duress slots \(duressSlots)",
+                        )
+                }
+            }
+            lines.append("duress killphrase own key: \(duressKeyrings.killphrase.ownKey.data.toHexString())")
+            lines
+                .append(
+                    "duress search passphrase own key: \(duressKeyrings.searchPassphrase.ownKey.data.toHexString())",
+                )
+            lines.append("duress killphrase salt: \(digest.salt.toHexString()), digest: \(digest.digest.toHexString())")
+            // Only when recording, which has to be asked for.
+            // swiftlint:disable:next no_direct_standard_out_logs
+            print(lines.joined(separator: "\n"))
+        }
     }
 }
