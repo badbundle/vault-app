@@ -3,24 +3,53 @@
   "output": { "width": 2064, "height": 2752, "format": "png" },
   "mode": "inset",
   "frameColor": "Silver",
-  "background": { "colors": ["#04060D", "#081226", "#13337F", "#3E7BFA"], "locations": [0, 0.42, 0.82, 1], "angle": 180 },
+  "background": {
+    "colors": ["#020409", "#050B1A", "#0A1A42"],
+    "locations": [0, 0.45, 1],
+    "angle": 180,
+    "glows": [
+      { "x": 0.6, "y": 0.7, "radius": 0.8, "color": "#0A84FF8C" },
+      { "x": 0.95, "y": 0.06, "radius": 0.45, "color": "#3E7BFA4D" },
+      { "x": 0.02, "y": 0.98, "radius": 0.5, "color": "#5E5CE666" }
+    ],
+    "images": [
+      { "path": "assets/vault-door.png", "x": 0.5, "y": 0.15, "width": 1.25, "rotation": -6, "opacity": 0.06 }
+    ]
+  },
   "text": {
     "position": "top",
-    "title": { "font": "system", "size": 150, "weight": "bold", "color": "#FFFFFF" },
-    "subtitle": { "font": "system", "size": 80, "weight": "regular", "color": "#FFFFFFB3" },
-    "spacing": 32,
-    "maxScale": 1.25
+    "anchor": "edge",
+    "title": { "font": "system", "size": 210, "weight": "bold", "color": "#FFFFFF" },
+    "subtitle": { "font": "system", "size": 80, "weight": "regular", "color": "#FFFFFFC7" },
+    "spacing": 40,
+    "minScale": 0.8,
+    "maxScale": 1,
+    "maxRotation": 0,
+    "accentColor": "#4DA3FF"
   },
-  "padding": 120,
+  "padding": 150,
   "gap": 96,
-  "shadow": { "color": "#00000099", "radius": 110, "offsetY": 44 },
+  "shadow": { "color": "#000000A6", "radius": 120, "offsetY": 48 },
   "screenshots": [
     {
       "output": "ipad-01-codes",
       "title": "Every code.\nEvery secret.",
+      "accent": "secret.",
       "subtitle": "Two-factor codes and private notes,\nkept on your iPad.",
       "devices": [
-        { "path": "../.build/screenshots/raw/ipad/01-feed.png", "x": 0.56, "y": 0.94, "width": 1.02, "rotation": -5 }
+        { "path": "../.build/screenshots/raw/ipad/01-feed.png", "x": 0.6, "y": 0.93, "width": 1.12, "rotation": -6 }
+      ],
+      "callouts": [
+        {
+          "region": { "x": 664, "y": 164, "width": 332, "height": 332 },
+          "x": 0.42,
+          "y": 0.59,
+          "scale": 1.8,
+          "rotation": -4,
+          "borderWidth": 0,
+          "highlight": false,
+          "shadow": { "color": "#0A84FFB3", "radius": 150, "offsetY": 0 }
+        }
       ]
     },
     {

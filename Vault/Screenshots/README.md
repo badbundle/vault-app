@@ -85,15 +85,21 @@ callout sits live in `iphone.json` and `ipad.json`; the
 [config reference](https://github.com/badbundle/device-screenshot-framer#config-file-reference)
 documents every key, including the
 [layouts](https://github.com/badbundle/device-screenshot-framer#layouts).
-Every image shares one background: near-black at the top, where the text
-sits, lightening to Vault's blue at the bottom. Devices cast a shadow and
-have a Silver frame, apart from the dark settings screens, which get Deep
-Blue (iPhone) or Space Gray (iPad) to set them apart from the light ones.
+Every image shares one background, in the icon's colours: near-black,
+deepening to navy at the bottom, lit by soft glows of Vault's blue behind the
+devices, with the icon's vault door, very faint and oversized, behind the
+title (`assets/vault-door.png`, the dark icon's glyph rendered at 3072 pixels
+by `swift run vault-app-icon-generator -o <dir> --size 3072` and trimmed). The
+title is large and stays at the top (`"anchor": "edge"`), with one word in
+the accent blue (`accent`). Devices cast a shadow and have a Silver frame,
+apart from the dark settings screens, which get Deep Blue (iPhone) or Space
+Gray (iPad) to set them apart from the light ones. Callout cards float on a
+blue glow rather than a border.
 
 Each device class tells the same story in nine images, the strongest first:
 
 1. **Every code. Every secret.** The feed, as one large tilted device running
-   off the bottom.
+   off the bottom, with the GitHub code lifted out of it.
 2. A panorama of three, one canvas cut into `-1`, `-2` and `-3`, about being
    made to unlock Vault:
    - **Locked with a password:** the dark lock screen, asking for the App Lock
