@@ -3,7 +3,7 @@ import Foundation
 /// One-way digest representing an item's killphrase.
 ///
 /// Stored in place of the plaintext phrase. The digest is computed as
-/// `HMAC-SHA256(K, salt || phrase)` where `K` is a key on the device's
+/// `HMAC-SHA256(K, salt || phrase)` where `K` is a key on the vault's
 /// keyring (see `KillphraseKeyStore`). Recovering the original phrase from
 /// the digest is computationally infeasible without `K` and a candidate
 /// phrase.

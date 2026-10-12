@@ -568,13 +568,17 @@ compression, so either can change later. It's `EncryptedVaultPayload` (VAULT-45)
 ```
 { "items": [VaultItemRecord],   // every PersistedSchemaV3.PersistedVaultItem field + details, raw strings
   "tags":  [VaultTagRecord],
-  "vault": { "duressSlots": [UInt8] /* VAULT-51 */, "settings": VaultBackupSettings /* VAULT-70 */ } }
+  "vault": { "duressSlots": [UInt8] /* VAULT-51 */, "settings": VaultBackupSettings /* VAULT-70 */,
+             "keyrings": VaultPhraseKeyrings? /* VAULT-127, version 2 */ } }
 ```
 
 The keys are the records' property names. The version is the body header's, not a JSON field. `vault` arrives
 with VAULT-51, and its `settings` with VAULT-70 (see
 [Each vault's backup settings](#each-vaults-backup-settings-vault-70)). `settings` is always written, with every
-key, `null` when it's unset, so every vault's payload has the same sections whatever it holds.
+key, `null` when it's unset, so every vault's payload has the same sections whatever it holds. `keyrings`, the
+vault's own killphrase and search passphrase keys, arrives with VAULT-127 and payload version 2 (see
+[Each vault's keyrings](#each-vaults-keyrings-vault-127)). It's always written, `null` when the vault has none in its
+payload.
 
 - **`VaultItemRecord` mirrors the persisted schema, not the domain model.** Migration is then a field-for-field
   copy that can't fail, and an item that fails domain decoding in SQLite today survives the migration byte for
@@ -584,6 +588,9 @@ key, `null` when it's unset, so every vault's payload has the same sections what
 - **Payload version.** Each version adds optional fields with defaults, and the decoder accepts every older
   version. A version newer than the app knows is refused rather than read, because saving it would drop what the
   newer app added. SwiftData schema migrations don't apply to encrypted vaults.
+  - **Version 1**: items, tags, and the vault's duress slots and backup settings.
+  - **Version 2** (VAULT-127): adds the vault's keyrings. Every save writes version 2. An app that knew only version 1
+    refuses it, rather than dropping the keys and with them every phrase they check.
 - **A schema parity test** fails if the latest `VersionedSchema` has an attribute that `VaultItemRecord` doesn't
   carry. Forgetting a field would otherwise silently drop data at migration.
 
@@ -711,6 +718,11 @@ different order:
 - **The backup settings** move into the real vault (VAULT-70). They're read first, before the attempt counter is
   reset, because reading the backup password asks the user to authenticate: if they don't, nothing has changed. They
   go into the snapshot's `vault.settings`, and are deleted from the keychain and `UserDefaults` after the commit.
+- **The keyrings** move into the real vault too (VAULT-127): read from the keychain once the session has locked,
+  with a new key for a kind that has none yet, into the snapshot's `vault.keyrings`, and deleted from the keychain
+  after the commit. The new file holds no other vault, so nothing else needs them. If they can't be read, nothing is
+  converted. If deleting them fails, they stay as a copy only a vault without keyrings of its own would read, and
+  there's none.
 - **After the commit**, "close the SwiftData container" is a hook the app provides (`releasePlainStore`, with
   `VaultRoot.plainVaultStore` releasable). The SQLite files, the rehash files and the confirmed archives are
   deleted, then the journal says `clearingSystemSurfaces` while the QuickType identity store is cleared and the
@@ -751,14 +763,16 @@ neither. A new password that happens to open another slot is accepted silently (
 
 1. Makes a new device key `D`, replacing any there was.
 2. Journals `turningOff`.
-3. Rekeys the open vault's slot to `D`, and gives the file the `deviceKey` mode's protection.
+3. Rekeys the open vault's slot to `D`, and gives the file the `deviceKey` mode's protection. The vault's keyrings
+   move to the keychain (VAULT-127): stored there first, then taken out of the payload in the rekey's own write, so
+   they're never only in a file `D` opens. See [Each vault's keyrings](#each-vaults-keyrings-vault-127).
 4. Settles the mode by trying `D` on every slot, as recovery does (below): `encrypted(deviceKey)` if the rekey
    happened, and the journal is cleared.
 
 **Turning it back on**, from `encrypted(deviceKey)`, needs no current password: device authentication opened the
 vault. It resets the attempt counter, derives the new password's key with the file's salt, journals `turningOn`,
 rekeys the slot, and settles the mode the same way: `encrypted(password)`, and `D`, which opens nothing any more, is
-deleted.
+deleted. The keyrings move back into the payload in the rekey's write, and only then out of the keychain.
 
 Resetting the counter on device authentication alone is accepted, and doesn't conflict with MANIFESTO C4: with the
 password off, device authentication opens the vault anyway, so the count guards nothing a coercer couldn't already
@@ -952,7 +966,8 @@ The format serves VAULT-23 directly:
 - **Unlock timing is identical,** as described above.
 - **Each vault is a full payload,** with its own items, tags, killphrases and per-vault settings: backup
   password, backup events, auto-backup configuration and the "backup password is set" record. VAULT-70 moves
-  those from `UserDefaults` and the keychain into `payload.vault.settings`.
+  those from `UserDefaults` and the keychain into `payload.vault.settings`. VAULT-127 adds its own killphrase and
+  search passphrase keyrings, in `payload.vault.keyrings`.
 
 ### Making a duress database, from any vault
 
@@ -1008,6 +1023,9 @@ payloads.
   every vault. Making the vault once the check has passed doesn't touch the counter or the deadline.
 - Every list a duress vault gets, taken whole, is a uniformly random choice and ordering of ten of the other slots,
   as the first vault's is, so a list doesn't show which kind of vault holds it.
+- W gets killphrase and search passphrase keyrings of its own, new random keys with none to match against, never a
+  copy of V's (VAULT-127). So nothing in W checks V's phrases, a backup of W carries none of V's keys, and W's
+  payload has the same sections as every vault's.
 - A vault whose list isn't ten distinct slots other than its own (only a vault the app didn't write) makes no duress
   vault, rather than guessing where one goes.
 
@@ -1145,6 +1163,70 @@ What's left:
 - **The folder picker remembers.** The system's folder picker (`.fileImporter`) opens where it was last used,
   whichever vault that was in. Choosing a destination in a duress vault can therefore start in the real vault's
   folder. The app can't clear that.
+
+### Each vault's keyrings (VAULT-127)
+
+The killphrase and search passphrase keyrings used to be device-wide keychain items, shared by every vault. A vault
+moved to another Mac with Migration Assistant, or restored from a Time Machine or device backup, arrived without
+them, and its killphrases and search passphrases stopped working. Now each encrypted vault keeps its own inside its
+encryption, so they go wherever the vault file goes.
+
+**As built** (`VaultPhraseKeyrings`, `OpenVaultPhraseKeyrings`, `DevicePhraseKeyrings`):
+
+| How the vault is stored | Where its keyrings are |
+| --- | --- |
+| `plain` (iOS, no password; the Mac's empty store before the first password) | The keychain (`HMACKeyring`), as before: never beside the digests in a store that isn't encrypted |
+| `encrypted(password)` | The vault's payload, `vault.keyrings`, sealed with everything else |
+| `encrypted(deviceKey)` | The keychain, in an item of its own (`phraseKeyringsWhilePasswordOff`): the file opens with `D`, which is in the keychain too, so keys in it would sit beside the digests |
+| Locked | None: the data model drops its digesters, and reads the open vault's once one opens |
+
+- **Turning encryption on** moves the keychain's keyrings into the real vault, and deletes them after the commit
+  (see [Migration](#migration-plain-to-encrypted)). The Mac does the same at its first password.
+- **Turning the password off** keeps the vault's keyrings in the keychain item, then the rekey takes them out of the
+  payload in its own write: if keeping them fails, nothing changes. **Turning it back on** puts them back in the rekey's
+  write, then deletes the item. So at every point the keys are in the payload, the keychain or both, never neither.
+- **Changing the password** rekeys with the payload as it is, keyrings included.
+- **A duress vault** gets keyrings of its own when it's made, never its maker's (see
+  [Making a duress database](#making-a-duress-database-from-any-vault)).
+- **Erasing** removes the file, and with it every vault's keyrings, and deletes the keychain's (`VaultEraser`).
+  Delete All Data keeps the open vault's, as it keeps its metadata, and deletes the keychain's keyrings that only the
+  vaults it destroys could need (`OpenVaultPhraseKeyrings.deleteKeyringsNoOtherVaultNeeds`): this device's, once the
+  open vault keeps its own in its payload or, with the password off, in the keychain item turning it off left, and a
+  stale keychain item a turn off left. Those the open vault still uses stay: the plain store's, and a vault's that
+  hasn't taken its copy.
+- **Restoring a backup** adds its keys to the open vault's keyrings: into the payload, in a save of its own before the
+  items are imported, or the keychain for the plain store and while the password is off. A backup carries the open
+  vault's keys only.
+- **The data model** reads the open vault's keyrings whenever the session switches vault or locks
+  (`VaultDataModel.openVaultDidChange()`), and drops what it read for a vault that's no longer open.
+- **AutoFill** never reads them: its search doesn't check killphrases or find hidden items, its data model never
+  loads them, and its key stores refuse to (`NoPhraseKeyrings`). Its default keychain group isn't the app's, so a copy
+  it took could miss the keys from before.
+
+**Vaults made before VAULT-127.** Their payloads are version 1, with no keyrings, and their phrases were digested with
+the keychain's keys, which every vault shared. A vault can't tell whether others exist, by design, so the keychain's
+can't be moved into one vault: another, a duress vault that's rarely opened say, would lose them. Instead:
+
+- The first time such a vault opens with its password, it takes a copy (`VaultPhraseKeyrings.takingCopies`): a new
+  key of its own for each kind, and every key the keychain holds, to match against. It's saved in the payload before
+  any of it is used, so no digest is ever made with a key the vault doesn't hold. From then on no two vaults make
+  digests with the same key.
+- The keychain's stay, for any other vault made then. An erase deletes them, and so does Delete All Data from a vault
+  that has keyrings of its own, as it destroys every other vault.
+- If the copy can't be saved, the vault uses the keychain's for now, which hold every key the copy would, and tries
+  again the next time it reads its keys: the next unlock, backup or restore. It's idempotent: once a vault has
+  keyrings, it never takes a copy again.
+- A copy waits its turn among the store's changes, and isn't saved once a rekey has moved the vault to `D`
+  (`EncryptedVaultStore.updatePhraseKeyrings`).
+- A vault whose password was turned off before VAULT-127 uses the keychain's keyrings while it's off, and takes a
+  copy when the password is turned back on.
+
+What's left:
+
+- **A vault that hasn't opened since the update** still needs the keychain it was made with. Moved before it opens,
+  it arrives without its keys, as every vault did before.
+- **The keys from before stay shared.** Every vault that took a copy can match against them, so a backup of one
+  carries the keys the others' phrases from before were digested with, as it always did.
 
 ## Erasing after failed attempts (VAULT-34)
 
@@ -1325,6 +1407,10 @@ Mac, and not the widget extension's, which `make validate` checks in each build'
 The device key stays in the App Group's group: with the password off, the widgets open the vault with it, as they read
 the plain store when there's never been a password. With the password on, there's no device key.
 
+The killphrase and search passphrase keyrings the keychain holds (VAULT-127: the plain store's, those vaults made
+before then shared, and a vault's while the password is off) are in the app's own default group, which neither
+extension has. AutoFill never checks phrases, and its key stores refuse to read any (`NoPhraseKeyrings`).
+
 Earlier versions kept those items in the App Group's group, so each launch of the app, and each start of the AutoFill
 extension, moves what's still there (`SharedKeychainItems`):
 
@@ -1367,28 +1453,29 @@ So the count is never lost or lowered, and the erase deletes it, and the stamp, 
   from the live file at once, as it is from the SQLite store's files since VAULT-55 scrubs them after the
   delete.
 - **Search passphrases.** Matched in memory with the same digester.
-- **HMAC keys.** The killphrase and search passphrase keys stay device-wide keychain items. Per-item salts make
-  sharing them across vaults harmless. Each is a keyring (`HMACKeyring`): this device's own key, which makes every
-  new digest, and the keys that restored backups brought, which are only matched against. Every match tries every
-  key, each with a constant-time comparison (`isValidAuthenticationCode`), and none is skipped once one matches, so
-  a match behaves the same on no match and on failure as it always has (C2).
-- **HMAC keys in backups.** Every backup, auto-backup and move to another device carries every key on both
-  keyrings, inside its encryption (`killphraseKeys` and `searchPassphraseKeys` in the payload). Restoring one adds
-  the keys this device doesn't have, never synced and with the same access as its own, so the backup's killphrases
-  still delete and its passphrase-hidden items can still be found, on another iPhone or after an erase. That's the
-  only way they can: a digest can't be made again without its phrase, and a restored vault whose phrases never match
-  has items no search can reach.
+- **HMAC keys.** Each vault has a keyring for each kind of phrase (`VaultPhraseKeyrings`): its own key, which
+  makes every new digest, and keys that are only matched against, those restored backups brought. Every match tries
+  every key, each with a constant-time comparison (`isValidAuthenticationCode`), and none is skipped once one
+  matches, so a match behaves the same on no match and on failure as it always has (C2). Where they're kept is in
+  [Each vault's keyrings](#each-vaults-keyrings-vault-127).
+- **HMAC keys in backups.** Every backup, auto-backup and move to another device carries every key on the open
+  vault's two keyrings, inside its encryption (`killphraseKeys` and `searchPassphraseKeys` in the payload).
+  Restoring one adds the keys the open vault doesn't have to its keyrings, so the backup's killphrases still delete
+  and its passphrase-hidden items can still be found, on another iPhone or after an erase. That's the only way they
+  can: a digest can't be made again without its phrase, and a restored vault whose phrases never match has items no
+  search can reach.
   - **Accepted:** anyone who can decrypt a backup can test guesses at its killphrases and search passphrases offline,
     at the speed of HMAC-SHA256. They can already read every item in it, passphrase-hidden ones included, and see
     which items have a killphrase. What the keys add is the phrases themselves, so a phrase shouldn't be a password
     used anywhere else.
-  - The keyrings are the same whichever vault is open, so a duress vault's backup carries the same keys as the real
-    vault's. How many keys there are shows how many other devices' backups, or backups from before an erase, have
-    been restored here.
-  - Backups made before the keys went with them bring none. Their phrases only match on a device that still has the
-    keys they were digested with, which the FAQ says.
-  - Older builds ignore the two fields: the payload's version is unchanged, and its default `Codable` skips keys it
-    doesn't know.
+  - Each vault's keyrings are its own, so a duress vault made since VAULT-127 carries none of the real vault's keys
+    in its backups. Before, the keyrings were the same whichever vault was open, so every vault made then has those
+    shared keys to match against (see below). How many keys there are shows how many other devices' backups, or
+    backups from before an erase, have been restored into that vault.
+  - Backups made before the keys went with them bring none. Their phrases only match where the vault's keyrings
+    still have the keys they were digested with, which the FAQ says.
+  - Older builds ignore the two fields: the backup payload's version is unchanged, and its default `Codable` skips
+    keys it doesn't know.
 - **Rehash stores.** Only meaningful in `plain` mode. They must be empty before migrating, and they're deleted by
   it.
 - **Payload hash** (`currentPayloadHash`). Unchanged; computed from the export.
@@ -1410,7 +1497,7 @@ So the count is never lost or lowered, and the erase deletes it, and the stamp, 
 | Keyboard learning | Nothing from Apple's keyboard: every field turns off autocorrection and Writing Tools (VAULT-54). A third-party keyboard sees what's typed outside secure fields | Same |
 | Spotlight index | Site names of visible, unlocked codes, only while Show in Spotlight is on and App Lock is off. Readable only while the device is unlocked | Empty: App Lock turns it off |
 | App switcher snapshot | The screen as it was, while App Lock is off | The vault door cover |
-| Killphrase and search passphrase keyrings (keychain) | Random keys. With the store's digests, they check a phrase as Vault does | Same keys. The digests are only inside the encrypted file |
+| Killphrase and search passphrase keyrings | In the keychain: random keys. With the store's digests, they check a phrase as Vault does | Inside each vault's encryption, beside its digests. With the password off, in the keychain. Keys from before VAULT-127 stay in the keychain, with no digests outside the encrypted file |
 | Auto-backup folder | Encrypted backups padded to a fixed size (VAULT-75). Their file names show when each was made, so when the vault changed | Same, for each vault that has auto-backup on |
 | PDF backups, in plain text | That it's a Vault backup, when it was made, its page and QR code counts, and the hint if one was written | Same |
 

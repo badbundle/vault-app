@@ -7,8 +7,8 @@ struct VaultRecordState: Equatable, Sendable {
     var items: [VaultItemRecord]
     /// Tags in the order they were first stored.
     var tags: [VaultTagRecord]
-    /// About the vault itself, rather than what's in it. Only changing its backup settings changes it: deleting all
-    /// data and override imports keep it.
+    /// About the vault itself, rather than what's in it. Only changing its backup settings or its keyrings changes it:
+    /// deleting all data and override imports keep it.
     var vault = VaultMetadata()
 
     static let empty = VaultRecordState(items: [], tags: [])
@@ -24,16 +24,34 @@ struct VaultMetadata: Codable, Equatable, Sendable {
     /// The vault's own backup password, last backup and auto-backup configuration. Always written, even when it's
     /// all defaults, so every payload has the same shape.
     var settings = VaultBackupSettings()
+    /// The vault's own killphrase and search passphrase keyrings, while the App Lock Password opens it (payload
+    /// version 2). `nil` in a vault made before vaults kept their own, until it takes a copy of the keychain's
+    /// (`OpenVaultPhraseKeyrings`), and while the device key opens it, when they're in the keychain. Always written,
+    /// `null` when there are none.
+    var keyrings: VaultPhraseKeyrings?
 
-    init(duressSlots: [Int] = [], settings: VaultBackupSettings = .init()) {
+    init(duressSlots: [Int] = [], settings: VaultBackupSettings = .init(), keyrings: VaultPhraseKeyrings? = nil) {
         self.duressSlots = duressSlots
         self.settings = settings
+        self.keyrings = keyrings
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case duressSlots, settings, keyrings
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(duressSlots, forKey: .duressSlots)
+        try container.encode(settings, forKey: .settings)
+        try container.encode(keyrings, forKey: .keyrings)
     }
 
     init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         duressSlots = try container.decodeIfPresent([Int].self, forKey: .duressSlots) ?? []
         settings = try container.decodeIfPresent(VaultBackupSettings.self, forKey: .settings) ?? .init()
+        keyrings = try container.decodeIfPresent(VaultPhraseKeyrings.self, forKey: .keyrings)
     }
 }
 
@@ -493,6 +511,27 @@ extension RecordVaultStore {
     ) async throws -> Result {
         await waitForTurnToChange()
         defer { finishChange() }
+        return try await changeInItsTurn(saving: saving, makeChange)
+    }
+
+    /// As `change(saving:_:)`, only if `isWanted` still says so once it's the change's turn: for a change that depends
+    /// on something only another change can alter, such as which key opens the vault (`whileChanging(_:)`). If it
+    /// doesn't, nothing changes, and it returns `nil`.
+    func change<Result>(
+        if isWanted: @Sendable () async -> Bool,
+        _ makeChange: (inout VaultRecordState) throws -> Result,
+    ) async throws -> Result? {
+        await waitForTurnToChange()
+        defer { finishChange() }
+        guard await isWanted() else { return nil }
+        return try await changeInItsTurn(saving: .ifChanged, makeChange)
+    }
+
+    /// Makes the change, once it's its turn.
+    private func changeInItsTurn<Result>(
+        saving: ChangeSaving,
+        _ makeChange: (inout VaultRecordState) throws -> Result,
+    ) async throws -> Result {
         for _ in 0 ..< Self.conflictAttempts {
             var newState = state
             let result = try makeChange(&newState)

@@ -9,9 +9,9 @@ public struct VaultApplicationPayload: Sendable, Equatable, Hashable {
     public var userDescription: String
     public var items: [VaultItem]
     public var tags: [VaultItemTag]
-    /// The keys the items' killphrase digests can have been made with: every key on the keyring of the device the
-    /// vault was exported from, its own first (`VaultDataModel.makeExport(userDescription:)`). They go with the vault,
-    /// so its killphrases still work wherever it's restored. Empty straight from a store, and from a backup made
+    /// The keys the items' killphrase digests can have been made with: every key on the exported vault's keyring, its
+    /// own first (`VaultDataModel.makeExport(userDescription:)`). They go with the vault, so its killphrases still work
+    /// wherever it's restored. Empty straight from a store, and from a backup made
     /// before they were included.
     public var killphraseKeys: [KeyData<32>]
     /// The keys the items' search passphrase digests can have been made with, as `killphraseKeys`.

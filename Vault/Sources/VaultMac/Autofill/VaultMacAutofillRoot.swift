@@ -38,7 +38,7 @@ final class VaultMacAutofillRoot {
         sharedDefaults = defaults
         localSettings = LocalSettings(defaults: defaults, sharedDefaults: defaults)
         // The phrase keyrings are never read here: the extension's search doesn't check killphrases or find hidden
-        // items (G2, G47), as `VaultDataModel.setup()` is never called.
+        // items (G2, G47), as `VaultDataModel.setup()` is never called, and its key stores refuse to read any.
         let secureStorage = SecureStorageImpl(keychain: .default)
         let dataModel = VaultDataModel(
             vaultStore: session,
@@ -48,9 +48,9 @@ final class VaultMacAutofillRoot {
             vaultKillphraseDeleter: session,
             vaultOtpAutofillStore: NoCredentialIdentities(),
             backupPasswordStore: BackupPasswordStoreImpl(secureStorage: secureStorage, clock: clock),
-            killphraseKeyStore: KillphraseKeyStoreImpl(secureStorage: secureStorage),
+            killphraseKeyStore: NoPhraseKeyrings.killphraseKeys,
             killphraseRehashService: nil,
-            searchPassphraseKeyStore: SearchPassphraseKeyStoreImpl(secureStorage: secureStorage),
+            searchPassphraseKeyStore: NoPhraseKeyrings.searchPassphraseKeys,
             searchPassphraseRehashService: nil,
             backupEventLogger: BackupEventLoggerImpl(storage: defaults, clock: clock),
         )

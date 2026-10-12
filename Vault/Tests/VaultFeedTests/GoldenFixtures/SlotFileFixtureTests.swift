@@ -50,6 +50,17 @@ struct SlotFileFixtureTests {
         #expect(state.vault.duressSlots == vault.duressSlots)
     }
 
+    /// Its payloads are version 1, from before vaults kept their own keyrings, so neither vault has any: each takes a
+    /// copy of the keychain's the first time it opens (`OpenVaultPhraseKeyrings`).
+    @Test(arguments: SlotFileFixture.vaults)
+    func payload_isVersion1WithNoKeyrings(vault: SlotFileFixture.Vault) throws {
+        let file = try SlotFileFixture.file()
+        let slot = try file.openSlot(vault.slot, with: file.header.passwordKey(for: vault.password))
+
+        #expect(try file.openPayload(of: slot).version == 1)
+        #expect(try EncryptedVaultPayload.decode(slot: slot, in: file).vault.keyrings == nil)
+    }
+
     @Test
     func wrongPassword_opensNoSlot() throws {
         let file = try SlotFileFixture.file()
@@ -174,6 +185,13 @@ enum SlotFileFixture {
     /// slots go at `indices`, in the order they're stored, and every other slot is filled with bytes from a seeded
     /// generator, as random bytes stand in for them.
     static func file(placingStoredSlotsAt indices: [Int]) throws -> VaultSlotFile {
+        try file(named: name, storedSlots: storedSlots, placingStoredSlotsAt: indices)
+    }
+
+    /// Rebuilds the whole file from a fixture that stores its header, then `storedSlots`, as `file()` does.
+    static func file(named name: String, storedSlots: [Int], placingStoredSlotsAt indices: [Int]) throws
+        -> VaultSlotFile
+    {
         let stored = try GoldenFixture.data(named: name)
         let header = try VaultSlotFile.Header(parsing: stored)
         let slotSize = header.slotSize

@@ -241,11 +241,14 @@ public enum VaultRoot {
         },
     )
 
-    public static let killphraseKeyStore: some KillphraseKeyStore<KeyData<32>> =
-        KillphraseKeyStoreImpl(secureStorage: secureStorage)
+    /// The killphrase and search passphrase keyrings in the keychain: the plain store's, and those of a vault the
+    /// device key opens. Turning encryption on moves the plain store's into the real vault.
+    static let devicePhraseKeyrings = DevicePhraseKeyrings(secureStorage: secureStorage)
 
-    public static let searchPassphraseKeyStore: some SearchPassphraseKeyStore<KeyData<32>> =
-        SearchPassphraseKeyStoreImpl(secureStorage: secureStorage)
+    /// The killphrase and search passphrase keyrings of whichever vault is open: the plain store's in the keychain,
+    /// and an encrypted vault's own, in its payload, so they move with the vault file.
+    @MainActor
+    static let openVaultPhraseKeyrings = OpenVaultPhraseKeyrings(session: vaultStore, device: devicePhraseKeyrings)
 
     /// How the vault can be opened right now: plain, with the device key, or
     /// only with the App Lock Password. Unlike `storageMode`, which is how it
@@ -332,15 +335,22 @@ public enum VaultRoot {
         vaultKillphraseDeleter: vaultStore,
         vaultOtpAutofillStore: vaultOtpAutofillStore,
         backupPasswordStore: openVaultBackupSettings,
-        killphraseKeyStore: killphraseKeyStore,
+        // AutoFill never checks phrases (G2, G47), and its default keychain group isn't the app's, so it never reads
+        // the keyrings.
+        killphraseKeyStore: isAppExtension
+            ? NoPhraseKeyrings.killphraseKeys as any KillphraseKeyStore<KeyData<32>>
+            : openVaultPhraseKeyrings.killphraseKeys,
         killphraseRehashService: killphraseRehashService,
-        searchPassphraseKeyStore: searchPassphraseKeyStore,
+        searchPassphraseKeyStore: isAppExtension
+            ? NoPhraseKeyrings.searchPassphraseKeys as any SearchPassphraseKeyStore<KeyData<32>>
+            : openVaultPhraseKeyrings.searchPassphraseKeys,
         searchPassphraseRehashService: searchPassphraseRehashService,
         backupEventLogger: backupEventLogger,
         // Only the app moves a backup key to a stronger derivation, which needs 512 MiB. AutoFill never loads the
         // backup password, but its data model can't, either.
         backupPasswordUpgrader: isAppExtension ? nil :
             BackupPasswordUpgrader(keyDeriverFactory: vaultKeyDeriverFactory),
+        phraseKeyringsCleanup: isAppExtension ? nil : openVaultPhraseKeyrings,
     )
 
     // MARK: - Previews
@@ -520,6 +530,7 @@ public enum VaultRoot {
             },
             archives: vaultStoreArchives,
             deviceBackupSettings: deviceBackupSettings,
+            devicePhraseKeyrings: devicePhraseKeyrings,
             purgeVaultContents: { @MainActor in
                 await vaultDataModel.purgeVaultContents()
             },

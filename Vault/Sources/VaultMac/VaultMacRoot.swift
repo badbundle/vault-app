@@ -123,11 +123,13 @@ enum VaultMacRoot {
         },
     )
 
-    static let killphraseKeyStore: some KillphraseKeyStore<KeyData<32>> =
-        KillphraseKeyStoreImpl(secureStorage: secureStorage)
+    /// The killphrase and search passphrase keyrings in the keychain: the empty store's, which setting the password
+    /// moves into the vault, and those vaults made before they kept their own used. The Mac has no device key mode.
+    static let devicePhraseKeyrings = DevicePhraseKeyrings(secureStorage: secureStorage)
 
-    static let searchPassphraseKeyStore: some SearchPassphraseKeyStore<KeyData<32>> =
-        SearchPassphraseKeyStoreImpl(secureStorage: secureStorage)
+    /// The open vault's killphrase and search passphrase keyrings, which an encrypted vault keeps in its payload, so
+    /// they move with the vault file, to another Mac with Migration Assistant or a Time Machine restore.
+    static let openVaultPhraseKeyrings = OpenVaultPhraseKeyrings(session: vaultStore, device: devicePhraseKeyrings)
 
     static let backupEventLogger: some BackupEventLogger = BackupEventLoggerImpl(
         storage: openVaultBackupSettings,
@@ -144,15 +146,16 @@ enum VaultMacRoot {
         // (G46).
         vaultOtpAutofillStore: NoCredentialIdentities(),
         backupPasswordStore: openVaultBackupSettings,
-        killphraseKeyStore: killphraseKeyStore,
+        killphraseKeyStore: openVaultPhraseKeyrings.killphraseKeys,
         // Only an iOS SQLite store from an older version has phrases to rehash.
         killphraseRehashService: nil,
-        searchPassphraseKeyStore: searchPassphraseKeyStore,
+        searchPassphraseKeyStore: openVaultPhraseKeyrings.searchPassphraseKeys,
         searchPassphraseRehashService: nil,
         backupEventLogger: backupEventLogger,
         // The app moves a backup key to a stronger derivation once it's loaded. The AutoFill extension, which has its
         // own data model, never does.
         backupPasswordUpgrader: BackupPasswordUpgrader(keyDeriverFactory: vaultKeyDeriverFactory),
+        phraseKeyringsCleanup: openVaultPhraseKeyrings,
     )
 
     // MARK: - Items
@@ -261,6 +264,7 @@ enum VaultMacRoot {
             },
             archives: NoVaultStoreArchives(),
             deviceBackupSettings: deviceBackupSettings,
+            devicePhraseKeyrings: devicePhraseKeyrings,
             purgeVaultContents: { @MainActor in
                 await vaultDataModel.purgeVaultContents()
             },

@@ -25,7 +25,8 @@ import VaultCore
 ///    can open a vault from here on. It holds the encrypted file's lock while it does, if it can, so a save underway
 ///    in an extension can't put the file back: a save reads the file under the lock, and fails if there isn't one.
 /// 4. Deletes every keychain item (`VaultIdentifiers.SecureStorageKey`): the killphrase and search passphrase HMAC
-///    keyrings, this device's own keys and those restored backups brought, the backup password and its record, the
+///    keyrings, this device's own keys and those restored backups brought, and those of the vault the device key
+///    opened, the backup password and its record, the
 /// count of attempts at the App Lock Password, the wrap stamp,
 ///    which shows a password vault was used and about when, the device key, which opens the vault while the
 ///    password is off, and the codes the Mac app hands its widgets and a widget's note of a copied code, if any were
@@ -323,6 +324,10 @@ extension VaultEraser {
         case .killphraseBackupKeys, .searchPassphraseBackupKeys:
             // The rest of the keyrings, the keys restored backups brought: they check the erased vaults' phrases, and
             // show backups were restored here.
+            try await secureStorage.remove(key: key.keychainService)
+        case .phraseKeyringsWhilePasswordOff:
+            // The keyrings of the vault the device key opened. They check its phrases, and show the password was
+            // turned off.
             try await secureStorage.remove(key: key.keychainService)
         case .appLockPasswordAttempts:
             try await attemptCounter.reset()

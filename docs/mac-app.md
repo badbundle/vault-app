@@ -313,10 +313,11 @@ On the Mac, the data protection keychain only answers an app whose provisioning 
 group: without one, every call fails with `errSecMissingEntitlement`, App Group or not (found in VAULT-106). So the Mac
 app has `keychain-access-groups`, and its App Group is a keychain access group too:
 
-- the killphrase and search passphrase keyrings are in the app's own group, `442P244AFS.com.badbundle.vault.private`,
-  which the AutoFill extension can't read. `VaultMacRoot.keychain` names that group, so the app never reads one of
-  its own items from the App Group either. The backup password is inside each encrypted vault, as on iOS with the
-  password on;
+- the killphrase and search passphrase keyrings the keychain still holds are in the app's own group,
+  `442P244AFS.com.badbundle.vault.private`, which the AutoFill extension can't read: the empty store's before the
+  first password, which setting it moves into the vault, and those vaults made before VAULT-127 used.
+  `VaultMacRoot.keychain` names that group, so the app never reads one of its own items from the App Group either.
+  The backup password and each vault's own keyrings are inside each encrypted vault, as on iOS with the password on;
 - the attempt counter, the wrap stamp and the app lock's device settings are in the group the app shares with the
   AutoFill extension, `442P244AFS.com.badbundle.vault.shared`, as on iOS (VAULT-129). The AutoFill extension's only
   keychain access groups are that one and the App Group's, `442P244AFS.com.badbundle.vault`, which holds the device
@@ -360,9 +361,12 @@ from the defaults again. The item also keeps whether the user has turned Keep Ou
 [Time Machine](#time-machine)). Vault's other settings, such as Hide While Recording, which anyone at the unlocked Vault can
 change, stay in the defaults.
 
-The keyrings stay on this Mac: moving to another Mac, with Migration Assistant or a Time Machine restore, brings the
-vault file but not them, so its killphrases and search passphrases would stop working there. Moving to another Mac is
-done with a Vault backup, which carries them (G7).
+Each vault keeps its killphrase and search passphrase keyrings inside its encryption (VAULT-127), so moving to
+another Mac with Migration Assistant or a Time Machine restore brings them with the vault file, and its killphrases
+and search passphrases work there. A vault made before that takes its copy of the keychain's the first time it opens:
+one that hasn't opened since the update still needs this Mac's keychain, so open each vault once before moving, or
+move with a Vault backup, which carries them (G7, G100). See "Each vault's keyrings" in
+[`on-device-encryption.md`](./on-device-encryption.md).
 
 ### Spotlight
 

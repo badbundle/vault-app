@@ -5,7 +5,7 @@ import FoundationExtensions
 /// Computes and verifies one-way search-passphrase digests for a vault.
 ///
 /// Digests are `HMAC-SHA256(K, salt || fold(phrase))` where `K` is a 256-bit
-/// key that lives in the device keychain (see `SearchPassphraseKeyStore`)
+/// key on the vault's keyring (see `SearchPassphraseKeyStore`)
 /// and `fold(...)` is `precomposedStringWithCanonicalMapping` followed by
 /// `folding(options: .caseInsensitive, locale: nil)`. The same `K` is
 /// reused across every item; per-item randomness comes from `salt`, which
@@ -14,9 +14,9 @@ import FoundationExtensions
 /// The case fold preserves the case-insensitive search behavior that the
 /// prior plaintext `caseInsensitiveCompare` predicate provided.
 ///
-/// New digests are always made with this device's own key. Matching also
-/// tries the keys restored backups brought (`HMACKeyring`), which their
-/// items' digests were made with.
+/// New digests are always made with the vault's own key. Matching also
+/// tries the keys restored backups brought, which their items' digests
+/// were made with.
 public struct SearchPassphraseDigester: SearchPassphraseMatcher, Sendable {
     /// Random salt length, in bytes, generated per item.
     public static let saltLength = 16

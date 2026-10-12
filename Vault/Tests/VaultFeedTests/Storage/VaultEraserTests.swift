@@ -646,7 +646,7 @@ struct VaultEraseHarness {
         for key in VaultIdentifiers.SecureStorageKey.allCases {
             switch key {
             case .backupPassword, .backupPasswordMetadata, .backupPasswordUpgrade, .killphraseKey, .searchPassphraseKey,
-                 .killphraseBackupKeys, .searchPassphraseBackupKeys:
+                 .killphraseBackupKeys, .searchPassphraseBackupKeys, .phraseKeyringsWhilePasswordOff:
                 await keychain.store(data: Data(key.rawValue.utf8), forKey: key.rawValue)
             case .appLockPasswordAttempts:
                 attemptStorage.setCount(AppLockPasswordAttemptCounter.eraseThreshold)
@@ -788,7 +788,7 @@ struct VaultEraseHarness {
     func isStored(_ key: VaultIdentifiers.SecureStorageKey) async -> Bool {
         switch key {
         case .backupPassword, .backupPasswordMetadata, .backupPasswordUpgrade, .killphraseKey, .searchPassphraseKey,
-             .killphraseBackupKeys, .searchPassphraseBackupKeys:
+             .killphraseBackupKeys, .searchPassphraseBackupKeys, .phraseKeyringsWhilePasswordOff:
             await keychain.keys().contains(key.rawValue)
         case .appLockPasswordAttempts:
             attemptStorage.hasRecord
@@ -910,6 +910,7 @@ actor FaultInjectingSecureStorage: SecureStorage {
         case .searchPassphraseKey: "the search passphrase key"
         case .killphraseBackupKeys: "the killphrase keys from backups"
         case .searchPassphraseBackupKeys: "the search passphrase keys from backups"
+        case .phraseKeyringsWhilePasswordOff: "the keyrings while the password is off"
         case .backupPassword: "the backup password"
         case .backupPasswordMetadata: "the backup password's record"
         case .backupPasswordUpgrade: "the backup password's upgraded key"

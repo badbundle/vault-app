@@ -9,7 +9,7 @@ struct EncryptedVaultPayloadTests {
 
         let payload = try EncryptedVaultPayload.encode(state)
 
-        #expect(payload.version == 1)
+        #expect(payload.version == 2)
         #expect(try EncryptedVaultPayload.decode(payload) == state)
     }
 
@@ -52,18 +52,75 @@ struct EncryptedVaultPayloadTests {
 
         #expect(try EncryptedVaultPayload.decode(payload) == state)
         let vault = try Self.vaultSection(of: payload)
-        #expect(Set(vault.keys) == ["duressSlots", "settings"])
+        #expect(Set(vault.keys) == ["duressSlots", "settings", "keyrings"])
         #expect(vault["duressSlots"] as? [Int] == [3, 14, 0])
     }
 
-    /// The vault's settings are written even when none is set, so every payload has the same sections.
+    /// The vault's settings are written even when none is set, and its keyrings as `null` when it has none, so every
+    /// payload has the same sections.
     @Test
     func encode_writesTheVaultsSettingsWhenNoneIsSet() throws {
         let payload = try EncryptedVaultPayload.encode(.empty)
 
         let vault = try Self.vaultSection(of: payload)
-        #expect(Set(vault.keys) == ["duressSlots", "settings"])
+        #expect(Set(vault.keys) == ["duressSlots", "settings", "keyrings"])
         #expect(vault["settings"] is [String: Any])
+        #expect(vault["keyrings"] is NSNull)
+    }
+
+    /// Version 2 carries the vault's own killphrase and search passphrase keyrings, every key of each, in the order
+    /// they were added.
+    @Test
+    func encode_roundTripsTheVaultsKeyrings() throws {
+        let keyrings = VaultPhraseKeyrings(
+            killphrase: .init(ownKey: .repeating(byte: 0x01), keysFromBackups: [.repeating(byte: 0x02)]),
+            searchPassphrase: .init(
+                ownKey: .repeating(byte: 0x03),
+                keysFromBackups: [.repeating(byte: 0x05), .repeating(byte: 0x04)],
+            ),
+        )
+        let state = VaultRecordState(items: [], tags: [], vault: VaultMetadata(keyrings: keyrings))
+
+        let payload = try EncryptedVaultPayload.encode(state)
+
+        #expect(payload.version == 2)
+        #expect(try EncryptedVaultPayload.decode(payload).vault.keyrings == keyrings)
+        let section = try #require(Self.vaultSection(of: payload)["keyrings"] as? [String: Any])
+        #expect(Set(section.keys) == ["killphrase", "searchPassphrase"])
+        let killphrase = try #require(section["killphrase"] as? [String: Any])
+        #expect(Set(killphrase.keys) == ["ownKey", "keysFromBackups"])
+        #expect(killphrase["ownKey"] as? String == Data(repeating: 0x01, count: 32).base64EncodedString())
+    }
+
+    /// Version 2's keyrings, as the first version that carried them wrote them.
+    @Test
+    func decode_readsVersion2sKeyringsAsTheyWereFirstWritten() throws {
+        let one = Data(repeating: 0x01, count: 32).base64EncodedString()
+        let two = Data(repeating: 0x02, count: 32).base64EncodedString()
+        let three = Data(repeating: 0x03, count: 32).base64EncodedString()
+        let json = """
+        {"items":[],"tags":[],"vault":{"duressSlots":[],"settings":{},"keyrings":\
+        {"killphrase":{"ownKey":"\(one)","keysFromBackups":["\(two)"]},\
+        "searchPassphrase":{"ownKey":"\(three)","keysFromBackups":[]}}}}
+        """
+
+        let state = try EncryptedVaultPayload.decode(VaultSlotPayload(version: 2, data: Data(json.utf8)))
+
+        #expect(state.vault.keyrings == VaultPhraseKeyrings(
+            killphrase: .init(ownKey: .repeating(byte: 0x01), keysFromBackups: [.repeating(byte: 0x02)]),
+            searchPassphrase: .init(ownKey: .repeating(byte: 0x03)),
+        ))
+    }
+
+    /// A vault saved before vaults kept their own keyrings has none, until it takes a copy of the keychain's.
+    @Test
+    func decode_version1_hasNoKeyrings() throws {
+        let json = #"{"items":[],"tags":[],"vault":{"duressSlots":[1,2],"settings":{}}}"#
+
+        let state = try EncryptedVaultPayload.decode(VaultSlotPayload(version: 1, data: Data(json.utf8)))
+
+        #expect(state.vault.keyrings == nil)
+        #expect(state.vault.duressSlots == [1, 2])
     }
 
     /// Fields added later read as their defaults when they're missing.
@@ -121,7 +178,9 @@ struct EncryptedVaultPayloadTests {
         #expect(state.tags.map(\.color) == [nil])
     }
 
-    @Test(arguments: [UInt32(0), 2, .max])
+    /// Version 3 and later are refused too: saving one would drop what the newer version added. An app that knew only
+    /// version 1 refused version 2 this way, rather than dropping the vault's keyrings.
+    @Test(arguments: [UInt32(0), 3, .max])
     func decode_refusesAVersionItDoesNotKnow(version: UInt32) throws {
         let payload = try EncryptedVaultPayload.encode(VaultRecordState(items: [Self.everyFieldItem()], tags: []))
 

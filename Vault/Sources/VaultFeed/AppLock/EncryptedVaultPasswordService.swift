@@ -39,6 +39,8 @@ public final class EncryptedVaultPasswordService: AppLockPasswordService {
     ///   - erase: Erases every vault, and forgets what the app holds from them: `VaultRoot.eraseVault()`.
     ///   - archives: The copies of the plain store set aside because they couldn't be opened.
     ///   - deviceBackupSettings: The plain store's backup settings, which setting the password moves into the vault.
+    ///   - devicePhraseKeyrings: The killphrase and search passphrase keyrings in the keychain: the plain store's,
+    ///     which setting the password moves into the vault, and those turning it off moves out of it.
     ///   - purgeVaultContents: Forgets everything the app read from the vault. Called every time it locks.
     ///   - conversionHooks: What the app does around converting the plain store.
     ///   - passwordHooks: Brings the widgets, QuickType and AutoFill up to date with the password turned off or on.
@@ -54,6 +56,7 @@ public final class EncryptedVaultPasswordService: AppLockPasswordService {
         erase: @escaping @MainActor () async throws -> Void,
         archives: any VaultStoreArchiving,
         deviceBackupSettings: any DeviceBackupSettingsMoving,
+        devicePhraseKeyrings: DevicePhraseKeyrings,
         purgeVaultContents: @escaping @Sendable () async -> Void,
         conversionHooks: VaultEncryptionConverter.Hooks,
         passwordHooks: VaultPasswordChangeService.Hooks,
@@ -80,6 +83,7 @@ public final class EncryptedVaultPasswordService: AppLockPasswordService {
                 unlockService: unlockService,
                 attemptCounter: attemptCounter,
                 settings: settings,
+                phraseKeyrings: devicePhraseKeyrings,
                 backgroundTime: backgroundTime,
                 hooks: passwordHooks,
             ),
@@ -98,6 +102,7 @@ public final class EncryptedVaultPasswordService: AppLockPasswordService {
                     archives: archives,
                     attemptCounter: attemptCounter,
                     deviceBackupSettings: deviceBackupSettings,
+                    devicePhraseKeyrings: devicePhraseKeyrings,
                     hooks: conversionHooks,
                     backgroundTime: backgroundTime,
                     calibration: calibration,

@@ -6,13 +6,13 @@ import FoundationExtensions
 ///
 /// Digests are `HMAC-SHA256(K, salt || normalize(phrase))` where
 /// `normalize(...)` trims surrounding whitespace and `K` is a 256-bit key
-/// that lives in the device keychain (see `KillphraseKeyStore`). The same
-/// `K` is reused across every item; per-item randomness comes from `salt`,
-/// which is regenerated on every set.
+/// on the vault's keyring (see `KillphraseKeyStore`, `VaultPhraseKeyrings`).
+/// The same `K` is reused across every item; per-item randomness comes from
+/// `salt`, which is regenerated on every set.
 ///
-/// New digests are always made with this device's own key. Matching also
-/// tries the keys restored backups brought (`HMACKeyring`), which their
-/// items' digests were made with.
+/// New digests are always made with the vault's own key. Matching also
+/// tries the keys restored backups brought, which their items' digests
+/// were made with.
 public struct KillphraseDigester: KillphraseMatcher, Sendable {
     /// Random salt length, in bytes, generated per item.
     public static let saltLength = 16

@@ -88,7 +88,8 @@ actor SlotFilePersistence: VaultRecordPersistence {
     /// wrap time is `wrapStamper`'s, for the slot as it's saved, read under the lock.
     ///
     /// The vault sealed is what's saved: `state`, unless another writer has saved the slot since, when it's what that
-    /// writer saved. `RecordVaultStore` runs this in a change's turn, so no save of its own is underway.
+    /// writer saved, with its keyrings changed by `changeKeyrings`. `RecordVaultStore` runs this in a change's turn,
+    /// so no save of its own is underway.
     ///
     /// - Returns: The state sealed, for the store to take as its own.
     /// - Throws: `EncryptedVaultStoreError.slotLost` if the slot doesn't open with its wrap key any more. The file is
@@ -98,6 +99,7 @@ actor SlotFilePersistence: VaultRecordPersistence {
         to rootKey: VaultSlotRootKey,
         protection: SlotFileProtection,
         wrapStamper: any VaultWrapStamping,
+        changeKeyrings: @Sendable (inout VaultPhraseKeyrings?) -> Void = { _ in },
     ) async throws -> VaultRecordState {
         var newFile = file
         newFile.protection = protection
@@ -110,9 +112,10 @@ actor SlotFilePersistence: VaultRecordPersistence {
             } catch {
                 throw EncryptedVaultStoreError.slotLost
             }
-            let sealed = current.generation == slot.generation
+            var sealed = current.generation == slot.generation
                 ? state
                 : try EncryptedVaultPayload.decode(slot: current, in: contents)
+            changeKeyrings(&sealed.vault.keyrings)
             var payload = try EncryptedVaultPayload.encode(sealed)
             defer { SlotRandom.wipe(&payload.data) }
             let wrappedAt = try wrapStamper.nextWrapStamp(rewrapping: current.wrappedAt)
@@ -195,10 +198,11 @@ extension SlotFilePersistence {
         let key = try await Task.detached(priority: .userInitiated) {
             try work.passwordKey(for: password, header: header)
         }.value
+        // Keyrings of its own, never a copy of this vault's, so nothing in it checks this vault's phrases.
         let state = VaultRecordState(
             items: [],
             tags: [],
-            vault: VaultMetadata(duressSlots: placement.duressSlots),
+            vault: VaultMetadata(duressSlots: placement.duressSlots, keyrings: .random()),
         )
         var payload = try EncryptedVaultPayload.encode(state)
         defer { SlotRandom.wipe(&payload.data) }

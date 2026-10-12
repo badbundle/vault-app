@@ -300,7 +300,7 @@ extension VaultPasswordChangeServiceTests {
         let deviceKey = try #require(sut.deviceKeyStore.key)
         #expect(try sut.slots(openedBy: .device(deviceKey)) == [Self.realSlot])
         #expect(try sut.slots(openedBy: "real").isEmpty)
-        #expect(try sut.savedState(inSlot: Self.realSlot, with: .device(deviceKey)) == sut.realState)
+        #expect(try sut.savedState(inSlot: Self.realSlot, with: .device(deviceKey)) == sut.realState(in: .deviceKey))
         #expect(try sut.stateFile.read() == VaultStorageState(mode: .deviceKey, unlockDeadline: Self.deadline))
         try Self.expectOnlySlotChanged(Self.realSlot, from: before, to: sut.contents())
         let oldSlot = try before.openSlot(Self.realSlot, with: sut.passwordKey("real"))
@@ -499,6 +499,93 @@ extension VaultPasswordChangeServiceTests {
         try Self.expectOnlySlotChanged(Self.duressSlot, from: before, to: sut.contents())
         #expect(try sut.slots(openedBy: "real") == [Self.realSlot])
         #expect(try sut.slots(openedBy: "new") == [Self.duressSlot])
+    }
+}
+
+// MARK: - The keyrings
+
+/// The vault's killphrase and search passphrase keyrings go with the password (VAULT-127): in the payload while it's
+/// on, in the keychain while it's off, moved in the same write as the vault's key, and never lost.
+extension VaultPasswordChangeServiceTests {
+    @Test
+    func turnOffPassword_movesTheKeyringsFromThePayloadToTheKeychain() async throws {
+        let sut = try await makeSUT()
+
+        #expect(try await sut.service.turnOffPassword(current: "real") == .changed)
+
+        let deviceKey = try #require(sut.deviceKeyStore.key)
+        #expect(try sut.savedState(inSlot: Self.realSlot, with: .device(deviceKey)).vault.keyrings == nil)
+        #expect(try await sut.passwordOffKeyrings() == sut.realKeyrings)
+    }
+
+    @Test
+    func turnOnPassword_movesTheKeyringsBackIntoThePayloadAndOutOfTheKeychain() async throws {
+        let sut = try await makeSUT(mode: .deviceKey)
+
+        try await sut.service.turnOnPassword("new")
+
+        #expect(try sut.savedState(inSlot: Self.realSlot, with: sut.passwordKey("new")).vault.keyrings == sut
+            .realKeyrings)
+        #expect(try await sut.passwordOffKeyrings() == nil)
+    }
+
+    /// Off and back on, the vault has exactly the keys it had, so every phrase it holds still works, and none are
+    /// left in the keychain.
+    @Test
+    func turnOffThenOn_keepsEveryKeyAndLeavesNoneInTheKeychain() async throws {
+        let sut = try await makeSUT()
+
+        #expect(try await sut.service.turnOffPassword(current: "real") == .changed)
+        try await sut.service.turnOnPassword("new")
+
+        #expect(try sut.savedState(inSlot: Self.realSlot, with: sut.passwordKey("new")) == sut.realState)
+        #expect(try await sut.passwordOffKeyrings() == nil)
+        #expect(await !sut.phraseKeyringStorage.contains(key: VaultIdentifiers.SecureStorageKey.killphraseKey.rawValue))
+    }
+
+    /// A vault whose password was turned off before vaults kept their own keyrings uses this device's. Turning it
+    /// back on gives it a copy, with a key of its own, and leaves this device's for any other vault made then.
+    @Test
+    func turnOnPassword_turnedOffBeforeVaultsKeptTheirOwn_takesACopyOfTheDevicesKeyrings() async throws {
+        let sut = try await makeSUT(mode: .deviceKey, keyringsInTheKeychain: true)
+
+        try await sut.service.turnOnPassword("new")
+
+        let keyrings = try #require(try sut.savedState(inSlot: Self.realSlot, with: sut.passwordKey("new")).vault
+            .keyrings)
+        #expect(keyrings.killphrase.keysFromBackups == [sut.realKeyrings.killphrase.ownKey])
+        #expect(keyrings.searchPassphrase.keysFromBackups == [sut.realKeyrings.searchPassphrase.ownKey])
+        #expect(keyrings.killphrase.ownKey != sut.realKeyrings.killphrase.ownKey)
+        #expect(try await DevicePhraseKeyrings(secureStorage: sut.phraseKeyringStorage).killphrase.loadAllKeys() == [
+            sut.realKeyrings.killphrase.ownKey,
+        ])
+    }
+
+    /// Turning the password off from a vault that has no keyrings of its own yet leaves it using this device's, and
+    /// never keyrings another vault left in the keychain while its password was off.
+    @Test
+    func turnOffPassword_vaultWithoutKeyrings_usesTheDevicesWithThePasswordOff() async throws {
+        let sut = try await makeSUT(keyringsInTheKeychain: true)
+        try await DevicePhraseKeyrings(secureStorage: sut.phraseKeyringStorage).storePasswordOffKeyrings(.random())
+
+        #expect(try await sut.service.turnOffPassword(current: "real") == .changed)
+
+        let deviceKey = try #require(sut.deviceKeyStore.key)
+        #expect(try sut.savedState(inSlot: Self.realSlot, with: .device(deviceKey)).vault.keyrings == nil)
+        #expect(try await sut.passwordOffKeyrings() == nil)
+    }
+
+    /// Changing the password, or making a duress vault, leaves the keyrings where they are.
+    @Test
+    func changePassword_andMakeDuressVault_keepTheKeyrings() async throws {
+        let sut = try await makeSUT()
+
+        #expect(try await sut.service.changePassword(current: "real", new: "new") == .changed)
+        #expect(try await sut.service.makeDuressVault(current: "new", password: "duress") == .changed)
+
+        #expect(try sut.savedState(inSlot: Self.realSlot, with: sut.passwordKey("new")).vault.keyrings == sut
+            .realKeyrings)
+        #expect(try await sut.passwordOffKeyrings() == nil)
     }
 }
 
@@ -1025,7 +1112,11 @@ extension VaultPasswordChangeServiceTests {
         }
         let key = try #require(expectedKey, comment)
         let slot = try after.openSlot(Self.realSlot, with: key)
-        #expect(try EncryptedVaultPayload.decode(slot: slot, in: after) == sut.realState, comment)
+        #expect(
+            try EncryptedVaultPayload.decode(slot: slot, in: after) == sut
+                .realState(in: mode == .deviceKey ? .deviceKey : .password),
+            comment,
+        )
         // With the password on, launch recovery deletes a device key it's shown opens nothing, however the change
         // ended, and with it off, the key is there.
         #expect((sut.deviceKeyStore.key != nil) == (mode == .deviceKey), comment)
@@ -1379,8 +1470,14 @@ extension VaultPasswordChangeServiceTests {
         /// The app lock's settings, with erasing after failed passwords.
         let settings: AppLockSettingsStore
         let realItem: VaultItem
+        /// The real vault as it's saved while the password opens it: with its keyrings, `realKeyrings`, in its
+        /// payload.
         let realState: VaultRecordState
         let duressState: VaultRecordState
+        /// The real vault's killphrase and search passphrase keyrings.
+        let realKeyrings: VaultPhraseKeyrings
+        /// The keychain the keyrings are in while the password is off.
+        let phraseKeyringStorage: InMemorySecureStorage
         /// What the surface hooks did, in order.
         let surfaces: SharedMutex<[String]>
         /// Makes the surface hooks fail, as if the app stopped before they ran.
@@ -1424,6 +1521,20 @@ extension VaultPasswordChangeServiceTests {
             return try EncryptedVaultPayload.decode(slot: file.openSlot(index, with: key), in: file)
         }
 
+        /// The real vault as it's saved in `mode`: with the password off, its keyrings are in the keychain instead.
+        func realState(in mode: VaultStorageState.Mode) -> VaultRecordState {
+            var state = realState
+            if mode == .deviceKey {
+                state.vault.keyrings = nil
+            }
+            return state
+        }
+
+        /// The keyrings in the keychain while the password is off, if there are any.
+        func passwordOffKeyrings() async throws -> VaultPhraseKeyrings? {
+            try await DevicePhraseKeyrings(secureStorage: phraseKeyringStorage).passwordOffKeyrings()
+        }
+
         func temporaryFileNames() throws -> [String] {
             try base.contentsOfDirectory(at: directory)
                 .map(\.lastPathComponent)
@@ -1450,11 +1561,15 @@ extension VaultPasswordChangeServiceTests {
     ///   - openedWith: The password that opened the session's vault, in the `password` mode.
     ///   - deviceKey: A device key in the keychain, in the `password` mode. It opens nothing.
     ///   - now: The device's clock, for wrap stamps.
+    ///   - keyringsInTheKeychain: Whether the real vault was made before vaults kept their own keyrings: it has none
+    ///     in its payload, or in the keychain's keyrings for while the password is off, and `realKeyrings` are this
+    ///     device's own, in the keychain.
     private static func makeSUT(
         mode: VaultStorageState.Mode = .password,
         password: String = "real",
         openedWith: String? = nil,
         deviceKey: SymmetricKey? = nil,
+        keyringsInTheKeychain: Bool = false,
         now: @escaping @Sendable () -> Date = { Date() },
         backgroundTime: (FaultInjectingSlotFileSystem) -> VaultBackgroundTime = { _ in .none },
     ) async throws -> SUT {
@@ -1466,10 +1581,29 @@ extension VaultPasswordChangeServiceTests {
         let keychain = FaultInjectingDeviceKeyStore(wrapping: deviceKeyStore, steps: fileSystem)
         let wrapStampStorage = InMemoryWrapStampStorage()
         let realItem = uniqueVaultItem()
+        let realKeyrings = VaultPhraseKeyrings.random()
         var realState = try EncryptedVaultStoreTests.state(items: [realItem])
         realState.vault.duressSlots = realDuressSlots
+        realState.vault.keyrings = keyringsInTheKeychain ? nil : realKeyrings
         var duressState = try EncryptedVaultStoreTests.state(items: [uniqueVaultItem()])
         duressState.vault.duressSlots = duressDuressSlots
+        duressState.vault.keyrings = .random()
+        let phraseKeyringStorage = InMemorySecureStorage()
+        var savedRealState = realState
+        if keyringsInTheKeychain {
+            for kind in VaultPhraseKeyrings.Kind.allCases {
+                let item: VaultIdentifiers
+                    .SecureStorageKey = kind == .killphrase ? .killphraseKey : .searchPassphraseKey
+                await phraseKeyringStorage.storeSilent(
+                    data: realKeyrings[kind].ownKey.data,
+                    forKey: item.keychainService,
+                )
+            }
+        } else if mode == .deviceKey {
+            // Turning the password off moved them to the keychain.
+            savedRealState.vault.keyrings = nil
+            try await DevicePhraseKeyrings(secureStorage: phraseKeyringStorage).storePasswordOffKeyrings(realKeyrings)
+        }
 
         var contents = try VaultSlotFile(kdfParameters: EncryptedVaultFixture.kdfParameters)
         let realKey: VaultSlotRootKey = if mode == .deviceKey, let key = deviceKeyStore.key {
@@ -1480,7 +1614,7 @@ extension VaultPasswordChangeServiceTests {
         try contents.createVault(
             inSlot: realSlot,
             rootKey: realKey,
-            payload: EncryptedVaultPayload.encode(realState),
+            payload: EncryptedVaultPayload.encode(savedRealState),
             wrappedAt: Self.longAgo,
         )
         try contents.createVault(
@@ -1529,6 +1663,7 @@ extension VaultPasswordChangeServiceTests {
             attemptCounter: attemptCounter,
             deviceKeyStore: keychain,
             settings: settings,
+            phraseKeyrings: DevicePhraseKeyrings(secureStorage: phraseKeyringStorage),
             backgroundTime: backgroundTime(fileSystem),
             hooks: VaultPasswordChangeService.Hooks(
                 passwordDidTurnOff: {
@@ -1565,6 +1700,8 @@ extension VaultPasswordChangeServiceTests {
             realItem: realItem,
             realState: realState,
             duressState: duressState,
+            realKeyrings: realKeyrings,
+            phraseKeyringStorage: phraseKeyringStorage,
             surfaces: surfaces,
             surfaceHooksFail: surfaceHooksFail,
         )
@@ -1575,6 +1712,7 @@ extension VaultPasswordChangeServiceTests {
         password: String = "real",
         openedWith: String? = nil,
         deviceKey: SymmetricKey? = nil,
+        keyringsInTheKeychain: Bool = false,
         now: @escaping @Sendable () -> Date = { Date() },
         backgroundTime: (FaultInjectingSlotFileSystem) -> VaultBackgroundTime = { _ in .none },
     ) async throws -> SUT {
@@ -1583,6 +1721,7 @@ extension VaultPasswordChangeServiceTests {
             password: password,
             openedWith: openedWith,
             deviceKey: deviceKey,
+            keyringsInTheKeychain: keyringsInTheKeychain,
             now: now,
             backgroundTime: backgroundTime,
         )

@@ -96,10 +96,60 @@ public final class EncryptedVaultStore: Sendable {
     /// a password change, or turning the password off or on. Only this vault's slot changes. Its wrap time is
     /// stamped by `VaultWrapStamping`, later than every wrap this device has made and than its own.
     ///
+    /// `keyrings` says what happens to the vault's keyrings, in the same write: they move out of the payload or into
+    /// it with the change of key, or not at all.
+    ///
     /// It waits for any change underway to be saved first, and nothing is changed while it runs.
-    func rekey(to rootKey: VaultSlotRootKey, protection: SlotFileProtection) async throws {
+    func rekey(
+        to rootKey: VaultSlotRootKey,
+        protection: SlotFileProtection,
+        keyrings: KeyringsMove = .none,
+    ) async throws {
         try await records.whileChanging { [persistence, wrapStamper] state in
-            try await persistence.rekey(state, to: rootKey, protection: protection, wrapStamper: wrapStamper)
+            let changeKeyrings: @Sendable (inout VaultPhraseKeyrings?) -> Void
+            switch keyrings {
+            case .none:
+                changeKeyrings = { _ in }
+            case let .out(keep):
+                // Only this app changes a vault's keyrings, and only in a change's turn, which this is: another
+                // writer's save holds these same ones.
+                let moving = state.vault.keyrings
+                try await keep(moving)
+                changeKeyrings = {
+                    if $0 == moving {
+                        $0 = nil
+                    }
+                }
+            case let .in(moving):
+                changeKeyrings = { keyrings in keyrings = keyrings.map { $0.adding(moving) } ?? moving }
+            }
+            return try await persistence.rekey(
+                state,
+                to: rootKey,
+                protection: protection,
+                wrapStamper: wrapStamper,
+                changeKeyrings: changeKeyrings,
+            )
+        }
+    }
+
+    /// What a rekey does with the vault's keyrings (`rekey(to:protection:keyrings:)`).
+    enum KeyringsMove: Sendable {
+        /// They stay as they are.
+        case none
+        /// They're taken out of the payload, for turning the password off, once `keep` has kept them elsewhere: it's
+        /// given those in the payload, or `nil` if there are none. If it throws, nothing changes.
+        case out(keep: @Sendable (VaultPhraseKeyrings?) async throws -> Void)
+        /// These go into the payload, for turning the password back on. If the payload has some already, they're
+        /// kept, with these keys added to match against.
+        case `in`(VaultPhraseKeyrings)
+    }
+
+    /// Whether the device key opens this vault, rather than the App Lock Password: the `deviceKey` mode, which gives
+    /// the file its protection (`EncryptedVaultFile.protection(for:)`). Rekeying it moves it from one to the other.
+    var opensWithTheDeviceKey: Bool {
+        get async {
+            await persistence.file.protection == EncryptedVaultFile.protection(for: .deviceKey)
         }
     }
 
@@ -317,6 +367,47 @@ extension EncryptedVaultStore {
         try checkWrite()
         try await records.change { state in
             update(&state.vault.settings)
+        }
+    }
+}
+
+// MARK: - Keyrings
+
+extension EncryptedVaultStore {
+    /// This vault's own killphrase and search passphrase keyrings, as saved in its payload, or `nil` if it has none
+    /// there (`VaultMetadata.keyrings`).
+    var phraseKeyrings: VaultPhraseKeyrings? {
+        get async {
+            await records.state.vault.keyrings
+        }
+    }
+
+    /// Changes this vault's keyrings in its payload, while the App Lock Password opens it, and saves them to its slot
+    /// like any other change: if another writer saved first, the change is made again on top of what it saved.
+    ///
+    /// Once the device key opens the vault, its keyrings are in the keychain (`DevicePhraseKeyrings`): nothing
+    /// changes, and it returns `nil`. Which key opens it only changes in a change's turn
+    /// (`rekey(to:protection:keyrings:)`), so it's checked in this one's.
+    ///
+    /// Use `VaultStoreSession.whileOpen(_:_:)` around it, so it's only made while this vault is the open one.
+    ///
+    /// - Parameter update: The keyrings to save, from those in the payload now, or `nil` if there are none. If it
+    ///   throws, nothing changes.
+    /// - Returns: The keyrings as saved, or `nil` if the device key opens the vault.
+    @discardableResult
+    func updatePhraseKeyrings(
+        _ update: @escaping @Sendable (VaultPhraseKeyrings?) throws -> VaultPhraseKeyrings,
+    ) async throws -> VaultPhraseKeyrings? {
+        try checkWrite()
+        let persistence = persistence
+        let deviceKeyProtection = EncryptedVaultFile.protection(for: .deviceKey)
+        let opensWithThePassword: @Sendable () async -> Bool = {
+            await persistence.file.protection != deviceKeyProtection
+        }
+        return try await records.change(if: opensWithThePassword) { state in
+            let keyrings = try update(state.vault.keyrings)
+            state.vault.keyrings = keyrings
+            return keyrings
         }
     }
 }
