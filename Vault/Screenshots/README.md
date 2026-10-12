@@ -40,6 +40,12 @@ real vault is never shown or touched, seeds the demo items and tags defined
 there, and opens the requested scene. Add a scene there and to `SCENES` in
 `capture.sh` to capture a new screen.
 
+It also moves the app's clock (`ScreenshotMode.clockOffset`) so every demo
+code is 3 seconds into its 30-second period as the app launches. After the
+capture's wait the countdown bars show about 70% left in every shot, never a
+nearly empty bar, and the codes are still the right ones for the clock's time.
+Raising `SCREENSHOT_SETTLE_SECONDS` lowers the bars.
+
 ## Scenes
 
 | Scene               | Shows |
@@ -85,38 +91,61 @@ callout sits live in `iphone.json` and `ipad.json`; the
 [config reference](https://github.com/badbundle/device-screenshot-framer#config-file-reference)
 documents every key, including the
 [layouts](https://github.com/badbundle/device-screenshot-framer#layouts).
-Every image shares one background: near-black at the top, where the text
-sits, lightening to Vault's blue at the bottom. Devices cast a shadow and
-have a Silver frame, apart from the dark settings screens, which get Deep
-Blue (iPhone) or Space Gray (iPad) to set them apart from the light ones.
+Every image shares one background, in the icon's colours: near-black,
+deepening to navy at the bottom, lit by soft glows of Vault's blue behind the
+devices, with the icon's vault door, very faint and oversized, behind the
+title (`assets/vault-door.png`, the dark icon's glyph rendered at 3072 pixels
+by `swift run vault-app-icon-generator -o <dir> --size 3072` and trimmed). A
+panorama has its own `background`, with a glow and a door per page. Every
+title is the same size and sits the same distance from the top
+(`"anchor": "edge"`, `minScale` and `maxScale` 1), with one word in the
+accent blue (`accent`), and the devices start just below the text, large and
+tilted, running off the bottom. Devices cast a shadow and have a Silver frame,
+apart from the dark screens, which get Deep Blue (iPhone) or Space Gray (iPad)
+to set them apart from the light ones.
 
-Each device class tells the same story in nine images, the strongest first:
+Where a page has a focal point, a callout lifts it off the screen on a blue
+glow, with no border. A card is left over the part it lifts (no `x` / `y`,
+the device's rotation) and sized so its edges land in the gaps around it, so
+nothing shows half-covered at its edges; `offsetX` / `offsetY`, in the
+capture's pixels, nudge it to fit those gaps. The exceptions are the search
+field, which is moved up into the empty middle of the search results, and on
+the iPad hero the GitHub code, enlarged over the empty sidebar with its card
+outlined in the feed.
+
+Each device class tells the same story in nine images, the strongest first.
+The first three show in search results, so they sell Vault on their own: what
+it keeps, then what it does when someone makes you open it.
 
 1. **Every code. Every secret.** The feed, as one large tilted device running
-   off the bottom.
+   off the bottom, with the GitHub code lifted out of it.
 2. A panorama of three, one canvas cut into `-1`, `-2` and `-3`, about being
    made to unlock Vault:
-   - **Locked with a password:** the dark lock screen, asking for the App Lock
-     Password (on iPad, with its door enlarged into a card);
    - **Forced to unlock it?:** the App Lock Password's settings, with Set
-     Duress Password enlarged;
-   - **Erase after 10 wrong passwords:** the same settings in dark, with the
-     erase row enlarged.
-3. **Hidden until you search:** the search for `blue heron` finding the
-   hidden items, with its search field enlarged (on iPhone, in front of the
-   feed that doesn't show them; on iPad, with the hidden items enlarged too).
-4. **One search deletes it:** the editor's Privacy & Security step, with the
-   killphrase enlarged.
-5. **Tap to copy:** an item's page, with its code and countdown enlarged.
-6. **Backups you can hold:** the Backups page, barely tilted, running off the
-   bottom.
+     Duress Password lifted out;
+   - **One search deletes it:** the editor's Privacy & Security step, with
+     the killphrase lifted out;
+   - **Erase after 10 wrong tries:** the same settings as the first page, in
+     dark, with the erase row lifted out.
+3. **Locked with a password:** the dark lock screen, with its door and "Vault
+   Locked" lifted out and most of the keyboard cropped off.
+4. **Hidden until you search:** the search for `blue heron` finding the
+   hidden items, with its search field lifted into the empty space below them
+   (on iPhone, in front of the feed that doesn't show them).
+5. **Tap to copy:** an item's page, with its code and countdown lifted out.
+6. **Backups you can hold:** the Backups page, with its last backup ("Exported
+   to PDF") lifted out.
 7. **Private by design:** Settings in light and dark, overlapping.
+
+`deliver` orders each device's screenshots by file name (naturally sorted),
+so the numbers in the names are the order on the App Store.
 
 The copy is short and says only what holds, as the in-app help and
 [`docs/security-model.md`](../../docs/security-model.md) put it, limits
 included: a killphrase deletes the item "from this vault" (backups made
-before still have it), erasing happens "if you turn it on", and the clipboard
-clears after a minute "by default". Check a new claim against both before
+before still have it), erasing happens "if you turn it on" after 10 wrong
+App Lock Passwords in a row (the title's "tries"), and the clipboard clears
+after a minute "by default". Check a new claim against both before
 using it. Newlines in a title or subtitle start a new line; the subtitles
 are broken by hand so their lines balance. Apple rejects iPad screenshots
 that show an iPhone, so the iPad config only ever places iPads.
@@ -138,8 +167,9 @@ text too.
 
 Check each image at full size and at the size the App Store shows it in
 search results, about 300 pixels wide (`magick in.png -resize 300x out.png`):
-the titles should read easily there, the text shouldn't touch a device, and
-the codes shouldn't be masked.
+the titles should read easily there, the text shouldn't touch a device (the
+titles never shrink, so nothing else stops it), nothing should show
+half-covered at a callout's edges, and the codes shouldn't be masked.
 
 Frames are downloaded on first use into
 `~/Library/Caches/device-screenshot-framer/`.

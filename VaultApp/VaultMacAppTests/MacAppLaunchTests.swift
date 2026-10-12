@@ -220,6 +220,8 @@ struct MacAppKeychainTests {
         // Adding it to a group that has it already finds it there, as a move that's already been made does.
         var again = Self.query(account: account, group: MacAppLaunchTests.sharedKeychainGroupID)
         again[kSecValueData as String] = Data("again".utf8)
+        // As above: without it, the add is refused while the screen's locked before it ever finds the item.
+        again[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         #expect(SecItemAdd(again as CFDictionary, nil) == errSecDuplicateItem)
 
         #expect(SecItemDelete(Self.query(account: account, group: MacAppLaunchTests.appGroupID) as CFDictionary)

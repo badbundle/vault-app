@@ -203,6 +203,17 @@ enum ScreenshotMode {
         lastSetDate: Calendar.current.date(byAdding: .day, value: -14, to: statusBarTimeToday),
     ))
 
+    /// How far to move the app's clock so that, as the app launches, every demo code is `codeSecondsElapsed` into its
+    /// period (the default 30 seconds). `capture.sh` waits about 5 seconds before it captures, so the countdown bars
+    /// show roughly 70% left in every shot, rather than wherever the real time happened to fall, and no shot catches a
+    /// nearly empty bar. The codes are still the right ones for the clock's time.
+    static func clockOffset(now: Double = Date.now.timeIntervalSince1970) -> Double {
+        let period = Double(OTPAuthType.TOTP.defaultPeriod)
+        let codeSecondsElapsed = 3.0
+        let elapsed = now.truncatingRemainder(dividingBy: period)
+        return (codeSecondsElapsed - elapsed + period).truncatingRemainder(dividingBy: period)
+    }
+
     /// 9:41 today, the time `capture.sh` sets the status bar to: when the demo vault was last backed up.
     private static var statusBarTimeToday: Date {
         Calendar.current.date(bySettingHour: 9, minute: 41, second: 0, of: Date()) ?? Date()
