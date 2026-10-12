@@ -128,6 +128,7 @@ function skipMacUITests(): string | undefined {
  */
 const macAppEntitlements = [
   "com.apple.application-identifier",
+  "com.apple.developer.authentication-services.autofill-credential-provider",
   "com.apple.developer.team-identifier",
   "com.apple.security.app-sandbox",
   "com.apple.security.application-groups",
