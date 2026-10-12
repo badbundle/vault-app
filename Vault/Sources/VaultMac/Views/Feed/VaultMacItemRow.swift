@@ -80,6 +80,8 @@ struct VaultMacItemRow: View {
                 VaultMacCodeTimer(state: timer)
             }
         }
+        // A narrow list truncates the name and account rather than breaking the code across two lines.
+        .fixedSize()
         .overlay(alignment: .trailing) {
             if didCopy {
                 Text("Copied")
