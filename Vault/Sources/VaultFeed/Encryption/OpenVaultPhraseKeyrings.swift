@@ -107,6 +107,33 @@ extension OpenVaultPhraseKeyrings {
     }
 }
 
+// MARK: - Delete All Data
+
+/// Deletes the keyrings in the keychain that no vault can need once Delete All Data has emptied the open vault and
+/// destroyed every other one (`VaultDataModel.deleteVault()`).
+public protocol PhraseKeyringsCleanup: Sendable {
+    func deleteKeyringsNoOtherVaultNeeds() async throws
+}
+
+extension OpenVaultPhraseKeyrings: PhraseKeyringsCleanup {
+    /// Once Delete All Data has destroyed every vault but the open one, this device's keyrings only served vaults
+    /// that are gone, if the open vault keeps its own elsewhere: in its payload, or, with the password off, where
+    /// turning it off left them. They're deleted then, and so are keyrings a turn off left behind that the open vault
+    /// isn't using. Keyrings the open vault still uses stay: the plain store's, and those of a vault that hasn't taken
+    /// its copy yet.
+    public func deleteKeyringsNoOtherVaultNeeds() async throws {
+        guard case let .encrypted(store) = await session.openVault else { return }
+        if await store.opensWithTheDeviceKey {
+            guard try await device.passwordOffKeyrings() != nil else { return }
+            try await device.delete()
+        } else {
+            guard await store.phraseKeyrings != nil else { return }
+            try await device.delete()
+            try await device.deletePasswordOffKeyrings()
+        }
+    }
+}
+
 // MARK: - Where they are
 
 extension OpenVaultPhraseKeyrings {
@@ -197,6 +224,52 @@ extension OpenVaultPhraseKeyrings {
 
         func addKeysFromBackup(_ keys: [KeyData<32>]) async throws {
             try await keyrings.addKeysFromBackup(keys, to: .searchPassphrase)
+        }
+    }
+}
+
+// MARK: - None
+
+/// Key stores for a process that never checks phrases, the AutoFill extensions (G2, G47): every call throws, so it
+/// can't read the keychain's keyrings, make keys, or save a copy into a vault it opened. Its data model never loads
+/// them, and this keeps it that way: an extension reading another keychain group could otherwise give a vault made
+/// before vaults kept their own a copy without the keys its phrases were digested with.
+public enum NoPhraseKeyrings {
+    public struct Unavailable: Error, Equatable {}
+
+    public static var killphraseKeys: some KillphraseKeyStore<KeyData<32>> {
+        KillphraseKeys()
+    }
+
+    public static var searchPassphraseKeys: some SearchPassphraseKeyStore<KeyData<32>> {
+        SearchPassphraseKeys()
+    }
+
+    private struct KillphraseKeys: KillphraseKeyStore {
+        func loadOrCreate() async throws -> KeyData<32> {
+            throw Unavailable()
+        }
+
+        func loadKeysFromBackups() async throws -> [KeyData<32>] {
+            throw Unavailable()
+        }
+
+        func addKeysFromBackup(_: [KeyData<32>]) async throws {
+            throw Unavailable()
+        }
+    }
+
+    private struct SearchPassphraseKeys: SearchPassphraseKeyStore {
+        func loadOrCreate() async throws -> KeyData<32> {
+            throw Unavailable()
+        }
+
+        func loadKeysFromBackups() async throws -> [KeyData<32>] {
+            throw Unavailable()
+        }
+
+        func addKeysFromBackup(_: [KeyData<32>]) async throws {
+            throw Unavailable()
         }
     }
 }

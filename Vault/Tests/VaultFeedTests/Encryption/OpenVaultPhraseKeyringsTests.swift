@@ -407,6 +407,103 @@ extension OpenVaultPhraseKeyringsTests {
     }
 }
 
+// MARK: - Delete All Data
+
+/// Delete All Data destroys every vault but the open one, so the keychain's keyrings that only those vaults could need
+/// go too. The ones the open vault uses stay.
+extension OpenVaultPhraseKeyringsTests {
+    @MainActor
+    @Test
+    func deleteVault_fromAVaultWithItsOwnKeyrings_deletesTheKeychainsKeyrings() async throws {
+        let keyrings = VaultPhraseKeyrings.random()
+        let sut = try await Harness.encrypted(keyrings: keyrings, deviceKeys: true)
+        // As a turn off that stopped part way could leave them.
+        try await sut.device.storePasswordOffKeyrings(.random())
+        let dataModel = sut.makeDataModel()
+
+        try await dataModel.deleteVault()
+
+        #expect(try await sut.device.killphrase.loadAllKeys().isEmpty)
+        #expect(try await sut.device.searchPassphrase.loadAllKeys().isEmpty)
+        #expect(try await sut.device.passwordOffKeyrings() == nil)
+        #expect(try sut.fixture.savedState().vault.keyrings == keyrings)
+    }
+
+    /// A vault that hasn't taken its copy yet still uses this device's keyrings, so they stay.
+    @MainActor
+    @Test
+    func deleteVault_fromAVaultStillUsingTheKeychains_keepsThem() async throws {
+        let sut = try await Harness.encrypted(keyrings: nil, deviceKeys: true)
+        let dataModel = sut.makeDataModel()
+
+        try await dataModel.deleteVault()
+
+        #expect(try await sut.device.killphrase.loadAllKeys() == [Self.deviceKillphraseKey, Self.restoredKillphraseKey])
+        #expect(try await sut.device.searchPassphrase.loadAllKeys() == [Self.deviceSearchPassphraseKey])
+    }
+
+    @MainActor
+    @Test
+    func deleteVault_inThePlainStore_keepsItsKeyrings() async throws {
+        let sut = try await Harness.plain()
+        let dataModel = sut.makeDataModel()
+        let own = try await sut.keyrings.ownKey(.killphrase)
+
+        try await dataModel.deleteVault()
+
+        #expect(try await sut.device.killphrase.loadAllKeys() == [own])
+    }
+
+    /// With the password off, this device's keyrings go only once the vault has its own in the keychain item turning
+    /// it off left, and that item stays.
+    @MainActor
+    @Test(arguments: [false, true])
+    func deleteVault_withThePasswordOff_deletesTheDevicesOnlyOnceTheVaultHasItsOwn(hasItsOwn: Bool) async throws {
+        let sut = try await Harness.encrypted(keyrings: nil, deviceKeys: true, openedWithTheDeviceKey: true)
+        let keyrings = VaultPhraseKeyrings.random()
+        if hasItsOwn {
+            try await sut.device.storePasswordOffKeyrings(keyrings)
+        }
+        let dataModel = sut.makeDataModel()
+
+        try await dataModel.deleteVault()
+
+        if hasItsOwn {
+            #expect(try await sut.device.killphrase.loadAllKeys().isEmpty)
+            #expect(try await sut.device.passwordOffKeyrings() == keyrings)
+        } else {
+            #expect(try await sut.device.killphrase.loadAllKeys() == [
+                Self.deviceKillphraseKey,
+                Self.restoredKillphraseKey,
+            ])
+        }
+    }
+}
+
+// MARK: - AutoFill
+
+extension OpenVaultPhraseKeyringsTests {
+    /// AutoFill never checks phrases, and its key stores refuse to read any: setting it up makes no digester, reads
+    /// nothing from the keychain, and saves no copy into a vault made before vaults kept their own.
+    @MainActor
+    @Test
+    func autofill_neverReadsOrSavesKeyrings() async throws {
+        let sut = try await Harness.encrypted(keyrings: nil, deviceKeys: true)
+        let dataModel = sut.makeAutofillDataModel()
+        let before = try sut.fixture.bytes()
+
+        await dataModel.setup()
+        await dataModel.openVaultDidChange()
+
+        #expect(dataModel.killphraseDigester == nil)
+        #expect(dataModel.searchPassphraseDigester == nil)
+        #expect(try sut.fixture.bytes() == before)
+        await #expect(throws: NoPhraseKeyrings.Unavailable()) {
+            try await NoPhraseKeyrings.killphraseKeys.loadOrCreate()
+        }
+    }
+}
+
 // MARK: - Helpers
 
 extension OpenVaultPhraseKeyringsTests {
@@ -507,14 +604,34 @@ extension OpenVaultPhraseKeyringsTests {
         /// The data model, reading the open vault's keyrings, as the app has it.
         @MainActor
         func makeDataModel() -> VaultDataModel {
+            VaultDataModel(
+                vaultStore: session,
+                vaultTagStore: session,
+                vaultImporter: session,
+                vaultDeleter: session,
+                vaultKillphraseDeleter: session,
+                vaultOtpAutofillStore: VaultOTPAutofillStoreMock(),
+                backupPasswordStore: BackupPasswordStoreMock(),
+                killphraseKeyStore: keyrings.killphraseKeys,
+                killphraseRehashService: nil,
+                searchPassphraseKeyStore: keyrings.searchPassphraseKeys,
+                searchPassphraseRehashService: nil,
+                backupEventLogger: BackupEventLoggerMock(),
+                phraseKeyringsCleanup: keyrings,
+            )
+        }
+
+        /// The data model as the AutoFill extension has it, which never reads the keyrings.
+        @MainActor
+        func makeAutofillDataModel() -> VaultDataModel {
             anyVaultDataModel(
                 vaultStore: session,
                 vaultTagStore: session,
                 vaultImporter: session,
                 vaultDeleter: session,
                 vaultKillphraseDeleter: session,
-                killphraseKeyStore: keyrings.killphraseKeys,
-                searchPassphraseKeyStore: keyrings.searchPassphraseKeys,
+                killphraseKeyStore: NoPhraseKeyrings.killphraseKeys,
+                searchPassphraseKeyStore: NoPhraseKeyrings.searchPassphraseKeys,
             )
         }
     }

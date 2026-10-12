@@ -1189,14 +1189,19 @@ encryption, so they go wherever the vault file goes.
 - **A duress vault** gets keyrings of its own when it's made, never its maker's (see
   [Making a duress database](#making-a-duress-database-from-any-vault)).
 - **Erasing** removes the file, and with it every vault's keyrings, and deletes the keychain's (`VaultEraser`).
-  Delete All Data keeps the open vault's, as it keeps its metadata.
+  Delete All Data keeps the open vault's, as it keeps its metadata, and deletes the keychain's keyrings that only the
+  vaults it destroys could need (`OpenVaultPhraseKeyrings.deleteKeyringsNoOtherVaultNeeds`): this device's, once the
+  open vault keeps its own in its payload or, with the password off, in the keychain item turning it off left, and a
+  stale keychain item a turn off left. Those the open vault still uses stay: the plain store's, and a vault's that
+  hasn't taken its copy.
 - **Restoring a backup** adds its keys to the open vault's keyrings: into the payload, in a save of its own before the
   items are imported, or the keychain for the plain store and while the password is off. A backup carries the open
   vault's keys only.
 - **The data model** reads the open vault's keyrings whenever the session switches vault or locks
   (`VaultDataModel.openVaultDidChange()`), and drops what it read for a vault that's no longer open.
-- **AutoFill** never reads them: its search doesn't check killphrases or find hidden items, and its data model never
-  loads them. If it did, they'd be the unlocked vault's, from its payload.
+- **AutoFill** never reads them: its search doesn't check killphrases or find hidden items, its data model never
+  loads them, and its key stores refuse to (`NoPhraseKeyrings`). Its default keychain group isn't the app's, so a copy
+  it took could miss the keys from before.
 
 **Vaults made before VAULT-127.** Their payloads are version 1, with no keyrings, and their phrases were digested with
 the keychain's keys, which every vault shared. A vault can't tell whether others exist, by design, so the keychain's
@@ -1206,7 +1211,8 @@ can't be moved into one vault: another, a duress vault that's rarely opened say,
   key of its own for each kind, and every key the keychain holds, to match against. It's saved in the payload before
   any of it is used, so no digest is ever made with a key the vault doesn't hold. From then on no two vaults make
   digests with the same key.
-- The keychain's stay, for any other vault made then. Only an erase deletes them.
+- The keychain's stay, for any other vault made then. An erase deletes them, and so does Delete All Data from a vault
+  that has keyrings of its own, as it destroys every other vault.
 - If the copy can't be saved, the vault uses the keychain's for now, which hold every key the copy would, and tries
   again the next time it reads its keys: the next unlock, backup or restore. It's idempotent: once a vault has
   keyrings, it never takes a copy again.
@@ -1400,6 +1406,10 @@ Mac, and not the widget extension's, which `make validate` checks in each build'
 
 The device key stays in the App Group's group: with the password off, the widgets open the vault with it, as they read
 the plain store when there's never been a password. With the password on, there's no device key.
+
+The killphrase and search passphrase keyrings the keychain holds (VAULT-127: the plain store's, those vaults made
+before then shared, and a vault's while the password is off) are in the app's own default group, which neither
+extension has. AutoFill never checks phrases, and its key stores refuse to read any (`NoPhraseKeyrings`).
 
 Earlier versions kept those items in the App Group's group, so each launch of the app, and each start of the AutoFill
 extension, moves what's still there (`SharedKeychainItems`):

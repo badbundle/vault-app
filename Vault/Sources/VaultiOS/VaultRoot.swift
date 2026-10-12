@@ -335,15 +335,22 @@ public enum VaultRoot {
         vaultKillphraseDeleter: vaultStore,
         vaultOtpAutofillStore: vaultOtpAutofillStore,
         backupPasswordStore: openVaultBackupSettings,
-        killphraseKeyStore: openVaultPhraseKeyrings.killphraseKeys,
+        // AutoFill never checks phrases (G2, G47), and its default keychain group isn't the app's, so it never reads
+        // the keyrings.
+        killphraseKeyStore: isAppExtension
+            ? NoPhraseKeyrings.killphraseKeys as any KillphraseKeyStore<KeyData<32>>
+            : openVaultPhraseKeyrings.killphraseKeys,
         killphraseRehashService: killphraseRehashService,
-        searchPassphraseKeyStore: openVaultPhraseKeyrings.searchPassphraseKeys,
+        searchPassphraseKeyStore: isAppExtension
+            ? NoPhraseKeyrings.searchPassphraseKeys as any SearchPassphraseKeyStore<KeyData<32>>
+            : openVaultPhraseKeyrings.searchPassphraseKeys,
         searchPassphraseRehashService: searchPassphraseRehashService,
         backupEventLogger: backupEventLogger,
         // Only the app moves a backup key to a stronger derivation, which needs 512 MiB. AutoFill never loads the
         // backup password, but its data model can't, either.
         backupPasswordUpgrader: isAppExtension ? nil :
             BackupPasswordUpgrader(keyDeriverFactory: vaultKeyDeriverFactory),
+        phraseKeyringsCleanup: isAppExtension ? nil : openVaultPhraseKeyrings,
     )
 
     // MARK: - Previews

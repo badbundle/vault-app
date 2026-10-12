@@ -190,6 +190,9 @@ public final class VaultDataModel {
     private let killphraseRehashService: KillphraseRehashService?
     private let searchPassphraseKeyStore: any SearchPassphraseKeyStore<KeyData<32>>
     private let searchPassphraseRehashService: SearchPassphraseRehashService?
+    /// Deletes the keychain's keyrings no vault needs once Delete All Data has destroyed the others. `nil` where
+    /// nothing deletes the vault.
+    private let phraseKeyringsCleanup: (any PhraseKeyringsCleanup)?
     private let backupEventLogger: any BackupEventLogger
     /// Moves a loaded backup key to a stronger derivation, or `nil` where that mustn't happen: in an extension.
     private let backupPasswordUpgrader: (any BackupPasswordUpgrading)?
@@ -221,6 +224,7 @@ public final class VaultDataModel {
         backupEventLogger: any BackupEventLogger,
         itemCaches: [any VaultItemCache] = [],
         backupPasswordUpgrader: (any BackupPasswordUpgrading)? = nil,
+        phraseKeyringsCleanup: (any PhraseKeyringsCleanup)? = nil,
     ) {
         self.vaultStore = vaultStore
         self.vaultTagStore = vaultTagStore
@@ -236,6 +240,7 @@ public final class VaultDataModel {
         self.backupEventLogger = backupEventLogger
         self.itemCaches = itemCaches
         self.backupPasswordUpgrader = backupPasswordUpgrader
+        self.phraseKeyringsCleanup = phraseKeyringsCleanup
 
         monitorBackupEvents()
     }
@@ -828,6 +833,10 @@ extension VaultDataModel {
     /// The backup password goes too (VAULT-60): it's the key to every backup of what was just deleted, so it goes with
     /// the data. Restoring never uses it, since a backup always asks for the password it was made with. An erase
     /// deletes it for the same reason. Backups, auto-backup's configuration and the app's settings stay.
+    ///
+    /// Deleting an encrypted vault's data destroys every other vault, so the keychain's killphrase and search
+    /// passphrase keyrings that only those vaults could need go too (`PhraseKeyringsCleanup`). The open vault keeps
+    /// its own.
     public func deleteVault() async throws {
         try await vaultDeleter.deleteVault()
         // Reload and notify before the rest, so nothing keeps showing items that are already gone if that fails.
@@ -843,6 +852,11 @@ extension VaultDataModel {
         }
         do {
             try await vaultOtpAutofillStore.removeAll()
+        } catch {
+            failure = failure ?? error
+        }
+        do {
+            try await phraseKeyringsCleanup?.deleteKeyringsNoOtherVaultNeeds()
         } catch {
             failure = failure ?? error
         }
