@@ -1,0 +1,12 @@
+// The version of everything Vault ships: the iOS app, its AutoFill extension and widgets, and the Mac app, its AutoFill
+// extension and widgets. iOS and the Mac always ship together, with the same version and build number (RELEASE.md).
+//
+// The project's Debug and Release configurations are based on this file, and no target sets either setting itself, so
+// none can drift. `make validate`'s "Versions" check fails if one does.
+
+// The version people see (CFBundleShortVersionString). Change it here, and only here, for a new version.
+MARKETING_VERSION = 2.1
+
+// A floor for the build number (CFBundleVersion), not the last one shipped. The release lane builds with the next
+// global build number, after the latest iOS and Mac uploads, or with this one if it's higher. Don't commit bumps.
+CURRENT_PROJECT_VERSION = 100008
