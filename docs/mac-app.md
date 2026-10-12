@@ -523,8 +523,9 @@ window, the About window and Settings. Its icon is an Icon Composer document, `V
 black in the dark appearance, flat as on iOS. macOS 26 masks it to its own rounded square, and Xcode compiles it into
 every size the app and the App Store take. An image with its own corners and shadow, as Mac icons were drawn before
 macOS 26, is shrunk onto a grey tile (VAULT-125). It's built for Apple silicon and Intel,
-with a deployment target of macOS 26. Its version and build numbers follow the iOS app's, and `RELEASE.md`'s global
-rule for build numbers (VAULT-114).
+with a deployment target of macOS 26. It ships with the iOS app, always with the same version and build number
+(VAULT-136): every target's version is in `VaultApp/Version.xcconfig`, and the release lane builds both platforms with
+one build number, by `RELEASE.md`'s global rule.
 
 ### App Sandbox
 
@@ -627,7 +628,15 @@ setting was off: an accepted limit.
 - **The widget extension:** signed automatically, with the "Mac Team Provisioning Profile:
   com.badbundle.vault.Widgets" Xcode made on 11 October 2026 (until 11 October 2027), for the App ID the iOS widgets
   already have. Another Mac that builds Vault gets one by building once with `-allowProvisioningUpdates`.
-- **The App Store:** a Mac App Store provisioning profile for each target, made with the release lanes (VAULT-114).
+- **The App Store:** the release lanes sign the app and both extensions with the team's Apple Distribution certificate,
+  as on iOS, and the `.pkg` with its Mac Installer Distribution certificate, made on 12 October 2026. Each target has
+  a Mac App Store profile, made for that Apple Distribution certificate the same day: "Vault Mac App Store", "Vault Mac
+  AutoFill App Store" and "Vault Mac Widgets App Store". Like the development profiles, each grants the team's App
+  Groups and keychain access groups (`442P244AFS.*`), which cover the App Group, the app's private group, the shared
+  group (VAULT-129) and the widgets' group, and the widget extension, `com.badbundle.vault.Widgets`, uses the App ID
+  the iOS widgets have. Before uploading, the release lane checks each exported bundle's signature and entitlements:
+  no `get-task-allow`, no temporary exceptions, the sandbox and the hardened runtime, and exactly its App Groups and
+  keychain access groups. See Signing in [`RELEASE.md`](../RELEASE.md#signing).
 
 ## Modules
 

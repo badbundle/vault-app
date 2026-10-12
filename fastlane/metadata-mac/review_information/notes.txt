@@ -1,0 +1,26 @@
+Vault needs no account or sign-in, has no in-app purchases, and makes no network requests. Everything stays on the Mac, so there's no demo account. It's the same app record as Vault for iPhone and iPad, and each device keeps a vault of its own, with no sync.
+
+THE APP LOCK PASSWORD IS REQUIRED ON THE MAC
+- The first launch asks for an App Lock Password before anything else: at least 8 characters, not only numbers. It encrypts the vault on this Mac, and it can't be skipped, turned off or reset, so please keep a note of the one you set.
+- Unlocking asks for Touch ID or the Mac's login password first, then the App Lock Password.
+- Vault locks as soon as another app comes to the front (Settings > Security > Require Unlock can delay that), when the Mac locks or sleeps, when its window closes or is minimised, and with Vault > Lock Vault (Control-Command-L).
+
+TRYING IT
+- Click + in the toolbar, or choose File > New Code, New Note or New Recovery Phrase. A code can be scanned with the Mac's camera or Continuity Camera, read from an image, or typed in as a secret such as JBSWY3DPEHPK3PXP.
+- Click a code to copy it.
+- Help > Vault Help explains each feature.
+
+SECURITY FEATURES
+- Settings > Security > App Lock Password has Set Duress Password, which makes a second, empty vault: entering the duress password on the lock screen opens that vault instead of the real one.
+- It also has Erase Vault After 10 Failed Passwords, which erases every vault after 10 wrong passwords in a row. Please leave it off while reviewing.
+- When editing an item, Privacy & Security has Visibility (a hidden item only appears when its passphrase is typed into search) and Killphrase (typing it into search quietly deletes the item).
+- Hide While Recording (Settings > Security, on by default) keeps Vault's windows out of screenshots, screen recordings and screen sharing, so they show as empty there. Turn it off to capture them.
+
+BACKUPS
+- Backups, in the sidebar, saves the whole vault as an encrypted PDF once a backup password is set, and restores one from the file or by scanning its QR codes with the camera.
+
+AUTOFILL AND WIDGETS
+- In System Settings > General > AutoFill & Passwords, turn on Vault to fill one-time codes in Safari.
+- Vault's widget shows a code on the desktop while Vault is unlocked, and shows Vault locked otherwise.
+
+Vault is open source: https://github.com/badbundle/vault-app

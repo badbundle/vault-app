@@ -24,7 +24,7 @@ IF YOU'RE MADE TO UNLOCK IT
 BACKUPS YOU CONTROL
 • Save an encrypted PDF backup to print or keep wherever you like. Restore it from the file, or by scanning its QR codes.
 • Or have Vault save a fresh encrypted backup whenever your items change, to a folder you choose, such as one in iCloud Drive.
-• Move your vault to another iPhone or iPad by scanning QR codes, with no file saved.
+• Move your vault to another iPhone, iPad or Mac by scanning QR codes, with no file saved.
 
 PRIVATE BY DESIGN
 • No servers, no accounts, no sync, no analytics and no network requests.
@@ -32,4 +32,4 @@ PRIVATE BY DESIGN
 • Apple's keyboard learns nothing you type in Vault.
 • Open source: the code is on GitHub, with a security model that lists every promise Vault makes, and its limits.
 
-Vault is free, with no ads and no in-app purchases.
+Vault is free on iPhone, iPad and the Mac, with no ads and no in-app purchases.

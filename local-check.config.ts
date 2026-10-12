@@ -89,6 +89,13 @@ export default (({ xcode }) => {
           await checkMacAppEntitlements(ctx, ios.derivedData(ctx));
         },
       },
+      // After both apps are built, as it reads their bundles.
+      {
+        name: "Versions",
+        async run(ctx) {
+          await checkVersions(ctx, ios.derivedData(ctx));
+        },
+      },
       // The Mac app's UI tests, in their own scheme as the iOS app's are. Each build stays just before its tests.
       {
         ...ios.buildForTesting({
@@ -349,6 +356,53 @@ async function checkSimulatorEntitlements(
     throw new Error(`${name}'s keychain access groups aren't ${JSON.stringify(keychainGroups)}: ${keychain}`);
   }
   ctx.log(`${name}'s entitlements: ${Object.keys(entitlements).join(", ")}`);
+}
+
+/**
+ * Fails unless every app and extension Vault ships, on iOS and the Mac, has the version in VaultApp/Version.xcconfig and
+ * one build number, as they always ship together (RELEASE.md). The project's configurations are based on that file, so
+ * no target may set either setting itself, and each bundle the build steps made must say the same.
+ */
+async function checkVersions(ctx: Context, derivedData: string): Promise<void> {
+  const xcconfig = await Bun.file(`${ctx.worktree}/VaultApp/Version.xcconfig`).text();
+  const version = /^MARKETING_VERSION = (\S+)$/m.exec(xcconfig)?.[1];
+  if (!version) {
+    throw new Error("VaultApp/Version.xcconfig doesn't set MARKETING_VERSION");
+  }
+  const project = await Bun.file(`${ctx.worktree}/VaultApp/VaultApp.xcodeproj/project.pbxproj`).text();
+  const overrides = (project.match(/^\s*(MARKETING_VERSION|CURRENT_PROJECT_VERSION) = .*$/gm) ?? []).map((line) =>
+    line.trim(),
+  );
+  if (overrides.length > 0) {
+    throw new Error(
+      `VaultApp.xcodeproj sets versions of its own, which belong in VaultApp/Version.xcconfig:\n${overrides.join("\n")}`,
+    );
+  }
+  const ios = `${derivedData}/Build/Products/Debug-iphonesimulator/VaultApp.app`;
+  const mac = `${derivedData}/Build/Products/Debug/Vault.app/Contents`;
+  const bundles: Record<string, string> = {
+    "VaultApp.app": `${ios}/Info.plist`,
+    "VaultAppAutofill.appex": `${ios}/PlugIns/VaultAppAutofill.appex/Info.plist`,
+    "VaultWidgetsExtension.appex": `${ios}/PlugIns/VaultWidgetsExtension.appex/Info.plist`,
+    "Vault.app (Mac)": `${mac}/Info.plist`,
+    "VaultMacAutofill.appex": `${mac}/PlugIns/VaultMacAutofill.appex/Contents/Info.plist`,
+    "VaultMacWidgets.appex": `${mac}/PlugIns/VaultMacWidgets.appex/Contents/Info.plist`,
+  };
+  const found: { name: string; version: unknown; build: unknown }[] = [];
+  for (const [name, plist] of Object.entries(bundles)) {
+    const { exitCode, stdout, stderr } = await ctx.capture(["plutil", "-convert", "json", "-o", "-", plist]);
+    if (exitCode !== 0) {
+      throw new Error(`Can't read ${name}'s Info.plist at ${plist}: ${stderr}`);
+    }
+    const info = JSON.parse(stdout) as Record<string, unknown>;
+    found.push({ name, version: info.CFBundleShortVersionString, build: info.CFBundleVersion });
+  }
+  const listed = found.map((bundle) => `${bundle.name}: ${String(bundle.version)} (${String(bundle.build)})`).join("\n");
+  const builds = new Set(found.map((bundle) => bundle.build));
+  if (found.some((bundle) => bundle.version !== version) || builds.size !== 1) {
+    throw new Error(`Not every bundle has version ${version} and one build number:\n${listed}`);
+  }
+  ctx.log(`Every app and extension is version ${version}:\n${listed}`);
 }
 
 /**

@@ -1,5 +1,9 @@
 # Release Playbook
 
+iOS and the Mac ship together. Every release builds both from one commit, with
+one version and one build number, and uploads both, even when one of them has
+no changes, so the two never drift apart.
+
 Tags are the permanent release record. Release branches are maintenance lines
 for supported versions, not the historical archive.
 
@@ -8,8 +12,9 @@ for supported versions, not the historical archive.
 - Ship from `main`: build the commit to release, upload it, then tag that same
   commit.
 - Tag every shipped build, including the App Store build number, for example
-  `v2.0.0+100123`. The tags say which commit became which build, so nothing
-  else needs to.
+  `v2.1.0+100123`. One tag covers the iOS and Mac builds, which share the
+  number. The tags say which commit became which build, so nothing else needs
+  to.
 - Don't keep a branch per version, and don't move a release branch along
   `main` after each build. It says nothing the tags don't, and it goes stale.
 - Create `release/2.0` only when a `2.0.x` fix has to ship while `main` holds
@@ -22,24 +27,42 @@ for supported versions, not the historical archive.
 - Delete the branch once that version gets no more fixes. Its builds stay
   tagged.
 
+## Versions
+
+`MARKETING_VERSION` in [`VaultApp/Version.xcconfig`](VaultApp/Version.xcconfig)
+is the version of every target: the iOS app, its AutoFill extension and
+widgets, and the Mac app, its AutoFill extension and widgets. The project's
+configurations are based on that file, and no target sets a version of its
+own.
+
+- Change the version there, and only there, in the pull request that starts
+  the next version, such as 2.2.
+- Don't change it in a target's General tab in Xcode: that writes a setting
+  into the target, and `make validate`'s **Versions** check fails on it. The
+  check also fails if any of the six bundles the iOS and Mac builds make has
+  another version, or if their build numbers differ.
+
 ## Build numbers
 
-Build numbers are global across all versions and branches. They identify App
-Store artifacts, not a marketing-version sequence.
+Build numbers are global across all versions, branches and both platforms.
+They identify App Store artifacts, not a marketing-version sequence, and the
+iOS and Mac builds of a release always share one.
 
-- Fastlane queries App Store Connect/TestFlight at release time and builds with
-  the build after the latest upload.
-- `CURRENT_PROJECT_VERSION` in Git is a floor, not a record of the last build.
-  A floor above the next build is used as it is, so raising it skips ahead to
-  that number and never past it.
+- Fastlane queries App Store Connect at release time for the latest iOS upload
+  and the latest Mac upload, and builds both with the build after whichever is
+  higher.
+- `CURRENT_PROJECT_VERSION` in `VaultApp/Version.xcconfig` is a floor, not a
+  record of the last build. A floor above the next build is used as it is, so
+  raising it skips ahead to that number and never past it.
 - Do not commit build-number bumps, before a release or after one. The lane
   passes the number to `xcodebuild`, so a bump never reaches the binary, and
   the tag already records it. A build made locally shows the floor, which is
   fine.
-- It is fine for `release/2.0` to ship a build number higher than a later
+- It is fine for `release/2.1` to ship a build number higher than a later
   marketing version if that is the next global App Store build number.
 
-To inspect the next build number without changing project files:
+To inspect the next build number, for both platforms, without changing
+project files:
 
 ```sh
 bundle exec fastlane increment_build
@@ -49,7 +72,8 @@ bundle exec fastlane increment_build
 
 The unit tests stand in for Face ID and the passcode, and the simulator has
 neither, so the app's use of the real ones is checked by hand, on an iPhone
-with Face ID and a passcode, before each release. With App Lock on and an App
+with Face ID and a passcode, before each release. The Mac's checks follow, and
+both are done for every release, as both platforms ship. With App Lock on and an App
 Lock Password set:
 
 - Launch: Face ID is asked for by itself, then the password. The vault opens
@@ -68,8 +92,8 @@ Lock Password set:
 ## Checking a build on a Mac
 
 The Mac app's use of the real Touch ID, screen capture, AutoFill and widgets is
-checked by hand, on a Mac with Touch ID, before each release of the Mac app, and on
-each new version of macOS.
+checked by hand, on a Mac with Touch ID, before each release, and on each new
+version of macOS.
 
 **Capture.** With Hide While Recording on, take a screenshot (⇧⌘3), a screen
 recording (⇧⌘5), a screen share (FaceTime or another app) and an AirPlay
@@ -120,46 +144,130 @@ Vault, then in Safari, on a page with a one-time code field:
   until Vault locks, then shows it locked.
 - Click the widget anywhere but its code: Vault opens.
 
+## Signing
+
+The release lanes sign both platforms for the App Store with these, from the
+developer account of team `442P244AFS`. They fetch each from the account before
+they build, so the Mac that releases needs only the certificates' private keys
+in its login keychain.
+
+- **Apple Distribution certificate** (`PQ7Z28BJ65`, until 25 September 2027):
+  signs the apps and extensions on both platforms. Its private key is in the
+  login keychain of the Mac that releases.
+- **Mac Installer Distribution certificate** (`QD3WB8NZZ8`, "3rd Party Mac
+  Developer Installer: Bad Bundle Limited (442P244AFS)", made on 12 October
+  2026, until 12 October 2027): signs the Mac's `.pkg`. Its private key is in
+  the same keychain.
+- **iOS App Store profiles**, one for each of `com.badbundle.vault`,
+  `com.badbundle.vault.VaultAutofill` and `com.badbundle.vault.Widgets`, which
+  `get_provisioning_profile` finds or makes.
+- **Mac App Store profiles**, "Vault Mac App Store", "Vault Mac AutoFill App
+  Store" and "Vault Mac Widgets App Store", for the same three bundle IDs and
+  the Apple Distribution certificate, made on 12 October 2026. They grant the
+  team's App Groups and keychain access groups (`442P244AFS.*`), which cover
+  the Mac's App Group and its private, shared and widgets keychain groups (see
+  Signing in [`docs/mac-app.md`](docs/mac-app.md#signing)). The lanes find them
+  by name. Once one expires, sigh makes a new one, named after it with a
+  timestamp, for the lanes to find instead.
+
+A new Apple Distribution certificate needs new profiles on both platforms:
+`get_certificates` and `get_provisioning_profile` make them on the next
+release, as they made the Mac's.
+
 ## Shipping a build
 
-Run the release lane only when you intend to build and upload a real App Store
-build:
+Run the release lane only when you intend to build and upload real App Store
+builds for both platforms:
 
 ```sh
-bundle exec fastlane ios release
+bundle exec fastlane release
 ```
 
 The release lane:
 
 - requires a clean Git working tree
-- queries App Store Connect/TestFlight for the latest uploaded build number
-- builds with `CURRENT_PROJECT_VERSION=<next global build number>`
-- uploads the build to App Store Connect, with the listing in
-  `fastlane/metadata/` and the screenshots in `fastlane/screenshots/en-US/`;
-  the screenshots replace the version's, so one that changed, was renamed or
-  was removed doesn't stay behind in App Store Connect
-- does not commit build-number changes
-- does not create or push Git tags
+- works out the next build number, for iOS and the Mac, as above
+- archives and exports the iOS app (`VaultApp.ipa`) and the Mac app
+  (`Vault.pkg`), each with `CURRENT_PROJECT_VERSION=<that build number>`
+- checks every bundle it exported, on both platforms, before it uploads either:
+  each has the version in `VaultApp/Version.xcconfig` and that build number, is
+  signed with the Apple Distribution certificate, has no `get-task-allow` and
+  no temporary exceptions, and has exactly the App Groups and keychain access
+  groups its target's entitlements list. On the Mac, each is also sandboxed,
+  with the hardened runtime, and the `.pkg` is signed with the Mac installer
+  certificate. A build that fails any of them uploads nothing
+- uploads the iOS build to App Store Connect, with the listing in
+  `fastlane/metadata/` and the screenshots in `fastlane/screenshots/en-US/`
+- uploads the Mac build, with the Mac's listing in `fastlane/metadata-mac/`
+  and its screenshots in `fastlane/screenshots-mac/en-US/`
+- makes each platform's version in App Store Connect the version being built:
+  it renames the version App Store Connect is editing, or adds one if it isn't
+  editing any. The screenshots replace the version's, so one that changed, was
+  renamed or was removed doesn't stay behind
+- sets both versions to be released by hand once they're approved
+- does not attach the builds to the versions, submit anything, commit
+  build-number changes, or create or push Git tags
+
+Building both takes about 3 minutes on the Mac Studio, and the uploads a few
+more.
 
 Every build tells App Store Connect that Vault uses no encryption needing export
-compliance documentation (`ITSAppUsesNonExemptEncryption` is `NO`), so there's
-no export question to answer. That holds only while all of Vault's encryption
-is Apple's CryptoKit: [`docs/export-compliance.md`](docs/export-compliance.md)
-says why, and what to do if that changes.
+compliance documentation (`ITSAppUsesNonExemptEncryption` is `NO`, on iOS and
+the Mac), so there's no export question to answer. That holds only while all
+of Vault's encryption is Apple's CryptoKit:
+[`docs/export-compliance.md`](docs/export-compliance.md) says why, and what to
+do if that changes.
 
 Record the build number printed by the release lane, for example:
 
 ```text
-Using release build number 100123
+Using release build number 100123 for 2.1 on iOS and the Mac
 ```
 
-If the build succeeded but upload failed, retry the existing IPA upload:
+To build, sign and check both platforms as the release lane does, without
+uploading anything, for example after a change to signing:
+
+```sh
+bundle exec fastlane build_release
+```
+
+It takes `build_number:` to build with a number of your own, rather than the
+next one.
+
+If a build succeeded but its upload failed, retry the existing file's upload.
+The listing and screenshots go up before the binary, so they're already there:
 
 ```sh
 bundle exec fastlane ios upload
+bundle exec fastlane mac upload
 ```
 
-The upload lane does not build, bump, commit, or tag anything.
+The upload lanes do not build, bump, commit, or tag anything.
+
+## Attaching the builds
+
+Once both builds have uploaded, attach each to its platform's version:
+
+```sh
+bundle exec fastlane attach_builds build_number:100123
+```
+
+It waits for App Store Connect to finish processing each build, which takes a
+few minutes, then selects it for the iOS or macOS version App Store Connect is
+editing, which must be the version being built. It doesn't submit anything.
+
+## Submitting for review
+
+With both builds attached, both versions have everything App Review needs.
+Before submitting:
+
+- [Check the build on an iPhone](#checking-a-build-on-a-device) and
+  [on a Mac](#checking-a-build-on-a-mac), from TestFlight.
+- Read each version's listing, screenshots and What's New in App Store Connect.
+
+Then submit the iOS and macOS versions for review in App Store Connect. Both
+are released by hand: release them together once both are approved, so the
+App Store never has one platform ahead of the other.
 
 ## Updating the screenshots
 
@@ -185,42 +293,65 @@ bundle exec fastlane mac upload_screenshots
 ```
 
 It needs a macOS version that App Store Connect is editing, and does no more
-than the iOS lane.
+than the iOS lane. The release lane uploads both.
 
 ## Updating the listing
 
-The listing's text is in `fastlane/metadata/`: the name, subtitle and keywords
-(the only fields App Store search reads), the description, the promotional
-text and the URLs in `en-US/`, and the notes for App Review in
-`review_information/`. The App Privacy answers are in
-`fastlane/app_privacy_details.json`. The release lane uploads the text with
-every build. To upload it, and publish the privacy answers, without a build:
+Each platform's version in App Store Connect has its own listing text, so each
+has its own folder:
+
+- `fastlane/metadata/` is the iOS listing, and the app's own details, which
+  both platforms share: the name and subtitle (which, with the keywords, are
+  the only fields App Store search reads), the privacy policy's URL, the
+  categories and the copyright. Its `en-US/` has the description, keywords,
+  promotional text, What's New (`release_notes.txt`) and URLs, and
+  `review_information/` the notes for App Review. The App Privacy answers,
+  which are the app's, are in `fastlane/app_privacy_details.json`.
+- `fastlane/metadata-mac/` is the Mac listing: only the version's own text,
+  so it never sets the shared details. Where its text is the same as iOS's,
+  its file is a link to iOS's (the keywords, promotional text, URLs and
+  copyright). The description, What's New and review notes are its own, and
+  make no claim that's only true on an iPhone: check each against
+  [`docs/mac-app.md`](docs/mac-app.md) and
+  [`docs/security-model.md`](docs/security-model.md). The review notes say
+  that the App Lock Password is required on the Mac.
+
+Every release updates What's New in both, from `CHANGELOG.md`. App Store
+Connect takes no What's New for a platform's first version, so deliver skipped
+the Mac's for 2.1.
+
+The release lane uploads both listings with every build. To upload them
+without a build:
 
 ```sh
 bundle exec fastlane ios upload_metadata
+bundle exec fastlane mac upload_metadata
 ```
 
-It changes the version App Store Connect is editing. It doesn't build, upload
-a binary or screenshots, or submit anything.
+Each changes the version App Store Connect is editing on its platform. The
+iOS lane also publishes the privacy answers. Neither builds, uploads a binary
+or screenshots, or submits anything.
 
 ## Tagging a shipped build
 
-After App Store Connect has the uploaded build, tag the shipped commit:
+After App Store Connect has both uploaded builds, tag the shipped commit:
 
 ```sh
-bundle exec fastlane ios tag_release version:2.0.0 build_number:100123
+bundle exec fastlane tag_release build_number:100123
 ```
 
 The tag lane:
 
 - requires a clean Git working tree
-- tags the current commit as `v<version>+<build_number>`
-- accepts `version:2.0` and normalizes it to `2.0.0`
+- tags the current commit as `v<version>+<build_number>`, one tag for both
+  platforms
+- takes the version from `VaultApp/Version.xcconfig`, or `version:`, and
+  normalizes `2.1` to `2.1.0`
 - requires `build_number:` to be passed explicitly
 - refuses to overwrite an existing local or remote tag
 - pushes only that tag to `origin`
 
-Use the build number printed by `ios release`, not the checked-in
+Use the build number printed by `release`, not the checked-in
 `CURRENT_PROJECT_VERSION` floor.
 
 ## Starting a maintenance branch
@@ -230,10 +361,11 @@ from that version's last tag, so the branch starts at exactly what shipped:
 
 ```sh
 git fetch --tags
-git checkout -b release/2.0 'v2.0.0+100008'
-git push -u origin release/2.0
+git checkout -b release/2.1 'v2.1.0+100123'
+git push -u origin release/2.1
 ```
 
 Fixes reach it through pull requests, as they reach `main`, each validated with
-`make validate` from `Vault/`. Release and tag from the branch as from `main`,
-with the patch version: `version:2.0.1`.
+`make validate` from `Vault/`. The first sets the patch version in
+`VaultApp/Version.xcconfig`, such as 2.1.1. Release and tag from the branch as
+from `main`, for both platforms.

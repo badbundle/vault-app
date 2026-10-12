@@ -11,7 +11,11 @@ vendor/
 *.certSigningRequest
 *.p12
 *.mobileprovision
+*.provisionprofile
 *.ipa
+*.pkg
+*.dSYM.zip
+/Vault.app/
 
 # Bun
 node_modules/

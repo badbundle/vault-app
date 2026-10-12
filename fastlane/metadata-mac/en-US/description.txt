@@ -1,0 +1,36 @@
+Vault keeps the secrets you can't afford to lose: two-factor codes, private notes and crypto recovery phrases. It has no servers, no accounts and no analytics, it makes no network requests, and it's open source.
+
+It's also built for the moment someone makes you unlock it.
+
+2FA CODES
+• Add a code by scanning its QR code with your Mac's camera or Continuity Camera, reading it from an image, or typing in its secret. Time-based (TOTP) and counter-based (HOTP) codes both work.
+• Click a code to copy it. Copies are cleared from the clipboard after a minute by default, and only reach your other devices if you allow it.
+• Fill time-based codes into websites in Safari with AutoFill.
+• Add a widget to your desktop that shows a code while Vault is unlocked.
+
+NOTES AND RECOVERY PHRASES
+• Write notes in plain text or Markdown, tag them, and find anything with instant search.
+• Lock any item behind Touch ID or your Mac's password, and encrypt a note with a password of its own.
+• Recovery phrases for crypto wallets are always encrypted, checked against the BIP39, SLIP-39, Electrum and Monero word lists, masked until you click them, and can't be copied.
+
+IF YOU'RE MADE TO UNLOCK IT
+• An App Lock Password encrypts the whole vault on your Mac, and it's always on. Vault asks for it after Touch ID or your Mac's password, and makes you wait longer after each wrong one.
+• Vault locks as soon as you switch to another app, or after a delay you choose, and whenever your Mac locks or sleeps.
+• A duress password opens a separate vault instead of your real one.
+• Hidden items only appear when you search for their passphrase.
+• A killphrase quietly deletes an item from this vault as soon as it's searched for.
+• If you turn it on, 10 wrong passwords in a row erase every vault on the Mac.
+
+BACKUPS YOU CONTROL
+• Save an encrypted PDF backup to print or keep wherever you like. Restore it from the file, or by scanning its QR codes.
+• Or have Vault save a fresh encrypted backup whenever your items change, to a folder you choose, such as one in iCloud Drive.
+• Move your vault between your Mac and an iPhone or iPad by scanning QR codes, with no file saved.
+• Your vault is left out of Time Machine backups, unless you choose otherwise.
+
+PRIVATE BY DESIGN
+• No servers, no accounts, no sync, no analytics and no network requests.
+• Hide While Recording keeps Vault's windows out of screenshots, screen recordings, screen sharing and AirPlay.
+• Secure Keyboard Entry is on while you type in Vault, and nothing you type there goes to autocorrect, predictions or Writing Tools.
+• Open source: the code is on GitHub, with a security model that lists every promise Vault makes, and its limits.
+
+Vault is free on the Mac, iPhone and iPad, with no ads and no in-app purchases.
