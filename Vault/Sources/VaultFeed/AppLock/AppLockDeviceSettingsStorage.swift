@@ -54,70 +54,33 @@ protocol AppLockDeviceSettingsStorage: Sendable {
 ///
 /// The item is readable once the device has been unlocked after starting up, as the defaults are, so a launch while
 /// the screen is locked still reads the user's settings. It never syncs to iCloud Keychain, and never moves to another
-/// device with a backup. It's in the App Group's access group, so the AutoFill extension reads the same settings.
+/// device with a backup. It's in the keychain access group the app shares with the AutoFill extension only
+/// (`SharedKeychainItem`), so the AutoFill extension reads the same settings.
 struct AppLockDeviceSettingsKeychainStorage: AppLockDeviceSettingsStorage {
-    let accessGroup: String?
+    let item: SharedKeychainItem
 
-    init(accessGroup: String? = VaultSharedStorage.appGroupID) {
-        self.accessGroup = accessGroup
+    init(item: SharedKeychainItem = SharedKeychainItem(key: .appLockDeviceSettings)) {
+        self.item = item
     }
 
     func load() throws -> AppLockDeviceSettings? {
-        var query = Self.itemQuery(accessGroup: accessGroup)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: AnyObject?
-        switch SecItemCopyMatching(query as CFDictionary, &result) {
-        case errSecSuccess:
-            guard let data = result as? Data else { throw SwiftSecurityError.invalidParameter }
-            return try JSONDecoder().decode(AppLockDeviceSettings.self, from: data)
-        case errSecItemNotFound:
-            return nil
-        case let status:
-            throw SwiftSecurityError(rawValue: status)
-        }
+        guard let data = try item.data() else { return nil }
+        return try JSONDecoder().decode(AppLockDeviceSettings.self, from: data)
     }
 
     func add(_ settings: AppLockDeviceSettings) throws -> Bool {
-        let item = try Self.itemQuery(accessGroup: accessGroup).merging(Self.attributes(for: settings)) { $1 }
-        switch SecItemAdd(item as CFDictionary, nil) {
-        case errSecSuccess:
-            return true
-        case errSecDuplicateItem:
-            return false
-        case let status:
-            throw SwiftSecurityError(rawValue: status)
-        }
+        try item.add(Self.attributes(for: settings))
     }
 
     /// Updates the item in place, so there's never a moment without it.
     func save(_ settings: AppLockDeviceSettings) throws {
-        let query = Self.itemQuery(accessGroup: accessGroup)
-        let attributes = try Self.attributes(for: settings)
-        switch SecItemUpdate(query as CFDictionary, attributes as CFDictionary) {
-        case errSecSuccess:
-            return
-        case errSecItemNotFound:
-            let status = SecItemAdd(query.merging(attributes) { $1 } as CFDictionary, nil)
-            guard status == errSecSuccess else { throw SwiftSecurityError(rawValue: status) }
-        case let status:
-            throw SwiftSecurityError(rawValue: status)
-        }
+        try item.save(Self.attributes(for: settings))
     }
 
-    /// Identifies the item: a password item for the settings, in `accessGroup`, that doesn't sync.
-    static func itemQuery(accessGroup: String?) -> [String: Any] {
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: VaultIdentifiers.SecureStorageKey.appLockDeviceSettings.keychainService,
-            kSecAttrSynchronizable as String: false,
-            // Makes macOS use the same keychain as iOS.
-            kSecUseDataProtectionKeychain as String: true,
-        ]
-        if let accessGroup {
-            query[kSecAttrAccessGroup as String] = accessGroup
-        }
-        return query
+    /// Moves the settings out of the App Group's keychain access group, where versions before VAULT-129 kept them
+    /// (`SharedKeychainItem.moveFromTheAppGroup()`).
+    func moveFromTheAppGroup() throws {
+        try item.moveFromTheAppGroup()
     }
 
     /// What's stored in the item: the settings, readable once the device has been unlocked after starting up, on this

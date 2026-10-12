@@ -98,24 +98,25 @@ struct MacAppLaunchTests {
     }
 
     /// The widget extension has no App Group, which would also make it a member of the App Group's keychain access
-    /// group, and so able to read the attempt counter, the device key and the wrap stamp. Its only keychain access group
-    /// is the widgets' own (G84, G98).
+    /// group, and so able to read the device key. Its only keychain access group is the widgets' own: not the one the
+    /// app shares with AutoFill, which holds the attempt counter and the wrap stamp (G84, G98, G99).
     @Test
     func widgetExtension_hasNoAppGroupAndOnlyTheWidgetsKeychainGroup() throws {
-        let url = Bundle.main.bundleURL.appending(path: "Contents/PlugIns/VaultMacWidgets.appex")
-        var staticCode: SecStaticCode?
-        #expect(SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode) == errSecSuccess)
-        var information: CFDictionary?
-        #expect(SecCodeCopySigningInformation(
-            try #require(staticCode),
-            SecCSFlags(rawValue: kSecCSSigningInformation),
-            &information,
-        ) == errSecSuccess)
-        let signing = try #require(information as? [String: Any])
-        let entitlements = try #require(signing[kSecCodeInfoEntitlementsDict as String] as? [String: Any])
+        let entitlements = try Self.signedEntitlements(ofPlugIn: "VaultMacWidgets.appex")
 
         #expect(entitlements["com.apple.security.application-groups"] == nil)
         #expect(entitlements["keychain-access-groups"] as? [String] == ["442P244AFS.com.badbundle.vault.widgets"])
+        #expect(entitlements["com.apple.security.app-sandbox"] as? Bool == true)
+    }
+
+    /// The AutoFill extension has the App Group, for the vault, and the keychain access group it shares with the app,
+    /// for the attempt counter, the wrap stamp and the app lock's settings, and no other (G84, G99).
+    @Test
+    func autofillExtension_hasTheAppGroupAndTheSharedKeychainGroup() throws {
+        let entitlements = try Self.signedEntitlements(ofPlugIn: "VaultMacAutofill.appex")
+
+        #expect(entitlements["com.apple.security.application-groups"] as? [String] == [Self.appGroupID])
+        #expect(entitlements["keychain-access-groups"] as? [String] == [Self.appGroupID, Self.sharedKeychainGroupID])
         #expect(entitlements["com.apple.security.app-sandbox"] as? Bool == true)
     }
 
@@ -136,6 +137,23 @@ struct MacAppLaunchTests {
 
     /// docs/mac-app.md, decision 7.
     static let appGroupID = "442P244AFS.com.badbundle.vault"
+    /// The keychain access group the app shares with its AutoFill extension only (docs/mac-app.md, "Keychain").
+    static let sharedKeychainGroupID = "442P244AFS.com.badbundle.vault.shared"
+
+    /// The entitlements a plug-in in the app is signed with.
+    private static func signedEntitlements(ofPlugIn name: String) throws -> [String: Any] {
+        let url = Bundle.main.bundleURL.appending(path: "Contents/PlugIns/\(name)")
+        var staticCode: SecStaticCode?
+        #expect(SecStaticCodeCreateWithPath(url as CFURL, [], &staticCode) == errSecSuccess)
+        var information: CFDictionary?
+        #expect(SecCodeCopySigningInformation(
+            try #require(staticCode),
+            SecCSFlags(rawValue: kSecCSSigningInformation),
+            &information,
+        ) == errSecSuccess)
+        let signing = try #require(information as? [String: Any])
+        return try #require(signing[kSecCodeInfoEntitlementsDict as String] as? [String: Any])
+    }
 
     /// The main window, once the app has put it on screen.
     private func mainWindow() async throws -> NSWindow {
@@ -151,8 +169,8 @@ struct MacAppLaunchTests {
 }
 
 /// The app's keychain, as its entitlements make it: its own group, which its extensions can't read, by default, the
-/// App Group, which the AutoFill extension shares, and the widgets' group, which only the widget extension shares
-/// (docs/mac-app.md, "Keychain").
+/// App Group and the group it shares with the AutoFill extension, which only that extension shares too, and the
+/// widgets' group, which only the widget extension shares (docs/mac-app.md, "Keychain").
 @MainActor
 struct MacAppKeychainTests {
     nonisolated static let ownGroup = "442P244AFS.com.badbundle.vault.private"
@@ -160,6 +178,7 @@ struct MacAppKeychainTests {
     @Test(arguments: [
         "442P244AFS.com.badbundle.vault.private",
         "442P244AFS.com.badbundle.vault",
+        "442P244AFS.com.badbundle.vault.shared",
         "442P244AFS.com.badbundle.vault.widgets",
     ])
     func keychain_eachOfTheAppsGroups_holdsItems(group: String) throws {
@@ -177,6 +196,43 @@ struct MacAppKeychainTests {
         var result: CFTypeRef?
         #expect(SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess)
         #expect(result as? Data == Data("secret".utf8))
+    }
+
+    /// The same item in the App Group's group and the shared one is two items, read, written and deleted apart: what
+    /// moving the attempt counter, the wrap stamp and the app lock's settings out of the App Group's group relies on
+    /// (G99).
+    @Test
+    func keychain_theSameItemInTheAppGroupAndTheSharedGroup_isTwoItems() throws {
+        let account = "vault-test-\(UUID().uuidString)"
+        let groups = [MacAppLaunchTests.appGroupID, MacAppLaunchTests.sharedKeychainGroupID]
+        defer {
+            for group in groups {
+                SecItemDelete(Self.query(account: account, group: group) as CFDictionary)
+            }
+        }
+        for group in groups {
+            var item = Self.query(account: account, group: group)
+            item[kSecValueData as String] = Data(group.utf8)
+            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            let added = SecItemAdd(item as CFDictionary, nil)
+            #expect(added == errSecSuccess, "SecItemAdd in \(group): \(added)")
+        }
+        // Adding it to a group that has it already finds it there, as a move that's already been made does.
+        var again = Self.query(account: account, group: MacAppLaunchTests.sharedKeychainGroupID)
+        again[kSecValueData as String] = Data("again".utf8)
+        #expect(SecItemAdd(again as CFDictionary, nil) == errSecDuplicateItem)
+
+        #expect(SecItemDelete(Self.query(account: account, group: MacAppLaunchTests.appGroupID) as CFDictionary)
+            == errSecSuccess)
+
+        var query = Self.query(account: account, group: MacAppLaunchTests.sharedKeychainGroupID)
+        query[kSecReturnData as String] = true
+        var result: CFTypeRef?
+        #expect(SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess)
+        #expect(result as? Data == Data(MacAppLaunchTests.sharedKeychainGroupID.utf8))
+        var gone = Self.query(account: account, group: MacAppLaunchTests.appGroupID)
+        gone[kSecReturnData as String] = true
+        #expect(SecItemCopyMatching(gone as CFDictionary, &result) == errSecItemNotFound)
     }
 
     /// An item added without a group goes in the app's own, not the App Group.

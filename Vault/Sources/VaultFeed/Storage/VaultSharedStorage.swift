@@ -12,13 +12,22 @@ public enum VaultSharedStorage {
     // and widget extension. Must match the `com.apple.security.application-groups`
     // entitlement on every target that reads the vault.
     //
-    // The Mac's starts with the team ID: on the Mac, that needs no provisioning profile, and it's also the keychain
-    // access group its app and AutoFill extension share (docs/mac-app.md, decision 7).
+    // The Mac's starts with the team ID: on the Mac, that needs no provisioning profile, and it's also a keychain
+    // access group its app and AutoFill extension have (docs/mac-app.md, decision 7).
     #if os(macOS)
     public static let appGroupID = "442P244AFS.com.badbundle.vault"
     #else
     public static let appGroupID = "group.com.badbundle.vault-group"
     #endif
+
+    /// The keychain access group the app shares with its AutoFill extension, and with nothing else, on iOS and the
+    /// Mac: it's in their `keychain-access-groups`, and not the widget extension's. The keychain items they share are
+    /// kept in it (`SharedKeychainItem`).
+    ///
+    /// Every App Group is a keychain access group too, so the App Group's would also be the iOS widget extension's,
+    /// which shares the App Group to read the vault (VAULT-129). Only the device key stays there, as that extension
+    /// reads it to show codes while the App Lock Password is off (`VaultDeviceKeychainStore`).
+    public static let keychainGroupID = "442P244AFS.com.badbundle.vault.shared"
 
     /// Resolves the App Group container URL. Crashes if the entitlement is
     /// missing — there is no meaningful fallback because the vault cannot be

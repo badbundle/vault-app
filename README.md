@@ -94,6 +94,7 @@ The checks are in [`local-check.config.ts`](./local-check.config.ts). local-chec
 - the Fastlane config check, which is skipped, and noted on the check, if the Ruby version in `.ruby-version` isn't installed;
 - a build and full run of the `iOSAllTests` test plan on a throwaway iPhone 18 Pro Max / iOS 27.0 simulator, created for the run and deleted afterwards;
 - a build and run of the UI tests, the `VaultAppUITests` scheme, on the same simulator;
+- a build of the iOS app, `VaultApp`, for the simulator, then a check that it and its extensions have only their own entitlements: the keychain access group the app shares with its AutoFill extension is theirs alone, and not the widget extension's;
 - a build and run of the `macOS_SupportedTests` test plan, the shared modules' tests, on the Mac itself, so that work on the Mac app can't break iOS, or the other way round (see [`docs/mac-app.md`](./docs/mac-app.md));
 - a build of the Mac app, `VaultMacApp`, with its tests running inside it, then a check that it's signed with only the entitlements the design lists, and its UI tests, the `VaultMacAppUITests` scheme.
 

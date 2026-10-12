@@ -291,7 +291,9 @@ one-time, verified conversion. After that, turning the password on and off only 
     that, and a looser one adds nothing they need.
   - **Migratable**, not `ThisDeviceOnly`, so a device backup restores it with the file. It never syncs to iCloud
     Keychain.
-  - **In the App Group's access group**, like the attempt counter, for the extensions (VAULT-50).
+  - **In the App Group's access group**, for the extensions, as the widgets and AutoFill both open the vault with it
+    (VAULT-50). The attempt counter and the wrap stamp are in a group only the app and AutoFill have (see
+    [Keychain access groups](#keychain-access-groups-vault-129)).
   - **New every time the password is turned off**, and deleted when it's turned back on, so it only ever opens
     copies of the file written while the password was off.
 - `K_i`, the data key, is 256 random bits per vault. It's sealed under `W_i` together with the body length, a
@@ -1028,7 +1030,8 @@ payloads.
   rewrapping) is stamped through `VaultWrapStamping` by `VaultDeviceWrapStamper`:
   `max(now, the last stamp + 1 ms, the previous wrap time + 1 ms)`, where the previous wrap time is the slot's own,
   or, for a vault made from another, that vault's. The stamp is saved before the wrap is made, in a keychain item on
-  this device only, in the App Group's access group. Every vault that opens raises it to its own wrap time.
+  this device only, in the access group the app shares with AutoFill only (VAULT-129). Every vault that opens raises it
+  to its own wrap time.
 - **What's left:** a device whose stamp is missing or older than the real vault's wrap, because its keychain was reset
   or it's a new device restored from a backup, and where the user hasn't opened the real vault since. There a duress
   vault made with the clock set back is stamped only after the duress vault it's made from, and can be older than the
@@ -1165,7 +1168,8 @@ Honest limits:
   against a copy taken earlier is what the KDF, and the password's strength, are for.
 
 The counter is per device and shared by all vaults (`AppLockPasswordAttemptCounter`). It counts attempts in a row,
-since one last opened a vault, in one keychain record on this device only. The duress password is a correct
+since one last opened a vault, in one keychain record on this device only, which the app and AutoFill share, and the
+widgets can't read (VAULT-129). The duress password is a correct
 password: it opens a slot and resets the counter, as the real one does, and every vault does exactly the same to it
 (MANIFESTO C2). The count decides the waits, which follow iOS's schedule, when to erase, and where Settings and
 AutoFill stop. A reset removes the record, so the next attempt can be made at once, and a wrong one after it waits
@@ -1308,6 +1312,40 @@ app counts at the same moment, with both on screen on an iPad, can't make the ex
 
 Residual: a configured widget's saved `OTPWidgetItemEntity` (issuer, account name) sits in the system's widget
 configuration, which the app can't edit. Turning on the password should tell users to remove existing widgets.
+
+### Keychain access groups (VAULT-129)
+
+Every App Group is a keychain access group too, so every member of the App Group can read the items in its group. The
+widget extension is a member, as it reads the vault from the App Group's container. So the items only the app and
+AutoFill need are in a keychain access group only they have, `442P244AFS.com.badbundle.vault.shared`
+(`VaultSharedStorage.keychainGroupID`, `SharedKeychainItem`): the attempt counter, the wrap stamp, and on the Mac, the
+app lock's device settings. It's in the `keychain-access-groups` of the app and the AutoFill extension, on iOS and the
+Mac, and not the widget extension's, which `make validate` checks in each build's signed entitlements.
+
+The device key stays in the App Group's group: with the password off, the widgets open the vault with it, as they read
+the plain store when there's never been a password. With the password on, there's no device key.
+
+Earlier versions kept those items in the App Group's group, so each launch of the app, and each start of the AutoFill
+extension, moves what's still there (`SharedKeychainItems`):
+
+1. Read the item from the App Group's group, with its accessibility. If it isn't there, there's nothing to do.
+2. Add a copy to the shared group, with the same bytes and accessibility, never synced, unless the shared group has
+   the item already: then that's the item's current value, as everything writes there, having read it first, or
+   another process has just moved it.
+3. Read the shared group's copy back: it has to be there, with the same accessibility, never synced, and the same
+   bytes if this move added it.
+4. Only then delete the App Group's.
+
+A step that fails leaves the App Group's item as it was, and the next launch tries again. The app and the AutoFill
+extension can move at once: whichever adds the copy first, the other finds it, and both delete the original. The
+attempt counter moves holding its `flock`, so no attempt is counted or forgotten meanwhile, but only if it has a
+record to move, as the lock's file shows a password was tried. In the app, an interrupted erase finishes only after
+the move.
+
+Until an item has moved, everything reads the shared group, then the App Group's, then the shared group again, in
+case a move finished between the two, and writes only to the shared group. Removing an item, for a reset or an erase,
+deletes the App Group's first, then the shared group's, so a delete that fails never leaves an older value to be read.
+So the count is never lost or lowered, and the erase deletes it, and the stamp, from both.
 
 ## Backups, killphrases and everything else
 

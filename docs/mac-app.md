@@ -52,8 +52,8 @@ Mine, for Bradley to review:
    share `442P244AFS.com.badbundle.vault`, rather than the iOS app's `group.com.badbundle.vault-group`: on the Mac, an
    App Group that starts with the team ID needs nothing registered for it, so any app of the team could claim it: no
    other Bad Bundle Mac app may. The keychain is as on iOS: the app's own
-   group (`keychain-access-groups`, `…vault.private`), and the App Group for the few items the extension reads too.
-   See [Keychain](#keychain).
+   group (`keychain-access-groups`, `…vault.private`), and a group the app shares with the extension only
+   (`…vault.shared`) for the few items the extension reads too. See [Keychain](#keychain).
 
    This was first planned without `keychain-access-groups`, so that development builds needed no provisioning
    profile. VAULT-106 found the Mac refuses the data protection keychain (`errSecMissingEntitlement`) to an app with
@@ -317,14 +317,36 @@ app has `keychain-access-groups`, and its App Group is a keychain access group t
   which the AutoFill extension can't read. `VaultMacRoot.keychain` names that group, so the app never reads one of
   its own items from the App Group either. The backup password is inside each encrypted vault, as on iOS with the
   password on;
-- the attempt counter, the device key, the wrap stamp and the app lock's device settings name the App Group,
-  `442P244AFS.com.badbundle.vault`, which the AutoFill extension shares, and which is its only keychain access group;
+- the attempt counter, the wrap stamp and the app lock's device settings are in the group the app shares with the
+  AutoFill extension, `442P244AFS.com.badbundle.vault.shared`, as on iOS (VAULT-129). The AutoFill extension's only
+  keychain access groups are that one and the App Group's, `442P244AFS.com.badbundle.vault`, which holds the device
+  key. The Mac never makes a device key, as its password is always on, but the shared code looks for one there;
 - the codes the app hands its widgets, and a widget's note of a code it copied, are in the widgets' own group,
   `442P244AFS.com.badbundle.vault.widgets`, which only the widget extension shares, and which is its only keychain
   access group (see [Widgets](#widgets)).
 
 The app's own group isn't named for the app, as the iOS app's is, because on the Mac that name is the App Group's, and
 the extension would read it too (found in VAULT-112).
+
+Before VAULT-129, the attempt counter, the wrap stamp and the device settings were in the App Group's group, which
+every member of the App Group has: on iOS, that includes the widget extension, which needs the App Group to read the
+vault.
+The Mac's widget extension already had no App Group, but the items moved on both platforms, so they're kept the same
+way on each (`SharedKeychainItem`). Each launch of the app, and each start of the AutoFill extension, moves what's
+still in the App Group's group (`SharedKeychainItems`), the attempt counter holding its lock while it does:
+
+1. it reads the item there, with its accessibility;
+2. adds a copy to the shared group, with the same bytes and accessibility, never synced, unless the shared group has
+   it already, in which case that's kept, as everything writes there, having read it first;
+3. reads the shared group's back, and checks it;
+4. and only then deletes the App Group's.
+
+A step that fails leaves the App Group's item where it is, and the next launch tries again. Until then, everything
+reads the shared group, then the App Group's, then the shared group again, in case a move finished in between, and
+writes only the shared group. Removing an item, as an erase does, deletes it from both, the App Group's first. So the
+count of wrong passwords is never lost or lowered, and an erase leaves nothing in either. A development vault moves the
+same way, the first time a build with VAULT-129 launches; a build from before it would no longer find them, and read
+the device settings from the defaults again.
 
 Erasing after failed passwords and the Require Unlock delay, the settings that protect the vault and only weaken with
 the password or Touch ID, are kept in the keychain too, in one item on this Mac only
@@ -505,12 +527,12 @@ entitlements:
 | Entitlement | Why |
 | --- | --- |
 | `com.apple.security.app-sandbox` | Required. |
-| `com.apple.security.application-groups`: `442P244AFS.com.badbundle.vault` | The vault file and the settings the AutoFill extension shares, and the keychain access group. |
+| `com.apple.security.application-groups`: `442P244AFS.com.badbundle.vault` | The vault file and the settings the AutoFill extension shares, and a keychain access group. |
 | `com.apple.security.files.user-selected.read-write` | Saving a backup, choosing the auto-backup folder, and restoring or reading an image. |
 | `com.apple.security.files.bookmarks.app-scope` | Keeping the auto-backup folder across launches. VAULT-110 checks whether macOS 26 still needs it. |
 | `com.apple.security.device.camera` | Scanning QR codes, with `NSCameraUsageDescription`. |
 | `com.apple.security.print` | Printing a backup. |
-| `keychain-access-groups`: `442P244AFS.com.badbundle.vault.private`, then `442P244AFS.com.badbundle.vault`, then `442P244AFS.com.badbundle.vault.widgets` | The app's own keychain items, which neither extension can read, then the App Group's, then the codes it hands its widgets. |
+| `keychain-access-groups`: `442P244AFS.com.badbundle.vault.private`, then `442P244AFS.com.badbundle.vault`, then `442P244AFS.com.badbundle.vault.shared`, then `442P244AFS.com.badbundle.vault.widgets` | The app's own keychain items, which neither extension can read, then the App Group's, then those it shares with the AutoFill extension only, then the codes it hands its widgets. |
 
 The provisioning profile adds two more, which name the app and its team: `com.apple.application-identifier` and
 `com.apple.developer.team-identifier`.
@@ -519,7 +541,8 @@ It never has:
 
 - **network entitlements** (`network.client`, `network.server`): Vault makes no network requests (G70), and without
   them, the sandbox makes sure it can't;
-- a keychain access group but its own and the App Group's, or iCloud entitlements (G69);
+- a keychain access group but its own, the App Group's, the one it shares with AutoFill and its widgets', or iCloud
+  entitlements (G69);
 - temporary exceptions, file access beyond user-selected files (downloads, pictures and so on), Apple Events or
   scripting targets, or Mach lookup exceptions;
 - the hardened runtime's exceptions: no JIT, unsigned memory, DYLD environment variables, or disabled library
@@ -528,21 +551,24 @@ It never has:
 
 The hardened runtime is on, so other code can't be injected into Vault's process.
 
-The AutoFill extension gets the sandbox, the hardened runtime, the App Group, the App Group as its only keychain
-access group, and the AutoFill entitlement
+The AutoFill extension gets the sandbox, the hardened runtime, the App Group, the App Group's and the shared group
+(`…vault.shared`) as its only keychain access groups, and the AutoFill entitlement
 (`com.apple.developer.authentication-services.autofill-credential-provider`), and nothing else. The app itself doesn't
 need the AutoFill entitlement: it never writes the credential identity store, which stays empty on the Mac.
 
 The widget extension gets the sandbox, the hardened runtime, and the widgets' keychain access group as its only one,
-and nothing else. It has no App Group, which would also be a keychain access group (see [Keychain](#keychain)): it
-can't read the App Group's keychain items, such as the attempt counter, nor its container or defaults, and the
-AutoFill extension can't read the widgets' items.
+and nothing else. It has no App Group, which would also be a keychain access group (see [Keychain](#keychain)), nor
+the shared group: it can't read the attempt counter or the device key, nor the App Group's container or defaults,
+and the AutoFill extension can't read the widgets' items.
 
 `make validate`'s "Mac app entitlements" check builds the app as it runs (a build for testing has entitlements of
 Xcode's own), and fails unless the app and its two extensions are each signed with the hardened runtime and
 sandboxed, the app and the AutoFill extension in the App Group and the widget extension in none, with only their own
-keychain access groups, and with no entitlement outside their lists and the profile's two, apart from a development
-build's `get-task-allow`.
+keychain access groups, the shared group only the app's and the AutoFill extension's, and with no entitlement outside
+their lists and the profile's two, apart from a development build's `get-task-allow`. Its "iOS app entitlements"
+check builds the iOS app for the simulator, reads each target's entitlements from its executable, and fails unless
+each has only the iOS App Group, only its own keychain access groups, and nothing outside its list: the shared group
+is only the app's and the AutoFill extension's, and the widget extension has no keychain access group of its own.
 
 ### Info.plist
 
@@ -614,8 +640,9 @@ stores, backups and import, the OTP timers and copy actions are all in VaultFeed
 
 What changes in the shared modules:
 
-- **`VaultSharedStorage.appGroupID`** is the Mac's App Group on macOS (decision 7), which the keychain items with an
-  explicit access group (the attempt counter, the device wrap stamp and the device key) name.
+- **`VaultSharedStorage.appGroupID`** is the Mac's App Group on macOS (decision 7), which the device key names as its
+  keychain access group. The attempt counter, the device wrap stamp and the device settings name
+  `VaultSharedStorage.keychainGroupID`, the same on both platforms (VAULT-129).
 - **`VaultStorageRecovery`** knows the Mac's plain store is only in memory: a first launch stopped mid-conversion
   leaves only the encrypted files it began, which the journal shows can go.
 - **`VaultEraser`** leaves the Mac a fresh store in memory, and `AppLockService.lockNow()` locks at once, for Lock

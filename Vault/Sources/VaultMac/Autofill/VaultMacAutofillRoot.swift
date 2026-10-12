@@ -30,6 +30,10 @@ final class VaultMacAutofillRoot {
     let vaultService: AutofillVaultService
 
     private init() {
+        // Moves the keychain items an earlier version kept in the App Group's access group, in case the app hasn't yet.
+        Task {
+            await SharedKeychainItems.moveFromTheAppGroup()
+        }
         let defaults = Defaults(userDefaults: UserDefaults(suiteName: VaultSharedStorage.appGroupID) ?? .standard)
         sharedDefaults = defaults
         localSettings = LocalSettings(defaults: defaults, sharedDefaults: defaults)

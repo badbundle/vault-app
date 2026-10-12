@@ -696,16 +696,31 @@ public enum VaultRoot {
 
     // MARK: - Setup
 
+    /// Moves the keychain items the app shares with the AutoFill extension out of the App Group's access group, where
+    /// earlier versions kept them (`SharedKeychainItems`). The app calls it as it launches, and the AutoFill extension
+    /// as it starts. Never in screenshot mode, which doesn't touch the simulator's keychain items.
+    public static func moveSharedKeychainItems() async {
+        #if DEBUG
+        if ScreenshotMode.isEnabled {
+            return
+        }
+        #endif
+        await SharedKeychainItems.moveFromTheAppGroup()
+    }
+
     /// Call this at app startup to wire up connections between components.
     @MainActor
     public static func setup() {
-        // Finish an erase the app was stopped in the middle of. It leaves a
-        // fresh, empty plain store. The vault's views wait for it, and it
-        // never runs twice.
-        if let interruptedErase {
-            Task {
-                await interruptedErase.finish()
-            }
+        // Move the keychain items an earlier version kept in the App Group's
+        // access group, which the widget extension has too, to the one only
+        // the app and the AutoFill extension have. Then finish an erase the app
+        // was stopped in the middle of, which deletes them wherever they are.
+        // It leaves a fresh, empty plain store. The vault's views wait for it,
+        // and it never runs twice.
+        let interruptedErase = interruptedErase
+        Task {
+            await moveSharedKeychainItems()
+            await interruptedErase?.finish()
         }
         lockWhenTheDeviceLocks(appLockService)
         // With the password off after being on, the vault is encrypted with a

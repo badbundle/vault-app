@@ -102,67 +102,35 @@ protocol VaultWrapStampStorage: Sendable {
     func remove() throws
 }
 
-/// Keeps the wrap stamp in the keychain, on this device only, in the App Group's access group.
+/// Keeps the wrap stamp in the keychain, on this device only, in the keychain access group the app shares with the
+/// AutoFill extension only (`SharedKeychainItem`).
 ///
 /// It survives relaunches and updates. It never syncs to iCloud Keychain and never moves to another device with a
 /// backup, so a stamp from another time can't be put back with an old backup.
 struct VaultWrapStampKeychainStorage: VaultWrapStampStorage {
-    let accessGroup: String?
+    let item: SharedKeychainItem
 
-    init(accessGroup: String? = VaultSharedStorage.appGroupID) {
-        self.accessGroup = accessGroup
+    init(item: SharedKeychainItem = SharedKeychainItem(key: .vaultWrapStamp)) {
+        self.item = item
     }
 
     func load() throws -> UInt64? {
-        var query = Self.itemQuery(accessGroup: accessGroup)
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: AnyObject?
-        switch SecItemCopyMatching(query as CFDictionary, &result) {
-        case errSecSuccess:
-            guard let data = result as? Data else { throw SwiftSecurityError.invalidParameter }
-            return try JSONDecoder().decode(UInt64.self, from: data)
-        case errSecItemNotFound:
-            return nil
-        case let status:
-            throw SwiftSecurityError(rawValue: status)
-        }
+        guard let data = try item.data() else { return nil }
+        return try JSONDecoder().decode(UInt64.self, from: data)
     }
 
     func save(_ stamp: UInt64) throws {
-        let query = Self.itemQuery(accessGroup: accessGroup)
-        let attributes = try Self.attributes(for: stamp)
-        switch SecItemUpdate(query as CFDictionary, attributes as CFDictionary) {
-        case errSecSuccess:
-            return
-        case errSecItemNotFound:
-            let status = SecItemAdd(query.merging(attributes) { $1 } as CFDictionary, nil)
-            guard status == errSecSuccess else { throw SwiftSecurityError(rawValue: status) }
-        case let status:
-            throw SwiftSecurityError(rawValue: status)
-        }
+        try item.save(Self.attributes(for: stamp))
     }
 
     func remove() throws {
-        let status = SecItemDelete(Self.itemQuery(accessGroup: accessGroup) as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else {
-            throw SwiftSecurityError(rawValue: status)
-        }
+        try item.remove()
     }
 
-    /// Identifies the item: a password item for the stamp, in `accessGroup`, that doesn't sync.
-    static func itemQuery(accessGroup: String?) -> [String: Any] {
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: VaultIdentifiers.SecureStorageKey.vaultWrapStamp.keychainService,
-            kSecAttrSynchronizable as String: false,
-            // Makes macOS use the same keychain as iOS.
-            kSecUseDataProtectionKeychain as String: true,
-        ]
-        if let accessGroup {
-            query[kSecAttrAccessGroup as String] = accessGroup
-        }
-        return query
+    /// Moves the stamp out of the App Group's keychain access group, where versions before VAULT-129 kept it
+    /// (`SharedKeychainItem.moveFromTheAppGroup()`).
+    func moveFromTheAppGroup() throws {
+        try item.moveFromTheAppGroup()
     }
 
     /// What's stored in the item: the stamp, readable only while the device is unlocked, on this device only.

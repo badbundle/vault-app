@@ -13,6 +13,11 @@ open class VaultCredentialProviderViewController: ASCredentialProviderViewContro
     private var deviceLockObserver: (any NSObjectProtocol)?
 
     override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
+        // Moves the keychain items an earlier version kept in the App Group's
+        // access group, once in each process, in case the app hasn't yet.
+        Task {
+            await VaultRoot.moveSharedKeychainItems()
+        }
         // Decided for every request, not once for the process: the app can
         // change how the vault's stored while the extension's process lives
         // on. With the password on, the sheet unlocks the vault with it after
