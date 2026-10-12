@@ -13,110 +13,415 @@
 # Uncomment the line if you want fastlane to automatically update itself
 # update_fastlane
 
+require "open3"
+require "plist"
+require "tmpdir"
+
 default_platform(:ios)
 
+# iOS and the Mac always ship together, from one commit, with one version and one build number (RELEASE.md).
+
+# fastlane reads this file from inside fastlane/, so the repo is its parent.
+REPO_ROOT = File.expand_path("..", Dir.pwd) unless defined?(REPO_ROOT)
+APPLE_ID = "badbundlelimited@gmail.com" unless defined?(APPLE_ID)
+TEAM_ID = "442P244AFS" unless defined?(TEAM_ID)
+# The account's App Store Connect team, which the build number lookup takes, rather than the developer team.
+ASC_TEAM_ID = "127471357" unless defined?(ASC_TEAM_ID)
+APP_IDENTIFIER = "com.badbundle.vault" unless defined?(APP_IDENTIFIER)
+SHARED_KEYCHAIN_GROUP = "#{TEAM_ID}.com.badbundle.vault.shared" unless defined?(SHARED_KEYCHAIN_GROUP)
+
+# The App Store build's bundles on each platform, and the App Groups and keychain access groups each must have
+# (docs/mac-app.md, and the entitlements checks in local-check.config.ts). nil is none at all.
+IOS_BUNDLES = {
+  "VaultApp.app" => {
+    bundle_id: APP_IDENTIFIER,
+    app_groups: ["group.com.badbundle.vault-group"],
+    keychain_groups: ["#{TEAM_ID}.com.badbundle.vault", SHARED_KEYCHAIN_GROUP]
+  },
+  "VaultApp.app/PlugIns/VaultAppAutofill.appex" => {
+    bundle_id: "com.badbundle.vault.VaultAutofill",
+    app_groups: ["group.com.badbundle.vault-group"],
+    keychain_groups: ["#{TEAM_ID}.com.badbundle.vault.VaultAutofill", SHARED_KEYCHAIN_GROUP]
+  },
+  "VaultApp.app/PlugIns/VaultWidgetsExtension.appex" => {
+    bundle_id: "com.badbundle.vault.Widgets",
+    app_groups: ["group.com.badbundle.vault-group"],
+    keychain_groups: nil
+  }
+}.freeze unless defined?(IOS_BUNDLES)
+
+MAC_BUNDLES = {
+  "Vault.app" => {
+    bundle_id: APP_IDENTIFIER,
+    app_groups: ["#{TEAM_ID}.com.badbundle.vault"],
+    keychain_groups: [
+      "#{TEAM_ID}.com.badbundle.vault.private",
+      "#{TEAM_ID}.com.badbundle.vault",
+      SHARED_KEYCHAIN_GROUP,
+      "#{TEAM_ID}.com.badbundle.vault.widgets"
+    ]
+  },
+  "Vault.app/Contents/PlugIns/VaultMacAutofill.appex" => {
+    bundle_id: "com.badbundle.vault.VaultAutofill",
+    app_groups: ["#{TEAM_ID}.com.badbundle.vault"],
+    keychain_groups: ["#{TEAM_ID}.com.badbundle.vault", SHARED_KEYCHAIN_GROUP]
+  },
+  "Vault.app/Contents/PlugIns/VaultMacWidgets.appex" => {
+    bundle_id: "com.badbundle.vault.Widgets",
+    app_groups: nil,
+    keychain_groups: ["#{TEAM_ID}.com.badbundle.vault.widgets"]
+  }
+}.freeze unless defined?(MAC_BUNDLES)
+
+# The Mac App Store provisioning profiles the release lanes made, by bundle ID. They're named so the lanes find these
+# rather than any other profile.
+MAC_PROFILES = {
+  "com.badbundle.vault" => "Vault Mac App Store",
+  "com.badbundle.vault.VaultAutofill" => "Vault Mac AutoFill App Store",
+  "com.badbundle.vault.Widgets" => "Vault Mac Widgets App Store"
+}.freeze unless defined?(MAC_PROFILES)
+
+# Signs the Mac's .pkg. The Apple Distribution certificate signs the apps on both platforms.
+MAC_INSTALLER_CERTIFICATE = "3rd Party Mac Developer Installer: Bad Bundle Limited (#{TEAM_ID})" unless defined?(MAC_INSTALLER_CERTIFICATE)
+
+# A setting from VaultApp/Version.xcconfig, the one place every target's version and build number floor are set.
+def version_setting(name)
+  value = File.read(File.join(REPO_ROOT, "VaultApp/Version.xcconfig"))[/^#{name} = (\S+)$/, 1]
+  UI.user_error!("VaultApp/Version.xcconfig doesn't set #{name}") unless value
+  value
+end
+
+# Runs the block with Apple's own tools first on PATH. Xcode's export step launches /usr/bin/rsync, which can spawn an
+# rsync helper from PATH, and Homebrew's rejects Apple's xattr flags.
+def with_apple_tools_first
+  original_path = ENV["PATH"]
+  ENV["PATH"] = ["/usr/bin", "/bin", "/usr/sbin", "/sbin", original_path].compact.join(":")
+  yield
+ensure
+  ENV["PATH"] = original_path
+end
+
+# Fails unless every bundle of an exported build has this version and build number, is signed for the App Store with
+# the team's Apple Distribution certificate, and has exactly its App Groups and keychain access groups, with nothing
+# only a development build has (get-task-allow) and no sandbox exception. The Mac's must also be sandboxed and have
+# the hardened runtime.
+def check_release_bundles(root, bundles, version:, build_number:, mac:)
+  bundles.each do |relative_path, expected|
+    path = File.join(root, relative_path)
+    UI.user_error!("The build has no #{relative_path}") unless File.directory?(path)
+
+    info = Plist.parse_xml(sh("plutil", "-convert", "xml1", "-o", "-", File.join(path, mac ? "Contents/Info.plist" : "Info.plist"), log: false))
+    found = "#{info['CFBundleShortVersionString']} (#{info['CFBundleVersion']})"
+    unless info["CFBundleIdentifier"] == expected[:bundle_id] && found == "#{version} (#{build_number})"
+      UI.user_error!("#{relative_path} is #{info['CFBundleIdentifier']} #{found}, not #{expected[:bundle_id]} #{version} (#{build_number})")
+    end
+
+    _, signature, = Open3.capture3("codesign", "--display", "--verbose=2", path)
+    unless signature.include?("Authority=Apple Distribution: Bad Bundle Limited (#{TEAM_ID})")
+      UI.user_error!("#{relative_path} isn't signed with the team's Apple Distribution certificate:\n#{signature}")
+    end
+    if mac && !signature.match?(/flags=0x\h+\([^)]*runtime[^)]*\)/)
+      UI.user_error!("#{relative_path} isn't signed with the hardened runtime:\n#{signature}")
+    end
+
+    entitlements_xml, = Open3.capture3("codesign", "--display", "--entitlements", "-", "--xml", path)
+    entitlements = Plist.parse_xml(entitlements_xml) || {}
+    debuggable = entitlements.select { |key, value| key.end_with?("get-task-allow") && value != false }
+    exceptions = entitlements.keys.grep(/temporary-exception/)
+    unless debuggable.empty? && exceptions.empty?
+      UI.user_error!("#{relative_path} has development or exception entitlements: #{(debuggable.keys + exceptions).join(', ')}")
+    end
+    if mac && entitlements["com.apple.security.app-sandbox"] != true
+      UI.user_error!("#{relative_path} isn't sandboxed")
+    end
+    app_groups = entitlements["com.apple.security.application-groups"]
+    keychain_groups = entitlements["keychain-access-groups"]
+    unless app_groups == expected[:app_groups] && keychain_groups == expected[:keychain_groups]
+      UI.user_error!("#{relative_path} has App Groups #{app_groups.inspect} and keychain access groups " \
+                     "#{keychain_groups.inspect}, not #{expected[:app_groups].inspect} and #{expected[:keychain_groups].inspect}")
+    end
+    UI.success("#{relative_path}: #{found}, signed for the App Store, entitlements #{entitlements.keys.sort.join(', ')}")
+  end
+end
+
 private_lane :next_release_build_number do
-  current_project_build = get_build_number(
-    xcodeproj: "VaultApp/VaultApp.xcodeproj"
-  ).to_i
+  floor = version_setting("CURRENT_PROJECT_VERSION").to_i
+  latest_uploads = %w[ios osx].map do |platform|
+    latest_testflight_build_number(
+      app_identifier: APP_IDENTIFIER,
+      username: APPLE_ID,
+      team_id: ASC_TEAM_ID,
+      platform: platform,
+      # For a platform with no uploads yet, as the Mac had none before 2.1.
+      initial_build_number: 0
+    ).to_i
+  end
 
-  latest_uploaded_build = latest_testflight_build_number(
-    app_identifier: "com.badbundle.vault",
-    username: "badbundlelimited@gmail.com",
-    team_id: "127471357",
-    platform: "ios",
-    initial_build_number: current_project_build
-  ).to_i
-
-  # A project bumped ahead of TestFlight releases with its own number; otherwise the build after the latest upload.
-  [current_project_build, latest_uploaded_build + 1].max.to_s
+  # One number for both platforms: the build after the latest upload on either, or the floor if it's higher.
+  [floor, latest_uploads.max + 1].max.to_s
 rescue => error
   UI.user_error!("Unable to determine the next App Store build number: #{error.message}")
 end
 
-desc "Prints the next global App Store/TestFlight build number without changing project files"
+desc "Prints the next build number for iOS and the Mac, without changing project files"
 lane :increment_build do
   build_number = next_release_build_number
   UI.message("Next release build number: #{build_number}")
   build_number
 end
 
-platform :ios do
-  desc "Push a new release build to the App Store"
+desc "Archive, sign, check and upload iOS and the Mac, with one build number, their listings and screenshots. Submits nothing"
+lane :release do
+  ensure_git_status_clean
+  version = version_setting("MARKETING_VERSION")
+  build_number = next_release_build_number
+  UI.message("Using release build number #{build_number} for #{version} on iOS and the Mac")
 
+  # Both platforms are built and checked before either is uploaded, so one that can't be signed leaves App Store
+  # Connect as it was.
+  builds = build_release(build_number: build_number)
 
-  lane :release do
-    ensure_git_status_clean
-    release_build_number = next_release_build_number
-    UI.message("Using release build number #{release_build_number}")
+  upload_to_app_store(
+    username: APPLE_ID,
+    team_id: TEAM_ID,
+    app_identifier: APP_IDENTIFIER,
+    platform: "ios",
+    ipa: builds[:ipa],
+    # Creates the iOS version for this one, if App Store Connect isn't editing one, or renames the one it's editing.
+    app_version: version,
+    metadata_path: "./fastlane/metadata",
+    screenshots_path: "./fastlane/screenshots",
+    # Replace the version's screenshots with exactly those in fastlane/screenshots. Without this, deliver adds any
+    # changed image next to the old one, and a set that reaches Apple's limit of ten skips the rest.
+    overwrite_screenshots: true,
+    # Released by hand once it's approved.
+    automatic_release: false,
+    # Skip the Preview.html confirmation of metadata and screenshots so the lane runs non-interactively.
+    force: true
+  )
 
-    # Pass the Apple ID to each signing step; there's no Appfile, so they'd each prompt for it.
-    get_certificates(username: "badbundlelimited@gmail.com")
-    get_provisioning_profile(app_identifier: "com.badbundle.vault", username: "badbundlelimited@gmail.com")
-    get_provisioning_profile(app_identifier: "com.badbundle.vault.VaultAutofill", username: "badbundlelimited@gmail.com")
-    get_provisioning_profile(app_identifier: "com.badbundle.vault.Widgets", username: "badbundlelimited@gmail.com")
+  upload_to_app_store(
+    username: APPLE_ID,
+    team_id: TEAM_ID,
+    app_identifier: APP_IDENTIFIER,
+    platform: "osx",
+    pkg: builds[:pkg],
+    # As for iOS, the macOS version for this one: the first Mac release renames the 1.0 App Store Connect started with.
+    app_version: version,
+    # The Mac's own listing, with its own screenshots, as each platform's version has its own (RELEASE.md).
+    metadata_path: "./fastlane/metadata-mac",
+    screenshots_path: "./fastlane/screenshots-mac",
+    overwrite_screenshots: true,
+    automatic_release: false,
+    force: true
+  )
 
-    export_options = {
-      provisioningProfiles: {
-        "com.badbundle.vault" => "vault.mobileprovision",
-        "com.badbundle.vault.VaultAutofill" => "vault-autofill.mobileprovision",
-        "com.badbundle.vault.Widgets" => "vault-widgets.mobileprovision"
-      },
-      uploadSymbols: true,
-      uploadBitcode: false,
-      # Keep Xcode from mutating App Store Connect version/build metadata during export.
-      manageAppVersionAndBuildNumber: false
-    }
+  UI.success("Uploaded #{version} (#{build_number}) for iOS and the Mac. Next, attach both builds and tag this commit:")
+  UI.success("bundle exec fastlane attach_builds build_number:#{build_number}")
+  UI.success("bundle exec fastlane tag_release build_number:#{build_number}")
+end
 
-    # Archive with the normal PATH so the configured xcodebuild formatter uses the active Ruby toolchain.
-    archive_path = gym(
-      workspace: "Vault.xcworkspace",
-      scheme: "VaultApp",
-      clean: true,
-      skip_package_ipa: true,
-      # Allow non-interactive release archives to run approved SwiftPM build tool plugins.
-      xcargs: "-allowProvisioningUpdates -skipPackagePluginValidation CURRENT_PROJECT_VERSION=#{release_build_number}"
-    )
+desc "Attach the builds uploaded with build_number: to the iOS and macOS versions App Store Connect is editing. Submits nothing"
+lane :attach_builds do |options|
+  build_number = options[:build_number].to_s.strip
+  UI.user_error!("Pass build_number:100123") unless build_number.match?(/\A\d+\z/)
+  version = version_setting("MARKETING_VERSION")
 
-    original_path = ENV["PATH"]
-    begin
-      # Xcode's export step launches /usr/bin/rsync, which can spawn an rsync helper from PATH.
-      # Keep Apple's system bins first so Homebrew rsync does not reject Apple's xattr flags.
-      ENV["PATH"] = ["/usr/bin", "/bin", "/usr/sbin", "/sbin", original_path].compact.join(":")
-
-      gym(
-        workspace: "Vault.xcworkspace",
-        scheme: "VaultApp",
-        archive_path: archive_path,
-        skip_build_archive: true,
-        # Fastlane 2.235 still validates the pre-Xcode-26 name; Xcode accepts it with a warning.
-        export_method: "app-store",
-        export_options: export_options,
-        export_team_id: "442P244AFS",
-        export_xcargs: "-allowProvisioningUpdates"
-      )
-    ensure
-      ENV["PATH"] = original_path
+  Spaceship::ConnectAPI.login(APPLE_ID, nil, use_portal: false, use_tunes: true, tunes_team_id: ASC_TEAM_ID)
+  app = Spaceship::ConnectAPI::App.find(APP_IDENTIFIER)
+  [Spaceship::ConnectAPI::Platform::IOS, Spaceship::ConnectAPI::Platform::MAC_OS].each do |platform|
+    app_store_version = app.get_edit_app_store_version(platform: platform)
+    unless app_store_version&.version_string == version
+      UI.user_error!("App Store Connect isn't editing #{version} for #{platform}: #{app_store_version&.version_string.inspect}")
     end
-    
-    # Upload to App Store using the correct Apple ID
-    upload_to_app_store(
-      username: "badbundlelimited@gmail.com",
-      team_id: "442P244AFS",
-      # Replace the version's screenshots with exactly those in fastlane/screenshots. Without this,
-      # deliver adds any changed image next to the old one, and a set that reaches Apple's limit of
-      # ten skips the rest.
-      overwrite_screenshots: true,
-      # Skip the Preview.html confirmation of metadata and screenshots so the lane runs non-interactively.
-      force: true
-    )
+
+    # App Store Connect takes a few minutes to process an upload before it can be attached.
+    deadline = Time.now + (45 * 60)
+    loop do
+      build = Spaceship::ConnectAPI::Build.all(app_id: app.id, version: version, build_number: build_number, platform: platform).first
+      if build&.processing_state == Spaceship::ConnectAPI::Build::ProcessingState::VALID
+        app_store_version.select_build(build_id: build.id)
+        UI.success("Attached build #{build_number} to #{platform} #{version}")
+        break
+      end
+      UI.user_error!("#{platform} build #{build_number} is #{build.processing_state}") if build&.processed?
+      UI.user_error!("#{platform} build #{build_number} wasn't ready in 45 minutes") if Time.now > deadline
+      UI.message("Waiting for #{platform} build #{build_number} to be processed (#{build ? build.processing_state : 'not listed yet'})")
+      sleep(60)
+    end
+  end
+end
+
+desc "Archive, sign and check iOS and the Mac with the next build number, or build_number:, without uploading"
+lane :build_release do |options|
+  build_number = (options[:build_number] || next_release_build_number).to_s
+  UI.user_error!("Build number must be numeric") unless build_number.match?(/\A\d+\z/)
+  version = version_setting("MARKETING_VERSION")
+
+  ipa = build_ios_release(build_number: build_number, version: version)
+  pkg = build_mac_release(build_number: build_number, version: version)
+  UI.success("Built #{version} (#{build_number}): #{ipa} and #{pkg}")
+  { ipa: ipa, pkg: pkg }
+end
+
+private_lane :build_ios_release do |options|
+  build_number = options[:build_number]
+
+  # Pass the Apple ID to each signing step; there's no Appfile, so they'd each prompt for it.
+  get_certificates(username: APPLE_ID)
+  # The export maps each bundle to the profiles fetched here, and to no other platform's.
+  lane_context.delete(SharedValues::SIGH_PROFILE_PATHS)
+  profiles = IOS_BUNDLES.values.to_h do |bundle|
+    [bundle[:bundle_id], get_provisioning_profile(app_identifier: bundle[:bundle_id], username: APPLE_ID)]
   end
 
-  desc "Upload the existing VaultApp.ipa to App Store Connect (no build, no bump)"
+  # Archive with the normal PATH so the configured xcodebuild formatter uses the active Ruby toolchain.
+  archive_path = gym(
+    workspace: "Vault.xcworkspace",
+    scheme: "VaultApp",
+    clean: true,
+    skip_package_ipa: true,
+    # Allow non-interactive release archives to run approved SwiftPM build tool plugins.
+    xcargs: "-allowProvisioningUpdates -skipPackagePluginValidation CURRENT_PROJECT_VERSION=#{build_number}"
+  )
+
+  with_apple_tools_first do
+    gym(
+      workspace: "Vault.xcworkspace",
+      scheme: "VaultApp",
+      archive_path: archive_path,
+      skip_build_archive: true,
+      # Fastlane 2.235 still validates the pre-Xcode-26 name; Xcode accepts it with a warning.
+      export_method: "app-store",
+      export_options: {
+        provisioningProfiles: profiles,
+        uploadSymbols: true,
+        uploadBitcode: false,
+        # Keep Xcode from mutating App Store Connect version/build metadata during export.
+        manageAppVersionAndBuildNumber: false
+      },
+      export_team_id: TEAM_ID,
+      export_xcargs: "-allowProvisioningUpdates"
+    )
+  end
+  ipa = lane_context[SharedValues::IPA_OUTPUT_PATH]
+
+  Dir.mktmpdir("vault-ios-release") do |dir|
+    sh("unzip", "-q", ipa, "-d", dir, log: false)
+    check_release_bundles(File.join(dir, "Payload"), IOS_BUNDLES, version: options[:version], build_number: build_number, mac: false)
+  end
+  ipa
+end
+
+private_lane :build_mac_release do |options|
+  build_number = options[:build_number]
+
+  # The installer certificate signs the .pkg that's uploaded, and the Apple Distribution certificate signs the app and
+  # its extensions, as on iOS. The profiles are for the Apple Distribution one, which get_certificates otherwise
+  # leaves sigh to pick as whichever it found last.
+  get_certificates(type: "mac_installer_distribution", platform: "macos", username: APPLE_ID, team_id: TEAM_ID)
+  get_certificates(username: APPLE_ID)
+  distribution_certificate = lane_context[SharedValues::CERT_CERTIFICATE_ID]
+  lane_context.delete(SharedValues::SIGH_PROFILE_PATHS)
+  profiles = MAC_PROFILES.to_h do |bundle_id, name|
+    [bundle_id, get_provisioning_profile(
+      platform: "macos",
+      app_identifier: bundle_id,
+      cert_id: distribution_certificate,
+      # The valid profile with this name, or else one named after it: when the named one has expired, sigh makes a new
+      # one with a timestamp after the name.
+      provisioning_name: name,
+      username: APPLE_ID,
+      team_id: TEAM_ID
+    )]
+  end
+
+  # gym copies the archived app out next to the archive, so it goes somewhere it can be thrown away, not the repo.
+  Dir.mktmpdir("vault-mac-archive") do |archive_output|
+    gym(
+      workspace: "Vault.xcworkspace",
+      scheme: "VaultMacApp",
+      destination: "generic/platform=macOS",
+      clean: true,
+      skip_package_pkg: true,
+      output_directory: archive_output,
+      xcargs: "-allowProvisioningUpdates -skipPackagePluginValidation CURRENT_PROJECT_VERSION=#{build_number}"
+    )
+  end
+  archive_path = lane_context[SharedValues::XCODEBUILD_ARCHIVE]
+
+  with_apple_tools_first do
+    gym(
+      workspace: "Vault.xcworkspace",
+      scheme: "VaultMacApp",
+      destination: "generic/platform=macOS",
+      archive_path: archive_path,
+      skip_build_archive: true,
+      export_method: "app-store",
+      export_options: {
+        provisioningProfiles: profiles,
+        uploadSymbols: true,
+        manageAppVersionAndBuildNumber: false
+      },
+      export_team_id: TEAM_ID,
+      installer_cert_name: MAC_INSTALLER_CERTIFICATE,
+      output_name: "Vault",
+      export_xcargs: "-allowProvisioningUpdates"
+    )
+  end
+  pkg = lane_context[SharedValues::PKG_OUTPUT_PATH]
+  # gym also copies the archived app next to the .pkg. It's signed for development, not what's uploaded, and would run
+  # on this Mac with the real App Group, so it goes.
+  FileUtils.rm_rf(File.join(File.dirname(pkg), "Vault.app"))
+
+  installer_signature = sh("pkgutil", "--check-signature", pkg, log: false)
+  unless installer_signature.include?(MAC_INSTALLER_CERTIFICATE)
+    UI.user_error!("#{pkg} isn't signed with #{MAC_INSTALLER_CERTIFICATE}:\n#{installer_signature}")
+  end
+  Dir.mktmpdir("vault-mac-release") do |dir|
+    sh("pkgutil", "--expand-full", pkg, File.join(dir, "pkg"), log: false)
+    app = Dir.glob(File.join(dir, "pkg", "**", "Vault.app")).first
+    UI.user_error!("#{pkg} has no Vault.app") unless app
+    check_release_bundles(File.dirname(app), MAC_BUNDLES, version: options[:version], build_number: build_number, mac: true)
+  end
+  pkg
+end
+
+desc "Tag and push the current commit as the iOS and Mac builds uploaded with build_number:"
+lane :tag_release do |options|
+  ensure_git_status_clean
+
+  version = (options[:version] || version_setting("MARKETING_VERSION")).to_s.strip
+  version = "#{version}.0" if version.split(".").length == 2
+  UI.user_error!("Version must look like 2.1.0") unless version.match?(/\A\d+\.\d+\.\d+\z/)
+
+  build_number = options[:build_number].to_s.strip
+  UI.user_error!("Pass build_number:100123") if build_number.empty?
+  UI.user_error!("Build number must be numeric") unless build_number.match?(/\A\d+\z/)
+
+  tag_name = "v#{version}+#{build_number}"
+  unless sh("git tag --list #{tag_name}", log: false).strip.empty?
+    UI.user_error!("Git tag #{tag_name} already exists locally")
+  end
+  unless sh("git ls-remote --tags origin refs/tags/#{tag_name}", log: false).strip.empty?
+    UI.user_error!("Git tag #{tag_name} already exists on origin")
+  end
+
+  add_git_tag(
+    tag: tag_name,
+    message: "Release #{version} (build #{build_number}) for iOS and the Mac"
+  )
+  push_git_tags(tag: tag_name)
+  UI.success("Tagged and pushed #{tag_name}")
+  tag_name
+end
+
+platform :ios do
+  desc "Upload the existing VaultApp.ipa to App Store Connect (no build, no bump, no listing)"
   lane :upload do
     upload_to_app_store(
-      username: "badbundlelimited@gmail.com",
-      team_id: "442P244AFS",
+      username: APPLE_ID,
+      team_id: TEAM_ID,
       ipa: "./VaultApp.ipa",
       skip_metadata: true,
       skip_screenshots: true
@@ -126,10 +431,11 @@ platform :ios do
   desc "Replace the App Store screenshots with fastlane/screenshots (no build, no listing)"
   lane :upload_screenshots do
     upload_to_app_store(
-      username: "badbundlelimited@gmail.com",
-      team_id: "442P244AFS",
+      username: APPLE_ID,
+      team_id: TEAM_ID,
       # There's no IPA to read it from.
-      app_identifier: "com.badbundle.vault",
+      app_identifier: APP_IDENTIFIER,
+      platform: "ios",
       skip_binary_upload: true,
       skip_metadata: true,
       # Upload to the version App Store Connect is editing. Without this, a VaultApp.ipa left by a release would
@@ -145,10 +451,11 @@ platform :ios do
   desc "Upload the App Store listing's text, review notes and privacy answers (no build, no screenshots)"
   lane :upload_metadata do
     upload_to_app_store(
-      username: "badbundlelimited@gmail.com",
-      team_id: "442P244AFS",
+      username: APPLE_ID,
+      team_id: TEAM_ID,
       # There's no IPA to read it from.
-      app_identifier: "com.badbundle.vault",
+      app_identifier: APP_IDENTIFIER,
+      platform: "ios",
       skip_binary_upload: true,
       skip_screenshots: true,
       # As in upload_screenshots: the version App Store Connect is editing, whatever a VaultApp.ipa says.
@@ -156,55 +463,37 @@ platform :ios do
       # Skip the Preview.html confirmation so the lane runs non-interactively.
       force: true
     )
-    # The App Privacy answers, which App Store Connect needs published before a submission.
+    # The App Privacy answers, which App Store Connect needs published before a submission. They're the app's, so
+    # they cover the Mac too.
     upload_app_privacy_details_to_app_store(
-      username: "badbundlelimited@gmail.com",
-      team_id: "442P244AFS",
-      app_identifier: "com.badbundle.vault",
+      username: APPLE_ID,
+      team_id: TEAM_ID,
+      app_identifier: APP_IDENTIFIER,
       json_path: "fastlane/app_privacy_details.json"
     )
-  end
-
-  desc "Tag and push the current commit for an uploaded App Store build"
-  lane :tag_release do |options|
-    ensure_git_status_clean
-
-    version = (options[:version] || get_version_number(
-      xcodeproj: "VaultApp/VaultApp.xcodeproj",
-      target: "VaultApp"
-    )).to_s.strip
-    version = "#{version}.0" if version.split(".").length == 2
-    UI.user_error!("Version must look like 2.0.0") unless version.match?(/\A\d+\.\d+\.\d+\z/)
-
-    build_number = options[:build_number].to_s.strip
-    UI.user_error!("Pass build_number:100123") if build_number.empty?
-    UI.user_error!("Build number must be numeric") unless build_number.match?(/\A\d+\z/)
-
-    tag_name = "v#{version}+#{build_number}"
-    unless sh("git tag --list #{tag_name}", log: false).strip.empty?
-      UI.user_error!("Git tag #{tag_name} already exists locally")
-    end
-    unless sh("git ls-remote --tags origin refs/tags/#{tag_name}", log: false).strip.empty?
-      UI.user_error!("Git tag #{tag_name} already exists on origin")
-    end
-
-    add_git_tag(
-      tag: tag_name,
-      message: "Release #{version} (build #{build_number})"
-    )
-    push_git_tags(tag: tag_name)
-    UI.success("Tagged and pushed #{tag_name}")
-    tag_name
   end
 end
 
 platform :mac do
+  desc "Upload the existing Vault.pkg to App Store Connect (no build, no bump, no listing)"
+  lane :upload do
+    upload_to_app_store(
+      username: APPLE_ID,
+      team_id: TEAM_ID,
+      app_identifier: APP_IDENTIFIER,
+      platform: "osx",
+      pkg: "./Vault.pkg",
+      skip_metadata: true,
+      skip_screenshots: true
+    )
+  end
+
   desc "Replace the Mac App Store screenshots with fastlane/screenshots-mac (no build, no listing)"
   lane :upload_screenshots do
     upload_to_app_store(
-      username: "badbundlelimited@gmail.com",
-      team_id: "442P244AFS",
-      app_identifier: "com.badbundle.vault",
+      username: APPLE_ID,
+      team_id: TEAM_ID,
+      app_identifier: APP_IDENTIFIER,
       # The Mac app's version of the app, which has its own screenshots. deliver sends every image in the folder to
       # the one platform's version, telling devices apart only by size, so the Mac's are kept out of
       # fastlane/screenshots, which the iOS lanes upload.
@@ -216,6 +505,25 @@ platform :mac do
       skip_app_version_update: true,
       # The version's screenshots become exactly those in fastlane/screenshots-mac.
       overwrite_screenshots: true,
+      # Skip the Preview.html confirmation so the lane runs non-interactively.
+      force: true
+    )
+  end
+
+  desc "Upload the Mac App Store listing's text and review notes from fastlane/metadata-mac (no build, no screenshots)"
+  lane :upload_metadata do
+    upload_to_app_store(
+      username: APPLE_ID,
+      team_id: TEAM_ID,
+      app_identifier: APP_IDENTIFIER,
+      platform: "osx",
+      # Only the version's own text: the name, subtitle, privacy policy and categories are the app's, shared with
+      # iOS, and only fastlane/metadata sets them.
+      metadata_path: "./fastlane/metadata-mac",
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      # The version App Store Connect is editing.
+      skip_app_version_update: true,
       # Skip the Preview.html confirmation so the lane runs non-interactively.
       force: true
     )
