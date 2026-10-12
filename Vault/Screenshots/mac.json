@@ -1,0 +1,132 @@
+{
+  "outputDirectory": "../../fastlane/screenshots-mac/en-US",
+  "output": { "width": 2880, "height": 1800, "format": "png" },
+  "mode": "inset",
+  "frame": "window",
+  "background": {
+    "colors": ["#020409", "#050B1A", "#0A1A42"],
+    "locations": [0, 0.45, 1],
+    "angle": 180,
+    "glows": [
+      { "x": 0.58, "y": 0.72, "radius": 0.55, "color": "#0A84FF8C" },
+      { "x": 0.94, "y": 0.06, "radius": 0.32, "color": "#3E7BFA4D" },
+      { "x": 0.04, "y": 0.98, "radius": 0.38, "color": "#5E5CE666" }
+    ],
+    "images": [
+      { "path": "assets/vault-door.png", "x": 0.5, "y": 0.1, "width": 0.62, "rotation": -6, "opacity": 0.06 }
+    ]
+  },
+  "text": {
+    "position": "top",
+    "anchor": "edge",
+    "title": { "font": "system", "size": 132, "weight": "bold", "color": "#FFFFFF" },
+    "subtitle": { "font": "system", "size": 56, "weight": "regular", "color": "#FFFFFFC7" },
+    "spacing": 24,
+    "minScale": 1,
+    "maxScale": 1,
+    "maxRotation": 0,
+    "accentColor": "#4DA3FF"
+  },
+  "padding": 104,
+  "gap": 64,
+  "shadow": { "color": "#000000A6", "radius": 90, "offsetY": 36 },
+  "screenshots": [
+    {
+      "output": "mac-01-codes",
+      "path": "../.build/screenshots/raw/mac/02-detail.png",
+      "title": "Every code. Every secret.",
+      "accent": "secret.",
+      "subtitle": "Two-factor codes and private notes, kept on your Mac.",
+      "devices": [
+        { "x": 0.54, "y": 0.72, "width": 0.84, "rotation": -2 }
+      ],
+      "callouts": [
+        {
+          "region": { "x": 1036, "y": 324, "width": 1120, "height": 158 },
+          "scale": 1.16,
+          "borderWidth": 0,
+          "highlight": false,
+          "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
+        }
+      ]
+    },
+    {
+      "output": "mac-02-duress",
+      "title": "Forced to unlock it?",
+      "accent": "Forced",
+      "subtitle": "A duress password opens a separate vault instead of your real one.",
+      "devices": [
+        { "path": "../.build/screenshots/raw/mac/04-lock-dark.png", "x": 0.36, "y": 0.73, "width": 0.66, "rotation": -3 },
+        { "path": "../.build/screenshots/raw/mac/06-settings.png", "x": 0.79, "y": 0.68, "width": 0.3, "rotation": 3 }
+      ],
+      "callouts": [
+        {
+          "device": 1,
+          "region": { "x": 40, "y": 793, "width": 1000, "height": 87 },
+          "scale": 1.12,
+          "borderWidth": 0,
+          "highlight": false,
+          "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
+        }
+      ]
+    },
+    {
+      "output": "mac-03-killphrase",
+      "path": "../.build/screenshots/raw/mac/03-editor-dark.png",
+      "title": "One search deletes it",
+      "accent": "deletes",
+      "subtitle": "Search for an item's killphrase, and it's quietly deleted from this vault.",
+      "devices": [
+        { "x": 0.5, "y": 0.72, "width": 0.84, "rotation": 2 }
+      ],
+      "callouts": [
+        {
+          "region": { "x": 640, "y": 928, "width": 960, "height": 155 },
+          "scale": 1.06,
+          "borderWidth": 0,
+          "highlight": false,
+          "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
+        }
+      ]
+    },
+    {
+      "output": "mac-04-backups",
+      "path": "../.build/screenshots/raw/mac/05-backups.png",
+      "title": "Backups you can hold",
+      "accent": "hold",
+      "subtitle": "Print to paper or save an encrypted file.",
+      "devices": [
+        { "x": 0.5, "y": 0.72, "width": 0.84, "rotation": -2 }
+      ],
+      "callouts": [
+        {
+          "region": { "x": 448, "y": 136, "width": 480, "height": 156 },
+          "scale": 1.2,
+          "borderWidth": 0,
+          "highlight": false,
+          "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
+        }
+      ]
+    },
+    {
+      "output": "mac-05-private",
+      "title": "Private by design",
+      "accent": "Private",
+      "subtitle": "Fully offline, with no accounts or tracking. Open source.",
+      "devices": [
+        { "path": "../.build/screenshots/raw/mac/01-feed.png", "x": 0.37, "y": 0.73, "width": 0.68, "rotation": -3 },
+        { "path": "../.build/screenshots/raw/mac/06-settings-dark.png", "x": 0.8, "y": 0.68, "width": 0.3, "rotation": 3 }
+      ],
+      "callouts": [
+        {
+          "device": 1,
+          "region": { "x": 40, "y": 345, "width": 1000, "height": 71 },
+          "scale": 1.12,
+          "borderWidth": 0,
+          "highlight": false,
+          "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
+        }
+      ]
+    }
+  ]
+}

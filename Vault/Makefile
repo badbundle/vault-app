@@ -38,8 +38,9 @@ lint:
 validate:
 	cd .. && bun install --frozen-lockfile --silent && bun run --silent validate
 
-# Marketing screenshots: capture raw shots of the app on throwaway simulators,
-# then put them in device frames with titles. See Screenshots/README.md.
+# Marketing screenshots: capture raw shots of the app on throwaway simulators
+# and of the Mac app on this Mac, then put them in device frames or windows
+# with titles. See Screenshots/README.md.
 .PHONY: screenshots
 screenshots: screenshots-capture screenshots-frame
 
@@ -51,6 +52,7 @@ screenshots-capture:
 screenshots-frame:
 	swift run -c release framer render --config Screenshots/iphone.json
 	swift run -c release framer render --config Screenshots/ipad.json
+	swift run -c release framer render --config Screenshots/mac.json
 
 .PHONY: clean
 clean:

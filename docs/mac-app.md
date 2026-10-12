@@ -16,8 +16,9 @@ Xcode 27 and the macOS 27 SDK, for an app that runs on macOS 26 and later, as th
 4. [Packaging](#packaging)
 5. [Modules](#modules)
 6. [Validation](#validation)
-7. [The security model](#the-security-model)
-8. [Sub-issues](#sub-issues)
+7. [App Store screenshots](#app-store-screenshots)
+8. [The security model](#the-security-model)
+9. [Sub-issues](#sub-issues)
 
 ## Decisions
 
@@ -220,7 +221,9 @@ It depends on macOS honouring `sharingType`, which `RELEASE.md`'s Mac checks tes
 Turning the setting off sets `.readOnly`, the system's default.
 
 `VaultMacWindowPrivacy` sets it on every window of Vault's as it opens, and again each time one updates, so a sheet or
-alert has it as soon as it appears, and a change to the setting reaches every window at once. Panels macOS shows for
+alert has it as soon as it appears, and a change to the setting reaches every window at once. The one exception is a
+debug build launched for the App Store screenshots, which shows only the demo vault and captures its own windows (see
+[App Store screenshots](#app-store-screenshots)); a release build has no screenshot mode. Panels macOS shows for
 Vault, such as the Open panel, are drawn by macOS, not Vault, and show only files.
 
 ### Other ways a window's contents could leak
@@ -713,6 +716,26 @@ window's. (SnapshotTesting's perceptual precision would do the same, but it thro
 soon as two images differ.)
 
 A run takes several minutes longer. As now, never run two vault-app validations at once.
+
+## App Store screenshots
+
+The Mac App Store screenshots are made as the iOS ones are (VAULT-135): `make screenshots` in `Vault/` captures the
+app in a fixed demo state, then frames each capture with a title. [`Vault/Screenshots/README.md`](../Vault/Screenshots/README.md)
+has the details.
+
+- **Screenshot mode.** A debug build launched with `-screenshot-scene <scene>` (`VaultMacScreenshotMode`) runs on the
+  demo vault the iOS screenshots show (`DemoVault`), in memory, with defaults, keychain items, widget codes and a
+  storage directory of its own, so the Mac's own vault, keychain and widgets are never read or written. Touch ID
+  passes, the App Lock Password is a stand-in that's set, and the lock triggers are off.
+- **Capture.** Every window is kept out of screen captures, and capturing the screen would need the screen recording
+  permission. So the app captures its own window, through ScreenCaptureKit's content for the current process, which
+  needs no permission, and writes it to a file descriptor `capture.sh` opens for it. To be offered, the window's
+  `sharingType` is `.readOnly` in screenshot mode only. Drawing the window in the app instead leaves out everything on
+  Liquid Glass or drawn with vibrancy, such as the sidebar. macOS draws a window at its display's scale, so it needs
+  a Retina display, and the Mac unlocked, and it takes the front from whatever app is in use while it captures.
+- **Upload.** deliver sends every screenshot in a folder to one platform's version, telling devices apart by size,
+  so the Mac's go in `fastlane/screenshots-mac/en-US/` and `fastlane mac upload_screenshots` uploads them to the Mac
+  app's version.
 
 ## The security model
 

@@ -176,6 +176,17 @@ It replaces the screenshots of the version App Store Connect is editing with
 exactly those in `fastlane/screenshots/en-US/`, as the release lane does. It
 doesn't build, upload a binary, change the listing's text or submit anything.
 
+The Mac app's screenshots are in `fastlane/screenshots-mac/en-US/`, apart from
+the iOS ones, as deliver would send every image in a folder to one platform's
+version. To replace the Mac app's version's screenshots with them:
+
+```sh
+bundle exec fastlane mac upload_screenshots
+```
+
+It needs a macOS version that App Store Connect is editing, and does no more
+than the iOS lane.
+
 ## Updating the listing
 
 The listing's text is in `fastlane/metadata/`: the name, subtitle and keywords
