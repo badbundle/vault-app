@@ -39,6 +39,7 @@ struct VaultMacRootView: View {
                     keyDeriverFactory: VaultMacRoot.vaultKeyDeriverFactory,
                 )
                 .environment(\.vaultMacItemPreviews, .live)
+                .environment(\.vaultMacClock, VaultMacRoot.clock)
                 .environment(\.vaultMacCopy, VaultMacCopyAction { action in
                     await VaultMacCopier(
                         pasteboard: VaultMacRoot.pasteboard,
