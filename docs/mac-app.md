@@ -535,6 +535,7 @@ entitlements:
 | Entitlement | Why |
 | --- | --- |
 | `com.apple.security.app-sandbox` | Required. |
+| `com.apple.developer.authentication-services.autofill-credential-provider` | Required by the App Store for an app that contains an AutoFill extension: an upload without it is rejected (error 90729). The app never writes the credential identity store, which stays empty on the Mac. |
 | `com.apple.security.application-groups`: `442P244AFS.com.badbundle.vault` | The vault file and the settings the AutoFill extension shares, and a keychain access group. |
 | `com.apple.security.files.user-selected.read-write` | Saving a backup, choosing the auto-backup folder, and restoring or reading an image. |
 | `com.apple.security.files.bookmarks.app-scope` | Keeping the auto-backup folder across launches. VAULT-110 checks whether macOS 26 still needs it. |
@@ -561,8 +562,8 @@ The hardened runtime is on, so other code can't be injected into Vault's process
 
 The AutoFill extension gets the sandbox, the hardened runtime, the App Group, the App Group's and the shared group
 (`…vault.shared`) as its only keychain access groups, and the AutoFill entitlement
-(`com.apple.developer.authentication-services.autofill-credential-provider`), and nothing else. The app itself doesn't
-need the AutoFill entitlement: it never writes the credential identity store, which stays empty on the Mac.
+(`com.apple.developer.authentication-services.autofill-credential-provider`), and nothing else. The app has the AutoFill
+entitlement too, only because the App Store requires it of the app that contains the extension (see the table).
 
 The widget extension gets the sandbox, the hardened runtime, and the widgets' keychain access group as its only one,
 and nothing else. It has no App Group, which would also be a keychain access group (see [Keychain](#keychain)), nor
