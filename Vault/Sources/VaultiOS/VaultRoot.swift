@@ -47,7 +47,17 @@ public enum VaultRoot {
 
     public static let timer: some IntervalTimer = IntervalTimerImpl()
 
-    public static let clock: some EpochClock = EpochClockImpl()
+    public static let clock: some EpochClock = EpochClockImpl(offset: clockOffset)
+
+    /// How far the clock runs ahead of the device's time: not at all, apart from in screenshot mode.
+    private static var clockOffset: Double {
+        #if DEBUG
+        if ScreenshotMode.isEnabled {
+            return ScreenshotMode.clockOffset()
+        }
+        #endif
+        return 0
+    }
 
     @MainActor
     public static let fileManager: FileManager = .default

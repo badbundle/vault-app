@@ -41,15 +41,20 @@ extension EpochClock where Self == EpochClockMock {
     }
 }
 
-/// Epoch clock that is equal to the current time, according to the device.
+/// Epoch clock that is equal to the current time, according to the device, plus `offset`.
 public struct EpochClockImpl: EpochClock {
-    public init() {}
+    /// Seconds this clock runs ahead of the device's time. 0 apart from in screenshots.
+    public let offset: Double
+
+    public init(offset: Double = 0) {
+        self.offset = offset
+    }
 
     public var currentTime: Double {
-        Date.now.timeIntervalSince1970
+        Date.now.timeIntervalSince1970 + offset
     }
 
     public var currentDate: Date {
-        Date.now
+        Date.now.addingTimeInterval(offset)
     }
 }
