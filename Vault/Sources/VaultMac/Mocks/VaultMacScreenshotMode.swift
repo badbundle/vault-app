@@ -42,9 +42,18 @@ enum VaultMacScreenshotMode {
             self != .lock
         }
 
-        /// The window the scene shows, which is the one drawn.
+        /// The window the scene shows, which is the one captured.
         var windowID: String {
             self == .settings ? VaultMacScreenshotMode.settingsWindowID : VaultMacWindow.main.id
+        }
+
+        /// Whether the list in the window's middle column has a row selected, which only shows in the accent colour
+        /// while the list has focus.
+        var selectsInTheList: Bool {
+            switch self {
+            case .detail, .backups: true
+            case .feed, .editor, .lock, .settings: false
+            }
         }
     }
 
@@ -308,7 +317,10 @@ enum VaultMacScreenshotMode {
         guard let window = window(scene.windowID) else {
             fatalError("The \(scene.rawValue) scene's window isn't open")
         }
-        await bringToFront(window)
+        guard await bringToFront(window, focusingTheList: scene.selectsInTheList) else {
+            log("couldn't bring the window to the front, so it would be drawn inactive; nothing captured")
+            exit(1)
+        }
         log("capturing")
         do {
             let png = try await pngData(of: window)
@@ -323,28 +335,49 @@ enum VaultMacScreenshotMode {
         NSApp.terminate(nil)
     }
 
-    /// Brings the app and `window` to the front, so the window is drawn active, with coloured buttons and selections,
-    /// even though something else, such as the terminal running `capture.sh`, is in front. `NSApp.activate()` only
-    /// asks, and is turned down then. Its predecessor still takes the front, but it's deprecated, which the build
-    /// treats as an error, so it's called by name. Someone using the Mac can take the front back meanwhile, so it tries
-    /// a few times, and says so if it never got there.
-    private static func bringToFront(_ window: NSWindow) async {
+    /// Brings the app and `window` to the front, so the window is drawn active, with coloured buttons, and with
+    /// `focusingTheList`, the middle column's list focused, so its selection is in the accent colour. That holds even
+    /// though something else, such as the terminal running `capture.sh`, is in front: `NSApp.activate()` only asks,
+    /// and is turned down then. Its predecessor still takes the front, but it's deprecated, which the build treats as
+    /// an error, so it's called by name. Someone using the Mac can take the front back meanwhile, so it tries a few
+    /// times. `false` if it never got there.
+    private static func bringToFront(_ window: NSWindow, focusingTheList: Bool) async -> Bool {
         typealias Activate = @convention(c) (AnyObject, Selector, Bool) -> Void
         let selector = NSSelectorFromString("activateIgnoringOtherApps:")
         let activate = unsafeBitCast(NSApp.method(for: selector), to: Activate.self)
+        func isReady() -> Bool {
+            NSApp.isActive && isKey(window) && (!focusingTheList || window.firstResponder is NSTableView)
+        }
         for _ in 0 ..< 10 {
-            if NSApp.isActive, isKey(window) {
+            if isReady() {
                 // Long enough for the window to draw itself active.
                 try? await Task.sleep(for: .milliseconds(500))
-                if NSApp.isActive, isKey(window) {
-                    return
+                if isReady() {
+                    return true
                 }
             }
             activate(NSApp, selector, true)
             (window.attachedSheet ?? window).makeKeyAndOrderFront(nil)
+            if focusingTheList, let list = middleColumnList(in: window) {
+                window.makeFirstResponder(list)
+            }
             try? await Task.sleep(for: .milliseconds(300))
         }
-        log("couldn't come to the front; the window is drawn inactive")
+        return false
+    }
+
+    /// The list in the window's middle column: the leftmost one that isn't the sidebar's.
+    private static func middleColumnList(in window: NSWindow) -> NSTableView? {
+        func lists(in view: NSView) -> [NSTableView] {
+            (view as? NSTableView).map { [$0] } ?? view.subviews.flatMap(lists(in:))
+        }
+        guard let contentView = window.contentView else { return nil }
+        let sidebarEdge = 120.0
+        return lists(in: contentView)
+            .map { ($0, $0.convert($0.bounds, to: nil).minX) }
+            .filter { $0.1 > sidebarEdge }
+            .min { $0.1 < $1.1 }?
+            .0
     }
 
     /// Posted once the window's captured: the main window closes its sheet.
