@@ -224,6 +224,39 @@ using it. Newlines in a title or subtitle start a new line; the subtitles
 are broken by hand so their lines balance. Apple rejects iPad screenshots
 that show an iPhone, so the iPad config only ever places iPads.
 
+## Creative assets
+
+Since iOS 27 and iPadOS 27, the App Store can show two more images for an
+iOS app: a **product page header** (21:9, 3840×1646, above the icon and name)
+and a **search results** image (3:2, 1920×1280 up to 3840×2560). Neither is
+offered for macOS. `creative-header.json` and `creative-search.json` make
+them in the screenshots' style from the same raw captures, as `header.png`
+(3840×1646) and `search-results.png` (3840×2560) in
+`fastlane/creative-assets/`, which neither deliver lane reads:
+
+```sh
+swift run -c release framer render --config Screenshots/creative-header.json
+swift run -c release framer render --config Screenshots/creative-search.json
+```
+
+Both are bigger than any capture, which the framer allows only with
+`"clamp": false` in `output`, and Apple takes no alpha or transparency in
+either, so they're written with `"opaque": true`: a PNG without an alpha
+channel.
+
+- **Header:** one brand-led idea, "Every code. Every secret.", over the iPad
+  feed, between the App Lock Password's settings and the lock screen on
+  iPhone. The title and the iPad are in the middle, so they still read when
+  the image is cropped; the app's icon and name sit below it.
+- **Search results:** states the obvious with the real interface: "No
+  accounts. No tracking." and "Two-factor codes and private notes, fully
+  offline." over the dark iPad feed and an item's page on iPhone. Check it at
+  about 600 pixels wide, the size of a search result.
+
+Apple's rules for them: short text, the focal point in the middle, and no
+claim we can't back (no prices, URLs, ©, awards or other platforms' logos).
+The copy here is the screenshots' copy, so the same checks apply.
+
 ## Iterating
 
 Edit a config, then re-run `make screenshots-frame`: no rebuild or capture

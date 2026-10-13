@@ -295,6 +295,17 @@ bundle exec fastlane mac upload_screenshots
 It needs a macOS version that App Store Connect is editing, and does no more
 than the iOS lane. The release lane uploads both.
 
+## Updating the creative assets
+
+The product page header and the search results image (see
+[Creative assets](Vault/Screenshots/README.md#creative-assets)) are in
+`fastlane/creative-assets/` (`header.png` and `search-results.png`). Neither
+fastlane nor spaceship can upload them yet, so they go up by hand in App Store
+Connect: in the iOS version's Product Page Information, under Header and
+Search Results, before it's submitted, or on their own as an Asset Library
+submission, which is reviewed against the latest version. They show on iOS 27
+and iPadOS 27 or later.
+
 ## Updating the listing
 
 Each platform's version in App Store Connect has its own listing text, so each

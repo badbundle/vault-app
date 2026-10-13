@@ -1,0 +1,56 @@
+{
+  "outputDirectory": "../../fastlane/creative-assets",
+  "output": {"width": 3840, "height": 1646, "format": "png", "clamp": false, "opaque": true},
+  "mode": "inset",
+  "frameColor": "Silver",
+  "background": {
+    "colors": ["#020409", "#050B1A", "#0A1A42"],
+    "locations": [0, 0.45, 1],
+    "angle": 180,
+    "glows": [
+      {"x": 0.5, "y": 0.78, "radius": 0.42, "color": "#0A84FF8C"},
+      {"x": 0.12, "y": 0.1, "radius": 0.3, "color": "#3E7BFA4D"},
+      {"x": 0.9, "y": 0.95, "radius": 0.3, "color": "#5E5CE666"}
+    ],
+    "images": [{"path": "assets/vault-door.png", "x": 0.5, "y": 0.2, "width": 0.62, "rotation": -6, "opacity": 0.06}]
+  },
+  "text": {
+    "position": "top",
+    "anchor": "edge",
+    "title": {"font": "system", "size": 184, "weight": "bold", "color": "#FFFFFF"},
+    "subtitle": {"font": "system", "size": 76, "weight": "regular", "color": "#FFFFFFC7"},
+    "spacing": 28,
+    "minScale": 1,
+    "maxScale": 1,
+    "maxRotation": 0,
+    "accentColor": "#4DA3FF"
+  },
+  "padding": 104,
+  "gap": 72,
+  "shadow": {"color": "#000000A6", "radius": 100, "offsetY": 40},
+  "screenshots": [
+    {
+      "output": "header",
+      "title": "Every code. Every secret.",
+      "accent": "secret.",
+      "devices": [
+        {"path": "../.build/screenshots/raw/ipad/01-feed.png", "x": 0.5, "y": 1.0, "width": 0.46, "rotation": 0},
+        {
+          "path": "../.build/screenshots/raw/iphone/06-app-lock-password.png",
+          "x": 0.22,
+          "y": 0.98,
+          "width": 0.17,
+          "rotation": -9
+        },
+        {
+          "path": "../.build/screenshots/raw/iphone/05-lock-dark.png",
+          "x": 0.78,
+          "y": 0.98,
+          "width": 0.17,
+          "rotation": 9,
+          "frameColor": "Deep Blue"
+        }
+      ]
+    }
+  ]
+}
