@@ -31,13 +31,26 @@ struct AppLockViewSnapshotTests {
     }
 
     /// A screen whose safe area is wider on one side, as the iPhone Duo's unfolded is: the door is still in the middle
-    /// of the screen, and the words under it are under it, inside the safe area.
+    /// of the screen, and everything under it is lined up under it, inside the safe area.
     @Test
     func locked_onAScreenWithAnUnevenSafeArea() {
         snapshotScenarios(
             view: AppLockView(state: .init(step: .deviceAuthentication)) {}
                 .safeAreaPadding(.leading, 96),
             dynamicTypeSizes: [.medium, .accessibility3],
+        )
+    }
+
+    /// The iPhone Duo's outer screen, whose safe area stops 83 points short of the camera side. The words and the
+    /// Unlock button wrap and narrow to stay lined up under the door.
+    @Test
+    func locked_onTheDuosOuterScreen() {
+        snapshotScenarios(
+            view: AppLockView(state: .init(step: .deviceAuthentication)) {}
+                .safeAreaPadding(.trailing, 83),
+            dynamicTypeSizes: [.medium, .accessibility3],
+            width: 466,
+            height: 678,
         )
     }
 
@@ -57,6 +70,17 @@ struct AppLockViewSnapshotTests {
             view: AppLockView(state: .init(step: .password)) {}
                 .safeAreaPadding(.trailing, 96),
             dynamicTypeSizes: [.medium, .accessibility3],
+        )
+    }
+
+    @Test
+    func passwordEntry_onTheDuosOuterScreen() {
+        snapshotScenarios(
+            view: AppLockView(state: .init(step: .password)) {}
+                .safeAreaPadding(.trailing, 83),
+            dynamicTypeSizes: [.medium, .accessibility3],
+            width: 466,
+            height: 678,
         )
     }
 
@@ -150,6 +174,8 @@ extension AppLockViewSnapshotTests {
     private func snapshotScenarios(
         view: some View,
         dynamicTypeSizes: [DynamicTypeSize] = [.medium, .xxLarge],
+        width: CGFloat = 390,
+        height: CGFloat = 844,
         testName: String = #function,
     ) {
         for colorScheme in [ColorScheme.light, .dark] {
@@ -157,8 +183,9 @@ extension AppLockViewSnapshotTests {
                 let snapshottingView = view
                     .environment(\.drawsGlassSnapshotBackdrop, true)
                     .dynamicTypeSize(dynamicTypeSize)
-                    // A phone screen, as the lock screen fills one.
-                    .framedForTest(height: 844)
+                    // A phone screen, as the lock screen fills one: by default an iPhone 14's, as `framedForTest`.
+                    .frame(width: width, height: height)
+                    .environment(\.verticalSizeClass, .regular)
 
                 assertSnapshot(
                     of: snapshottingView,
