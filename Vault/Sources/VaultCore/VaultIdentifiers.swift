@@ -7,6 +7,8 @@ public enum VaultIdentifiers {
         public static let otpCode = "vault.item.otp-code.v1"
         /// Only ever stored inside an encrypted item, never as a plaintext payload.
         public static let recoveryPhrase = "vault.item.recovery-phrase.v1"
+        /// Only ever stored inside an encrypted item, never as a plaintext payload.
+        public static let privateKey = "vault.item.private-key.v1"
     }
 
     /// Every item the app keeps in the keychain, whichever way it's stored: through `SecureStorage`, or directly by
