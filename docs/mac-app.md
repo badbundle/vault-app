@@ -571,9 +571,9 @@ The hardened runtime is on, so other code can't be injected into Vault's process
 the table). Its pointer authentication builds Vault for `arm64e`, so every target in the project, and every Swift
 package (through `macOSPackagesShouldBuildARM64e` and `iOSPackagesShouldBuildARM64e` in
 `Vault.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings`), is built with pointer authentication too: a
-Debug build has only the `arm64e` slice, which the extensions couldn't link against otherwise. The extensions have
-pointer authentication but not the rest of Enhanced Security yet, as their App IDs and profiles don't include the
-capability (VAULT-152).
+Debug build has only the `arm64e` slice, which the extensions couldn't link against otherwise. Both extensions have
+the rest of Enhanced Security too, with the app's entitlements and values (VAULT-152): the AutoFill extension opens
+the vault with the App Lock Password, so it handles the same keys as the app.
 
 A release build is for `arm64`, `arm64e` and `x86_64`, but with pointer authentication on, Xcode builds the
 package's modules only for `arm64` and `arm64e`, so the Intel slices can't find them ("Unable to resolve module
@@ -581,13 +581,13 @@ dependency"). The release lane sets `ARCHS` on `xcodebuild`'s command line, whic
 and fails unless every Mac bundle has all three slices. `make validate` builds Debug, for this Mac only, so it doesn't
 catch this.
 
-The AutoFill extension gets the sandbox, the hardened runtime, the App Group, the App Group's and the shared group
-(`…vault.shared`) as its only keychain access groups, and the AutoFill entitlement
+The AutoFill extension gets the sandbox, the hardened runtime, Enhanced Security, the App Group, the App Group's and
+the shared group (`…vault.shared`) as its only keychain access groups, and the AutoFill entitlement
 (`com.apple.developer.authentication-services.autofill-credential-provider`), and nothing else. The app has the AutoFill
 entitlement too, only because the App Store requires it of the app that contains the extension (see the table).
 
-The widget extension gets the sandbox, the hardened runtime, and the widgets' keychain access group as its only one,
-and nothing else. It has no App Group, which would also be a keychain access group (see [Keychain](#keychain)), nor
+The widget extension gets the sandbox, the hardened runtime, Enhanced Security, and the widgets' keychain access group
+as its only one, and nothing else. It has no App Group, which would also be a keychain access group (see [Keychain](#keychain)), nor
 the shared group: it can't read the attempt counter or the device key, nor the App Group's container or defaults,
 and the AutoFill extension can't read the widgets' items.
 

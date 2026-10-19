@@ -18,7 +18,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 ### Changed
 
 - Recovery phrases and private keys now come first when adding an item, and in Help. The new-item sheet on iOS and the Mac's New Item and File menus offer Recovery Phrase, Private Key, Note, then Code, with new descriptions, and on the Mac ⌘N makes a recovery phrase (a note stays on ⇧⌘N). A vault with no items offers the same four to add, in the same order, so a new person's first view points at phrases and keys. Help has a new page, "About Recovery Phrases", which opens the list with "About Private Keys", above the page about codes. The error for items that can't be loaded says items rather than codes, and the Mac's About lists recovery phrases, private keys, notes and codes in that order
-- The iPhone, iPad and Mac apps run with Apple's Enhanced Security: pointer authentication, a hardened heap, checked allocations, and read-only dyld state, so a memory-safety bug in Vault or a library it uses is much harder to exploit. The AutoFill and widget extensions have pointer authentication, and get the rest later
+- The iPhone, iPad and Mac apps run with Apple's Enhanced Security: pointer authentication, a hardened heap, checked allocations, and read-only dyld state, so a memory-safety bug in Vault or a library it uses is much harder to exploit. The AutoFill and widget extensions run with it too, as the AutoFill extension opens the vault with the App Lock Password
 
 ### Fixed
 

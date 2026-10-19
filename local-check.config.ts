@@ -123,7 +123,7 @@ function skipMacUITests(): string | undefined {
 }
 
 /**
- * Apple's Enhanced Security, which the iOS and Mac apps must have, with these values: a hardened process with a hardened
+ * Apple's Enhanced Security, which the iOS and Mac apps and all their extensions must have, with these values: a hardened process with a hardened
  * heap, checked allocations that also check pointer arithmetic for overflow, read-only dyld state, and version 2 of
  * the enhanced security and platform restrictions (docs/security-model.md, G101).
  */
@@ -165,6 +165,7 @@ const macAutofillEntitlements = [
   "com.apple.security.app-sandbox",
   "com.apple.security.application-groups",
   "com.apple.security.get-task-allow",
+  ...Object.keys(enhancedSecurity),
   "keychain-access-groups",
 ];
 
@@ -178,6 +179,7 @@ const macWidgetsEntitlements = [
   "com.apple.developer.team-identifier",
   "com.apple.security.app-sandbox",
   "com.apple.security.get-task-allow",
+  ...Object.keys(enhancedSecurity),
   "keychain-access-groups",
 ];
 
@@ -230,6 +232,8 @@ async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promi
     "VaultMacAutofill.appex",
     macAutofillEntitlements,
     [appGroup, sharedKeychainGroup],
+    [appGroup],
+    enhancedSecurity,
   );
   await checkSignedEntitlements(
     ctx,
@@ -238,6 +242,7 @@ async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promi
     macWidgetsEntitlements,
     [`${appGroup}.widgets`],
     [],
+    enhancedSecurity,
   );
 }
 
@@ -317,6 +322,7 @@ const iosAutofillEntitlements = [
   "application-identifier",
   "com.apple.developer.authentication-services.autofill-credential-provider",
   "com.apple.security.application-groups",
+  ...Object.keys(enhancedSecurity),
   "keychain-access-groups",
 ];
 
@@ -325,7 +331,11 @@ const iosAutofillEntitlements = [
  * its signing adds. No keychain access group of its own, so its keychain is only its own and the App Group's, which
  * holds the device key it opens the vault with while the App Lock Password is off.
  */
-const iosWidgetsEntitlements = ["application-identifier", "com.apple.security.application-groups"];
+const iosWidgetsEntitlements = [
+  "application-identifier",
+  "com.apple.security.application-groups",
+  ...Object.keys(enhancedSecurity),
+];
 
 /**
  * Builds the iOS app for the simulator as it runs, rather than for testing, and fails unless the app and its AutoFill
@@ -366,6 +376,7 @@ async function checkIOSAppEntitlements(ctx: Context, derivedData: string, destin
     "VaultAppAutofill.appex",
     iosAutofillEntitlements,
     ["442P244AFS.com.badbundle.vault.VaultAutofill", sharedKeychainGroup],
+    enhancedSecurity,
   );
   await checkSimulatorEntitlements(
     ctx,
@@ -373,6 +384,7 @@ async function checkIOSAppEntitlements(ctx: Context, derivedData: string, destin
     "VaultWidgetsExtension.appex",
     iosWidgetsEntitlements,
     undefined,
+    enhancedSecurity,
   );
 }
 

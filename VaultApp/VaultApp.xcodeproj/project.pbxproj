@@ -773,6 +773,7 @@
 				CODE_SIGN_ENTITLEMENTS = VaultWidgetsExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_APPINTENTS_METADATA_PROCESSING = YES;
+				ENABLE_ENHANCED_SECURITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultWidgets/Info.plist;
@@ -807,6 +808,7 @@
 				CODE_SIGN_ENTITLEMENTS = VaultWidgetsExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_APPINTENTS_METADATA_PROCESSING = YES;
+				ENABLE_ENHANCED_SECURITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultWidgets/Info.plist;
@@ -975,6 +977,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 442P244AFS;
+				ENABLE_ENHANCED_SECURITY = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultMacAutofill/Info.plist;
@@ -1004,6 +1007,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = VaultMacAutofill/VaultMacAutofill.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				ENABLE_ENHANCED_SECURITY = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultMacAutofill/Info.plist;
@@ -1037,6 +1041,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 442P244AFS;
 				ENABLE_APPINTENTS_METADATA_PROCESSING = YES;
+				ENABLE_ENHANCED_SECURITY = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultMacWidgets/Info.plist;
@@ -1068,6 +1073,7 @@
 				CODE_SIGN_ENTITLEMENTS = VaultMacWidgets/VaultMacWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				ENABLE_APPINTENTS_METADATA_PROCESSING = YES;
+				ENABLE_ENHANCED_SECURITY = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultMacWidgets/Info.plist;
@@ -1095,6 +1101,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = VaultAppAutofill/VaultAppAutofill.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				ENABLE_ENHANCED_SECURITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultAppAutofill/Info.plist;
@@ -1124,6 +1131,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = VaultAppAutofill/VaultAppAutofill.entitlements;
 				CODE_SIGN_STYLE = Automatic;
+				ENABLE_ENHANCED_SECURITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultAppAutofill/Info.plist;
