@@ -6,8 +6,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/badbundle/bad-bundle-apps",
       "state" : {
-        "revision" : "675083edeb0b8f4498839b141bbd8742b0a8b8b2",
-        "version" : "0.1.0"
+        "revision" : "06c64fe92a7fe59abf7432cfa5ef4264013e5a8c",
+        "version" : "0.1.1"
       }
     },
     {
