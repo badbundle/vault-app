@@ -136,6 +136,10 @@ def check_release_bundles(root, bundles, version:, build_number:, mac:)
     unless archs == wanted.sort
       UI.user_error!("#{relative_path} is built for #{archs.join(', ')}, not #{wanted.join(', ')}")
     end
+    # With the arm64e.x1 slice, App Store Connect rejects an iOS bundle that doesn't require arm64 (error 90502).
+    if !mac && !Array(info["UIRequiredDeviceCapabilities"]).include?("arm64")
+      UI.user_error!("#{relative_path}'s UIRequiredDeviceCapabilities doesn't include arm64")
+    end
 
     entitlements_xml, = Open3.capture3("codesign", "--display", "--entitlements", "-", "--xml", path)
     entitlements = Plist.parse_xml(entitlements_xml) || {}
