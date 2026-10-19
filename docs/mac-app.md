@@ -575,6 +575,12 @@ Debug build has only the `arm64e` slice, which the extensions couldn't link agai
 pointer authentication but not the rest of Enhanced Security yet, as their App IDs and profiles don't include the
 capability (VAULT-152).
 
+A release build is for `arm64`, `arm64e` and `x86_64`, but with pointer authentication on, Xcode builds the
+package's modules only for `arm64` and `arm64e`, so the Intel slices can't find them ("Unable to resolve module
+dependency"). The release lane sets `ARCHS` on `xcodebuild`'s command line, which the package's targets take too,
+and fails unless every Mac bundle has all three slices. `make validate` builds Debug, for this Mac only, so it doesn't
+catch this.
+
 The AutoFill extension gets the sandbox, the hardened runtime, the App Group, the App Group's and the shared group
 (`…vault.shared`) as its only keychain access groups, and the AutoFill entitlement
 (`com.apple.developer.authentication-services.autofill-credential-provider`), and nothing else. The app has the AutoFill
