@@ -11,23 +11,23 @@ import VaultCore
 /// - Cut and Copy go through Vault's clipboard (G50, G51), and its menu has only the plain text actions.
 /// - While it has focus and Vault is the active app, Secure Keyboard Entry is on, so apps watching the keyboard see
 ///   nothing typed (docs/mac-app.md, decision 8).
-final class VaultMacFieldEditor: NSTextView {
+public final class VaultMacFieldEditor: NSTextView {
     /// Where Cut and Copy put the text: Vault's clipboard, as the app has it.
-    var copyText: (@MainActor (String) -> Void)?
+    public var copyText: (@MainActor (String) -> Void)?
     /// Whether Cut and Copy do nothing at all, as in a secure field: Copy copies nothing, and Cut neither copies nor
     /// deletes. A private key is never copied, even while it's typed.
-    var copiesNothing = false
+    public var copiesNothing = false
     /// Secure Keyboard Entry, which follows this editor's focus and whether Vault is the active app. Tests stand in
     /// for it before the editor first has focus.
     var secureInput = VaultMacSecureInput()
 
-    override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
+    override public init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
         super.init(frame: frameRect, textContainer: container)
         Self.turnOffLearning(self)
         observeAppActivity()
     }
 
-    override init(frame frameRect: NSRect) {
+    override public init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         Self.turnOffLearning(self)
         observeAppActivity()
@@ -39,7 +39,7 @@ final class VaultMacFieldEditor: NSTextView {
     }
 
     /// Turns off everything that could learn from what's typed, change it, or send it elsewhere.
-    static func turnOffLearning(_ textView: NSTextView) {
+    public static func turnOffLearning(_ textView: NSTextView) {
         textView.isContinuousSpellCheckingEnabled = false
         textView.isGrammarCheckingEnabled = false
         textView.isAutomaticSpellingCorrectionEnabled = false
@@ -57,7 +57,7 @@ final class VaultMacFieldEditor: NSTextView {
 
     /// The field editor as Vault sets it up, after AppKit has set it up for a field, which turns some of this back on.
     /// A single-line field keeps no undo history: its text can be a killphrase or a search passphrase.
-    static func keepPrivate(_ text: NSText) -> NSText {
+    public static func keepPrivate(_ text: NSText) -> NSText {
         if let textView = text as? NSTextView {
             turnOffLearning(textView)
             textView.allowsUndo = false
@@ -66,7 +66,7 @@ final class VaultMacFieldEditor: NSTextView {
     }
 
     /// Turns off what a field itself would hand its field editor as editing starts.
-    static func turnOffLearning(in field: NSTextField) {
+    public static func turnOffLearning(in field: NSTextField) {
         field.isAutomaticTextCompletionEnabled = false
         field.allowsCharacterPickerTouchBarItem = false
         (field.cell as? NSTextFieldCell)?.allowsUndo = false
@@ -75,17 +75,17 @@ final class VaultMacFieldEditor: NSTextView {
     // MARK: - Look Up
 
     /// Look Up (a force click, or ⌃⌘D) shows nothing, and sends nothing to Apple's Look Up services.
-    override func quickLook(with _: NSEvent) {}
+    override public func quickLook(with _: NSEvent) {}
 
-    override func showDefinition(for _: NSAttributedString?, at _: NSPoint) {}
+    override public func showDefinition(for _: NSAttributedString?, at _: NSPoint) {}
 
-    override func quickLookPreviewableItems(inRanges _: [NSValue]) -> [any QLPreviewItem] {
+    override public func quickLookPreviewableItems(inRanges _: [NSValue]) -> [any QLPreviewItem] {
         []
     }
 
     // MARK: - Secure Keyboard Entry
 
-    override func becomeFirstResponder() -> Bool {
+    override public func becomeFirstResponder() -> Bool {
         let became = super.becomeFirstResponder()
         if became {
             secureInput.hasFocus = true
@@ -93,7 +93,7 @@ final class VaultMacFieldEditor: NSTextView {
         return became
     }
 
-    override func resignFirstResponder() -> Bool {
+    override public func resignFirstResponder() -> Bool {
         let resigned = super.resignFirstResponder()
         if resigned {
             secureInput.hasFocus = false
@@ -101,7 +101,7 @@ final class VaultMacFieldEditor: NSTextView {
         return resigned
     }
 
-    override func viewDidMoveToWindow() {
+    override public func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         if window == nil {
             secureInput.hasFocus = false
@@ -126,32 +126,32 @@ final class VaultMacFieldEditor: NSTextView {
 
     // MARK: - Clipboard
 
-    @objc override func copy(_: Any?) {
+    @objc override public func copy(_: Any?) {
         guard !copiesNothing, let selected = selectedText else { return }
         copyText?(selected)
     }
 
-    @objc override func cut(_ sender: Any?) {
+    @objc override public func cut(_ sender: Any?) {
         guard !copiesNothing, selectedText != nil else { return }
         copy(sender)
         delete(sender)
     }
 
     /// What's selected, if anything is.
-    var selectedText: String? {
+    public var selectedText: String? {
         let range = selectedRange()
         guard range.length > 0, let text = (string as NSString?)?.substring(with: range) else { return nil }
         return text
     }
 
     /// Nothing is dragged out of a field into another app (G51).
-    override func dragSelection(with _: NSEvent, offset _: NSSize, slideBack _: Bool) -> Bool {
+    override public func dragSelection(with _: NSEvent, offset _: NSSize, slideBack _: Bool) -> Bool {
         false
     }
 
     // MARK: - Services and menus
 
-    override func validRequestor(
+    override public func validRequestor(
         forSendType _: NSPasteboard.PasteboardType?,
         returnType _: NSPasteboard.PasteboardType?,
     )
@@ -160,12 +160,12 @@ final class VaultMacFieldEditor: NSTextView {
         nil
     }
 
-    override func menu(for _: NSEvent) -> NSMenu? {
+    override public func menu(for _: NSEvent) -> NSMenu? {
         Self.editingMenu()
     }
 
     /// Cut, Copy, Paste and Select All: what a field's menu offers, and nothing else (G51).
-    static func editingMenu() -> NSMenu {
+    public static func editingMenu() -> NSMenu {
         let menu = NSMenu()
         menu.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "")
@@ -173,5 +173,17 @@ final class VaultMacFieldEditor: NSTextView {
         menu.addItem(.separator())
         menu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "")
         return menu
+    }
+}
+
+extension VaultMacFieldEditor {
+    /// A field editor for a single-line field, whose Cut and Copy go to `copyText`: Vault's clipboard in the app, and
+    /// nowhere in the AutoFill sheet.
+    @MainActor
+    public static func makeFieldEditor(copyText: (@MainActor (String) -> Void)?) -> VaultMacFieldEditor {
+        let editor = VaultMacFieldEditor(frame: .zero)
+        editor.isFieldEditor = true
+        editor.copyText = copyText
+        return editor
     }
 }

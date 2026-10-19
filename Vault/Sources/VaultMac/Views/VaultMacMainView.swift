@@ -1,5 +1,6 @@
 import SwiftUI
 import VaultFeed
+import VaultMacShared
 import VaultSettings
 
 /// The main window, once Vault is unlocked: the sidebar, the list of items with their live codes, and the open item's
@@ -221,8 +222,12 @@ struct VaultMacMainView: View {
             }
             ToolbarItem(placement: .automatic) {
                 // A field of Vault's own rather than `searchable`'s, so it edits as every other field does (G52).
-                VaultMacSearchField(text: Bindable(dataModel).itemsSearchQuery, focusRequest: searchFocusRequest)
-                    .frame(width: 200)
+                VaultMacSearchField(
+                    text: Bindable(dataModel).itemsSearchQuery,
+                    focusRequest: searchFocusRequest,
+                    copyText: VaultMacFieldEditor.copyToVaultClipboard,
+                )
+                .frame(width: 200)
             }
         }
         .accessibilityIdentifier("feed")

@@ -1,6 +1,7 @@
 import SwiftUI
 import VaultAppIcon
 import VaultFeed
+import VaultMacShared
 
 /// The Mac app's first launch: the App Lock Password is set before anything else, and can't be skipped
 /// (docs/mac-app.md,

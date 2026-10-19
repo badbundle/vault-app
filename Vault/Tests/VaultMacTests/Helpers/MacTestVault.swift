@@ -3,6 +3,7 @@ import TestHelpers
 import VaultCore
 @testable import VaultFeed
 @testable import VaultMac
+@testable import VaultMacShared
 
 /// A vault in memory, with fixed phrase keys and no keychain, for a test's data model.
 @MainActor

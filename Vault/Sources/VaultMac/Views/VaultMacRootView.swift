@@ -1,5 +1,6 @@
 import SwiftUI
 import VaultFeed
+import VaultMacShared
 
 /// What the main window shows: the vault once it's unlocked, and before that, whatever has to come first.
 ///

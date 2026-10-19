@@ -3,11 +3,16 @@ import VaultCore
 import VaultFeed
 
 /// A code's digits, in groups, monospaced: hidden as dots while it's locked or not ready.
-struct VaultMacOTPCodeText: View {
+public struct VaultMacOTPCodeText: View {
     var state: OTPCodeState
     var font: Font
 
-    var body: some View {
+    public init(state: OTPCodeState, font: Font) {
+        self.state = state
+        self.font = font
+    }
+
+    public var body: some View {
         Text(text)
             .font(font.monospacedDigit())
             .foregroundStyle(isError ? AnyShapeStyle(.red) : AnyShapeStyle(.primary))
@@ -42,7 +47,7 @@ struct VaultMacOTPCodeText: View {
     }
 
     /// "123 456", "1234 5678": halves, as the iOS app shows them.
-    static func grouped(_ code: String) -> String {
+    public static func grouped(_ code: String) -> String {
         guard code.count >= 6 else { return code }
         let middle = code.index(code.startIndex, offsetBy: code.count / 2)
         return String(code[..<middle]) + " " + String(code[middle...])
@@ -50,14 +55,19 @@ struct VaultMacOTPCodeText: View {
 }
 
 /// How long a time-based code has left, as a ring that empties.
-struct VaultMacCodeTimer: View {
+public struct VaultMacCodeTimer: View {
     var state: OTPCodeTimerPeriodState
-    var size: CGFloat = 14
+    var size: CGFloat
+
+    public init(state: OTPCodeTimerPeriodState, size: CGFloat = 14) {
+        self.state = state
+        self.size = size
+    }
 
     /// The clock the codes are made by, so the ring empties as the code runs out, whatever that clock says.
     @Environment(\.vaultMacClock) private var clock
 
-    var body: some View {
+    public var body: some View {
         TimelineView(.animation(minimumInterval: 0.1)) { _ in
             let remaining = state.animationState.initialFraction(currentTime: clock.currentTime)
             ZStack {
@@ -76,5 +86,5 @@ struct VaultMacCodeTimer: View {
 
 extension EnvironmentValues {
     /// The clock codes are made and count down by: the app's (`VaultMacRoot.clock`), as on iOS.
-    @Entry var vaultMacClock: any EpochClock = EpochClockImpl()
+    @Entry public var vaultMacClock: any EpochClock = EpochClockImpl()
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 import VaultCore
 import VaultFeed
+import VaultMacShared
 
 /// An item encrypted with a password of its own: a note, a recovery phrase or a private key. It opens once its password
 /// is entered, and the password is never stored (G42).

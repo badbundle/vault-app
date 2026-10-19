@@ -104,7 +104,7 @@ end
 # Fails unless every bundle of an exported build has this version and build number, is signed for the App Store with
 # the team's Apple Distribution certificate, and has exactly its App Groups and keychain access groups, with nothing
 # only a development build has (get-task-allow) and no sandbox exception. The Mac's must also be sandboxed and have
-# the hardened runtime.
+# the hardened runtime, and only one with the camera entitlement may use the camera.
 def check_release_bundles(root, bundles, version:, build_number:, mac:)
   bundles.each do |relative_path, expected|
     path = File.join(root, relative_path)
@@ -133,6 +133,17 @@ def check_release_bundles(root, bundles, version:, build_number:, mac:)
     end
     if mac && entitlements["com.apple.security.app-sandbox"] != true
       UI.user_error!("#{relative_path} isn't sandboxed")
+    end
+    # App Review rejects a Mac bundle whose code uses the camera without the camera entitlement (guideline 2.4.5), as
+    # it did 2.1 for the AutoFill extension, which then linked the app's QR scanner.
+    if mac && entitlements["com.apple.security.device.camera"] != true
+      camera = Dir.glob(File.join(path, "Contents", "MacOS", "*")).flat_map do |executable|
+        symbols, = Open3.capture3("nm", "-u", "-j", executable)
+        symbols.lines.map(&:strip).grep(/AVCapture/)
+      end
+      unless camera.empty?
+        UI.user_error!("#{relative_path} uses the camera without the camera entitlement: #{camera.uniq.join(', ')}")
+      end
     end
     app_groups = entitlements["com.apple.security.application-groups"]
     keychain_groups = entitlements["keychain-access-groups"]

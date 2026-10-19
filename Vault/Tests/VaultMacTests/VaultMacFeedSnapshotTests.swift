@@ -6,6 +6,7 @@ import Testing
 import VaultCore
 @testable import VaultFeed
 @testable import VaultMac
+@testable import VaultMacShared
 
 @MainActor
 struct VaultMacFeedSnapshotTests {

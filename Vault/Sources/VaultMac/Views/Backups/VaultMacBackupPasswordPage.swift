@@ -1,5 +1,6 @@
 import SwiftUI
 import VaultFeed
+import VaultMacShared
 
 /// The backup password: whether it's set, and setting or changing it, with the App Lock Password's rules (G27). Each
 /// vault has its own (G17).

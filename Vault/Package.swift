@@ -41,6 +41,7 @@ let package = Package(
         .library(name: "VaultiOSShared", targets: ["VaultiOSShared"]),
         .library(name: "VaultiOSWidgets", targets: ["VaultiOSWidgets"]),
         .library(name: "VaultMac", targets: ["VaultMac"]),
+        .library(name: "VaultMacAutofill", targets: ["VaultMacAutofill"]),
         .executable(
             name: "vault-keygen-speedtest",
             targets: ["VaultKeygenSpeedtest"],
@@ -388,6 +389,19 @@ let package = Package(
 
         // MARK: - MAC
 
+        // The views and AppKit pieces the Mac app and its AutoFill extension share: the lock screen, a code's digits,
+        // the search field and the field editor it types with. macOS only.
+        .target(
+            name: "VaultMacShared",
+            dependencies: [
+                "VaultCore",
+                "VaultFeed",
+                "VaultAppIcon",
+                "FoundationExtensions",
+            ],
+            swiftSettings: swiftSettings,
+            plugins: targetPlugins,
+        ),
         // The Mac app's views, its composition root and the AppKit pieces it needs. macOS only, as VaultiOS is
         // iOS only: see docs/mac-app.md.
         .target(
@@ -396,9 +410,26 @@ let package = Package(
                 "VaultFeed",
                 "VaultSettings",
                 "VaultAppIcon",
+                "VaultMacShared",
                 "FoundationExtensions",
                 .product(name: "MarkdownUI", package: "swift-markdown-ui"),
                 .product(name: "BadBundleApps", package: "bad-bundle-apps"),
+            ],
+            swiftSettings: swiftSettings,
+            plugins: targetPlugins,
+        ),
+        // The Mac's AutoFill extension: only what it needs to unlock the vault and fill a code. It never links
+        // `VaultMac`, so the extension has none of the app's camera code, which the App Store would require the
+        // camera entitlement for (docs/mac-app.md, "QuickType and AutoFill").
+        .target(
+            name: "VaultMacAutofill",
+            dependencies: [
+                "VaultCore",
+                "VaultFeed",
+                "VaultSettings",
+                "VaultMacShared",
+                "FoundationExtensions",
+                .product(name: "SwiftSecurity", package: "swift-security"),
             ],
             swiftSettings: swiftSettings,
             plugins: targetPlugins,
@@ -407,6 +438,8 @@ let package = Package(
             name: "VaultMacTests",
             dependencies: [
                 "VaultMac",
+                "VaultMacAutofill",
+                "VaultMacShared",
                 "VaultFeed",
                 "TestHelpers",
             ],

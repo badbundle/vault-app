@@ -1,5 +1,6 @@
 import SwiftUI
 import VaultFeed
+import VaultMacShared
 
 /// The AutoFill sheet: the lock, then the codes to fill, with the same search as iOS AutoFill, which never checks
 /// killphrases (G2).

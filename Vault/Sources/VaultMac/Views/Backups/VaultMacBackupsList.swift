@@ -1,5 +1,6 @@
 import SwiftUI
 import VaultFeed
+import VaultMacShared
 
 /// The Backups area's middle column: when this Mac last backed up, then each page.
 struct VaultMacBackupsList: View {
@@ -139,37 +140,6 @@ struct VaultMacBackupKeyGate<Content: View>: View {
                 action: ("Try Again", { Task { await services.dataModel.loadBackupPassword() } }),
             )
         }
-    }
-}
-
-/// A page's message, when there's something to do before it can show more.
-struct VaultMacBackupNotice: View {
-    var systemImage: String
-    var title: String
-    var message: String
-    var action: (title: String, perform: () -> Void)?
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .font(.system(size: 36))
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            Text(title)
-                .font(.title2.bold())
-            Text(message)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 380)
-            if let action {
-                Button(action.title, action: action.perform)
-                    .controlSize(.large)
-                    .keyboardShortcut(.defaultAction)
-                    .accessibilityIdentifier("backups.notice-action")
-            }
-        }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

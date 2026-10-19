@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 import SwiftUI
 import Testing
 @testable import VaultMac
+@testable import VaultMacShared
 
 @MainActor
 struct VaultMacFieldEditorTests {

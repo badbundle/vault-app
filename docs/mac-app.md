@@ -396,7 +396,8 @@ Mac's Settings don't offer it, and the Mac app never touches Core Spotlight.
     locked (G25, G48);
   - its attempts are counted with the app's (`AutofillVaultService`), and it never makes the last one before the
     vault would be erased: that one is only ever made at the app's lock screen (G20);
-  - it locks the vault again when the Mac locks, sleeps or its screen saver starts (`VaultMacLockTriggers`' lists),
+  - it locks the vault again when the Mac locks, sleeps or its screen saver starts (`VaultMacLockingEvents`, the
+    app's `VaultMacLockTriggers`' lists),
     and at the end of every request (G29);
   - it never offers a locked or hidden code, and its search never checks killphrases: their keys are never loaded in
     the extension (G2, G47);
@@ -546,7 +547,7 @@ entitlements:
 | `com.apple.security.application-groups`: `442P244AFS.com.badbundle.vault` | The vault file and the settings the AutoFill extension shares, and a keychain access group. |
 | `com.apple.security.files.user-selected.read-write` | Saving a backup, choosing the auto-backup folder, and restoring or reading an image. |
 | `com.apple.security.files.bookmarks.app-scope` | Keeping the auto-backup folder across launches. VAULT-110 checks whether macOS 26 still needs it. |
-| `com.apple.security.device.camera` | Scanning QR codes, with `NSCameraUsageDescription`. |
+| `com.apple.security.device.camera` | Scanning QR codes, with `NSCameraUsageDescription`. The app's alone: neither extension links the scanner, as App Review rejects a bundle whose code uses the camera without the entitlement (guideline 2.4.5), as it did 2.1 for the AutoFill extension. `make validate` and the release lane fail for a bundle without it whose code uses `AVCapture`. |
 | `com.apple.security.print` | Printing a backup. |
 | `com.apple.security.hardened-process`, with `…hardened-heap`, `…checked-allocations`, `…checked-allocations.enforce-checked-pointer-arithmetic-overflow` and `…dyld-ro` on, and `…enhanced-security-version-string` and `…platform-restrictions-string` at `2` | Apple's Enhanced Security (`ENABLE_ENHANCED_SECURITY`), as on iOS: a hardened heap, checked allocations, and read-only dyld state, so a memory-safety bug in Vault or a library it uses is much harder to exploit (G101). `make validate` fails if any is missing or changed. |
 | `keychain-access-groups`: `442P244AFS.com.badbundle.vault.private`, then `442P244AFS.com.badbundle.vault`, then `442P244AFS.com.badbundle.vault.shared`, then `442P244AFS.com.badbundle.vault.widgets` | The app's own keychain items, which neither extension can read, then the App Group's, then those it shares with the AutoFill extension only, then the codes it hands its widgets. |
@@ -663,7 +664,9 @@ setting was off: an accepted limit.
 | VaultAppIcon | yes | yes | SwiftUI only. The Mac's app icon is rendered from it, like iOS's, as an Icon Composer document. |
 | VaultiOS, VaultiOSAutofill | yes | no | Unchanged. |
 | VaultiOSShared, VaultiOSWidgets | yes | yes | The widgets, shared with the Mac's (VAULT-115): only where their codes come from differs (`OTPWidgetSource`). They keep their names, which the widgets' App Intents carry. |
-| `VaultMac` | no | yes | The Mac app's views, its composition root and the AppKit pieces, the AutoFill extension's (in `Autofill/`, with a root of its own), which its target subclasses, as the iOS extension's does, and handing the widgets their codes (in `Widgets/`). |
+| `VaultMac` | no | yes | The Mac app's views, its composition root and the AppKit pieces, and handing the widgets their codes (in `Widgets/`). |
+| `VaultMacShared` | no | yes | What the app and its AutoFill extension share: the lock screen, a code's digits, the search field and the field editor it edits with, an item's live code, and what means the Mac is locking. |
+| `VaultMacAutofill` | no | yes | The AutoFill extension's, with a root of its own, which its target subclasses, as the iOS extension's does. It never links `VaultMac`, so the extension has none of the app's camera code (see [App Sandbox](#app-sandbox)). Its target's own module is `VaultMacAutofillExtension`, as the target has the same name. |
 
 `VaultMac` doesn't reuse VaultiOS's views: they're iOS views, full of UIKit and iOS-only modifiers, and making them
 build for both would change the iOS app. It reuses everything beneath them. The shared view models, the App Lock, the

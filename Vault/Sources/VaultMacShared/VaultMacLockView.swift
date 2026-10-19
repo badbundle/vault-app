@@ -8,18 +8,30 @@ import VaultFeed
 /// after a cancelled or failed attempt. The App Lock Password comes next. A real password and a duress one open Vault
 /// exactly alike: the lock screen only ever learns that the password was accepted, at the same deadline as a wrong one
 /// would be refused (MANIFESTO.md C2).
-struct VaultMacLockView: View {
+public struct VaultMacLockView: View {
     var state: AppLockedState
     var unlock: () async -> Void
     var unlockWithPassword: (String) async -> Void
     /// What the wait after wrong passwords counts down with: the app lock's clock.
-    var clock: any AppLockClock = ContinuousClock()
+    var clock: any AppLockClock
+
+    public init(
+        state: AppLockedState,
+        unlock: @escaping () async -> Void,
+        unlockWithPassword: @escaping (String) async -> Void,
+        clock: any AppLockClock = ContinuousClock(),
+    ) {
+        self.state = state
+        self.unlock = unlock
+        self.unlockWithPassword = unlockWithPassword
+        self.clock = clock
+    }
 
     @State private var password = ""
     @FocusState private var isPasswordFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 20) {
             VaultLockGlyphView(appearance: colorScheme == .dark ? .dark : .light)
                 .frame(width: 88, height: 88)
@@ -150,15 +162,15 @@ struct VaultMacLockView: View {
 
 /// How the Mac's password screens talk about the wait after wrong passwords: only ever how long, never how many
 /// attempts have been made or are left. The same as the iOS app's.
-enum VaultMacPasswordWait {
+public enum VaultMacPasswordWait {
     /// How long is left to wait at `now`, or `nil` if the password can be tried.
-    static func remaining(until retryAt: ContinuousClock.Instant?, now: ContinuousClock.Instant) -> Duration? {
+    public static func remaining(until retryAt: ContinuousClock.Instant?, now: ContinuousClock.Instant) -> Duration? {
         guard let retryAt, now < retryAt else { return nil }
         return now.duration(to: retryAt)
     }
 
     /// "Try again in 5 minutes": in whole minutes rounded up, or hours from an hour.
-    static func tryAgainMessage(after remaining: Duration) -> String {
+    public static func tryAgainMessage(after remaining: Duration) -> String {
         let minutes = (Double(remaining.components.seconds) / 60).rounded(.up)
         let wait: String = if minutes >= 60 {
             Duration.seconds((minutes / 60).rounded(.up) * 3600).formatted(.units(allowed: [.hours], width: .wide))

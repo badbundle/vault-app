@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import VaultMacShared
 
 /// A single-line field that edits with `VaultMacFieldEditor`, so nothing typed into it is learned, corrected or sent
 /// elsewhere (G52, G89), with its title beside it, as a Mac form lays a field out. Every text field in the Mac app is
@@ -116,85 +117,6 @@ final class VaultMacTextFieldCell: NSTextFieldCell {
     }
 }
 
-/// The search field in the main window's toolbar, where killphrases and search passphrases are typed. It edits with
-/// `VaultMacFieldEditor`, like every other field.
-struct VaultMacSearchField: NSViewRepresentable {
-    @Binding var text: String
-    /// Changes each time something asks for the field to take focus, as Find (⌘F) does.
-    var focusRequest: Int
-    /// Where Cut and Copy put what's selected: Vault's clipboard, or nowhere, as in the AutoFill sheet.
-    var copyText: (@MainActor (String) -> Void)? = VaultMacFieldEditor.copyToVaultClipboard
-
-    func makeNSView(context: Context) -> NSSearchField {
-        let field = VaultMacNSSearchField()
-        VaultMacFieldEditor.turnOffLearning(in: field)
-        (field.cell as? VaultMacSearchFieldCell)?.copyText = copyText
-        field.placeholderString = "Search"
-        field.setAccessibilityIdentifier("feed.search")
-        field.delegate = context.coordinator
-        field.sendsSearchStringImmediately = true
-        return field
-    }
-
-    func updateNSView(_ field: NSSearchField, context: Context) {
-        context.coordinator.parent = self
-        if field.stringValue != text {
-            field.stringValue = text
-        }
-        if context.coordinator.focusRequest != focusRequest {
-            context.coordinator.focusRequest = focusRequest
-            field.window?.makeFirstResponder(field)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
-    }
-
-    final class Coordinator: NSObject, NSSearchFieldDelegate {
-        var parent: VaultMacSearchField
-        var focusRequest: Int
-
-        init(parent: VaultMacSearchField) {
-            self.parent = parent
-            focusRequest = parent.focusRequest
-        }
-
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField else { return }
-            parent.text = field.stringValue
-        }
-    }
-}
-
-/// An `NSSearchField` that edits with `VaultMacFieldEditor`.
-final class VaultMacNSSearchField: NSSearchField {
-    override static var cellClass: AnyClass? {
-        get { VaultMacSearchFieldCell.self }
-        set {}
-    }
-}
-
-/// Hands its field the Vault field editor, rather than the window's shared one, and keeps it as Vault set it up each
-/// time editing starts.
-final class VaultMacSearchFieldCell: NSSearchFieldCell {
-    private lazy var editor = VaultMacFieldEditor.makeFieldEditor()
-
-    /// Where Cut and Copy put what's selected: Vault's clipboard, unless the field says otherwise.
-    var copyText: (@MainActor (String) -> Void)? {
-        get { editor.copyText }
-        set { editor.copyText = newValue }
-    }
-
-    override func fieldEditor(for _: NSView) -> NSTextView? {
-        editor
-    }
-
-    override func setUpFieldEditorAttributes(_ textObj: NSText) -> NSText {
-        VaultMacFieldEditor.keepPrivate(super.setUpFieldEditorAttributes(textObj))
-    }
-}
-
 /// Multi-line text, such as a note, edited with a `VaultMacFieldEditor` of its own.
 struct VaultMacTextEditor: NSViewRepresentable {
     @Binding var text: String
@@ -267,13 +189,10 @@ struct VaultMacTextEditor: NSViewRepresentable {
 }
 
 extension VaultMacFieldEditor {
-    /// A field editor for a single-line field.
+    /// A field editor for a single-line field, whose Cut and Copy go through Vault's clipboard.
     @MainActor
     static func makeFieldEditor() -> VaultMacFieldEditor {
-        let editor = VaultMacFieldEditor(frame: .zero)
-        editor.isFieldEditor = true
-        editor.copyText = copyToVaultClipboard
-        return editor
+        makeFieldEditor(copyText: copyToVaultClipboard)
     }
 
     /// Copies text being edited through Vault's clipboard, as a detail that never leaves this Mac (G50).

@@ -5,6 +5,7 @@ import Testing
 import VaultCore
 @testable import VaultFeed
 @testable import VaultMac
+@testable import VaultMacAutofill
 
 /// The Mac AutoFill sheet, under the iOS AutoFill rules.
 @MainActor
