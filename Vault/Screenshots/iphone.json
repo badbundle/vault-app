@@ -32,19 +32,19 @@
   "shadow": { "color": "#000000A6", "radius": 90, "offsetY": 36 },
   "screenshots": [
     {
-      "output": "iphone-01-codes",
-      "title": "Every code.\nEvery secret.",
-      "accent": "secret.",
-      "subtitle": "Two-factor codes and private notes,\nkept on your iPhone.",
+      "output": "iphone-01-keys",
+      "path": "../.build/screenshots/raw/iphone/02-detail.png",
+      "title": "Your keys.\nOffline.",
+      "accent": "Offline.",
+      "subtitle": "Seed phrases and private keys,\nencrypted on your iPhone.",
       "devices": [
-        { "path": "../.build/screenshots/raw/iphone/01-feed.png", "x": 0.6, "y": 0.765, "width": 1.06, "rotation": -8 }
+        { "x": 0.52, "y": 0.72, "width": 0.94, "rotation": -5 }
       ],
       "callouts": [
         {
-          "region": { "x": 45, "y": 345, "width": 594, "height": 594 },
-          "offsetX": -14,
-          "offsetY": 30,
-          "scale": 1.18,
+          "region": { "x": 60, "y": 1310, "width": 1200, "height": 650 },
+          "offsetY": -40,
+          "scale": 1.15,
           "borderWidth": 0,
           "highlight": false,
           "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
@@ -132,7 +132,28 @@
       ]
     },
     {
-      "output": "iphone-03-locked",
+      "output": "iphone-03-checked",
+      "path": "../.build/screenshots/raw/iphone/09-phrase-editor.png",
+      "title": "Checked as\nyou type",
+      "accent": "Checked",
+      "subtitle": "BIP39, SLIP-39, Electrum and Monero\nphrases, word by word.",
+      "devices": [
+        { "x": 0.5, "y": 0.67, "width": 0.8, "rotation": -4 }
+      ],
+      "callouts": [
+        {
+          "region": { "x": 100, "y": 2370, "width": 520, "height": 128 },
+          "offsetX": 200,
+          "offsetY": -20,
+          "scale": 1.9,
+          "borderWidth": 0,
+          "highlight": false,
+          "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
+        }
+      ]
+    },
+    {
+      "output": "iphone-04-locked",
       "path": "../.build/screenshots/raw/iphone/05-lock-dark.png",
       "title": "Locked with\na password",
       "accent": "password",
@@ -151,7 +172,7 @@
       ]
     },
     {
-      "output": "iphone-04-hidden",
+      "output": "iphone-05-hidden",
       "title": "Hidden until\nyou search",
       "accent": "Hidden",
       "subtitle": "Some items only show when the\nwhole search is their passphrase.",
@@ -162,29 +183,9 @@
       "callouts": [
         {
           "device": 1,
-          "region": { "x": 40, "y": 2600, "width": 1100, "height": 160 },
+          "region": { "x": 30, "y": 2600, "width": 1100, "height": 160 },
           "offsetY": -720,
           "scale": 1.15,
-          "borderWidth": 0,
-          "highlight": false,
-          "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
-        }
-      ]
-    },
-    {
-      "output": "iphone-05-copy",
-      "path": "../.build/screenshots/raw/iphone/10-code-detail.png",
-      "title": "Tap to copy",
-      "accent": "copy",
-      "subtitle": "By default, copies stay on this iPhone\nand clear after a minute.",
-      "devices": [
-        { "x": 0.5, "y": 0.645, "width": 0.9, "rotation": -4 }
-      ],
-      "callouts": [
-        {
-          "region": { "x": 60, "y": 834, "width": 1200, "height": 409 },
-          "offsetY": -42,
-          "scale": 1.2,
           "borderWidth": 0,
           "highlight": false,
           "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
@@ -212,7 +213,27 @@
       ]
     },
     {
-      "output": "iphone-07-private",
+      "output": "iphone-07-codes",
+      "path": "../.build/screenshots/raw/iphone/10-code-detail.png",
+      "title": "2FA codes too",
+      "accent": "2FA",
+      "subtitle": "Tap a code to copy it. Copies clear\nafter a minute by default.",
+      "devices": [
+        { "x": 0.5, "y": 0.645, "width": 0.9, "rotation": -4 }
+      ],
+      "callouts": [
+        {
+          "region": { "x": 60, "y": 834, "width": 1200, "height": 409 },
+          "offsetY": -42,
+          "scale": 1.2,
+          "borderWidth": 0,
+          "highlight": false,
+          "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
+        }
+      ]
+    },
+    {
+      "output": "iphone-08-private",
       "title": "Private\nby design",
       "accent": "Private",
       "subtitle": "Fully offline, with no accounts\nor tracking. Open source.",

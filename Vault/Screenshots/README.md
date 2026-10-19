@@ -197,17 +197,15 @@ Where a page has a focal point, a callout lifts it off the screen on a blue
 glow, with no border. A card is left over the part it lifts (no `x` / `y`,
 the device's rotation) and sized so its edges land in the gaps around it, so
 nothing shows half-covered at its edges; `offsetX` / `offsetY`, in the
-capture's pixels, nudge it to fit those gaps. The exceptions are the search
-field, which is moved up into the empty middle of the search results, and on
-the iPad hero the GitHub code, enlarged over the empty sidebar with its card
-outlined in the feed.
+capture's pixels, nudge it to fit those gaps. The exception is the search
+field, which is moved up into the empty space below the search results.
 
-Each device class tells the same story in nine images, the strongest first.
-The first three show in search results, so they sell Vault on their own: what
-it keeps, then what it does when someone makes you open it.
+Each device class tells the same story in ten images, Apple's limit, the
+strongest first. The first three show in search results, so they sell Vault
+on their own: what it keeps, then what it does when someone makes you open it.
 
-1. **Every code. Every secret.** The feed, as one large tilted device running
-   off the bottom, with the GitHub code lifted out of it.
+1. **Your keys. Offline.** The "Cold storage" recovery phrase's page, with
+   its checksum and masked words lifted out.
 2. A panorama of three, one canvas cut into `-1`, `-2` and `-3`, about being
    made to unlock Vault:
    - **Forced to unlock it?:** the App Lock Password's settings, with Set
@@ -216,21 +214,23 @@ it keeps, then what it does when someone makes you open it.
      the killphrase lifted out;
    - **Erase after 10 wrong tries:** the same settings as the first page, in
      dark, with the erase row lifted out.
-3. **Locked with a password:** the dark lock screen, with its door and "Vault
+3. **Checked as you type:** the phrase editor on its words, with "Valid
+   BIP39 phrase" lifted out.
+4. **Locked with a password:** the dark lock screen, with its door and "Vault
    Locked" lifted out and most of the keyboard cropped off.
-4. **Hidden until you search:** the search for `blue heron` finding the
-   hidden items, with its search field lifted into the empty space below them
+5. **Hidden until you search:** the search for `blue heron` finding the
+   hidden "Savings wallet", with its search field lifted up under the results
    (on iPhone, in front of the feed that doesn't show them).
-5. **Tap to copy:** an item's page, with its code and countdown lifted out.
 6. **Backups you can hold:** the Backups page, with its last backup ("Exported
    to PDF") lifted out.
-7. **Private by design:** Settings in light and dark, overlapping.
+7. **2FA codes too:** a code's page, with its code and countdown lifted out.
+8. **Private by design:** Settings in light and dark, overlapping.
 
 The Mac tells the same story in five, in the same order, each a window (or
 two) on the same background:
 
-1. **Every code. Every secret.** The GitHub item open beside the list, with
-   its code lifted out.
+1. **Your keys. Offline.** The "Cold storage" recovery phrase open beside the
+   list, with its masked words lifted out.
 2. **Forced to unlock it?:** the dark lock screen, with the Settings window's
    Security tab over it and Set Duress Password lifted out.
 3. **One search deletes it:** the editor sheet, with the killphrase lifted out.
@@ -244,10 +244,12 @@ so the numbers in the names are the order on the App Store.
 
 The copy is short and says only what holds, as the in-app help and
 [`docs/security-model.md`](../../docs/security-model.md) put it, limits
-included: a killphrase deletes the item "from this vault" (backups made
-before still have it), erasing happens "if you turn it on" after 10 wrong
-App Lock Passwords in a row (the title's "tries"), and the clipboard clears
-after a minute "by default". Check a new claim against both before
+included: phrases and keys are always encrypted (G41, G102), the phrase
+editor checks each word against the BIP39, SLIP-39, Electrum or Monero word
+list as it's typed, a killphrase deletes the item "from this vault" (backups
+made before still have it), erasing happens "if you turn it on" after 10
+wrong App Lock Passwords in a row (the title's "tries"), and the clipboard
+clears after a minute "by default" (G50). Check a new claim against both before
 using it. Newlines in a title or subtitle start a new line; the subtitles
 are broken by hand so their lines balance. Apple rejects iPad screenshots
 that show an iPhone, so the iPad config only ever places iPads.
@@ -272,14 +274,15 @@ Both are bigger than any capture, which the framer allows only with
 either, so they're written with `"opaque": true`: a PNG without an alpha
 channel.
 
-- **Header:** one brand-led idea, "Every code. Every secret.", over the iPad
-  feed, between the App Lock Password's settings and the lock screen on
-  iPhone. The title and the iPad are in the middle, so they still read when
-  the image is cropped; the app's icon and name sit below it.
+- **Header:** one brand-led idea, "Your keys. Your secrets.", over the iPad
+  feed, recovery phrases and private keys first, between a recovery phrase's
+  page and the lock screen on iPhone. The title and the iPad are in the
+  middle, so they still read when the image is cropped; the app's icon and
+  name sit below it.
 - **Search results:** states the obvious with the real interface: "No
-  accounts. No tracking." and "Two-factor codes and private notes, fully
-  offline." over the dark iPad feed and an item's page on iPhone. Check it at
-  about 600 pixels wide, the size of a search result.
+  accounts. No tracking." and "Seed phrases, private keys and notes, fully
+  offline." over the dark iPad feed and a recovery phrase's page on iPhone.
+  Check it at about 600 pixels wide, the size of a search result.
 
 Apple's rules for them: short text, the focal point in the middle, and no
 claim we can't back (no prices, URLs, ©, awards or other platforms' logos).

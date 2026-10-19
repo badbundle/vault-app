@@ -32,18 +32,18 @@
   "shadow": { "color": "#000000A6", "radius": 90, "offsetY": 36 },
   "screenshots": [
     {
-      "output": "mac-01-codes",
-      "path": "../.build/screenshots/raw/mac/08-code-detail.png",
-      "title": "Every code. Every secret.",
-      "accent": "secret.",
-      "subtitle": "Two-factor codes and private notes, kept on your Mac.",
+      "output": "mac-01-keys",
+      "path": "../.build/screenshots/raw/mac/02-detail.png",
+      "title": "Your keys. Offline.",
+      "accent": "Offline.",
+      "subtitle": "Seed phrases and private keys, encrypted on your Mac.",
       "devices": [
         { "x": 0.54, "y": 0.72, "width": 0.84, "rotation": -2 }
       ],
       "callouts": [
         {
-          "region": { "x": 1036, "y": 324, "width": 1120, "height": 158 },
-          "scale": 1.16,
+          "region": { "x": 1036, "y": 326, "width": 1120, "height": 480 },
+          "scale": 1.08,
           "borderWidth": 0,
           "highlight": false,
           "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
