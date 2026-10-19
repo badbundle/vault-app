@@ -171,7 +171,7 @@
     },
     {
       "output": "ipad-05-copy",
-      "path": "../.build/screenshots/raw/ipad/02-detail.png",
+      "path": "../.build/screenshots/raw/ipad/10-code-detail.png",
       "title": "Tap to copy",
       "accent": "copy",
       "subtitle": "By default, copies stay on this iPad\nand clear after a minute.",

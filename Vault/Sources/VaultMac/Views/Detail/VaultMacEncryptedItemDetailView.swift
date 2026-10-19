@@ -22,6 +22,9 @@ struct VaultMacEncryptedItemDetailView: View {
             }
         default:
             passwordForm
+                #if DEBUG
+                .task { await VaultMacScreenshotMode.openEncryptedItem(viewModel) }
+                #endif
         }
     }
 

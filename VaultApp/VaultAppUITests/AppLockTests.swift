@@ -16,7 +16,7 @@ final class AppLockTests: XCTestCase {
         XCTAssertFalse(app.showsAnythingOfTheVault)
 
         unlock.tap()
-        XCTAssertTrue(app.buttons[AccessibilityIdentifier.Feed.encryptedItem].appears(within: 10))
+        XCTAssertTrue(app.buttons[AccessibilityIdentifier.Feed.encryptedItem].firstMatch.appears(within: 10))
         XCTAssertTrue(app.showsAnythingOfTheVault)
 
         // Launched again, device authentication never passes, so it stays locked.
@@ -33,7 +33,7 @@ final class AppLockTests: XCTestCase {
         // The prompt as the app launches passes, and the one as it comes back is dismissed.
         let app = XCUIApplication.launch(preparing: .appLock, authentication: [.allow, .cancel], appLockDelay: 0)
         let unlock = app.buttons[AccessibilityIdentifier.AppLock.unlock]
-        XCTAssertTrue(app.buttons[AccessibilityIdentifier.Feed.encryptedItem].appears(within: 10))
+        XCTAssertTrue(app.buttons[AccessibilityIdentifier.Feed.encryptedItem].firstMatch.appears(within: 10))
 
         // In the app switcher, the app's card shows the privacy cover rather than the vault.
         let cover = app.descendants(matching: .any)[AccessibilityIdentifier.AppLock.privacyCover]
@@ -46,7 +46,7 @@ final class AppLockTests: XCTestCase {
         // Back from the app switcher, it's still unlocked: it was only inactive.
         card.tap()
         XCTAssertTrue(cover.disappears(within: 5))
-        XCTAssertTrue(app.buttons[AccessibilityIdentifier.Feed.encryptedItem].exists)
+        XCTAssertTrue(app.buttons[AccessibilityIdentifier.Feed.encryptedItem].firstMatch.exists)
 
         // In the background, it locks.
         XCUIDevice.shared.press(.home)
@@ -76,7 +76,7 @@ final class AppLockTests: XCTestCase {
         XCTAssertFalse(app.showsAnythingOfTheVault)
 
         enter(TestVault.password, in: app)
-        XCTAssertTrue(app.buttons[AccessibilityIdentifier.Feed.encryptedItem].appears(within: 10))
+        XCTAssertTrue(app.buttons[AccessibilityIdentifier.Feed.encryptedItem].firstMatch.appears(within: 10))
 
         // Locked again, the duress password opens the duress vault, with only its own code and note.
         XCUIDevice.shared.press(.home)

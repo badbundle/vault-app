@@ -51,15 +51,16 @@ IPHONE_DEVICE="${SCREENSHOT_IPHONE_DEVICE:-iPhone 18 Pro Max}"
 IPAD_DEVICE="${SCREENSHOT_IPAD_DEVICE:-iPad Pro 13-inch (M5)}"
 SETTLE_SECONDS="${SCREENSHOT_SETTLE_SECONDS:-5}"
 
-# Order here is the order of the numbered output files. Names must match
+# Order here is the order of the numbered output files, which the framer
+# configs name, so a new scene goes on the end. Names must match
 # ScreenshotMode.Scene's raw values.
-SCENES=(feed detail search editor lock app-lock-password backups settings)
+SCENES=(feed detail search editor lock app-lock-password backups settings phrase-editor code-detail)
 # Scenes that start behind the lock and enter the App Lock Password, which
 # takes Face ID, the password and the door opening before they show.
 UNLOCKING_SCENES=(app-lock-password settings)
 
 # The Mac app's scenes, likewise matching VaultMacScreenshotMode.Scene.
-MAC_SCENES=(feed detail editor lock backups settings)
+MAC_SCENES=(feed detail editor lock backups settings phrase-editor code-detail)
 # How long one Mac capture may take, from launch to quitting.
 MAC_CAPTURE_TIMEOUT_SECONDS=40
 
@@ -98,6 +99,9 @@ device_type_for() {
     esac
 }
 
+# For this Mac's architecture only, which its simulators run: built for every
+# simulator architecture, the widget extension's x86_64 slice can't find the
+# package's module, which is only built for this one.
 build_app() {
     log "Building VaultApp for the simulator"
     xcodebuild build \
@@ -108,7 +112,8 @@ build_app() {
         -derivedDataPath "$DERIVED_DATA" \
         -skipPackagePluginValidation \
         -skipMacroValidation \
-        -quiet
+        -quiet \
+        ARCHS="$(uname -m)"
     [[ -d "$APP_PATH" ]] || { echo "Build did not produce $APP_PATH" >&2; exit 1; }
 }
 

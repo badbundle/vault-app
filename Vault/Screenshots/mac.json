@@ -33,7 +33,7 @@
   "screenshots": [
     {
       "output": "mac-01-codes",
-      "path": "../.build/screenshots/raw/mac/02-detail.png",
+      "path": "../.build/screenshots/raw/mac/08-code-detail.png",
       "title": "Every code. Every secret.",
       "accent": "secret.",
       "subtitle": "Two-factor codes and private notes, kept on your Mac.",

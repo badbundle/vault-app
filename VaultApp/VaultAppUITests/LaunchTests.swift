@@ -13,7 +13,10 @@ final class LaunchTests: XCTestCase {
         let code = codes.firstMatch
         let back = app.navigationBars.buttons["BackButton"]
 
-        XCTAssertTrue(code.appears(within: 10))
+        // The demo vault starts with its recovery phrases and private keys, and its codes are further down.
+        XCTAssertTrue(app.buttons.matching(identifier: AccessibilityIdentifier.Feed.encryptedItem).firstMatch
+            .appears(within: 10))
+        XCTAssertTrue(app.scrollFeed(toShow: code))
         XCTAssertGreaterThan(codes.count, 1)
 
         // The feed is on top of the sidebar, which has Settings. Tapping a code copies it unless Settings says to
@@ -27,6 +30,7 @@ final class LaunchTests: XCTestCase {
         back.tap()
         app.buttons[AccessibilityIdentifier.Sidebar.items].tap()
 
+        XCTAssertTrue(app.scrollFeed(toShow: code))
         code.tap()
         let done = app.buttons[AccessibilityIdentifier.Detail.done]
         XCTAssertTrue(done.appears(within: 5))

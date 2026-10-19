@@ -61,7 +61,7 @@ extension XCUIApplication {
     var showsAnythingOfTheVault: Bool {
         let vault = NSPredicate(
             format: "identifier BEGINSWITH 'feed.' OR identifier BEGINSWITH 'sidebar.'"
-                + " OR label CONTAINS 'GitHub' OR label CONTAINS 'Recovery codes' OR label CONTAINS 'mcky.dev'",
+                + " OR label CONTAINS 'Cold storage' OR label CONTAINS 'GitHub' OR label CONTAINS 'mcky.dev'",
         )
         return descendants(matching: .any).matching(vault).firstMatch.exists
     }
