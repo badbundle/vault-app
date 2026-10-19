@@ -5,7 +5,7 @@
 // none can drift. `make validate`'s "Versions" check fails if one does.
 
 // The version people see (CFBundleShortVersionString). Change it here, and only here, for a new version.
-MARKETING_VERSION = 2.1
+MARKETING_VERSION = 2.2
 
 // A floor for the build number (CFBundleVersion), not the last one shipped. The release lane builds with the next
 // global build number, after the latest iOS and Mac uploads, or with this one if it's higher. Don't commit bumps.

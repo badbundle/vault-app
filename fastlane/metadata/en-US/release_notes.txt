@@ -1,5 +1,5 @@
-Vault is on the Mac now too: a native app, free like this one, with a vault of its own. Move items between them with an encrypted backup or by scanning QR codes.
+Vault keeps private keys now, as well as recovery phrases: WIF and extended private keys (xprv, zprv and others), hex keys, Nostr nsec keys, and PGP, SSH and PEM private keys. Like a recovery phrase, a private key is always encrypted and locked, masked until you tap it, and never copied.
 
-- Backup passwords and items' own passwords are strengthened with Argon2id, so each guess at a leaked backup or a copied item costs far more.
-- With an App Lock Password, the keys that check killphrases and search passphrases are kept inside the encrypted vault, so they go wherever it goes.
-- Vault's widgets can no longer read the count of wrong App Lock Passwords.
+- Made for iPhone Duo: the lock screen lines up on the outer screen, and on the inner screen, partly folded, nothing sits across the crease.
+- Recovery phrases and private keys now come first when you add an item, and Help has a new page about each.
+- Vault runs with Apple's Enhanced Security, which makes memory bugs in it much harder to exploit.

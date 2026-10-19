@@ -1,1 +1,1 @@
-Vault comes to the Mac: a native app with a vault of its own, always encrypted with an App Lock Password, and with the duress password, hidden items, killphrases and encrypted backups Vault has on iPhone and iPad.
+Vault comes to the Mac: a native app with a vault of its own, always encrypted with an App Lock Password. It keeps recovery phrases, private keys, notes and 2FA codes, with the duress password, hidden items, killphrases and encrypted backups Vault has on iPhone and iPad.

@@ -329,7 +329,9 @@ has its own folder:
 
 Every release updates What's New in both, from `CHANGELOG.md`. App Store
 Connect takes no What's New for a platform's first version, so deliver skipped
-the Mac's for 2.1.
+the Mac's for 2.1, and again for 2.2: App Review rejected the Mac's 2.1, which
+was never released, so the release lane renamed that version 2.2 and it's still
+the Mac's first.
 
 The release lane uploads both listings with every build. To upload them
 without a build:

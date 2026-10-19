@@ -12,27 +12,37 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 ### Added
 
-- A native Mac app, on the same App Store record as the iPhone and iPad app, free and with no in-app purchases. It keeps a vault of its own, with no sync: items move between devices with a backup or the QR transfer, as between iPhones. Its App Lock Password is always on, set at the first launch, and asked for after Touch ID or the Mac's password. It has the iPhone app's codes, notes and recovery phrases, search, duress passwords, hidden items, killphrases, backups and auto-backups, AutoFill of time-based codes in Safari, and a desktop widget that shows codes only while Vault is unlocked. Hide While Recording keeps its windows out of screenshots, recordings and screen sharing, and it locks when another app comes to the front (or once the Require Unlock delay has passed), when the Mac locks or sleeps, and when its window closes. See `docs/mac-app.md`
 - On the iPhone Duo's inner screen, partly folded, nothing sits across the crease. Held open like a book, the lock screen has the vault door and its words on one page and the Unlock button on the other, the sidebar meets the items at the crease, the items fill both pages either side of it when they fill the screen, and an item's page keeps to one page. Stood on a table, the lock screen has the door in the top half and the Unlock button in the bottom half. iOS says when the screen is partly folded but not where the crease is, so Vault takes it to run through the middle of the screen. Open flat, the screen keeps its usual layout
 - Private keys as a new item type, on iOS and the Mac: WIF keys, extended private keys (xprv, yprv, zprv, tprv and the other SLIP-132 versions), raw hex secp256k1 keys, Nostr nsec keys, and OpenPGP, OpenSSH and PEM private keys, or any other text. Vault says what it recognises a key as, such as "WIF · mainnet · compressed" or "OpenSSH · Ed25519", checks its checksum where it has one, and warns about a public key entered by mistake, but derives nothing from it: no public key or address. Like a recovery phrase, a private key is always encrypted with a password and locked, masked until tapped, hidden while Vault is in the background or the screen is captured, and never copied or shown as a QR code. Help has a new page, "About Private Keys"
 
 ### Changed
 
 - Recovery phrases and private keys now come first when adding an item, and in Help. The new-item sheet on iOS and the Mac's New Item and File menus offer Recovery Phrase, Private Key, Note, then Code, with new descriptions, and on the Mac ⌘N makes a recovery phrase (a note stays on ⇧⌘N). A vault with no items offers the same four to add, in the same order, so a new person's first view points at phrases and keys. Help has a new page, "About Recovery Phrases", which opens the list with "About Private Keys", above the page about codes. The error for items that can't be loaded says items rather than codes, and the Mac's About lists recovery phrases, private keys, notes and codes in that order
+- The iPhone, iPad and Mac apps run with Apple's Enhanced Security: pointer authentication, a hardened heap, checked allocations, and read-only dyld state, so a memory-safety bug in Vault or a library it uses is much harder to exploit. The AutoFill and widget extensions have pointer authentication, and get the rest later
+
+### Fixed
+
+- On the iPhone Duo's outer screen, the lock screen's words and Unlock button sat to one side of the vault door, as its safe area is narrower on the camera's side. Everything beneath the door is now laid out across the middle of the screen, inside the safe area, so it's always lined up under the door
+- App Review rejected the Mac app (guideline 2.4.5) as its AutoFill extension had the app's QR code scanner in it, which uses the camera, without the camera entitlement, which only the app has. The extension is now built from only what it needs, the lock screen, the codes and their search, so it has no camera code at all, and `make validate` and the release lane fail for any Mac bundle whose code uses the camera without the entitlement
+
+## [2.1] - 2026-10-13
+
+Released on iOS. App Review rejected the Mac app's 2.1, so the Mac app is first released with 2.2.
+
+### Added
+
+- A native Mac app, on the same App Store record as the iPhone and iPad app, free and with no in-app purchases. It keeps a vault of its own, with no sync: items move between devices with a backup or the QR transfer, as between iPhones. Its App Lock Password is always on, set at the first launch, and asked for after Touch ID or the Mac's password. It has the iPhone app's codes, notes and recovery phrases, search, duress passwords, hidden items, killphrases, backups and auto-backups, AutoFill of time-based codes in Safari, and a desktop widget that shows codes only while Vault is unlocked. Hide While Recording keeps its windows out of screenshots, recordings and screen sharing, and it locks when another app comes to the front (or once the Require Unlock delay has passed), when the Mac locks or sleeps, and when its window closes. See `docs/mac-app.md`
+
+### Changed
+
+- Backup passwords and encrypted items' passwords are turned into keys with Argon2id, using 512 MB and 256 MB of memory, so each guess at a leaked backup or a copied item costs far more. Setting a backup password, or restoring a backup, takes seconds rather than minutes, and says it can take up to a minute. A backup password set before is strengthened in the background the first time Backups opens, without asking for it again, and backups made with it before still restore with it. An encrypted item is strengthened the first time its password opens it, with nothing else about it changed. A backup or item made by a newer version of Vault says to update Vault
+- The count of wrong App Lock Passwords is kept in the keychain where only Vault and its AutoFill extension can read it, and Vault's widgets can't. It moves there the first time Vault or AutoFill opens after updating, as it was
+- iOS and the Mac are released together, always with the same version and build number. Every target's version comes from `VaultApp/Version.xcconfig`, and `make validate` checks they all match
 
 ### Fixed
 
 - With an App Lock Password, killphrases and search passphrases stopped working in a vault moved to another Mac with Migration Assistant or a Time Machine restore: the keys that check them were kept in the keychain, beside the vault rather than in it. Each vault now keeps its own inside its encryption, so they go wherever it goes, and a duress vault has keys of its own. A vault made before this takes its keys in the first time it's opened, so open each vault once before moving it. Without the password, the keys stay in the keychain, as the vault isn't encrypted
 - On a screen whose safe area is wider on one side than the other, such as the iPhone Duo's unfolded, the lock screen's vault door sat off-centre, as did the privacy and screen-capture covers'. The door is now in the middle of the screen, and the words and buttons beneath it move across to be under it as far as they can while staying clear of the screen's edges
-- On the iPhone Duo's outer screen, the lock screen's words and Unlock button sat to one side of the vault door, as its safe area is narrower on the camera's side. Everything beneath the door is now laid out across the middle of the screen, inside the safe area, so it's always lined up under the door
-- App Review rejected the Mac app (guideline 2.4.5) as its AutoFill extension had the app's QR code scanner in it, which uses the camera, without the camera entitlement, which only the app has. The extension is now built from only what it needs, the lock screen, the codes and their search, so it has no camera code at all, and `make validate` and the release lane fail for any Mac bundle whose code uses the camera without the entitlement
-
-### Changed
-
-- The iPhone, iPad and Mac apps run with Apple's Enhanced Security: pointer authentication, a hardened heap, checked allocations, and read-only dyld state, so a memory-safety bug in Vault or a library it uses is much harder to exploit. The AutoFill and widget extensions have pointer authentication, and get the rest later
-- Backup passwords and encrypted items' passwords are turned into keys with Argon2id, using 512 MB and 256 MB of memory, so each guess at a leaked backup or a copied item costs far more. Setting a backup password, or restoring a backup, takes seconds rather than minutes, and says it can take up to a minute. A backup password set before is strengthened in the background the first time Backups opens, without asking for it again, and backups made with it before still restore with it. An encrypted item is strengthened the first time its password opens it, with nothing else about it changed. A backup or item made by a newer version of Vault says to update Vault
-- The count of wrong App Lock Passwords is kept in the keychain where only Vault and its AutoFill extension can read it, and Vault's widgets can't. It moves there the first time Vault or AutoFill opens after updating, as it was
-- iOS and the Mac are released together, always with the same version and build number. Every target's version comes from `VaultApp/Version.xcconfig`, and `make validate` checks they all match
 
 ## [2.0] - 2026-10-07
 
