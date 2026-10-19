@@ -33,7 +33,7 @@
       "output": "search-results",
       "title": "No accounts. No tracking.",
       "accent": "No tracking.",
-      "subtitle": "Two-factor codes and private notes, fully offline.",
+      "subtitle": "Seed phrases, private keys and notes, fully offline.",
       "devices": [
         {
           "path": "../.build/screenshots/raw/ipad/01-feed-dark.png",
@@ -43,7 +43,7 @@
           "rotation": -4,
           "frameColor": "Space Gray"
         },
-        {"path": "../.build/screenshots/raw/iphone/10-code-detail.png", "x": 0.76, "y": 0.88, "width": 0.26, "rotation": 6}
+        {"path": "../.build/screenshots/raw/iphone/02-detail.png", "x": 0.76, "y": 0.88, "width": 0.26, "rotation": 6}
       ]
     }
   ]
