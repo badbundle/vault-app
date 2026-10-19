@@ -1,1 +1,1 @@
-otp,totp,mfa,one,time,password,two,step,verification,secure,private,secret,encrypted,hidden,duress
+2fa,authenticator,pgp,crypto,bitcoin,secret,notes,passphrase,mnemonic,recovery,duress,offline,ssh
