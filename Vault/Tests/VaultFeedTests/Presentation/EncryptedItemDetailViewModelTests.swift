@@ -97,6 +97,46 @@ final class EncryptedItemDetailViewModelTests {
     }
 
     @Test
+    func startDecryption_privateKey() async throws {
+        let privateKey = anyPrivateKey(title: "Signing key", contents: "The laptop's")
+        let derivedKey = try VaultKeyDeriver.testing.createEncryptionKey(password: "hello")
+        let encryptor = VaultItemEncryptor(key: derivedKey)
+        let encryptedItem = try encryptor.encrypt(item: privateKey)
+
+        let keyDeriverFactory = VaultKeyDeriverFactoryMock()
+        keyDeriverFactory.lookupVaultKeyDeriverHandler = { _ in .testing }
+        let sut = makeSUT(item: encryptedItem, keyDeriverFactory: keyDeriverFactory)
+        sut.enteredEncryptionPassword = "hello"
+
+        await sut.startDecryption()
+
+        switch sut.state {
+        case let .decrypted(.privateKey(decryptedKey), key):
+            #expect(decryptedKey == privateKey)
+            #expect(key == derivedKey)
+        default:
+            Issue.record("Unexpected state \(sut.state)")
+        }
+    }
+
+    @Test
+    func startDecryption_privateKeyWithAWrongPassword_asksAgain() async throws {
+        let derivedKey = try VaultKeyDeriver.testing.createEncryptionKey(password: "hello")
+        let encryptedItem = try VaultItemEncryptor(key: derivedKey).encrypt(item: anyPrivateKey())
+
+        let keyDeriverFactory = VaultKeyDeriverFactoryMock()
+        keyDeriverFactory.lookupVaultKeyDeriverHandler = { _ in .testing }
+        let sut = makeSUT(item: encryptedItem, keyDeriverFactory: keyDeriverFactory)
+        sut.enteredEncryptionPassword = "wrong"
+
+        await sut.startDecryption()
+
+        if case .decrypted = sut.state {
+            Issue.record("Opened with the wrong password")
+        }
+    }
+
+    @Test
     func startDecryption_unknownItem() async throws {
         let encryptable = VaultItemEncryptableMock(
             itemIdentifier: "this is invalid",

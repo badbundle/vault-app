@@ -295,3 +295,83 @@ extension VaultDataModelEditorAdapter: RecoveryPhraseDetailEditor {
         )
     }
 }
+
+extension VaultDataModelEditorAdapter: PrivateKeyDetailEditor {
+    public enum PrivateKeyError: Error, Sendable {
+        /// Private keys can only be saved encrypted, but there was no password or key to encrypt it with.
+        case missingEncryptionKey
+    }
+
+    public func createPrivateKey(initialEdits: PrivateKeyDetailEdits) async throws {
+        let (encryptedItem, _) = try await encryptPrivateKey(edits: initialEdits)
+        try await dataModel.insert(item: makePrivateKeyWrite(encryptedItem: encryptedItem, edits: initialEdits))
+    }
+
+    public func updatePrivateKey(
+        id: Identifier<VaultItem>,
+        edits: PrivateKeyDetailEdits,
+    ) async throws -> DerivedEncryptionKey {
+        let (encryptedItem, key) = try await encryptPrivateKey(edits: edits)
+        try await dataModel.update(
+            itemID: id,
+            data: makePrivateKeyWrite(encryptedItem: encryptedItem, edits: edits),
+        )
+        return key
+    }
+
+    public func deletePrivateKey(id: Identifier<VaultItem>) async throws {
+        try await dataModel.delete(itemID: id)
+    }
+
+    /// Private keys are always stored encrypted, as recovery phrases are, so this only ever produces an
+    /// `EncryptedItem`, never a plaintext payload, and fails if there's nothing to encrypt it with.
+    private func encryptPrivateKey(
+        edits: PrivateKeyDetailEdits,
+    ) async throws -> (EncryptedItem, DerivedEncryptionKey) {
+        let encryptionKey: DerivedEncryptionKey
+        if edits.newEncryptionPassword.isNotBlank {
+            let keyDeriver = keyDeriverFactory.makeVaultItemKeyDeriver()
+            encryptionKey = try await Task.userInitiated {
+                try keyDeriver.createEncryptionKey(password: edits.newEncryptionPassword)
+            }
+        } else if let existingEncryptionKey = edits.existingEncryptionKey {
+            encryptionKey = existingEncryptionKey
+        } else {
+            throw PrivateKeyError.missingEncryptionKey
+        }
+        let privateKey = edits.makePrivateKey()
+        let encryptor = VaultItemEncryptor(key: encryptionKey)
+        let encryptedItem = try await Task.userInitiated {
+            try encryptor.encrypt(item: privateKey)
+        }
+        return (encryptedItem, encryptionKey)
+    }
+
+    private func makePrivateKeyWrite(
+        encryptedItem: EncryptedItem,
+        edits: PrivateKeyDetailEdits,
+    ) -> VaultItem.Write {
+        VaultItem.Write(
+            relativeOrder: edits.relativeOrder,
+            // Nothing about the key is stored outside of the encrypted item, except the title.
+            userDescription: "",
+            color: edits.color,
+            item: .encryptedItem(encryptedItem),
+            tags: edits.tags,
+            visibility: edits.viewConfig.visibility,
+            searchableLevel: edits.viewConfig.searchableLevel,
+            searchPassphraseUpdate: searchPassphraseUpdate(
+                viewConfig: edits.viewConfig,
+                newPhrase: edits.searchPassphrase,
+            ),
+            killphraseUpdate: killphraseUpdate(
+                enabled: edits.killphraseEnabled,
+                newPhrase: edits.newKillphrase,
+            ),
+            lockState: .lockedWithNativeSecurity,
+            showInQuickType: false,
+            // Encrypted items never show a preview of their contents.
+            previewMode: edits.previewMode == .titleAndFirstLine ? .titleOnly : edits.previewMode,
+        )
+    }
+}

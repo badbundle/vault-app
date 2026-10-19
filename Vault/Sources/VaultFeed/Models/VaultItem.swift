@@ -17,6 +17,12 @@ public struct VaultItem: Equatable, Hashable, Identifiable, Sendable {
         /// This is the in-memory form only, which exists after the user has decrypted an `encryptedItem`. Recovery
         /// phrases are always stored encrypted: the storage and backup encoders refuse this payload.
         case recoveryPhrase(RecoveryPhrase)
+        /// A decrypted private key.
+        ///
+        /// Like a recovery phrase, this is the in-memory form only, which exists after the user has decrypted an
+        /// `encryptedItem`. Private keys are always stored encrypted: the storage and backup encoders refuse this
+        /// payload.
+        case privateKey(PrivateKey)
     }
 
     /// Information about the stored item.
@@ -108,6 +114,13 @@ extension VaultItem.Payload {
     public var recoveryPhrase: RecoveryPhrase? {
         switch self {
         case let .recoveryPhrase(phrase): phrase
+        default: nil
+        }
+    }
+
+    public var privateKey: PrivateKey? {
+        switch self {
+        case let .privateKey(key): key
         default: nil
         }
     }

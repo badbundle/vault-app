@@ -65,15 +65,25 @@ struct VaultDetailEditView<
                     openInEditMode: openInEditMode,
                 )
             } else {
-                Form {
-                    PlaceholderView(
-                        systemIcon: "exclamationmark.triangle.fill",
-                        title: "Can't Open Item",
-                        subtitle: "This item couldn't be opened. Close it and try again.",
-                    )
-                    .padding()
-                    .containerRelativeFrame(.horizontal)
-                }
+                cantOpenItem
+            }
+        case let .privateKey(key):
+            // Like a recovery phrase, a decrypted private key always comes with the key it was decrypted with.
+            if let encryptionKey {
+                PrivateKeyDetailView(
+                    editingExisting: key,
+                    encryptionKey: encryptionKey,
+                    navigationPath: $navigationPath,
+                    dataModel: dataModel,
+                    storedMetadata: storedItem.metadata,
+                    editor: VaultDataModelEditorAdapter(
+                        dataModel: dataModel,
+                        keyDeriverFactory: injector.vaultKeyDeriverFactory,
+                    ),
+                    openInEditMode: openInEditMode,
+                )
+            } else {
+                cantOpenItem
             }
         case let .encryptedItem(item):
             EncryptedItemDetailView(
@@ -86,6 +96,18 @@ struct VaultDetailEditView<
                 openDetailSubject: openDetailSubject,
                 presentationMode: presentationMode,
             )
+        }
+    }
+
+    private var cantOpenItem: some View {
+        Form {
+            PlaceholderView(
+                systemIcon: "exclamationmark.triangle.fill",
+                title: "Can't Open Item",
+                subtitle: "This item couldn't be opened. Close it and try again.",
+            )
+            .padding()
+            .containerRelativeFrame(.horizontal)
         }
     }
 }

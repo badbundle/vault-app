@@ -89,6 +89,31 @@ struct SecretTextInputTraitsTests {
         #expect(traits.keyboardType == .default)
     }
 
+    /// A private key's field is a text view of its own, so the key wraps without being hyphenated. It's set up as
+    /// SwiftUI's fields are.
+    @Test
+    func privateKeyTextEditor_keepsKeyboardFromLearningAndNeverHyphenates() throws {
+        let field = PrivateKeyTextEditor(
+            text: .constant("KwdMAjGmerYanjeui5SHS7JkmpZvVipYvB2LJGU1ZxJwYvP98617"),
+            accessibilityLabel: "Key",
+        )
+        .secretTextInput(.verbatim)
+
+        let traits = try #require(try hostedTextInputTraits(of: field).first)
+        let textView = try #require(traits.view as? UITextView)
+
+        #expect(traits.keepsKeyboardFromLearning)
+        #expect(traits.autocapitalizationType == .none)
+        #expect(textView.spellCheckingType == .no)
+        #expect(textView.smartQuotesType == .no)
+        #expect(textView.textContainer.lineBreakMode == .byCharWrapping)
+        let paragraph = try #require(
+            textView.attributedText.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle,
+        )
+        #expect(paragraph.hyphenationFactor == 0)
+        #expect(!paragraph.usesDefaultHyphenation)
+    }
+
     @Test
     func textField_keepsKeyboardFromLearning() throws {
         let field = TextField("Search", text: .constant(""))

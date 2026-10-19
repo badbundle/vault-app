@@ -52,7 +52,7 @@ struct VaultMacItemDetailView: View {
             // held before (G42). Encrypting it again with a stronger key derivation keeps its dates, so its page stays
             // open.
             .id(item.metadata.updated)
-        case .recoveryPhrase:
+        case .recoveryPhrase, .privateKey:
             // Only ever stored encrypted: a decrypted one only shows once its encrypted item is opened.
             EmptyView()
         }
@@ -65,7 +65,7 @@ struct VaultMacAuthenticationGate<Content: View>: View {
     var isRequired: Bool
     var reason: String
     var authentication: DeviceAuthenticationService
-    /// Asks again once Vault stops being the active app, as a recovery phrase does (G41).
+    /// Asks again once Vault stops being the active app, as a recovery phrase and a private key do (G41, G105).
     var locksWhenInactive = false
     @ViewBuilder var content: () -> Content
 

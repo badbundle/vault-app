@@ -8,18 +8,22 @@ enum VaultMacEditorRequest: Identifiable {
     case newCode
     case newNote
     case newRecoveryPhrase
+    case newPrivateKey
     case editCode(OTPAuthCode, VaultItem.Metadata)
     case editNote(SecureNote, VaultItem.Metadata, DerivedEncryptionKey?)
     case editRecoveryPhrase(RecoveryPhrase, VaultItem.Metadata, DerivedEncryptionKey)
+    case editPrivateKey(PrivateKey, VaultItem.Metadata, DerivedEncryptionKey)
 
     var id: String {
         switch self {
         case .newCode: "new-code"
         case .newNote: "new-note"
         case .newRecoveryPhrase: "new-recovery-phrase"
+        case .newPrivateKey: "new-private-key"
         case let .editCode(_, metadata),
              let .editNote(_, metadata, _),
-             let .editRecoveryPhrase(_, metadata, _):
+             let .editRecoveryPhrase(_, metadata, _),
+             let .editPrivateKey(_, metadata, _):
             metadata.id.id.uuidString
         }
     }
@@ -40,7 +44,7 @@ extension EnvironmentValues {
 }
 
 extension FocusedValues {
-    /// Opens a new item's editor: New Code (⌘N), New Note and New Recovery Phrase.
+    /// Opens a new item's editor: New Code (⌘N), New Note, New Recovery Phrase and New Private Key.
     @Entry var vaultMacNewItemAction: VaultMacEditAction?
 }
 
@@ -92,6 +96,20 @@ struct VaultMacEditorSheet: View {
             VaultMacRecoveryPhraseEditor(
                 viewModel: .init(
                     mode: .editing(phrase: phrase, metadata: metadata, existingKey: key),
+                    dataModel: dataModel,
+                    editor: adapter,
+                ),
+                close: close,
+            )
+        case .newPrivateKey:
+            VaultMacPrivateKeyEditor(
+                viewModel: .init(mode: .creating, dataModel: dataModel, editor: adapter),
+                close: close,
+            )
+        case let .editPrivateKey(privateKey, metadata, key):
+            VaultMacPrivateKeyEditor(
+                viewModel: .init(
+                    mode: .editing(key: privateKey, metadata: metadata, existingKey: key),
                     dataModel: dataModel,
                     editor: adapter,
                 ),

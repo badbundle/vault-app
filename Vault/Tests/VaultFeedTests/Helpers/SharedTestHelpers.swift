@@ -285,6 +285,34 @@ let recoveryPhraseFixtures: [RecoveryPhrase] = [
     ),
 ]
 
+/// The Bitcoin wiki's WIF example (https://en.bitcoin.it/wiki/Wallet_import_format), a public test key.
+let validWIFKey = "KwdMAjGmerYanjeui5SHS7JkmpZvVipYvB2LJGU1ZxJwYvP98617"
+
+func anyPrivateKey(title: String = "", key: String = validWIFKey, contents: String = "") -> PrivateKey {
+    PrivateKey(title: title, key: key, contents: contents)
+}
+
+/// Private keys covering the formats Vault recognizes and text it doesn't, for checking that the key survives
+/// encoding exactly: same characters, same line breaks, same Unicode scalars.
+let privateKeyFixtures: [PrivateKey] = [
+    PrivateKey(title: "WIF", key: validWIFKey, contents: ""),
+    PrivateKey(
+        title: "Extended key",
+        key: "xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi",
+        contents: "BIP32 test vector 1",
+    ),
+    PrivateKey(title: "Nostr", key: "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5", contents: ""),
+    PrivateKey(
+        title: "Armored, made up",
+        // Not a real key: an armor's shape, line breaks and all, with a made-up body.
+        key: ["-----BEGIN EXAMPLE KEY-----", "Q29tbWVudDogbm90IGEga2V5", "", "AAAA", "-----END EXAMPLE KEY-----"]
+            .joined(separator: "\n"),
+        contents: "Line one\nLine two, with \"quotes\" and a backslash \\ and emoji 🪙",
+    ),
+    PrivateKey(title: "Other", key: "  any text, 日本語, 🔑 and\ttabs  ", contents: ""),
+    PrivateKey(title: "", key: "x", contents: ""),
+]
+
 func anyEncryptedItem(title: String = "Hello") -> EncryptedItem {
     EncryptedItem(
         version: "1.0.0",

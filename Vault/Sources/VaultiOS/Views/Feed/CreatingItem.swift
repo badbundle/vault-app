@@ -4,4 +4,5 @@ enum CreatingItem {
     case otpCode
     case secureNote
     case recoveryPhrase
+    case privateKey
 }

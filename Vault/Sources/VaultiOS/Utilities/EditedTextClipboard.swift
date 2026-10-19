@@ -21,7 +21,8 @@ import VaultCore
 ///
 /// What kind of text it is, for Universal Clipboard, is what the focused field says it's copied as
 /// (`editedTextCopying(_:isFocused:)`): a note's contents follow the Notes setting. Anything else, like a code's
-/// setup key or a search, stays on this device. A field can say it copies nothing, as a recovery phrase's words do.
+/// setup key or a search, stays on this device. A field can say it copies nothing, as a recovery phrase's words
+/// and a private key do.
 ///
 /// A secure field copies nothing, as UIKit's doesn't, and keeps UIKit's own edit menu. `SelectableTextView` has a
 /// `copy(_:)` of its own.

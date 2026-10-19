@@ -14,8 +14,8 @@ public struct LocalSettingsState {
     @DefaultsStored public var allowUniversalClipboardForNotes: Bool
 
     /// When `true`, the whole app is covered while the screen is recorded, mirrored or shared. On by default
-    /// (MANIFESTO C7). Recovery phrases hide then whatever this says. Kept in the defaults the app shares with its
-    /// extensions, so the AutoFill sheet is covered too.
+    /// (MANIFESTO C7). Recovery phrases and private keys hide then whatever this says. Kept in the defaults the app
+    /// shares with its extensions, so the AutoFill sheet is covered too.
     @DefaultsStored public var hidesVaultWhileScreenCaptured: Bool
 
     /// When `true`, new codes and notes start locked. Only read when an item is created.

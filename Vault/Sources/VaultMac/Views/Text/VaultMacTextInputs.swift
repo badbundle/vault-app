@@ -202,6 +202,8 @@ struct VaultMacTextEditor: NSViewRepresentable {
     var accessibilityLabel: String
     /// Set on the AppKit text view itself, where UI tests look for it.
     var identifier: String?
+    /// Whether Cut and Copy go through Vault's clipboard, or do nothing, as for a private key.
+    var copiesText = true
 
     func makeNSView(context: Context) -> NSScrollView {
         let textView = VaultMacFieldEditor(frame: .zero)
@@ -216,7 +218,8 @@ struct VaultMacTextEditor: NSViewRepresentable {
         textView.autoresizingMask = [.width]
         textView.textContainer?.widthTracksTextView = true
         textView.delegate = context.coordinator
-        textView.copyText = VaultMacFieldEditor.copyToVaultClipboard
+        textView.copyText = copiesText ? VaultMacFieldEditor.copyToVaultClipboard : nil
+        textView.copiesNothing = !copiesText
         textView.string = text
         textView.setAccessibilityLabel(accessibilityLabel)
         textView.setAccessibilityIdentifier(identifier)

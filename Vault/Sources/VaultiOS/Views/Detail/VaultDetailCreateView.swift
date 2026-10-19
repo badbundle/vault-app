@@ -53,6 +53,22 @@ struct VaultDetailCreateView<
             } else {
                 RecoveryPhrasePasscodeRequiredView()
             }
+        case .privateKey:
+            if authenticationService.canAuthenticate {
+                PrivateKeyDetailView(
+                    newKeyWithEditor: VaultDataModelEditorAdapter(
+                        dataModel: dataModel,
+                        keyDeriverFactory: injector.vaultKeyDeriverFactory,
+                    ),
+                    navigationPath: $navigationPath,
+                    dataModel: dataModel,
+                )
+            } else {
+                RecoveryPhrasePasscodeRequiredView(
+                    navigationTitle: "Private Key",
+                    subtitle: "Private keys are always locked with your device passcode. Set up a passcode on this device to store a private key.",
+                )
+            }
         }
     }
 }

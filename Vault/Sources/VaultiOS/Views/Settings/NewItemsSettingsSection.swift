@@ -26,7 +26,7 @@ struct NewItemsSettingsSection: View {
             Text("New Items")
         } footer: {
             Text(
-                "What new codes and notes start with. You can still change each item, and existing items aren't affected. Recovery phrases are always locked.",
+                "What new codes and notes start with. You can still change each item, and existing items aren't affected. Recovery phrases and private keys are always locked.",
             )
         }
     }

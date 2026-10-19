@@ -22,6 +22,10 @@ struct GoldenFixtureRecorder {
         for fixture in EncryptedItemFixture.v1 where !GoldenFixture.isRecorded(fixture.name) {
             try record(fixture)
         }
+        // A new item's password derives its key with v2 (VAULT-128), so a private key, which came after, starts there.
+        if !GoldenFixture.isRecorded(EncryptedItemFixture.privateKey.name) {
+            try record(EncryptedItemFixture.privateKey, keyDeriver: VaultKeyDeriver.Item.Fast.v2)
+        }
         if !GoldenFixture.isRecorded(EncryptedItemFixture.noteKeygenV2.name) {
             try await recordOpened(EncryptedItemFixture.note, as: EncryptedItemFixture.noteKeygenV2)
         }
@@ -41,8 +45,11 @@ extension GoldenFixtureRecorder {
 
     /// Encrypts the item as the app does when it's given a new password, with a key derived with a new salt, and
     /// stores it in a payload of its own.
-    private func record(_ fixture: EncryptedItemFixture) throws {
-        let key = try VaultKeyDeriver.Item.Fast.v1.createEncryptionKey(password: fixture.password)
+    private func record(
+        _ fixture: EncryptedItemFixture,
+        keyDeriver: VaultKeyDeriver = VaultKeyDeriver.Item.Fast.v1,
+    ) throws {
+        let key = try keyDeriver.createEncryptionKey(password: fixture.password)
         let item = try VaultItem(
             metadata: fixture.metadata,
             item: .encryptedItem(encrypt(fixture.decrypted, with: VaultItemEncryptor(key: key))),
@@ -85,6 +92,7 @@ extension GoldenFixtureRecorder {
         switch payload {
         case let .secureNote(note): try encryptor.encrypt(item: note)
         case let .recoveryPhrase(phrase): try encryptor.encrypt(item: phrase)
+        case let .privateKey(key): try encryptor.encrypt(item: key)
         case .otpCode, .encryptedItem: throw NotEncryptable()
         }
     }

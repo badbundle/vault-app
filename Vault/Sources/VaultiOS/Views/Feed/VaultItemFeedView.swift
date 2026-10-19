@@ -740,8 +740,8 @@ public struct VaultItemFeedView<
         switch item {
         case .otpCode: "feed.item.otp-code"
         case .secureNote: "feed.item.secure-note"
-        // A recovery phrase shows as an encrypted card.
-        case .encryptedItem, .recoveryPhrase: "feed.item.encrypted-item"
+        // A recovery phrase or a private key shows as an encrypted card.
+        case .encryptedItem, .recoveryPhrase, .privateKey: "feed.item.encrypted-item"
         }
     }
 

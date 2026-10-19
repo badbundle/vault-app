@@ -10,7 +10,7 @@ struct CreateItemFlowTests {
         #expect(sut.creatingItem == nil)
     }
 
-    @Test(arguments: [CreatingItem.otpCode, .secureNote, .recoveryPhrase])
+    @Test(arguments: [CreatingItem.otpCode, .secureNote, .recoveryPhrase, .privateKey])
     func choose_goesForwardToMakingThatItem(item: CreatingItem) {
         var sut = CreateItemFlow()
 

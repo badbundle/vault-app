@@ -172,6 +172,36 @@ struct EditedTextClipboardTests {
         #expect(uikitText(of: input) == "abandon")
     }
 
+    // MARK: - Private key
+
+    /// A private key is never copied, even while it's typed: Copy copies nothing, and Cut neither copies nor deletes
+    /// (G103).
+    @Test
+    func privateKey_copiesNothing() async throws {
+        let clipboard = try Clipboard()
+        defer { EditedTextClipboard.uninstall() }
+        let viewModel = PrivateKeyDetailViewModel(
+            mode: .creating,
+            dataModel: anyVaultDataModel(),
+            editor: PrivateKeyDetailEditorMock(),
+        )
+        viewModel.startEditing()
+        viewModel.editingModel.detail.key = "KwdMAjGmerYanjeui5SHS7JkmpZvVipYvB2LJGU1ZxJwYvP98617"
+        let input = try await hostedInput(PrivateKeyKeyStep(viewModel: viewModel))
+        // Its window is kept for the rest of the run, so the field stops editing before the next test, or UIKit could
+        // focus it again as other windows come and go, and it would say Copy copies nothing in that test's field.
+        defer { input.resignFirstResponder() }
+        #expect(uikitText(of: input) == "KwdMAjGmerYanjeui5SHS7JkmpZvVipYvB2LJGU1ZxJwYvP98617")
+
+        try select("KwdMAj", in: input)
+        send("copy:", to: input)
+        send("cut:", to: input)
+        try await settle()
+
+        #expect(clipboard.copies.isEmpty)
+        #expect(uikitText(of: input) == "KwdMAjGmerYanjeui5SHS7JkmpZvVipYvB2LJGU1ZxJwYvP98617")
+    }
+
     // MARK: - What it's copied as
 
     @Test(arguments: [false, true])

@@ -35,6 +35,24 @@ struct VaultMacEditorSnapshotTests {
         assertSnapshot(of: view, as: .macWindow(width: 560, height: 720))
     }
 
+    /// The key is typed into a field that can't copy it, and checked as it's typed (G105).
+    @Test
+    func newPrivateKey() throws {
+        let view = try sheet(.newPrivateKey)
+
+        assertSnapshot(of: view, as: .macWindow(width: 560, height: 720))
+    }
+
+    /// An existing key stays masked until it's clicked, even in its editor.
+    @Test
+    func editPrivateKey() throws {
+        let privateKey = PrivateKey(title: "Wallet", key: "KwdMAjGmerYanjeui5SHS7JkmpZvVipYvB2LJGU1ZxJwYvP98617")
+        let key = DerivedEncryptionKey(key: .zero(), salt: Data(), keyDervier: .testing)
+        let view = try sheet(.editPrivateKey(privateKey, MacTestItems.metadata(), key))
+
+        assertSnapshot(of: view, as: .macWindow(width: 560, height: 720))
+    }
+
     /// An existing item's editor can delete it, after asking (C6).
     @Test
     func editCode() throws {

@@ -216,6 +216,7 @@ struct VaultMacMainView: View {
                     Button("New Code") { editorRequest = .newCode }
                     Button("New Note") { editorRequest = .newNote }
                     Button("New Recovery Phrase") { editorRequest = .newRecoveryPhrase }
+                    Button("New Private Key") { editorRequest = .newPrivateKey }
                 } label: {
                     Label("New Item", systemImage: "plus")
                 }

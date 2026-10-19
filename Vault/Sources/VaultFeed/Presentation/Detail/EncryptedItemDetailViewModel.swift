@@ -176,6 +176,12 @@ public final class EncryptedItemDetailViewModel {
                     expectedItemIdentifier: VaultIdentifiers.Item.recoveryPhrase,
                 )
                 return .decrypted(.recoveryPhrase(decryptedPhrase))
+            case VaultIdentifiers.Item.privateKey:
+                let decryptedKey: PrivateKey = try decryptor.decrypt(
+                    item: item,
+                    expectedItemIdentifier: VaultIdentifiers.Item.privateKey,
+                )
+                return .decrypted(.privateKey(decryptedKey))
             default:
                 return .unsupportedItemError(identifier: itemIdentifier)
             }

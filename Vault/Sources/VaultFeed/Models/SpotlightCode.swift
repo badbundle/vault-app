@@ -8,7 +8,7 @@ import VaultCore
 /// it, and less. It's only kept while App Lock is off, when nothing stands between the unlocked phone and the vault
 /// anyway (see `SpotlightCode.codes(in:isTurnedOn:isAppLockOn:)`). Even then:
 ///
-/// - Only codes: never notes, recovery phrases or encrypted items.
+/// - Only codes: never notes, recovery phrases, private keys or encrypted items.
 /// - Only codes the feed shows as they are: never one that's hidden until searched for, locked, or that Vault's own
 ///   search can't find.
 /// - Only the site's name: never the account name, which is often an email address, nor anything else.

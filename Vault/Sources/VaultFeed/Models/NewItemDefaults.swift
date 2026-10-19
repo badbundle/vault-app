@@ -6,7 +6,8 @@ import Foundation
 /// them in Settings never touches an existing item (MANIFESTO C1). Hiding an item, search passphrases and
 /// killphrases have no defaults, as they're set up item by item (C1, C9).
 public struct NewItemDefaults: Equatable, Hashable, Sendable {
-    /// Whether a new code or note starts locked. Recovery phrases are always locked, whatever this says.
+    /// Whether a new code or note starts locked. Recovery phrases and private keys are always locked, whatever this
+    /// says.
     public var lockNewItems: Bool
     /// Whether a new code starts out offered in QuickType.
     public var showNewCodesInQuickType: Bool

@@ -33,6 +33,12 @@ struct CreateItemPickerView: View {
                 subtitle: "Crypto wallet seed words",
                 systemImage: "list.number",
             )
+            option(
+                .privateKey,
+                title: "Private Key",
+                subtitle: "A wallet, PGP or SSH private key",
+                systemImage: "key.fill",
+            )
         }
         .listSectionSpacing(12)
         .environment(\.isInGuidedDetailEditor, true)

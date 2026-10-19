@@ -6,6 +6,7 @@ enum DetailEditorItemKind {
     case code
     case note
     case recoveryPhrase
+    case privateKey
 
     /// The editor's last button when creating an item.
     var addTitle: String {
@@ -13,6 +14,7 @@ enum DetailEditorItemKind {
         case .code: "Add Code"
         case .note: "Add Note"
         case .recoveryPhrase: "Add Phrase"
+        case .privateKey: "Add Key"
         }
     }
 }
@@ -23,6 +25,7 @@ extension DetailEditorStep {
         case (.content, .code): "Key"
         case (.content, .note): "Note"
         case (.content, .recoveryPhrase): "Words"
+        case (.content, .privateKey): "Key"
         case (.details, _): "Name"
         case (.appearance, _): "Appearance"
         case (.security, _): "Privacy & Security"
@@ -38,8 +41,12 @@ extension DetailEditorStep {
             "Write anything you want to keep safe. The first line is the note's title."
         case (.content, .recoveryPhrase):
             "Enter the words in order. They're encrypted with a password you choose."
+        case (.content, .privateKey):
+            "Paste or type the key. It's encrypted with a password you choose."
         case (.details, .recoveryPhrase):
             "A title to recognize the phrase by. The description is encrypted with the words."
+        case (.details, .privateKey):
+            "A title to recognize the key by. The description is encrypted with the key."
         case (.details, _):
             "What it's called in your vault and in search."
         case (.appearance, _):
@@ -54,6 +61,7 @@ extension DetailEditorStep {
         case (.content, .code): "qrcode.viewfinder"
         case (.content, .note): "text.alignleft"
         case (.content, .recoveryPhrase): "list.number"
+        case (.content, .privateKey): "key.fill"
         case (.details, _): "character.cursor.ibeam"
         case (.appearance, _): "paintpalette.fill"
         case (.security, _): "lock.shield.fill"

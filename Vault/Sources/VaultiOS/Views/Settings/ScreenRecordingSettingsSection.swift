@@ -17,7 +17,7 @@ struct ScreenRecordingSettingsSection: View {
             Text("Screen Recording")
         } footer: {
             Text(
-                "Cover Vault while your screen is recorded, mirrored or shared, so your codes and notes don't show. Recovery phrases always hide.",
+                "Cover Vault while your screen is recorded, mirrored or shared, so your codes and notes don't show. Recovery phrases and private keys always hide.",
             )
         }
     }

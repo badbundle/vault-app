@@ -34,6 +34,8 @@ struct VaultMacCommands: Commands {
                 .disabled(newItem == nil)
             Button("New Recovery Phrase") { newItem?(.newRecoveryPhrase) }
                 .disabled(newItem == nil)
+            Button("New Private Key") { newItem?(.newPrivateKey) }
+                .disabled(newItem == nil)
         }
         CommandGroup(replacing: .help) {
             Button("Vault Help") {

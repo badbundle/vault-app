@@ -106,7 +106,7 @@ struct VaultMacItemRow: View {
         switch item.item {
         case .otpCode: item.metadata.lockState.isLocked ? "lock.fill" : "key.horizontal.fill"
         case .secureNote: item.metadata.lockState.isLocked ? "lock.doc.fill" : "doc.text.fill"
-        case .encryptedItem, .recoveryPhrase: "lock.shield.fill"
+        case .encryptedItem, .recoveryPhrase, .privateKey: "lock.shield.fill"
         }
     }
 
@@ -129,7 +129,7 @@ struct VaultMacItemRow: View {
                 color: item.metadata.color ?? .default,
                 previewMode: item.metadata.previewMode,
             ).visibleTitle
-        case .recoveryPhrase:
+        case .recoveryPhrase, .privateKey:
             // Only ever stored encrypted, so the list never has one decrypted.
             "Untitled Item"
         }
@@ -143,7 +143,7 @@ struct VaultMacItemRow: View {
             item.metadata.lockState.isLocked || item.metadata.previewMode != .titleAndFirstLine
                 ? nil
                 : item.metadata.userDescription
-        case .encryptedItem, .recoveryPhrase:
+        case .encryptedItem, .recoveryPhrase, .privateKey:
             "Encrypted"
         }
     }

@@ -2,8 +2,8 @@ import SwiftUI
 import VaultCore
 import VaultFeed
 
-/// An item encrypted with a password of its own: a note or a recovery phrase. It opens once its password is entered,
-/// and the password is never stored (G42).
+/// An item encrypted with a password of its own: a note, a recovery phrase or a private key. It opens once its password
+/// is entered, and the password is never stored (G42).
 struct VaultMacEncryptedItemDetailView: View {
     @State var viewModel: EncryptedItemDetailViewModel
     var tags: [VaultItemTag]
@@ -14,7 +14,7 @@ struct VaultMacEncryptedItemDetailView: View {
         case let .decrypted(payload, key):
             VaultMacAuthenticationGate(
                 isRequired: Self.requiresDeviceAuthentication(payload),
-                reason: "Show the recovery phrase",
+                reason: Self.authenticationReason(payload),
                 authentication: authentication,
                 locksWhenInactive: true,
             ) {
@@ -25,14 +25,22 @@ struct VaultMacEncryptedItemDetailView: View {
         }
     }
 
-    /// Whether what's decrypted also needs Touch ID or the Mac's password before it shows. A recovery phrase always
-    /// does, whatever its stored lock state: its password protects it from someone coercing the user, and Touch ID or
-    /// the Mac's password from someone at an unattended Mac (G41). A note needs them only when its item is locked,
-    /// which its page has already asked for.
+    /// Whether what's decrypted also needs Touch ID or the Mac's password before it shows. A recovery phrase or a
+    /// private key always does, whatever its stored lock state: its password protects it from someone coercing the
+    /// user, and Touch ID or the Mac's password from someone at an unattended Mac (G41, G105). A note needs them only
+    /// when its item is locked, which its page has already asked for.
     nonisolated static func requiresDeviceAuthentication(_ payload: VaultItem.Payload) -> Bool {
         switch payload {
-        case .recoveryPhrase: true
+        case .recoveryPhrase, .privateKey: true
         case .secureNote, .otpCode, .encryptedItem: false
+        }
+    }
+
+    /// What the Touch ID prompt says it's for.
+    nonisolated static func authenticationReason(_ payload: VaultItem.Payload) -> String {
+        switch payload {
+        case .privateKey: "Show the private key"
+        case .recoveryPhrase, .secureNote, .otpCode, .encryptedItem: "Show the recovery phrase"
         }
     }
 
@@ -48,8 +56,15 @@ struct VaultMacEncryptedItemDetailView: View {
                 tags: tags,
                 encryptionKey: key,
             )
+        case let .privateKey(privateKey):
+            VaultMacPrivateKeyDetailView(
+                privateKey: privateKey,
+                metadata: viewModel.metadata,
+                tags: tags,
+                encryptionKey: key,
+            )
         case .otpCode, .encryptedItem:
-            // Only notes and recovery phrases are encrypted with a password of their own.
+            // Only notes, recovery phrases and private keys are encrypted with a password of their own.
             EmptyView()
         }
     }
