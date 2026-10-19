@@ -173,7 +173,7 @@
     },
     {
       "output": "iphone-05-copy",
-      "path": "../.build/screenshots/raw/iphone/02-detail.png",
+      "path": "../.build/screenshots/raw/iphone/10-code-detail.png",
       "title": "Tap to copy",
       "accent": "copy",
       "subtitle": "By default, copies stay on this iPhone\nand clear after a minute.",

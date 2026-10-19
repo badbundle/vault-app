@@ -149,6 +149,13 @@ struct VaultListView<
         else { return }
 
         pendingOpenItemDetail = nil
+        #if DEBUG
+        // A screenshot scene opens an encrypted demo item as its password would, with the key it was decrypted with.
+        if let decrypted = ScreenshotMode.decryptedItem, decrypted.decryptedItem.id == id {
+            modal = .detail(id, decrypted.decryptedItem, decrypted.encryptionKey)
+            return
+        }
+        #endif
         modal = .detail(id, item, nil)
     }
 }

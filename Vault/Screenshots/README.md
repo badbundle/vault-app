@@ -47,8 +47,13 @@ real vault is never shown or touched, seeds the demo items and tags defined
 there, and opens the requested scene. Add a scene there and to `SCENES` in
 `capture.sh` to capture a new screen.
 
-The demo vault itself, shared with the Mac app, is `DemoVault` in VaultFeed.
-It also moves the app's clock (`DemoVault.clockOffset`) so every demo
+The demo vault itself, shared with the Mac app, is `DemoVault` in VaultFeed:
+recovery phrases and private keys first, then notes and codes. Its phrases and
+keys were generated for the screenshots, with valid checksums (`DemoVaultTests`
+checks them), and were never funded; its SSH key is made afresh at each launch.
+As in the app, each one is an encrypted item with a password of its own, and
+locked: every encrypted demo item's password is `hello`
+(`DemoVault.encryptedItemPassword`). It also moves the app's clock (`DemoVault.clockOffset`) so every demo
 code is 3 seconds into its 30-second period as the app launches. After the
 capture's wait the countdown bars show about 70% left in every shot, never a
 nearly empty bar, and the codes are still the right ones for the clock's time.
@@ -58,14 +63,28 @@ Raising `SCREENSHOT_SETTLE_SECONDS` lowers the bars.
 
 | Scene               | Shows |
 | ------------------- | ----- |
-| `feed`              | The feed of the demo vault. |
-| `detail`            | The first item's page (GitHub), with its code and countdown. |
-| `search`            | The feed searching for `blue heron`, the passphrase of the four hidden items, which are never in the feed. |
-| `editor`            | The first item's editor on Privacy & Security, part way through hiding it behind `blue heron`, locking it and giving it the killphrase `paper lantern`. Nothing is saved. On iPad the sheet is scrolled to its end, so the killphrase shows. |
+| `feed`              | The feed of the demo vault, recovery phrases and private keys first. |
+| `detail`            | The first item's page, the "Cold storage" recovery phrase, with its words masked. |
+| `search`            | The feed searching for `blue heron`, the passphrase of the three hidden items, which are never in the feed: the "Savings wallet" recovery phrase, a code and a note. |
+| `editor`            | The first code's editor (GitHub) on Privacy & Security, part way through hiding it behind `blue heron`, locking it and giving it the killphrase `paper lantern`. Nothing is saved. On iPad the sheet is scrolled to its end, so the killphrase shows. |
 | `lock`              | The lock screen, asking for the App Lock Password. |
 | `app-lock-password` | Settings with the App Lock Password's sheet open: Set Duress Password, and Erase Vault After 10 Failed Passwords on. |
 | `backups`           | The Backups page, with a backup and a backup password. |
 | `settings`          | Settings, with App Lock and the App Lock Password on. |
+| `phrase-editor`     | The "Everyday wallet" recovery phrase's editor on its words: its 12 words masked, and its checksum valid. Nothing is saved. On iPad the sheet is scrolled to its end, so the checksum shows. |
+| `code-detail`       | The first code's page (GitHub), with its code and countdown. |
+
+New scenes go on the end of `SCENES`, as the configs name the captures by
+their numbers.
+
+The `detail` and `phrase-editor` scenes open a recovery phrase as someone
+would once they'd entered its password and Face ID had passed: screenshot mode
+hands the item's page the phrase it decrypted as it seeded the vault, and opens
+it unlocked, with its words still masked. A recovery phrase or private key
+hides while Vault isn't the active app or the screen is captured (G41, G103),
+but `simctl io screenshot` reads the simulator's display without iOS counting
+the screen as captured, and the app is in front, so nothing is hidden for the
+capture: screenshot mode changes nothing about the hiding.
 
 In every scene Face ID passes, as on a device with a passcode, so no screen
 says to set one up. The App Lock Password and the backup password are
@@ -107,11 +126,20 @@ in front. The main window is 1120×700 points, 16:10.
 | Scene      | Shows |
 | ---------- | ----- |
 | `feed`     | The list of items, none open. |
-| `detail`   | The first item's page (GitHub), with its code and countdown. |
-| `editor`   | That item's editor sheet, scrolled to Privacy & Security: locked, hidden behind `blue heron`, with the killphrase `paper lantern`. Nothing is saved. |
+| `detail`   | The first item's page, the "Cold storage" recovery phrase, with its words masked. |
+| `editor`   | The first code's editor sheet (GitHub), scrolled to Privacy & Security: locked, hidden behind `blue heron`, with the killphrase `paper lantern`. Nothing is saved. |
 | `lock`     | The lock screen, asking for the App Lock Password. |
 | `backups`  | Backups, on the backup password's page. |
 | `settings` | The Settings window's Security tab, with the App Lock Password and erasing after failed passwords on. |
+| `phrase-editor` | The "Everyday wallet" recovery phrase's editor sheet: its words in secure fields, and its checksum valid. Nothing is saved. |
+| `code-detail` | The first code's page (GitHub), with its code and countdown. |
+
+In `detail` and `phrase-editor`, screenshot mode enters the encrypted item's
+password (`hello`) on its page, and Touch ID passes for it. A recovery
+phrase's page locks again whenever Vault stops being the active app (G88), as
+it may while the scene settles behind the terminal, so in screenshot mode the
+page unlocks itself again once Vault is back in front, as it is for the
+capture; the words stay masked throughout.
 
 Every Vault window is kept out of screen captures (Hide While Recording,
 `sharingType` `.none`), and capturing the screen would need the screen

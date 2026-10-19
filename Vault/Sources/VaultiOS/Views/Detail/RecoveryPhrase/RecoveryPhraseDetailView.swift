@@ -39,6 +39,9 @@ struct RecoveryPhraseDetailView: View {
         if openInEditMode {
             viewModel.startEditing()
         }
+        #if DEBUG
+        ScreenshotMode.showRecoveryPhraseScene(in: viewModel)
+        #endif
     }
 
     init(

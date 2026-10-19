@@ -750,7 +750,9 @@ has the details.
 - **Screenshot mode.** A debug build launched with `-screenshot-scene <scene>` (`VaultMacScreenshotMode`) runs on the
   demo vault the iOS screenshots show (`DemoVault`), in memory, with defaults, keychain items, widget codes and a
   storage directory of its own, so the Mac's own vault, keychain and widgets are never read or written. Touch ID
-  passes, the App Lock Password is a stand-in that's set, and the lock triggers are off.
+  passes, the App Lock Password is a stand-in that's set, and the lock triggers are off. A scene that shows an
+  encrypted demo item enters its password, and a page that locks while Vault isn't the active app, as a recovery
+  phrase's does (G88), unlocks itself again once Vault is in front for the capture.
 - **Capture.** Every window is kept out of screen captures, and capturing the screen would need the screen recording
   permission. So the app captures its own window, through ScreenCaptureKit's content for the current process, which
   needs no permission, and writes it to a file descriptor `capture.sh` opens for it. To be offered, the window's

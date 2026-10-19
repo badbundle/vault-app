@@ -14,3 +14,18 @@ extension XCUIElement {
         !exists || waitForNonExistence(timeout: timeout)
     }
 }
+
+extension XCUIApplication {
+    /// Scrolls the feed down until `element` is on screen, as someone would to reach an item below the first
+    /// screenful: the feed only makes the cards it shows, so one further down isn't there to find until then. `false`
+    /// if it never comes on screen.
+    func scrollFeed(toShow element: XCUIElement, maxSwipes: Int = 6) -> Bool {
+        for _ in 0 ..< maxSwipes {
+            if element.exists, element.isHittable {
+                return true
+            }
+            swipeUp(velocity: .slow)
+        }
+        return element.exists && element.isHittable
+    }
+}

@@ -85,6 +85,15 @@ struct VaultMacAuthenticationGate<Content: View>: View {
                 isUnlocked = false
             }
         }
+        #if DEBUG
+        // Touch ID always passes in screenshot mode, so a scene's page opens as it does once someone has unlocked it.
+        // One that locks while Vault isn't the active app opens again once Vault is, as it is for the capture.
+        .task(id: appearsActive) {
+            if VaultMacScreenshotMode.isEnabled, isRequired, !isUnlocked, appearsActive || !locksWhenInactive {
+                await unlock()
+            }
+        }
+        #endif
     }
 
     private var lockedNotice: some View {

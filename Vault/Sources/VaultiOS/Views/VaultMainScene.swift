@@ -116,18 +116,14 @@ public struct VaultMainScene: Scene {
     #if DEBUG
     private func seedScreenshotVault() async {
         do {
-            let detailItemID = try await ScreenshotMode.seed(
+            let seeded = try await ScreenshotMode.seed(
                 store: VaultRoot.vaultStore,
                 dataModel: vaultDataModel,
                 backupEventLogger: injector.backupEventLogger,
             )
-            switch ScreenshotMode.scene {
-            case .detail, .editor:
-                pendingOpenItemDetail = detailItemID
-            case .search:
+            pendingOpenItemDetail = ScreenshotMode.itemToOpen(seeded)
+            if ScreenshotMode.scene == .search {
                 vaultDataModel.itemsSearchQuery = ScreenshotMode.hiddenItemsPassphrase
-            default:
-                break
             }
             isSeedingScreenshotVault = false
         } catch {

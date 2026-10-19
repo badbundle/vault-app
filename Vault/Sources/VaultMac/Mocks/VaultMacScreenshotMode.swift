@@ -25,9 +25,10 @@ enum VaultMacScreenshotMode {
     enum Scene: String, CaseIterable {
         /// The list of items, with none open.
         case feed
-        /// The first demo item's page, a code with its countdown.
+        /// The first demo item's page, the "Cold storage" recovery phrase, opened with its password and Touch ID,
+        /// with its words masked.
         case detail
-        /// The first demo item's editor, part way through hiding it behind `DemoVault.hiddenItemsPassphrase`, locking
+        /// The first demo code's editor, part way through hiding it behind `DemoVault.hiddenItemsPassphrase`, locking
         /// it and giving it the killphrase `editorKillphrase`. Nothing is saved.
         case editor
         /// The lock screen, asking for the App Lock Password.
@@ -36,6 +37,11 @@ enum VaultMacScreenshotMode {
         case backups
         /// The Settings window's Security tab, with the App Lock Password on.
         case settings
+        /// The "Everyday wallet" recovery phrase's editor sheet: its words masked, and their checksum valid. Nothing is
+        /// saved.
+        case phraseEditor = "phrase-editor"
+        /// The first demo code's page, with its code and countdown.
+        case codeDetail = "code-detail"
 
         /// Whether the App Lock Password is entered, to show what's behind the lock screen.
         var entersAppLockPassword: Bool {
@@ -51,8 +57,8 @@ enum VaultMacScreenshotMode {
         /// while the list has focus.
         var selectsInTheList: Bool {
             switch self {
-            case .detail, .backups: true
-            case .feed, .editor, .lock, .settings: false
+            case .detail, .codeDetail, .backups: true
+            case .feed, .editor, .lock, .settings, .phraseEditor: false
             }
         }
     }
@@ -253,6 +259,14 @@ enum VaultMacScreenshotMode {
         return view.subviews.lazy.compactMap(firstScrollingView(in:)).first
     }
 
+    /// Opens an encrypted demo item's page with its password, as someone would, in a scene that shows one. Every
+    /// encrypted demo item has the same password (`DemoVault.encryptedItemPassword`).
+    static func openEncryptedItem(_ viewModel: EncryptedItemDetailViewModel) async {
+        guard isEnabled, case .base = viewModel.state else { return }
+        viewModel.enteredEncryptionPassword = DemoVault.encryptedItemPassword
+        await viewModel.startDecryption()
+    }
+
     /// The Backups page the `backups` scene opens.
     static var backupsPage: VaultMacBackupsPage? {
         scene == .backups ? .password : nil
@@ -268,9 +282,9 @@ enum VaultMacScreenshotMode {
         // While it's still locked: resizing lays the window out again there and then, which mustn't be the first time
         // a code's row is drawn.
         window(VaultMacWindow.main.id)?.setContentSize(mainWindowSize)
-        let detailItemID: Identifier<VaultItem>
+        let seeded: DemoVault.SeededItems
         do {
-            detailItemID = try await DemoVault.seed(
+            seeded = try await DemoVault.seed(
                 store: VaultMacRoot.vaultStore,
                 dataModel: VaultMacRoot.vaultDataModel,
                 backupEventLogger: VaultMacRoot.backupEventLogger,
@@ -281,15 +295,25 @@ enum VaultMacScreenshotMode {
         }
 
         // What's open behind the lock, before it opens, so the main window starts on it.
+        let firstItem = seeded.firstItem.decryptedItem
         switch scene {
         case .detail:
-            VaultMacRoot.feedModel.selectedItemID = detailItemID
+            VaultMacRoot.feedModel.selectedItemID = firstItem.id
+        case .codeDetail:
+            VaultMacRoot.feedModel.selectedItemID = seeded.firstCodeID
         case .editor:
-            VaultMacRoot.feedModel.selectedItemID = detailItemID
-            if let item = VaultMacRoot.vaultDataModel.items.first(where: { $0.id == detailItemID }),
+            VaultMacRoot.feedModel.selectedItemID = seeded.firstCodeID
+            if let item = VaultMacRoot.vaultDataModel.items.first(where: { $0.id == seeded.firstCodeID }),
                case let .otpCode(code) = item.item
             {
                 editorRequest = .editCode(code, item.metadata)
+            }
+        case .phraseEditor:
+            let phrase = seeded.everydayWallet
+            VaultMacRoot.feedModel.selectedItemID = phrase.decryptedItem.id
+            // As its page's Edit opens it, once its password and Touch ID have opened the page.
+            if case let .recoveryPhrase(words) = phrase.decryptedItem.item {
+                editorRequest = .editRecoveryPhrase(words, phrase.decryptedItem.metadata, phrase.encryptionKey)
             }
         case .backups:
             VaultMacRoot.feedModel.sidebarSelection = .backups

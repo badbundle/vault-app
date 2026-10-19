@@ -22,11 +22,11 @@ enum ScreenshotMode {
     enum Scene: String, CaseIterable {
         /// The item feed.
         case feed
-        /// The feed with the detail sheet open on the first demo item.
+        /// The first demo item's page, the "Cold storage" recovery phrase, with its words masked.
         case detail
         /// The feed searching for `hiddenItemsPassphrase`, which shows the hidden items.
         case search
-        /// The first demo item's editor on its privacy and security step, part way through hiding the item, locking
+        /// The first demo code's editor on its privacy and security step, part way through hiding the code, locking
         /// it and giving it a killphrase.
         case editor
         /// The lock screen, asking for the App Lock Password.
@@ -37,10 +37,15 @@ enum ScreenshotMode {
         case backups
         /// The settings screen, with App Lock and the App Lock Password on.
         case settings
+        /// The "Everyday wallet" recovery phrase's editor on its words step: the words masked, and their checksum
+        /// valid.
+        case phraseEditor = "phrase-editor"
+        /// The first demo code's page, with its code and countdown.
+        case codeDetail = "code-detail"
 
         var sidebarItem: VaultMainNavigationView.SidebarItem {
             switch self {
-            case .feed, .detail, .search, .editor, .lock: .items
+            case .feed, .detail, .search, .editor, .lock, .phraseEditor, .codeDetail: .items
             case .backups: .backups
             case .appLockPassword, .settings: .settings
             }
@@ -50,8 +55,13 @@ enum ScreenshotMode {
         var hasAppLockPassword: Bool {
             switch self {
             case .lock, .appLockPassword, .settings: true
-            case .feed, .detail, .search, .editor, .backups: false
+            case .feed, .detail, .search, .editor, .backups, .phraseEditor, .codeDetail: false
             }
+        }
+
+        /// Whether the scene opens a recovery phrase, rather than a code.
+        var opensRecoveryPhrase: Bool {
+            self == .detail || self == .phraseEditor
         }
 
         /// Whether the password is entered for the scene as it's asked for, to show what's behind the lock screen.
@@ -116,6 +126,41 @@ enum ScreenshotMode {
         }
     }
 
+    /// The recovery phrase the scene opens, decrypted with its password, which it opens in place of its password
+    /// prompt, as someone would once they'd entered it. Set as the demo vault is seeded.
+    @MainActor static var decryptedItem: VaultItemEncryptionPayload?
+
+    /// The item a scene opens as it starts, if it opens one, once `seeded` is in the vault.
+    @MainActor
+    static func itemToOpen(_ seeded: DemoVault.SeededItems) -> Identifier<VaultItem>? {
+        switch scene {
+        case .detail:
+            decryptedItem = seeded.firstItem
+            return seeded.firstItem.decryptedItem.id
+        case .phraseEditor:
+            decryptedItem = seeded.everydayWallet
+            return seeded.everydayWallet.decryptedItem.id
+        case .editor, .codeDetail:
+            return seeded.firstCodeID
+        case .feed, .search, .lock, .appLockPassword, .backups, .settings, nil:
+            return nil
+        }
+    }
+
+    /// Opens the recovery phrase of the `detail` and `phrase-editor` scenes unlocked, as it is once Face ID has passed,
+    /// which it always does here, with its words still masked. In `phrase-editor`, it opens its editor on the words,
+    /// scrolled on iPad to the end of the sheet, which is shorter than the step, so whether they're valid shows.
+    @MainActor
+    static func showRecoveryPhraseScene(in viewModel: RecoveryPhraseDetailViewModel) {
+        guard scene?.opensRecoveryPhrase == true else { return }
+        viewModel.isLocked = false
+        if scene == .phraseEditor {
+            viewModel.startEditing()
+            viewModel.showEditorStep(.content)
+            scrollEditorSheetToEndOnIPad()
+        }
+    }
+
     /// Opens the `editor` scene's editor on its privacy and security step, with the code being hidden behind
     /// `hiddenItemsPassphrase`, locked and given a killphrase, but not yet saved.
     @MainActor
@@ -132,8 +177,9 @@ enum ScreenshotMode {
         scrollEditorSheetToEndOnIPad()
     }
 
-    /// On iPad, scrolls the `editor` scene's sheet to the end of the step, which is taller than the sheet, so the
-    /// killphrase shows. A form has no way to start scrolled to its end, so this finds the sheet's scroll view once
+    /// On iPad, scrolls an editor scene's sheet to the end of the step, which is taller than the sheet, so the
+    /// killphrase, or whether the words are valid, shows. A form has no way to start scrolled to its end, so this finds
+    /// the sheet's scroll view once
     /// it's on screen. The sheet takes a moment to come up and lay the step out, so it keeps scrolling for a few
     /// seconds, well within the capture's wait.
     @MainActor
@@ -209,14 +255,12 @@ enum ScreenshotMode {
     }
 
     /// Fills `store` with the demo vault (`DemoVault`), last backed up at 9:41 today, and reloads `dataModel` from it.
-    ///
-    /// - Returns: The identifier of the item the `detail` scene opens.
     @MainActor
     static func seed(
         store: some VaultStore & VaultTagStore,
         dataModel: VaultDataModel,
         backupEventLogger: any BackupEventLogger,
-    ) async throws -> Identifier<VaultItem> {
+    ) async throws -> DemoVault.SeededItems {
         try await DemoVault.seed(
             store: store,
             dataModel: dataModel,
