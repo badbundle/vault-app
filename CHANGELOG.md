@@ -21,6 +21,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 ### Changed
 
+- The iPhone, iPad and Mac apps run with Apple's Enhanced Security: a hardened heap, checked allocations, and read-only dyld state, so a memory-safety bug in Vault or a library it uses is much harder to exploit. The AutoFill and widget extensions don't have it yet
 - Backup passwords and encrypted items' passwords are turned into keys with Argon2id, using 512 MB and 256 MB of memory, so each guess at a leaked backup or a copied item costs far more. Setting a backup password, or restoring a backup, takes seconds rather than minutes, and says it can take up to a minute. A backup password set before is strengthened in the background the first time Backups opens, without asking for it again, and backups made with it before still restore with it. An encrypted item is strengthened the first time its password opens it, with nothing else about it changed. A backup or item made by a newer version of Vault says to update Vault
 - The count of wrong App Lock Passwords is kept in the keychain where only Vault and its AutoFill extension can read it, and Vault's widgets can't. It moves there the first time Vault or AutoFill opens after updating, as it was
 - iOS and the Mac are released together, always with the same version and build number. Every target's version comes from `VaultApp/Version.xcconfig`, and `make validate` checks they all match

@@ -541,6 +541,7 @@ entitlements:
 | `com.apple.security.files.bookmarks.app-scope` | Keeping the auto-backup folder across launches. VAULT-110 checks whether macOS 26 still needs it. |
 | `com.apple.security.device.camera` | Scanning QR codes, with `NSCameraUsageDescription`. |
 | `com.apple.security.print` | Printing a backup. |
+| `com.apple.security.hardened-process`, with `…hardened-heap`, `…checked-allocations`, `…checked-allocations.enforce-checked-pointer-arithmetic-overflow` and `…dyld-ro` on, and `…enhanced-security-version-string` and `…platform-restrictions-string` at `2` | Apple's Enhanced Security (`ENABLE_ENHANCED_SECURITY`), as on iOS: a hardened heap, checked allocations, and read-only dyld state, so a memory-safety bug in Vault or a library it uses is much harder to exploit (G101). `make validate` fails if any is missing or changed. |
 | `keychain-access-groups`: `442P244AFS.com.badbundle.vault.private`, then `442P244AFS.com.badbundle.vault`, then `442P244AFS.com.badbundle.vault.shared`, then `442P244AFS.com.badbundle.vault.widgets` | The app's own keychain items, which neither extension can read, then the App Group's, then those it shares with the AutoFill extension only, then the codes it hands its widgets. |
 
 The provisioning profile adds two more, which name the app and its team: `com.apple.application-identifier` and
@@ -558,7 +559,8 @@ It never has:
   validation;
 - `com.apple.security.get-task-allow` in release builds, so no other process can attach to Vault.
 
-The hardened runtime is on, so other code can't be injected into Vault's process.
+The hardened runtime is on, so other code can't be injected into Vault's process, and so is Enhanced Security (see
+the table). The extensions don't have Enhanced Security yet (VAULT-152).
 
 The AutoFill extension gets the sandbox, the hardened runtime, the App Group, the App Group's and the shared group
 (`…vault.shared`) as its only keychain access groups, and the AutoFill entitlement
