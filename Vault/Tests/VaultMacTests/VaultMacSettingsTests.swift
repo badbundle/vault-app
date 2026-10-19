@@ -110,6 +110,13 @@ struct VaultMacSettingsTests {
         return directory
     }
 
+    /// Help opens on recovery phrases and private keys, with the page about codes below them.
+    @Test
+    func helpQuestions_startWithRecoveryPhrasesAndPrivateKeys() {
+        #expect(VaultMacHelpPage.questions.prefix(3) == [.recoveryPhrases, .privateKeys, .codes])
+        #expect(VaultMacHelpModel().selection == .recoveryPhrases)
+    }
+
     @Test
     func helpPages_allHaveTheirText() {
         for page in VaultMacHelpPage.allCases where ![.libraries, .openSource].contains(page) {
