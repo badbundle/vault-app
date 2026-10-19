@@ -78,6 +78,24 @@ final class VaultItemFeedViewSnapshotTests {
         assertSnapshot(of: sut, as: .image)
     }
 
+    /// The iPhone Duo's inner screen, partly folded and held open like a book, with the feed filling it: the cards are
+    /// on two pages, either side of a gutter over the crease, and the bar is on the trailing page.
+    @Test
+    func layout_partlyFoldedLikeABook() async {
+        let sut = await makePartlyFoldedSUT()
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// One card to a page at the accessibility text sizes.
+    @Test
+    func layout_partlyFoldedLikeABookAtAccessibilitySize() async {
+        let sut = await makePartlyFoldedSUT()
+            .dynamicTypeSize(.accessibility3)
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
     @Test
     func viewState_toggleEditingMode() async {
         let state = VaultItemFeedState()
@@ -664,6 +682,25 @@ extension VaultItemFeedViewSnapshotTests {
         await populated.reloadData()
 
         return (empty, populated)
+    }
+
+    private func makePartlyFoldedSUT() async -> some View {
+        let store = VaultStoreStub()
+        let tagStore = VaultTagStoreStub()
+        tagStore.retrieveTagsHandler = {
+            [
+                VaultItemTag(id: .init(), name: "work"),
+                VaultItemTag(id: .init(), name: "personal", color: .gray),
+            ]
+        }
+        store.retrieveHandler = { _ in .init(items: (0 ..< 9).map { _ in uniqueVaultItem() }) }
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: tagStore)
+        await dataModel.reloadData()
+
+        return makeSUT(dataModel: dataModel)
+            .frame(width: PartlyFoldedScreen.book.size.width, height: PartlyFoldedScreen.book.size.height)
+            .environment(\.verticalSizeClass, .regular)
+            .partlyFolded(.book)
     }
 
     private func makeSUT(

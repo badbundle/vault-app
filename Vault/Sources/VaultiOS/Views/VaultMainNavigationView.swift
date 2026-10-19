@@ -13,6 +13,9 @@ struct VaultMainNavigationView: View {
     @Environment(\.presentToast) private var presentToast
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.crease) private var crease
+    /// Where the split view is in the window, to meet a crease.
+    @State private var frame: CGRect?
     @State private var isShowingCopyPaste = false
     @State private var selectedView: SidebarItem?
 
@@ -85,6 +88,7 @@ struct VaultMainNavigationView: View {
             }
             .navigationTitle("Vault")
             .listStyle(.sidebar)
+            .modifier(SidebarMeetsTheCrease(width: sidebarWidthToMeetTheCrease))
         } detail: {
             // Show the selected view in the detail area
             switch selectedView {
@@ -101,21 +105,25 @@ struct VaultMainNavigationView: View {
                 NavigationStack {
                     VaultTagFeedView(viewModel: .init())
                 }
+                .keepsToOnePageOfTheCrease()
             case .settings:
                 NavigationStack {
                     VaultSettingsView(viewModel: SettingsViewModel(), localSettings: localSettings)
                 }
                 .navigationBarTitleDisplayMode(.inline)
+                .keepsToOnePageOfTheCrease()
             case .about:
                 NavigationStack {
                     VaultAboutView(viewModel: SettingsViewModel())
                 }
                 .navigationBarTitleDisplayMode(.inline)
+                .keepsToOnePageOfTheCrease()
             case .backups:
                 NavigationStack {
                     BackupHomeView()
                 }
                 .navigationBarTitleDisplayMode(.inline)
+                .keepsToOnePageOfTheCrease()
             case .demos:
                 NavigationStack {
                     DeveloperToolsHomeView()
@@ -127,6 +135,7 @@ struct VaultMainNavigationView: View {
                     .navigationTitle("")
             }
         }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
         .onReceive(pasteboard.didPaste()) {
             let toast = ToastValue(
                 icon: Image(systemName: "doc.on.doc.fill"),
@@ -156,6 +165,29 @@ struct VaultMainNavigationView: View {
             @unknown default:
                 break
             }
+        }
+    }
+}
+
+extension VaultMainNavigationView {
+    /// With a vertical crease through the split view, the sidebar is as wide as the leading page, so the sidebar and
+    /// the content beside it meet at the crease, and neither has anything across it. Where the content fills the
+    /// window, with the sidebar hidden or the window too narrow for both, it keeps out of the crease itself.
+    private var sidebarWidthToMeetTheCrease: Double? {
+        guard let crease, crease.axis == .vertical, let frame, let split = crease.split(frame) else { return nil }
+        return split.before + Crease.bandWidth / 2
+    }
+}
+
+private struct SidebarMeetsTheCrease: ViewModifier {
+    var width: Double?
+
+    func body(content: Content) -> some View {
+        if let width {
+            content
+                .navigationSplitViewColumnWidth(width)
+        } else {
+            content
         }
     }
 }

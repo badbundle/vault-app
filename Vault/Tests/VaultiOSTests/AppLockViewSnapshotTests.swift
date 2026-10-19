@@ -54,6 +54,64 @@ struct AppLockViewSnapshotTests {
         )
     }
 
+    // MARK: - Partly folded
+
+    /// The iPhone Duo's inner screen, partly folded and held open like a book: the door and the words beneath it on
+    /// the leading page, the Unlock button on the trailing one, and nothing across the crease.
+    @Test
+    func locked_partlyFoldedLikeABook() {
+        snapshotScenarios(
+            view: AppLockView(state: .init(step: .deviceAuthentication)) {},
+            dynamicTypeSizes: [.medium, .accessibility3],
+            partlyFolded: .book,
+        )
+    }
+
+    @Test
+    func passwordEntry_partlyFoldedLikeABook() {
+        snapshotScenarios(
+            view: AppLockView(state: .init(step: .password)) {},
+            dynamicTypeSizes: [.medium],
+            partlyFolded: .book,
+        )
+    }
+
+    /// Stood on a table like a laptop: the door and the words beneath it in the top half, and the Unlock button in the
+    /// bottom half.
+    @Test
+    func locked_partlyFoldedOnATable() {
+        snapshotScenarios(
+            view: AppLockView(state: .init(step: .deviceAuthentication)) {},
+            dynamicTypeSizes: [.medium, .accessibility3],
+            partlyFolded: .tabletop,
+        )
+    }
+
+    @Test
+    func passwordEntry_partlyFoldedOnATable() {
+        snapshotScenarios(
+            view: AppLockView(state: .init(step: .password)) {},
+            dynamicTypeSizes: [.medium],
+            partlyFolded: .tabletop,
+        )
+    }
+
+    /// The door is where the lock screen's is, so they swap without it moving.
+    @Test
+    func privacyCover_partlyFoldedLikeABook() {
+        snapshotScenarios(view: AppPrivacyCoverView(), dynamicTypeSizes: [.medium], partlyFolded: .book)
+    }
+
+    @Test
+    func privacyCover_partlyFoldedOnATable() {
+        snapshotScenarios(view: AppPrivacyCoverView(), dynamicTypeSizes: [.medium], partlyFolded: .tabletop)
+    }
+
+    @Test
+    func screenCaptureCover_partlyFoldedLikeABook() {
+        snapshotScenarios(view: AppScreenCaptureCoverView(), dynamicTypeSizes: [.medium], partlyFolded: .book)
+    }
+
     // MARK: - App Lock Password
 
     @Test
@@ -176,6 +234,7 @@ extension AppLockViewSnapshotTests {
         dynamicTypeSizes: [DynamicTypeSize] = [.medium, .xxLarge],
         width: CGFloat = 390,
         height: CGFloat = 844,
+        partlyFolded screen: PartlyFoldedScreen? = nil,
         testName: String = #function,
     ) {
         for colorScheme in [ColorScheme.light, .dark] {
@@ -184,8 +243,9 @@ extension AppLockViewSnapshotTests {
                     .environment(\.drawsGlassSnapshotBackdrop, true)
                     .dynamicTypeSize(dynamicTypeSize)
                     // A phone screen, as the lock screen fills one: by default an iPhone 14's, as `framedForTest`.
-                    .frame(width: width, height: height)
+                    .frame(width: screen?.size.width ?? width, height: screen?.size.height ?? height)
                     .environment(\.verticalSizeClass, .regular)
+                    .modifier(PartlyFoldedIfAsked(screen: screen))
 
                 assertSnapshot(
                     of: snapshottingView,
@@ -194,6 +254,18 @@ extension AppLockViewSnapshotTests {
                     testName: testName,
                 )
             }
+        }
+    }
+}
+
+private struct PartlyFoldedIfAsked: ViewModifier {
+    var screen: PartlyFoldedScreen?
+
+    func body(content: Content) -> some View {
+        if let screen {
+            content.partlyFolded(screen)
+        } else {
+            content
         }
     }
 }

@@ -70,6 +70,8 @@ struct VaultListView<
                         navigationPath: $navigationPath,
                     )
                 }
+                // An item's page, filling a window held open like a book, is kept to one page of it.
+                .keepsToOnePageOfTheCrease()
             case .creatingItem:
                 // Choosing the kind of item is the sheet's first step.
                 NavigationStack(path: $navigationPath) {
@@ -79,6 +81,7 @@ struct VaultListView<
                         navigationPath: $navigationPath,
                     )
                 }
+                .keepsToOnePageOfTheCrease()
             }
         }
         .onReceive(openDetailSubject, perform: { vaultItemEncryptedPayload in
