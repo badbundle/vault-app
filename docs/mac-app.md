@@ -560,7 +560,12 @@ It never has:
 - `com.apple.security.get-task-allow` in release builds, so no other process can attach to Vault.
 
 The hardened runtime is on, so other code can't be injected into Vault's process, and so is Enhanced Security (see
-the table). The extensions don't have Enhanced Security yet (VAULT-152).
+the table). Its pointer authentication builds Vault for `arm64e`, so every target in the project, and every Swift
+package (through `macOSPackagesShouldBuildARM64e` and `iOSPackagesShouldBuildARM64e` in
+`Vault.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings`), is built with pointer authentication too: a
+Debug build has only the `arm64e` slice, which the extensions couldn't link against otherwise. The extensions have
+pointer authentication but not the rest of Enhanced Security yet, as their App IDs and profiles don't include the
+capability (VAULT-152).
 
 The AutoFill extension gets the sandbox, the hardened runtime, the App Group, the App Group's and the shared group
 (`…vault.shared`) as its only keychain access groups, and the AutoFill entitlement
