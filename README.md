@@ -1,27 +1,18 @@
 # Vault
 
-Vault is an open-source iPhone and iPad app for the secrets you can't afford to lose: two-factor codes, private notes and crypto recovery phrases. It's fully offline, with no servers, no accounts, no sync, no analytics and no network requests. And it's built for the moment someone forces you to unlock it.
+Vault is an open-source iPhone, iPad and Mac app for the secrets you can't afford to lose: seed phrases, private keys and private notes, and your two-factor codes too. It's fully offline, with no servers, no accounts, no sync, no analytics and no network requests. And it's built for the moment someone forces you to unlock it.
 
 [badbundle.com/apps/vault](https://badbundle.com/apps/vault)
 
 ## Who it's for
 
-- Anyone who wants their 2FA codes and secrets on their own device, backed up where they choose, rather than synced to someone else's servers.
-- Anyone who might be made to unlock their iPhone, at a border, in a robbery or at home. Face ID and the passcode don't stop that, so Vault has an App Lock Password, a duress password, hidden items and killphrases. [`MANIFESTO.md`](./MANIFESTO.md) sets out the threat model.
+- Anyone who holds the keys to their own crypto, or other secrets they can't afford to lose, and wants them on their own device, backed up where they choose, rather than synced to someone else's servers. Vault keeps the keys, never the funds: it signs nothing and makes no network requests.
+- Anyone who might be made to unlock their iPhone or Mac, at a border, in a robbery or at home. Face ID and the passcode don't stop that, so Vault has an App Lock Password, a duress password, hidden items and killphrases. [`MANIFESTO.md`](./MANIFESTO.md) sets out the threat model.
 
 ## Features
 
-### 2FA codes
+### Recovery phrases and private keys
 
-- Time-based (TOTP) and counter-based (HOTP) codes, added by scanning a QR code or typing in the secret.
-- Tap a code to copy it, or to open its details. Copies are cleared after 1 minute by default, and stay on the device unless you allow Universal Clipboard.
-- AutoFill for one-time codes, QuickType suggestions for the codes you choose, and widgets on the Home Screen, the Lock Screen and in StandBy.
-- Show Next Code near the end of a code's countdown, and Show in Spotlight, which is off by default and works only while App Lock is off.
-
-### Notes, recovery phrases and private keys
-
-- Notes in plain text or Markdown, with tags and instant search. Images in notes are never loaded.
-- Lock any item behind Face ID, Touch ID or the passcode, and encrypt a note with a password of its own.
 - Recovery phrases (crypto wallet seed words), always encrypted and locked. They're checked against the BIP39 (all 10 languages), SLIP-39, Electrum and Monero word lists and checksums, masked until tapped, and can't be copied.
 - Private keys, protected as recovery phrases are: WIF, extended private keys (xprv, zprv and others), raw hex, Nostr nsec, and OpenPGP, OpenSSH and PEM private keys, or any other text. Vault says what each key is and checks its checksum, and never derives anything from it.
 
@@ -39,13 +30,22 @@ Vault is an open-source iPhone and iPad app for the secrets you can't afford to 
 
 - Encrypted PDF backups to print, or to save anywhere, restored from the file or by scanning their QR codes. In plain text, a backup shows only that it's a Vault backup, when it was made, and a hint if you write one.
 - Automatic encrypted backups to a folder you choose, such as one in iCloud Drive, whenever your items change.
-- Moving the vault to another iPhone or iPad with QR codes, with no file saved.
+- Moving the vault to another iPhone, iPad or Mac with QR codes, with no file saved.
 - Every export is the whole vault, encrypted with its backup password. There's no unencrypted export.
 
 ### Privacy
 
 - No servers, no accounts, no sync, no analytics and no network requests.
 - Your iPhone's own backups, to iCloud or a computer, include Vault's data, as they do other apps'. Set an App Lock Password to encrypt the vault, on the iPhone and in those backups.
+
+### Notes and 2FA codes
+
+- Notes in plain text or Markdown, with tags and instant search. Images in notes are never loaded.
+- Lock any item behind Face ID, Touch ID or the passcode, and encrypt a note with a password of its own.
+- Time-based (TOTP) and counter-based (HOTP) codes, added by scanning a QR code or typing in the secret.
+- Tap a code to copy it, or to open its details. Copies are cleared after 1 minute by default, and stay on the device unless you allow Universal Clipboard.
+- AutoFill for one-time codes, QuickType suggestions for the codes you choose, and widgets on the Home Screen, the Lock Screen and in StandBy.
+- Show Next Code near the end of a code's countdown, and Show in Spotlight, which is off by default and works only while App Lock is off.
 
 Every promise, the code that keeps it, the test that pins it, and its limits are in [`docs/security-model.md`](./docs/security-model.md).
 

@@ -68,7 +68,7 @@ let package = Package(
         // its main branch.
         .package(url: "https://github.com/badbundle/device-screenshot-framer", branch: "main"),
         // Bad Bundle's other apps, which the About page links to. Shared with GPS.
-        .package(url: "https://github.com/badbundle/bad-bundle-apps", exact: "0.1.0"),
+        .package(url: "https://github.com/badbundle/bad-bundle-apps", exact: "0.1.1"),
     ],
     targets: [
         .target(
