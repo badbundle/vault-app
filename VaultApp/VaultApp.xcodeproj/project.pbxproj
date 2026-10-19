@@ -113,13 +113,13 @@
 		1C4688E22FC8D77F004E2279 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		1C4688E42FC8D77F004E2279 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		1C4688FD2FC8D806004E2279 /* VaultWidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VaultWidgetsExtension.entitlements; sourceTree = "<group>"; };
-		1CAC00000000000000000050 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
 		1C648DFB2C0A884500163D41 /* VaultApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VaultApp.entitlements; sourceTree = "<group>"; };
 		1CAC00000000000000000001 /* Vault.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vault.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CAC00000000000000000002 /* VaultMacAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VaultMacAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CAC00000000000000000003 /* VaultMacAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VaultMacAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CAC00000000000000000022 /* VaultMacAutofill.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VaultMacAutofill.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CAC00000000000000000032 /* VaultMacWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VaultMacWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		1CAC00000000000000000050 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
 		1CBE0CCB2CD229FF000EA09D /* VaultAppAutofill.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = VaultAppAutofill.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1CBE0CCC2CD229FF000EA09D /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
 		1CDA9C912A057A8B00555E7A /* VaultApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VaultApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -841,6 +841,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				DEVELOPMENT_TEAM = 442P244AFS;
+				ENABLE_ENHANCED_SECURITY = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Vault;
@@ -873,6 +874,7 @@
 				CODE_SIGN_ENTITLEMENTS = VaultMacApp/VaultMacApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_ENHANCED_SECURITY = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Vault;
@@ -1180,6 +1182,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 442P244AFS;
+				ENABLE_POINTER_AUTHENTICATION = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1247,6 +1250,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 442P244AFS;
 				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_POINTER_AUTHENTICATION = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -1277,6 +1281,7 @@
 				CODE_SIGN_ENTITLEMENTS = VaultApp/VaultApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_ASSET_PATHS = "\"VaultApp/Preview Content/\"";
+				ENABLE_ENHANCED_SECURITY = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultApp/Info.plist;
@@ -1311,6 +1316,7 @@
 				CODE_SIGN_ENTITLEMENTS = VaultApp/VaultApp.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_ASSET_PATHS = "\"VaultApp/Preview Content/\"";
+				ENABLE_ENHANCED_SECURITY = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = VaultApp/Info.plist;

@@ -4,7 +4,7 @@ import type { ConfigFunction, Context } from "@badbundle/local-check";
 // "Validate (local)" check. See README.md#validation.
 export default (({ xcode }) => {
   const ios = xcode({
-    version: "27.0",
+    version: "27.1",
     // The snapshot tests check the device name, so the throwaway simulator
     // has to use exactly this one.
     simulator: {
@@ -122,6 +122,21 @@ function skipMacUITests(): string | undefined {
 }
 
 /**
+ * Apple's Enhanced Security, which the iOS and Mac apps must have, with these values: a hardened process with a hardened
+ * heap, checked allocations that also check pointer arithmetic for overflow, read-only dyld state, and version 2 of
+ * the enhanced security and platform restrictions (docs/security-model.md, G101).
+ */
+const enhancedSecurity: Record<string, unknown> = {
+  "com.apple.security.hardened-process": true,
+  "com.apple.security.hardened-process.checked-allocations": true,
+  "com.apple.security.hardened-process.checked-allocations.enforce-checked-pointer-arithmetic-overflow": true,
+  "com.apple.security.hardened-process.dyld-ro": true,
+  "com.apple.security.hardened-process.enhanced-security-version-string": "2",
+  "com.apple.security.hardened-process.hardened-heap": true,
+  "com.apple.security.hardened-process.platform-restrictions-string": "2",
+};
+
+/**
  * The entitlements the Mac app may have, from docs/mac-app.md's "App Sandbox" table, and the two its provisioning
  * profile adds, which name the app and its team. A development build also lets the debugger attach
  * (`get-task-allow`), which an App Store build doesn't.
@@ -137,6 +152,7 @@ const macAppEntitlements = [
   "com.apple.security.files.user-selected.read-write",
   "com.apple.security.get-task-allow",
   "com.apple.security.print",
+  ...Object.keys(enhancedSecurity),
   "keychain-access-groups",
 ];
 
@@ -198,12 +214,15 @@ async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promi
     "-skipPackageUpdates",
   ]);
   const app = `${derivedData}/Build/Products/Debug/Vault.app`;
-  await checkSignedEntitlements(ctx, app, "Vault.app", macAppEntitlements, [
-    `${appGroup}.private`,
-    appGroup,
-    sharedKeychainGroup,
-    `${appGroup}.widgets`,
-  ]);
+  await checkSignedEntitlements(
+    ctx,
+    app,
+    "Vault.app",
+    macAppEntitlements,
+    [`${appGroup}.private`, appGroup, sharedKeychainGroup, `${appGroup}.widgets`],
+    [appGroup],
+    enhancedSecurity,
+  );
   await checkSignedEntitlements(
     ctx,
     `${app}/Contents/PlugIns/VaultMacAutofill.appex`,
@@ -222,8 +241,9 @@ async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promi
 }
 
 /**
- * Fails unless `bundle` is signed with the hardened runtime and sandboxed, has no entitlement but those `allowed`, and
- * has exactly these App Groups (none, if empty) and keychain access groups.
+ * Fails unless `bundle` is signed with the hardened runtime and sandboxed, has no entitlement but those `allowed`, has
+ * exactly these App Groups (none, if empty) and keychain access groups, and has every `required` entitlement with its
+ * value.
  */
 async function checkSignedEntitlements(
   ctx: Context,
@@ -232,6 +252,7 @@ async function checkSignedEntitlements(
   allowed: string[],
   keychainGroups: string[],
   appGroups: string[] = [appGroup],
+  required: Record<string, unknown> = {},
 ): Promise<void> {
   const signature = await ctx.capture(["codesign", "--display", "--verbose", bundle]);
   if (!/flags=0x[0-9a-f]+\(runtime\)/.test(signature.stderr)) {
@@ -254,6 +275,7 @@ async function checkSignedEntitlements(
   if (keychain !== JSON.stringify(keychainGroups)) {
     throw new Error(`${name}'s keychain access groups aren't ${JSON.stringify(keychainGroups)}: ${keychain}`);
   }
+  checkRequiredEntitlements(name, entitlements, required);
   ctx.log(`${name}'s entitlements: ${Object.keys(entitlements).join(", ")}`);
 }
 
@@ -266,6 +288,7 @@ const iosAppEntitlements = [
   "com.apple.developer.authentication-services.autofill-credential-provider",
   "com.apple.developer.default-data-protection",
   "com.apple.security.application-groups",
+  ...Object.keys(enhancedSecurity),
   "keychain-access-groups",
 ];
 
@@ -309,10 +332,14 @@ async function checkIOSAppEntitlements(ctx: Context, derivedData: string, destin
     "-skipPackageUpdates",
   ]);
   const app = `${derivedData}/Build/Products/Debug-iphonesimulator/VaultApp.app`;
-  await checkSimulatorEntitlements(ctx, `${app}/VaultApp`, "VaultApp.app", iosAppEntitlements, [
-    "442P244AFS.com.badbundle.vault",
-    sharedKeychainGroup,
-  ]);
+  await checkSimulatorEntitlements(
+    ctx,
+    `${app}/VaultApp`,
+    "VaultApp.app",
+    iosAppEntitlements,
+    ["442P244AFS.com.badbundle.vault", sharedKeychainGroup],
+    enhancedSecurity,
+  );
   await checkSimulatorEntitlements(
     ctx,
     `${app}/PlugIns/VaultAppAutofill.appex/VaultAppAutofill`,
@@ -331,7 +358,7 @@ async function checkIOSAppEntitlements(ctx: Context, derivedData: string, destin
 
 /**
  * Fails unless the simulator build's `executable` has no entitlement but those `allowed`, exactly the iOS App Group,
- * and exactly these keychain access groups (none, if `undefined`).
+ * exactly these keychain access groups (none, if `undefined`), and every `required` entitlement with its value.
  */
 async function checkSimulatorEntitlements(
   ctx: Context,
@@ -339,6 +366,7 @@ async function checkSimulatorEntitlements(
   name: string,
   allowed: string[],
   keychainGroups: string[] | undefined,
+  required: Record<string, unknown> = {},
 ): Promise<void> {
   const plist = `${ctx.cacheDir}/${name}-simulator-entitlements.plist`;
   await ctx.exec(["xcrun", "segedit", executable, "-extract", "__TEXT", "__entitlements", plist]);
@@ -356,7 +384,22 @@ async function checkSimulatorEntitlements(
   if (keychain !== JSON.stringify(keychainGroups)) {
     throw new Error(`${name}'s keychain access groups aren't ${JSON.stringify(keychainGroups)}: ${keychain}`);
   }
+  checkRequiredEntitlements(name, entitlements, required);
   ctx.log(`${name}'s entitlements: ${Object.keys(entitlements).join(", ")}`);
+}
+
+/** Fails unless `entitlements` has every `required` entitlement, with its value. */
+function checkRequiredEntitlements(
+  name: string,
+  entitlements: Record<string, unknown>,
+  required: Record<string, unknown>,
+): void {
+  const missing = Object.entries(required)
+    .filter(([key, value]) => JSON.stringify(entitlements[key]) !== JSON.stringify(value))
+    .map(([key, value]) => `${key} = ${JSON.stringify(value)}`);
+  if (missing.length > 0) {
+    throw new Error(`${name} is missing entitlements it must have: ${missing.join(", ")}`);
+  }
 }
 
 /**
