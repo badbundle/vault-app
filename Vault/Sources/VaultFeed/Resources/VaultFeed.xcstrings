@@ -914,6 +914,644 @@
         }
       }
     },
+    "privateKeyDetail.action.delete.confirm.subtitle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This will permanently delete this private key. Unless you have another backup of it, you may lose access to what it unlocks forever."
+          }
+        }
+      }
+    },
+    "privateKeyDetail.action.delete.confirm.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete Private Key?"
+          }
+        }
+      }
+    },
+    "privateKeyDetail.action.delete.entity.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete This Private Key Forever"
+          }
+        }
+      }
+    },
+    "privateKeyDetail.field.titleEmpty.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untitled"
+          }
+        }
+      }
+    },
+    "privateKeyDetail.listSection.created.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Created"
+          }
+        }
+      }
+    },
+    "privateKeyDetail.listSection.updated.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updated"
+          }
+        }
+      }
+    },
+    "privateKeyDetail.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Private Key"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.compressed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "compressed"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.encrypted" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "encrypted"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.hex.length" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "32 bytes"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.network.dogecoin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dogecoin"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.network.litecoin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Litecoin"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.network.litecoinTestnet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Litecoin testnet"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.network.mainnet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "mainnet"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.network.testnet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "testnet"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.passphraseProtected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "passphrase protected"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.script.nativeSegwit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "native SegWit"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.script.nativeSegwitMultisig" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "native SegWit multisig"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.script.nestedSegwit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "nested SegWit"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.script.nestedSegwitMultisig" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "nested SegWit multisig"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.securityKey.ecdsa" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ECDSA security key"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.securityKey.ed25519" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ed25519 security key"
+          }
+        }
+      }
+    },
+    "privateKeyFormat.uncompressed" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "uncompressed"
+          }
+        }
+      }
+    },
+    "privateKeyKind.extendedKey.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extended Key"
+          }
+        }
+      }
+    },
+    "privateKeyKind.extendedKey.withArticle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "an extended private key"
+          }
+        }
+      }
+    },
+    "privateKeyKind.hex.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hex"
+          }
+        }
+      }
+    },
+    "privateKeyKind.hex.withArticle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "a raw hex key"
+          }
+        }
+      }
+    },
+    "privateKeyKind.nostr.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nostr"
+          }
+        }
+      }
+    },
+    "privateKeyKind.nostr.withArticle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "a Nostr key"
+          }
+        }
+      }
+    },
+    "privateKeyKind.openPGP.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenPGP"
+          }
+        }
+      }
+    },
+    "privateKeyKind.openPGP.withArticle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "an OpenPGP key"
+          }
+        }
+      }
+    },
+    "privateKeyKind.openSSH.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenSSH"
+          }
+        }
+      }
+    },
+    "privateKeyKind.openSSH.withArticle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "an OpenSSH key"
+          }
+        }
+      }
+    },
+    "privateKeyKind.other.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other"
+          }
+        }
+      }
+    },
+    "privateKeyKind.pem.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "PEM"
+          }
+        }
+      }
+    },
+    "privateKeyKind.pem.withArticle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "a PEM key"
+          }
+        }
+      }
+    },
+    "privateKeyKind.wif.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WIF"
+          }
+        }
+      }
+    },
+    "privateKeyKind.wif.withArticle" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "a WIF key"
+          }
+        }
+      }
+    },
+    "privateKeyValidation.empty.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste or type the key to check it."
+          }
+        }
+      }
+    },
+    "privateKeyValidation.empty.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No key yet"
+          }
+        }
+      }
+    },
+    "privateKeyValidation.inconsistent.detail.%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This looks like %@, but parts of it that must agree don't, so it may be damaged. Check it against your backup."
+          }
+        }
+      }
+    },
+    "privateKeyValidation.inconsistent.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Damaged key"
+          }
+        }
+      }
+    },
+    "privateKeyValidation.invalidChecksum.detail.%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This looks like %@, but a character may be mistyped or missing. Check it against your backup."
+          }
+        }
+      }
+    },
+    "privateKeyValidation.invalidChecksum.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checksum doesn't match"
+          }
+        }
+      }
+    },
+    "privateKeyValidation.outOfRange.detail.%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This looks like %@, but the number it holds isn't a valid secp256k1 private key, so no wallet can use it."
+          }
+        }
+      }
+    },
+    "privateKeyValidation.outOfRange.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Out of range"
+          }
+        }
+      }
+    },
+    "privateKeyValidation.publicKey.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A public key can be shared, and can't sign or spend. Keep the private key here: check you've copied the right one."
+          }
+        }
+      }
+    },
+    "privateKeyValidation.publicKey.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is a public key"
+          }
+        }
+      }
+    },
+    "privateKeyValidation.unknownVersion.detail.%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This looks like %@ and its checksum matches, but Vault doesn't know its version, so it may not be one."
+          }
+        }
+      }
+    },
+    "privateKeyValidation.unknownVersion.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown version"
+          }
+        }
+      }
+    },
+    "privateKeyValidation.unreadable.detail.%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This looks like %@, but part of it is missing or mistyped. Check it against your backup."
+          }
+        }
+      }
+    },
+    "privateKeyValidation.unreadable.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Can't be read"
+          }
+        }
+      }
+    },
+    "privateKeyValidation.unrecognized.detail" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vault doesn't recognize this format, so it can't check it. It's kept exactly as you entered it."
+          }
+        }
+      }
+    },
+    "privateKeyValidation.unrecognized.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other"
+          }
+        }
+      }
+    },
+    "privateKeyValidation.valid.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valid private key"
+          }
+        }
+      }
+    },
+    "privateKeyValidation.wrongLength.bytes.detail.%@.%lld.%lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This looks like %1$@, which holds %2$lld bytes, but this holds %3$lld. Check it against your backup."
+          }
+        }
+      }
+    },
+    "privateKeyValidation.wrongLength.hex.detail.%lld.%lld" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A raw key is %1$lld hexadecimal digits, but this has %2$lld. Check it against your backup."
+          }
+        }
+      }
+    },
+    "privateKeyValidation.wrongLength.title" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wrong length"
+          }
+        }
+      }
+    },
     "recoveryPhraseDetail.action.delete.confirm.subtitle" : {
       "extractionState" : "manual",
       "localizations" : {

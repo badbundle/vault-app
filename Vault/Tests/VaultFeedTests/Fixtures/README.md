@@ -56,7 +56,8 @@ slot file's unused slots are. Rebuild it at the same offsets, so the tests still
 
 The first three were recorded on 28 September 2026 by `GoldenFixtureRecorder`, from `main` at `32f26d33`. Their
 formats are the ones released in v2.0.0 (build 100012): nothing that writes or reads them has changed since that tag.
-`encrypted-note-keygen-v2.json` was recorded on 11 October 2026 for VAULT-128, by the same recorder.
+`encrypted-note-keygen-v2.json` was recorded on 11 October 2026 for VAULT-128, by the same recorder, and
+`encrypted-private-key-v1.json` on 19 October 2026 for VAULT-143.
 
 ### `slot-file-v1-vault-slots.bin`
 
@@ -143,6 +144,14 @@ wallet uses (`EncryptedItemFixture.recoveryPhrase`).
 (`EncryptedItemDetailViewModel`), which derived a key with `vault.keygen.item.fast.v2` from the password and a new
 48-byte salt, encrypted the same bytes again with a new 32-byte IV, and had the store replace the item's encryption.
 Everything else about it, its id, dates and lock among them, is the v1 note's, and it still opens with `open sesame`.
+
+### `encrypted-private-key-v1.json`
+
+A private key (VAULT-143), which is always stored encrypted, as a recovery phrase is, with the password
+`tr0ub4dor & 3`. A private key came after v2 key derivations, so like any item given a password now, its key is
+derived with `vault.keygen.item.fast.v2`. It decrypts to "Paper wallet": the Bitcoin wiki's WIF example, a public
+test key no wallet uses, with a description (`EncryptedItemFixture.privateKey`). Its container,
+`vault.item.private-key.v1`, holds the title, the key and the description: the key's format isn't stored.
 
 Release builds derive item keys with `vault.keygen.item.secure.v1` or `.v2` rather than the fast derivations. Those
 take seconds, so the fixtures don't use them. `VaultKeyDeriverParameterPinTests` pins their parameters, with known

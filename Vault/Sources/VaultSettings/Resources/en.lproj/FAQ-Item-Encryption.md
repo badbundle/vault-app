@@ -7,7 +7,7 @@ If you want extra protection for sensitive items, Vault lets you encrypt individ
 When you set an encryption password on an item, it runs through a key derivation function (KDF) with some random salt that is used to generate a 256 bit key.
 This key is then used with AES-GCM to perform a symmetric encryption of that item's contents.
 
-The item's title, description and tags aren't encrypted, so the item still shows in the feed and can be found by its title. A recovery phrase's description is encrypted with its words.
+The item's title, description and tags aren't encrypted, so the item still shows in the feed and can be found by its title. A recovery phrase's description is encrypted with its words, and a private key's with the key.
 
 The password is **never stored** anywhere on the device. Each time you want to view the item, you'll be asked to enter the password so the key can be re-derived and the contents decrypted in memory.
 

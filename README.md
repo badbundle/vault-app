@@ -18,11 +18,12 @@ Vault is an open-source iPhone and iPad app for the secrets you can't afford to 
 - AutoFill for one-time codes, QuickType suggestions for the codes you choose, and widgets on the Home Screen, the Lock Screen and in StandBy.
 - Show Next Code near the end of a code's countdown, and Show in Spotlight, which is off by default and works only while App Lock is off.
 
-### Notes and recovery phrases
+### Notes, recovery phrases and private keys
 
 - Notes in plain text or Markdown, with tags and instant search. Images in notes are never loaded.
 - Lock any item behind Face ID, Touch ID or the passcode, and encrypt a note with a password of its own.
 - Recovery phrases (crypto wallet seed words), always encrypted and locked. They're checked against the BIP39 (all 10 languages), SLIP-39, Electrum and Monero word lists and checksums, masked until tapped, and can't be copied.
+- Private keys, protected as recovery phrases are: WIF, extended private keys (xprv, zprv and others), raw hex, Nostr nsec, and OpenPGP, OpenSSH and PEM private keys, or any other text. Vault says what each key is and checks its checksum, and never derives anything from it.
 
 ### When you're forced to unlock it
 

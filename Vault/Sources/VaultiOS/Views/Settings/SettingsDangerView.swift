@@ -99,7 +99,7 @@ struct SettingsDangerView: View {
                     systemImage: "minus.circle.fill",
                     color: .red,
                     items: [
-                        "Every code, note and recovery phrase",
+                        "Every code, note, recovery phrase and private key",
                         "All your tags",
                         "Codes suggested by AutoFill",
                         "Your backup password",
@@ -147,7 +147,7 @@ struct SettingsDangerView: View {
         VStack(alignment: .leading, spacing: 20) {
             SheetHeader(
                 title: "Delete everything?",
-                message: "Every code, note, recovery phrase and tag on this device will be erased, and your backup password with them. You can't undo this.",
+                message: "Every code, note, recovery phrase, private key and tag on this device will be erased, and your backup password with them. You can't undo this.",
             )
 
             if case let .failed(error) = viewModel.state {

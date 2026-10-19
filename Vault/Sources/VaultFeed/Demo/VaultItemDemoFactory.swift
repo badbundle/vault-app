@@ -122,4 +122,29 @@ public struct VaultItemDemoFactory {
             previewMode: .titleOnly,
         )
     }
+
+    /// A private key (the WIF example from the Bitcoin wiki, which is public), encrypted with the password "hello".
+    public func makeEncryptedPrivateKey() throws -> VaultItem.Write {
+        let key = PrivateKey(
+            title: "Demo key \(UUID().uuidString.prefix(6))",
+            key: "5HueCGU8rMjxEXxiPuD5BDku4MkFqeZyd4dZ1jvhTVqvbTLvyTJ",
+        )
+        let derived = try VaultKeyDeriver.Item.Fast.v1.createEncryptionKey(password: "hello")
+        let encryptor = VaultItemEncryptor(key: derived)
+        let encrypted = try encryptor.encrypt(item: key)
+        return VaultItem.Write(
+            relativeOrder: 0,
+            userDescription: "",
+            color: nil,
+            item: .encryptedItem(encrypted),
+            tags: [],
+            visibility: .always,
+            searchableLevel: .full,
+            searchPassphraseUpdate: .clear,
+            killphraseUpdate: .clear,
+            lockState: .lockedWithNativeSecurity,
+            showInQuickType: false,
+            previewMode: .titleOnly,
+        )
+    }
 }

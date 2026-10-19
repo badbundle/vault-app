@@ -17,6 +17,9 @@ final class VaultBackupItemEncoder {
             // Backups only ever carry recovery phrases as encrypted items. Stored items are never in this form, but
             // refuse rather than risk the words ending up in a backup.
             throw VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable
+        case .privateKey:
+            // The same for private keys: only ever backed up as encrypted items.
+            throw VaultItemEncodingError.plaintextPrivateKeyNotPersistable
         }
         return VaultBackupItem(
             id: storedItem.id.rawValue,

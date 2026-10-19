@@ -38,6 +38,26 @@ struct VaultMacFieldEditorTests {
         #expect(NSPasteboard.general.changeCount == changeCount)
     }
 
+    /// A private key is never copied, even while it's typed: Copy copies nothing, and Cut neither copies nor deletes
+    /// (G105).
+    @Test
+    func copiesNothing_copyAndCutDoNothing() {
+        let sut = VaultMacFieldEditor(frame: .zero)
+        var copied: [String] = []
+        sut.copyText = { copied.append($0) }
+        sut.copiesNothing = true
+        sut.string = "the private key"
+        sut.setSelectedRange(NSRange(location: 4, length: 7))
+        let changeCount = NSPasteboard.general.changeCount
+
+        sut.copy(nil)
+        sut.cut(nil)
+
+        #expect(copied.isEmpty)
+        #expect(sut.string == "the private key")
+        #expect(NSPasteboard.general.changeCount == changeCount)
+    }
+
     @Test
     func copy_nothingSelected_copiesNothing() {
         let sut = VaultMacFieldEditor(frame: .zero)

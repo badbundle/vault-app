@@ -8,6 +8,7 @@ struct FileBackedContentTests {
     func loadContent_loadsEveryMarkdownDocument() {
         let documents: [any FileBackedContent] = [
             FAQCodesFileContent(),
+            FAQPrivateKeysFileContent(),
             FAQBackupsGeneralFileContent(),
             FAQBackupsSecurityFileContent(),
             FAQItemEncryptionFileContent(),

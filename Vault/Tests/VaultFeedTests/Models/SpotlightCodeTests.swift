@@ -35,6 +35,7 @@ struct SpotlightCodeTests {
         let items = [
             uniqueVaultItem(item: .secureNote(anySecureNote(title: "Home Wi-Fi"))),
             uniqueVaultItem(item: .recoveryPhrase(anyRecoveryPhrase(title: "Wallet"))),
+            uniqueVaultItem(item: .privateKey(anyPrivateKey(title: "Signing key"))),
             uniqueVaultItem(item: .encryptedItem(anyEncryptedItem(title: "GitHub"))),
         ]
 

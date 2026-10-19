@@ -5,7 +5,7 @@ import VaultCore
 import VaultKeygen
 @testable import VaultFeed
 
-/// The encrypted item fixtures: an encrypted note and a recovery phrase, each as the app stores it. See
+/// The encrypted item fixtures: an encrypted note, a recovery phrase and a private key, each as the app stores it. See
 /// `Fixtures/README.md`.
 struct EncryptedItemFixtureTests {
     @Test(arguments: EncryptedItemFixture.all)
@@ -85,6 +85,7 @@ struct EncryptedItemFixture: Sendable, CustomTestStringConvertible {
         switch decrypted {
         case let .secureNote(note): note.title
         case let .recoveryPhrase(phrase): phrase.title
+        case let .privateKey(key): key.title
         case .otpCode, .encryptedItem: ""
         }
     }
@@ -134,10 +135,28 @@ struct EncryptedItemFixture: Sendable, CustomTestStringConvertible {
         keygen: .itemFastV2,
     )
 
+    /// A private key (VAULT-143): the Bitcoin wiki's WIF example, a public test key that no wallet uses.
+    static let privateKey = EncryptedItemFixture(
+        name: "encrypted-private-key-v1.json",
+        password: "tr0ub4dor & 3",
+        metadata: metadata(
+            id: "C3F1E5A0-3B7D-4C55-9E2A-6D1B8F0A4E27",
+            relativeOrder: 50,
+            userDescription: "",
+            lockState: .lockedWithNativeSecurity,
+        ),
+        decrypted: .privateKey(PrivateKey(
+            title: "Paper wallet",
+            key: "KwdMAjGmerYanjeui5SHS7JkmpZvVipYvB2LJGU1ZxJwYvP98617",
+            contents: "Printed in 2017, in the safe.",
+        )),
+        keygen: .itemFastV2,
+    )
+
     /// The items the slot file and the backup corpus hold.
     static let v1 = [note, recoveryPhrase]
 
-    static let all = v1 + [noteKeygenV2]
+    static let all = v1 + [noteKeygenV2, privateKey]
 
     /// The item as it's stored, read from the test bundle.
     func storedItem() throws -> VaultItem {
@@ -170,6 +189,12 @@ struct EncryptedItemFixture: Sendable, CustomTestStringConvertible {
                 expectedItemIdentifier: VaultIdentifiers.Item.recoveryPhrase,
             )
             return .recoveryPhrase(phrase)
+        case VaultIdentifiers.Item.privateKey:
+            let key: PrivateKey = try decryptor.decrypt(
+                item: item,
+                expectedItemIdentifier: VaultIdentifiers.Item.privateKey,
+            )
+            return .privateKey(key)
         case let identifier:
             throw UnknownItem(identifier: identifier)
         }

@@ -29,6 +29,9 @@ struct HelpView: View {
             HelpQuestionLink(question: "What is a 'code'?") {
                 SettingsDocumentView(title: "About Codes", content: FAQCodesFileContent())
             }
+            HelpQuestionLink(question: "How does Vault keep private keys?") {
+                SettingsDocumentView(title: "About Private Keys", content: FAQPrivateKeysFileContent())
+            }
             HelpQuestionLink(question: "Can I encrypt individual items?") {
                 SettingsDocumentView(title: "Item Encryption", content: FAQItemEncryptionFileContent())
             }

@@ -216,11 +216,15 @@ struct RecoveryPhraseDetailView: View {
     }
 }
 
-/// Explains why a recovery phrase can't be created on a device without a passcode.
+/// Explains why a recovery phrase, or a private key, can't be created on a device without a passcode.
 ///
-/// Shown in the new-item sheet in place of a recovery phrase's first step, so it sits on the sheet's glass like the
-/// steps do.
+/// Shown in the new-item sheet in place of a recovery phrase's first step, or a private key's, so it sits on the
+/// sheet's glass like the steps do.
 struct RecoveryPhrasePasscodeRequiredView: View {
+    var navigationTitle = "Recovery Phrase"
+    var subtitle =
+        "Recovery phrases are always locked with your device passcode. Set up a passcode on this device to store a recovery phrase."
+
     @Environment(\.dismiss) private var dismiss
     /// Back to choosing another kind of item, when this is in the new-item sheet.
     @Environment(\.goBackFromFirstEditorStep) private var goBack
@@ -231,7 +235,7 @@ struct RecoveryPhrasePasscodeRequiredView: View {
                 PlaceholderView(
                     systemIcon: "lock.trianglebadge.exclamationmark.fill",
                     title: "Passcode Required",
-                    subtitle: "Recovery phrases are always locked with your device passcode. Set up a passcode on this device to store a recovery phrase.",
+                    subtitle: subtitle,
                 )
                 .padding()
                 .containerRelativeFrame(.horizontal)
@@ -241,7 +245,7 @@ struct RecoveryPhrasePasscodeRequiredView: View {
         .environment(\.isInGuidedDetailEditor, true)
         .scrollContentBackground(.hidden)
         .reportsFittedSheetHeight()
-        .navigationTitle("Recovery Phrase")
+        .navigationTitle(navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {

@@ -4,8 +4,9 @@ import Testing
 /// Every text input in the app declares how it sets up the keyboard.
 ///
 /// A text field left to the system's defaults lets the keyboard autocorrect, predict and learn from what's typed, and
-/// what the keyboard learns lives outside the vault. So every `TextField`, `SecureField`, `TextEditor` and
-/// `LabeledTextField` in the app's sources, including the AutoFill extension, the widgets and the Mac app, has to chain
+/// what the keyboard learns lives outside the vault. So every `TextField`, `SecureField`, `TextEditor`,
+/// `LabeledTextField` and `PrivateKeyTextEditor` in the app's sources, including the AutoFill extension, the widgets
+/// and the Mac app, has to chain
 /// `.secretTextInput(_:)` onto its declaration, or the Mac app's `.secretTextInput()`.
 struct SecretTextInputDeclarationTests {
     @Test
@@ -150,7 +151,9 @@ extension SecretTextInputDeclarationTests {
 
 extension SecretTextInputDeclarationTests {
     /// SwiftUI's text inputs, and the app's own field built from them.
-    static let textInputNames: Set = ["TextField", "SecureField", "TextEditor", "LabeledTextField"]
+    static let textInputNames: Set = [
+        "TextField", "SecureField", "TextEditor", "LabeledTextField", "PrivateKeyTextEditor",
+    ]
 
     private static func textInputCallsInAppSources() throws -> [ViewCallScanner.LocatedCall] {
         try ViewCallScanner.callsInAppSources(to: textInputNames)

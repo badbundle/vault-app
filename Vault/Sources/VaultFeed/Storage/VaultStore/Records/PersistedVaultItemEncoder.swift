@@ -56,6 +56,9 @@ extension PersistedVaultItemEncoder {
             // Recovery phrases must only ever be persisted encrypted. Refuse before any record exists, so a bug
             // elsewhere can never write the words in plaintext.
             throw VaultItemEncodingError.plaintextRecoveryPhraseNotPersistable
+        case .privateKey:
+            // The same for private keys: refused before any record exists.
+            throw VaultItemEncodingError.plaintextPrivateKeyNotPersistable
         }
         let updatedDate = switch writeUpdateContext?.updated {
         case .updateUpdatedDate: now

@@ -602,6 +602,7 @@ private struct ItemWrite: CustomStringConvertible {
         case .secureNote: "note"
         case .encryptedItem: "encrypted item"
         case .recoveryPhrase: "plaintext recovery phrase"
+        case .privateKey: "plaintext private key"
         }
         return "\(kind) \(userDescription.debugDescription), \(visibility), \(searchableLevel), order \(relativeOrder)"
     }

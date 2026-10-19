@@ -115,6 +115,24 @@ struct VaultMacFeedSnapshotTests {
         assertSnapshot(of: view, as: .macWindow(width: 620, height: 420))
     }
 
+    /// The key is masked until clicked, and its format shows (G105).
+    @Test
+    func privateKey_keyMasked() {
+        let view = VaultMacPrivateKeyDetailView(
+            privateKey: PrivateKey(
+                title: "Paper wallet",
+                key: "KwdMAjGmerYanjeui5SHS7JkmpZvVipYvB2LJGU1ZxJwYvP98617",
+                contents: "The one printed in 2017.",
+            ),
+            metadata: MacTestItems.metadata(),
+            tags: [],
+            encryptionKey: DerivedEncryptionKey(key: .zero(), salt: Data(), keyDervier: .testing),
+        )
+        .padding(28)
+
+        assertSnapshot(of: view, as: .macWindow(width: 620, height: 420))
+    }
+
     private func detail(_ item: VaultItem) -> some View {
         VaultMacItemDetailView(
             item: item,

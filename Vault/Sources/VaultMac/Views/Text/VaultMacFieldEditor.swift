@@ -14,6 +14,9 @@ import VaultCore
 final class VaultMacFieldEditor: NSTextView {
     /// Where Cut and Copy put the text: Vault's clipboard, as the app has it.
     var copyText: (@MainActor (String) -> Void)?
+    /// Whether Cut and Copy do nothing at all, as in a secure field: Copy copies nothing, and Cut neither copies nor
+    /// deletes. A private key is never copied, even while it's typed.
+    var copiesNothing = false
     /// Secure Keyboard Entry, which follows this editor's focus and whether Vault is the active app. Tests stand in
     /// for it before the editor first has focus.
     var secureInput = VaultMacSecureInput()
@@ -124,12 +127,12 @@ final class VaultMacFieldEditor: NSTextView {
     // MARK: - Clipboard
 
     @objc override func copy(_: Any?) {
-        guard let selected = selectedText else { return }
+        guard !copiesNothing, let selected = selectedText else { return }
         copyText?(selected)
     }
 
     @objc override func cut(_ sender: Any?) {
-        guard selectedText != nil else { return }
+        guard !copiesNothing, selectedText != nil else { return }
         copy(sender)
         delete(sender)
     }
