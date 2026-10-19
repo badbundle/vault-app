@@ -471,7 +471,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "We can't get your codes right now. Quit and relaunch the app to try again."
+            "value" : "We can't get your items right now. Quit and relaunch the app to try again."
           }
         }
       }
@@ -482,7 +482,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Couldn't fetch codes"
+            "value" : "Couldn't fetch items"
           }
         }
       }
