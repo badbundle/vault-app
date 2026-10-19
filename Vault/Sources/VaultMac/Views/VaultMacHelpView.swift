@@ -8,6 +8,7 @@ import VaultSettings
 /// The pages of the Help window: the iOS app's FAQ, then the policies, libraries and open source.
 enum VaultMacHelpPage: String, CaseIterable, Identifiable, Hashable {
     case codes
+    case privateKeys
     case itemEncryption
     case backups
     case backupSecurity
@@ -23,7 +24,7 @@ enum VaultMacHelpPage: String, CaseIterable, Identifiable, Hashable {
     }
 
     static let questions: [VaultMacHelpPage] = [
-        .codes, .itemEncryption, .backups, .backupSecurity, .movingBetweenDevices, .duress,
+        .codes, .privateKeys, .itemEncryption, .backups, .backupSecurity, .movingBetweenDevices, .duress,
     ]
     static let about: [VaultMacHelpPage] = [.termsOfUse, .privacyPolicy, .libraries, .openSource]
 
@@ -31,6 +32,7 @@ enum VaultMacHelpPage: String, CaseIterable, Identifiable, Hashable {
         let titles = SettingsViewModel()
         return switch self {
         case .codes: "What is a 'code'?"
+        case .privateKeys: "How does Vault keep private keys?"
         case .itemEncryption: "Can I encrypt individual items?"
         case .backups: "Why should I make backups?"
         case .backupSecurity: "Are backups secure?"
@@ -47,6 +49,7 @@ enum VaultMacHelpPage: String, CaseIterable, Identifiable, Hashable {
     var document: FormattedString? {
         let content: (any FileBackedContent)? = switch self {
         case .codes: FAQCodesFileContent()
+        case .privateKeys: FAQPrivateKeysFileContent()
         case .itemEncryption: FAQItemEncryptionFileContent()
         case .backups: FAQBackupsGeneralFileContent()
         case .backupSecurity: FAQBackupsSecurityFileContent()

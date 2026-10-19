@@ -100,6 +100,7 @@ The standard menus, with Vault's commands in them:
 | New Code | ⌘N | File |
 | New Note | ⇧⌘N | File |
 | New Recovery Phrase | | File |
+| New Private Key | | File |
 | Find | ⌘F | Edit (focuses the search field) |
 | Copy Code | ⌘C | Edit (with an item selected and no text selected) |
 | Edit Item | ⌘E | Item (while the item's page shows it) |
@@ -136,10 +137,10 @@ unlocked.
 
 ### Adding and editing items
 
-New Code, New Note and New Recovery Phrase, in the File menu and behind the toolbar's +, open the editor in a sheet,
-as Edit does for the open item. Each editor is one form, rather than iOS's steps, with the same fields and checks, on
-the same shared view models (`OTPCodeDetailViewModel`, `SecureNoteDetailViewModel` and
-`RecoveryPhraseDetailViewModel`) and `VaultDataModelEditorAdapter`:
+New Code, New Note, New Recovery Phrase and New Private Key, in the File menu and behind the toolbar's +, open the
+editor in a sheet, as Edit does for the open item. Each editor is one form, rather than iOS's steps, with the same
+fields and checks, on the same shared view models (`OTPCodeDetailViewModel`, `SecureNoteDetailViewModel`,
+`RecoveryPhraseDetailViewModel` and `PrivateKeyDetailViewModel`) and `VaultDataModelEditorAdapter`:
 
 - **A code's key** is typed in, scanned with the Mac's camera or Continuity Camera (`AVCaptureSession`, only while the
   scanner is open, with nothing kept), or read from an image the user chooses (Vision). Whichever it is, it's checked
@@ -148,6 +149,9 @@ the same shared view models (`OTPCodeDetailViewModel`, `SecureNoteDetailViewMode
   Once a note or recovery phrase is saved, its page asks for the password again.
 - **A recovery phrase** is checked against its standard's word list and checksum as it's typed, each word in a secure
   field, and always has a password of its own (G41).
+- **A private key** is recognized and checked as it's typed or pasted, in a field of Vault's own whose Cut and Copy do
+  nothing, and always has a password of its own. An existing key is masked until it's clicked, and the key is masked
+  whenever Vault isn't the active app (G102, G105).
 - **Privacy & Security** is per item only, as on iOS (C1, C8, C9): lock, visibility with a search passphrase, and a
   killphrase.
 - **Deleting** asks first, from the editor or Delete Item, and can't be undone (C6).
@@ -206,8 +210,8 @@ window left on screen behind another app is what the Require Unlock delay chose 
 cover: with the delay at Immediately, leaving Vault locks it.
 
 Locked items lock as on iOS (G32): a locked item's page shows nothing of it until Touch ID or the Mac's password
-passes, and asks again whenever it's opened. A recovery phrase always asks, whatever its stored lock state, once its
-own password has opened it, and again once Vault stops being the active app (G41).
+passes, and asks again whenever it's opened. A recovery phrase or a private key always asks, whatever its stored lock
+state, once its own password has opened it, and again once Vault stops being the active app (G41, G105).
 
 ### Hide While Recording
 
@@ -264,7 +268,8 @@ The same rules as iOS (G50), with AppKit's equivalents:
   a note has Copy Note instead.
 - A locked code asks for Touch ID or the Mac's password before it's copied (G32).
 - Locking clears it at once, so what was copied from one vault isn't there for the next (C2).
-- Recovery phrases can't be copied (G41), and a drag out of the list gives only the item's ID (G51).
+- Recovery phrases and private keys can't be copied (G41, G103, G105), and a drag out of the list gives only the
+  item's ID (G51).
 
 Whether macOS 26's own clipboard history, in Spotlight, keeps concealed and transient items is checked by hand
 (`RELEASE.md`), and becomes an accepted limit if it does.
