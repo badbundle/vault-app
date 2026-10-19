@@ -98,6 +98,9 @@ device_type_for() {
     esac
 }
 
+# For this Mac's architecture only, which its simulators run: built for every
+# simulator architecture, the widget extension's x86_64 slice can't find the
+# package's module, which is only built for this one.
 build_app() {
     log "Building VaultApp for the simulator"
     xcodebuild build \
@@ -108,7 +111,8 @@ build_app() {
         -derivedDataPath "$DERIVED_DATA" \
         -skipPackagePluginValidation \
         -skipMacroValidation \
-        -quiet
+        -quiet \
+        ARCHS="$(uname -m)"
     [[ -d "$APP_PATH" ]] || { echo "Build did not produce $APP_PATH" >&2; exit 1; }
 }
 
