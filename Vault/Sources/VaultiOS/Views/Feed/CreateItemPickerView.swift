@@ -15,30 +15,9 @@ struct CreateItemPickerView: View {
 
     var body: some View {
         Form {
-            option(
-                .otpCode,
-                title: "Code",
-                subtitle: "2FA timer or counter based codes",
-                systemImage: "qrcode",
-            )
-            option(
-                .secureNote,
-                title: "Note",
-                subtitle: "Freeform text",
-                systemImage: "text.alignleft",
-            )
-            option(
-                .recoveryPhrase,
-                title: "Recovery Phrase",
-                subtitle: "Crypto wallet seed words",
-                systemImage: "list.number",
-            )
-            option(
-                .privateKey,
-                title: "Private Key",
-                subtitle: "A wallet, PGP or SSH private key",
-                systemImage: "key.fill",
-            )
+            ForEach(CreatingItem.addOrder, id: \.self) { item in
+                option(item)
+            }
         }
         .listSectionSpacing(12)
         .environment(\.isInGuidedDetailEditor, true)
@@ -59,17 +38,12 @@ struct CreateItemPickerView: View {
         }
     }
 
-    private func option(
-        _ item: CreatingItem,
-        title: String,
-        subtitle: String,
-        systemImage: String,
-    ) -> some View {
+    private func option(_ item: CreatingItem) -> some View {
         Section {
             Button {
                 onSelect(item)
             } label: {
-                OptionCardLabel(title: title, subtitle: subtitle, systemImage: systemImage)
+                OptionCardLabel(title: item.title, subtitle: item.subtitle, systemImage: item.systemImage)
                     .padding(.vertical, 6)
             }
         }

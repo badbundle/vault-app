@@ -11,6 +11,7 @@ public struct VaultItemFeedView<
 {
     var localSettings: LocalSettings
     var viewGenerator: ViewGenerator
+    private var onAddItem: ((CreatingItem) -> Void)?
 
     @Environment(VaultInjector.self) private var injector
     @Environment(VaultDataModel.self) private var dataModel
@@ -41,6 +42,21 @@ public struct VaultItemFeedView<
         self.localSettings = localSettings
         self.viewGenerator = viewGenerator
         self.state = state
+    }
+
+    /// Offers to add an item of each kind while the vault has none, starting that item's flow with `action`.
+    ///
+    /// Without it, as in AutoFill, which can't add items, the empty feed only says there are none.
+    func offeringToAddItems(_ action: @escaping (CreatingItem) -> Void) -> Self {
+        var copy = self
+        copy.onAddItem = action
+        return copy
+    }
+
+    /// What choosing an option in the empty feed does, if it offers any: only for a vault with no items at all, not
+    /// while a search or filter shows none, or while the items haven't loaded.
+    private var addItemAction: ((CreatingItem) -> Void)? {
+        dataModel.looksEmpty ? onAddItem : nil
     }
 
     public var body: some View {
@@ -95,10 +111,13 @@ public struct VaultItemFeedView<
                 .padding(.bottom)
                 .animation(.snappy, value: dataModel.itemsFilteringByTags)
             } else {
-                ContentUnavailableView {
-                    Label(localized(key: "codeFeed.noCodes.title"), systemImage: "key.horizontal")
+                // At least as tall as the feed, so it's centred in it, but taller if the options to add an item need
+                // it, as in landscape or at large text sizes, when the feed scrolls to them.
+                ZStack {
+                    Color.clear
+                        .containerRelativeFrame(.vertical)
+                    EmptyFeedView(onAdd: addItemAction)
                 }
-                .containerRelativeFrame(.vertical)
             }
         }
         // Attached to the vertical scroll view itself, before anything that

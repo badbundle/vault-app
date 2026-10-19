@@ -7,8 +7,9 @@ import VaultSettings
 
 /// The pages of the Help window: the iOS app's FAQ, then the policies, libraries and open source.
 enum VaultMacHelpPage: String, CaseIterable, Identifiable, Hashable {
-    case codes
+    case recoveryPhrases
     case privateKeys
+    case codes
     case itemEncryption
     case backups
     case backupSecurity
@@ -24,15 +25,17 @@ enum VaultMacHelpPage: String, CaseIterable, Identifiable, Hashable {
     }
 
     static let questions: [VaultMacHelpPage] = [
-        .codes, .privateKeys, .itemEncryption, .backups, .backupSecurity, .movingBetweenDevices, .duress,
+        .recoveryPhrases, .privateKeys, .codes, .itemEncryption, .backups, .backupSecurity, .movingBetweenDevices,
+        .duress,
     ]
     static let about: [VaultMacHelpPage] = [.termsOfUse, .privacyPolicy, .libraries, .openSource]
 
     var title: String {
         let titles = SettingsViewModel()
         return switch self {
-        case .codes: "What is a 'code'?"
+        case .recoveryPhrases: "How does Vault keep recovery phrases?"
         case .privateKeys: "How does Vault keep private keys?"
+        case .codes: "What is a 'code'?"
         case .itemEncryption: "Can I encrypt individual items?"
         case .backups: "Why should I make backups?"
         case .backupSecurity: "Are backups secure?"
@@ -48,8 +51,9 @@ enum VaultMacHelpPage: String, CaseIterable, Identifiable, Hashable {
     /// The page's text, from the app's resources, as iOS shows it.
     var document: FormattedString? {
         let content: (any FileBackedContent)? = switch self {
-        case .codes: FAQCodesFileContent()
+        case .recoveryPhrases: FAQRecoveryPhrasesFileContent()
         case .privateKeys: FAQPrivateKeysFileContent()
+        case .codes: FAQCodesFileContent()
         case .itemEncryption: FAQItemEncryptionFileContent()
         case .backups: FAQBackupsGeneralFileContent()
         case .backupSecurity: FAQBackupsSecurityFileContent()
@@ -67,7 +71,7 @@ enum VaultMacHelpPage: String, CaseIterable, Identifiable, Hashable {
 @MainActor
 @Observable
 final class VaultMacHelpModel {
-    var selection: VaultMacHelpPage? = .codes
+    var selection: VaultMacHelpPage? = .recoveryPhrases
 }
 
 /// The Help window (⌘?): the FAQ, the policies, the libraries Vault uses and where its source is. Nothing in it

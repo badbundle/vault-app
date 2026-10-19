@@ -183,7 +183,7 @@ struct AppLockView: View {
         switch state.failure {
         case .none, .cancelled:
             return switch state.step {
-            case .deviceAuthentication: "Unlock to see your codes and notes."
+            case .deviceAuthentication: "Unlock to open your vault."
             case .password: tryAgainLater ?? "Enter your App Lock Password."
             }
         case .failed:

@@ -26,11 +26,14 @@ struct HelpView: View {
 
     private var questionsSection: some View {
         Section {
-            HelpQuestionLink(question: "What is a 'code'?") {
-                SettingsDocumentView(title: "About Codes", content: FAQCodesFileContent())
+            HelpQuestionLink(question: "How does Vault keep recovery phrases?") {
+                SettingsDocumentView(title: "About Recovery Phrases", content: FAQRecoveryPhrasesFileContent())
             }
             HelpQuestionLink(question: "How does Vault keep private keys?") {
                 SettingsDocumentView(title: "About Private Keys", content: FAQPrivateKeysFileContent())
+            }
+            HelpQuestionLink(question: "What is a 'code'?") {
+                SettingsDocumentView(title: "About Codes", content: FAQCodesFileContent())
             }
             HelpQuestionLink(question: "Can I encrypt individual items?") {
                 SettingsDocumentView(title: "Item Encryption", content: FAQItemEncryptionFileContent())

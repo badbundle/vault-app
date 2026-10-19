@@ -24,7 +24,7 @@ struct VaultMacAboutView: View {
                     .accessibilityIdentifier("about.version")
             }
             Text(
-                "Vault keeps the data you can't afford to lose or leak: two-factor codes, notes and recovery phrases, encrypted on this Mac and never online.",
+                "Vault keeps the data you can't afford to lose or leak: recovery phrases, private keys, notes and two-factor codes, encrypted on this Mac and never online.",
             )
             .multilineTextAlignment(.center)
             .foregroundStyle(.secondary)

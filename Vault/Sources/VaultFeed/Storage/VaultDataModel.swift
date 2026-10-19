@@ -34,6 +34,17 @@ public final class VaultDataModel {
         itemsSanitizedQuery != nil
     }
 
+    /// Whether the vault looks empty: its items have loaded, and there are none to show with no search or tag filter.
+    ///
+    /// Not while a search or filter has found nothing, nor before the items have loaded or when they couldn't be read,
+    /// so the feed only offers to add a first item to a vault that has none. An item that only a search shows, such as
+    /// one behind a search passphrase, doesn't count, so a vault that holds only those looks empty, as it does in the
+    /// feed.
+    public var looksEmpty: Bool {
+        itemsState == .loaded && itemsRetrievalError == nil && items.isEmpty && !isSearching
+            && itemsFilteringByTags.isEmpty
+    }
+
     public var feedTitle: String {
         if isSearching {
             localized(key: "feedViewModel.searching.title.\(items.count)")
@@ -81,6 +92,7 @@ public final class VaultDataModel {
     /// is.
     public private(set) var hasVisibleItems = false
     public private(set) var itemErrors = [VaultRetrievalResult<VaultItem>.Error]()
+    /// `.loaded` once the items have been read since the vault was last purged.
     public private(set) var itemsState: State = .base
     public private(set) var itemsRetrievalError: PresentationError?
     public var itemCaches: [any VaultItemCache]
@@ -595,6 +607,7 @@ extension VaultDataModel {
                 items = result.items
                 itemErrors = result.errors
                 itemsRetrievalError = nil
+                itemsState = .loaded
                 if query == VaultStoreQuery() {
                     hasVisibleItems = Self.showsAnyItems(result)
                 }

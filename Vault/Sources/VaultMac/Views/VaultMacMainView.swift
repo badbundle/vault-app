@@ -204,19 +204,15 @@ struct VaultMacMainView: View {
         .vaultMacItemRowHeight()
         .overlay {
             if dataModel.items.isEmpty {
-                ContentUnavailableView(
-                    dataModel.isSearching ? "No Results" : "No Items",
-                    systemImage: dataModel.isSearching ? "magnifyingglass" : "key.horizontal",
-                )
+                VaultMacEmptyItemsView(isSearching: dataModel.isSearching, offersNewItems: dataModel.looksEmpty) {
+                    editorRequest = $0
+                }
             }
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
-                    Button("New Code") { editorRequest = .newCode }
-                    Button("New Note") { editorRequest = .newNote }
-                    Button("New Recovery Phrase") { editorRequest = .newRecoveryPhrase }
-                    Button("New Private Key") { editorRequest = .newPrivateKey }
+                    VaultMacNewItemButtons { editorRequest = $0 }
                 } label: {
                     Label("New Item", systemImage: "plus")
                 }

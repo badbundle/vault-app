@@ -97,10 +97,10 @@ The standard menus, with Vault's commands in them:
 
 | Command | Shortcut | Menu |
 | --- | --- | --- |
-| New Code | ⌘N | File |
-| New Note | ⇧⌘N | File |
-| New Recovery Phrase | | File |
+| New Recovery Phrase | ⌘N | File |
 | New Private Key | | File |
+| New Note | ⇧⌘N | File |
+| New Code | | File |
 | Find | ⌘F | Edit (focuses the search field) |
 | Copy Code | ⌘C | Edit (with an item selected and no text selected) |
 | Edit Item | ⌘E | Item (while the item's page shows it) |
@@ -137,10 +137,12 @@ unlocked.
 
 ### Adding and editing items
 
-New Code, New Note, New Recovery Phrase and New Private Key, in the File menu and behind the toolbar's +, open the
-editor in a sheet, as Edit does for the open item. Each editor is one form, rather than iOS's steps, with the same
-fields and checks, on the same shared view models (`OTPCodeDetailViewModel`, `SecureNoteDetailViewModel`,
-`RecoveryPhraseDetailViewModel` and `PrivateKeyDetailViewModel`) and `VaultDataModelEditorAdapter`:
+New Recovery Phrase, New Private Key, New Note and New Code, in that order, in the File menu and behind the toolbar's
++, open the editor in a sheet, as Edit does for the open item. The list offers them too, as buttons, while the vault has
+no items, so a new person's first view points at recovery phrases and private keys. Each editor is one form, rather
+than iOS's steps, with the same fields and checks, on the same shared view models (`OTPCodeDetailViewModel`,
+`SecureNoteDetailViewModel`, `RecoveryPhraseDetailViewModel` and `PrivateKeyDetailViewModel`) and
+`VaultDataModelEditorAdapter`:
 
 - **A code's key** is typed in, scanned with the Mac's camera or Continuity Camera (`AVCaptureSession`, only while the
   scanner is open, with nothing kept), or read from an image the user chooses (Vision). Whichever it is, it's checked

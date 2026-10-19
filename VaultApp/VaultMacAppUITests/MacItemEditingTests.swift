@@ -11,8 +11,7 @@ final class MacItemEditingTests: XCTestCase {
         let app = XCUIApplication.launchedOnAFreshVault()
         app.setAppLockPassword()
 
-        // New Code, in the File menu.
-        app.typeKey("n", modifierFlags: .command)
+        app.chooseFileMenuItem("New Code")
         let secret = app.textFields["editor.secret"]
         XCTAssertTrue(secret.waitForExistence(timeout: 5))
         let save = app.buttons["editor.save"]
@@ -33,7 +32,7 @@ final class MacItemEditingTests: XCTestCase {
         let app = XCUIApplication.launchedOnAFreshVault()
         app.setAppLockPassword()
 
-        // New Note, in the File menu.
+        // New Note, with its shortcut.
         app.typeKey("n", modifierFlags: [.shift, .command])
         let contents = app.textViews["editor.contents"]
         XCTAssertTrue(contents.waitForExistence(timeout: 5))
@@ -71,10 +70,17 @@ final class MacItemEditingTests: XCTestCase {
 }
 
 extension XCUIApplication {
+    /// Chooses a command in the File menu, such as New Code, which has no shortcut.
+    @MainActor
+    func chooseFileMenuItem(_ title: String) {
+        menuBars.menuBarItems["File"].click()
+        menuItems[title].click()
+    }
+
     /// Adds a code with New Code, and waits for it to be listed.
     @MainActor
     func addCode(issuer: String, account: String) {
-        typeKey("n", modifierFlags: .command)
+        chooseFileMenuItem("New Code")
         let secret = textFields["editor.secret"]
         XCTAssertTrue(secret.waitForExistence(timeout: 5))
         secret.click()

@@ -15,6 +15,7 @@ struct VaultDataModelPurgeTests {
         sut.itemsSearchQuery = "a search passphrase"
         sut.toggleFiltering(tag: tag.id)
         #expect(sut.items.count == 2)
+        #expect(sut.itemsState == .loaded)
         #expect(sut.allTags == [tag])
         #expect(sut.hasVisibleItems)
 
