@@ -19,6 +19,7 @@ public struct VaultItemFeedView<
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.crease) private var crease
     @State private var state: VaultItemFeedState
     @Namespace private var barGlass
     @AccessibilityFocusState private var isStatusBarFocused: Bool
@@ -28,6 +29,9 @@ public struct VaultItemFeedView<
     @State private var focusesSearchFieldOnAppear = false
     /// The bar's height when last expanded, which it keeps while collapsed.
     @State private var expandedBarHeight: CGFloat?
+    /// Where the grid and the bar are across the window, to keep them out of a crease.
+    @State private var gridExtent: HorizontalExtent?
+    @State private var barExtent: HorizontalExtent?
 
     public init(
         localSettings: LocalSettings,
@@ -76,13 +80,18 @@ public struct VaultItemFeedView<
     private var listOfCodesView: some View {
         ScrollView(.vertical, showsIndicators: true) {
             if dataModel.items.isNotEmpty {
-                LazyVGrid(columns: columns, spacing: itemSpacing) {
+                let gutter = creaseGutter
+                LazyVGrid(columns: columns(around: gutter), spacing: itemSpacing) {
                     Section {
                         vaultItemsList
                     }
                 }
                 .scrollTargetLayout()
-                .padding(.horizontal)
+                .frame(width: gutter.map { CGFloat($0.gridWidth) })
+                .padding(.horizontal, gutter == nil ? nil : 0)
+                .padding(.leading, CGFloat(gutter?.leadingInset ?? 0))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .onGeometryChange(for: HorizontalExtent.self) { HorizontalExtent($0) } action: { gridExtent = $0 }
                 .padding(.bottom)
                 .animation(.snappy, value: dataModel.itemsFilteringByTags)
             } else {
@@ -118,6 +127,10 @@ public struct VaultItemFeedView<
                 }
             }
             .padding(.vertical, 6)
+            // On the trailing page of a window held open like a book, rather than across the crease.
+            .frame(width: barPageWidth.map { CGFloat($0) })
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .onGeometryChange(for: HorizontalExtent.self) { HorizontalExtent($0) } action: { barExtent = $0 }
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.height
             } action: { height in
@@ -739,9 +752,62 @@ public struct VaultItemFeedView<
 
     /// Cards are square, so one whose text makes it taller than its column is also wider, and runs off the screen.
     /// At the accessibility text sizes they're given room for that: one to a row on a phone.
-    private var columns: [GridItem] {
-        let minimumWidth: Double = dynamicTypeSize.isAccessibilitySize ? 300 : 150
-        return [GridItem(.adaptive(minimum: minimumWidth), spacing: itemSpacing, alignment: .top)]
+    private var minimumCardWidth: Double {
+        dynamicTypeSize.isAccessibilitySize ? 300 : 150
+    }
+
+    private func columns(around gutter: CreaseGutter?) -> [GridItem] {
+        guard let gutter else {
+            return [GridItem(.adaptive(minimum: minimumCardWidth), spacing: itemSpacing, alignment: .top)]
+        }
+        // As many even columns on each page as fit, with the gutter after the leading page's last.
+        return (0 ..< 2 * gutter.columnsPerPage).map { column in
+            let spacing = column == gutter.columnsPerPage - 1 ? gutter.width : itemSpacing
+            return GridItem(.flexible(), spacing: spacing, alignment: .top)
+        }
+    }
+
+    /// Where a vertical crease runs through the grid, it's laid out as two pages of cards, one each side of a gutter
+    /// over the crease, so no card sits across it. The pages are the same width, so the cards are the same size, and
+    /// as wide as the narrower side of the crease leaves room for.
+    private var creaseGutter: CreaseGutter? {
+        guard let crease, crease.axis == .vertical, let gridExtent,
+              let split = crease.split(gridExtent.frame)
+        else { return nil }
+        let gutterWidth = Crease.bandWidth + itemSpacing
+        // The narrower side, less the grid's margin at the edge and the gutter beyond the crease's band.
+        let pageWidth = min(split.before, split.after) - 16 - (gutterWidth - Crease.bandWidth) / 2
+        guard pageWidth >= minimumCardWidth else { return nil }
+        let columnsPerPage = Int((pageWidth + itemSpacing) / (minimumCardWidth + itemSpacing))
+        return CreaseGutter(
+            columnsPerPage: columnsPerPage,
+            pageWidth: pageWidth,
+            width: gutterWidth,
+            leadingInset: split.before + Crease.bandWidth / 2 - gutterWidth / 2 - pageWidth,
+        )
+    }
+
+    /// The bar's width where a vertical crease runs through it: the trailing page's, if that's wide enough for it.
+    private var barPageWidth: Double? {
+        guard let crease, crease.axis == .vertical, let barExtent,
+              let split = crease.split(barExtent.frame), split.after >= 320
+        else { return nil }
+        return split.after
+    }
+}
+
+/// The grid's two pages of cards, either side of a crease.
+private struct CreaseGutter: Equatable {
+    var columnsPerPage: Int
+    /// The width of each page's cards, with the spacing between them.
+    var pageWidth: Double
+    /// The gap between the pages, over the crease.
+    var width: Double
+    /// How far the leading page is from the grid's leading edge.
+    var leadingInset: Double
+
+    var gridWidth: Double {
+        2 * pageWidth + width
     }
 }
 

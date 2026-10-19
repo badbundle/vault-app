@@ -27,11 +27,15 @@ struct AppLockContainer<Content: View>: View {
                 content()
             }
         }
+        // The window's root, so everything in the app hears where a partly folded screen's crease is.
+        .observesCrease()
         .overlayWindow(
             isPresented: appLock.isLocked || cover != nil,
             coversScene: { phase in cover(in: phase) != nil },
             overlay: { didHide in
                 AppLockShieldView(appLock: appLock, cover: cover, didHide: didHide)
+                    // A window of its own, which the scene's environment doesn't reach.
+                    .observesCrease()
             },
         )
         .onChange(of: scenePhase, initial: true) { _, phase in

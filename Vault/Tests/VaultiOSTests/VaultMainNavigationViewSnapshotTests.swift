@@ -1,4 +1,5 @@
 import Foundation
+import SwiftUI
 import TestHelpers
 import Testing
 import VaultFeed
@@ -26,5 +27,26 @@ struct VaultMainNavigationViewSnapshotTests {
         .framedForTest()
 
         assertSnapshot(of: view, as: .image)
+    }
+
+    /// The iPhone Duo's inner screen, partly folded and held open like a book: the sidebar and the items beside it meet
+    /// at the crease.
+    @Test
+    func layout_partlyFoldedLikeABook() throws {
+        let localSettings = try LocalSettings(defaults: .nonPersistent())
+        let pasteboard = Pasteboard(SystemPasteboardMock(), localSettings: localSettings)
+
+        let view = VaultMainNavigationView(
+            pasteboard: pasteboard,
+            localSettings: localSettings,
+            deviceAuthenticationService: DeviceAuthenticationService(policy: .alwaysAllow),
+            vaultDataModel: anyVaultDataModel(),
+            injector: anyVaultInjector(),
+        )
+        .environment(\.drawsGlassSnapshotBackdrop, true)
+        .frame(width: PartlyFoldedScreen.book.size.width, height: PartlyFoldedScreen.book.size.height)
+        .partlyFolded(.book)
+
+        assertSnapshot(of: view, as: .image(traits: UITraitCollection(horizontalSizeClass: .regular)))
     }
 }

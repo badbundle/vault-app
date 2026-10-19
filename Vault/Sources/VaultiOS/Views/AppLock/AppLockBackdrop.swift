@@ -11,6 +11,11 @@ import VaultAppIcon
 /// the screen that stays inside the safe area, so it's lined up under the door, unless that band is too narrow to read
 /// comfortably. Then, and for words at the accessibility text sizes, which need all the width they can get, it moves
 /// across to be under the door as far as it can while staying inside the safe area.
+///
+/// On a screen that's partly folded, nothing sits across the crease (see `Crease`). Held open like a book, the door and
+/// what's beneath it are in the middle of the leading page, and the action is in the middle of the trailing one. Stood
+/// on a table like a laptop, the door and what's beneath it are in the top half, with the door's centre a third of the
+/// way down it, and the action is in the middle of the bottom half.
 struct AppLockBackdrop<Details: View, Action: View>: View {
     /// What the door is doing: `nil` leaves it shut.
     var doorTransition: VaultLockTransition?
@@ -22,6 +27,7 @@ struct AppLockBackdrop<Details: View, Action: View>: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.crease) private var crease
 
     init(
         doorTransition: VaultLockTransition? = nil,
@@ -37,9 +43,77 @@ struct AppLockBackdrop<Details: View, Action: View>: View {
 
     var body: some View {
         GeometryReader { proxy in
-            // How far the screen's centre is from the safe area's, along the width.
-            let offCentre = (proxy.safeAreaInsets.trailing - proxy.safeAreaInsets.leading) / 2
-            let safeWidth = proxy.size.width
+            switch Fold(crease?.split(proxy.frame(in: .global))) {
+            case let .book(split):
+                book(split, in: proxy)
+            case let .tabletop(split):
+                tabletop(split, in: proxy)
+            case nil:
+                unfolded(in: proxy)
+            }
+        }
+        .background {
+            GeometryReader { screen in
+                background(glowCentre: glowCentre(on: screen.frame(in: .global)))
+            }
+            .ignoresSafeArea()
+        }
+    }
+
+    private func unfolded(in proxy: GeometryProxy) -> some View {
+        // How far the screen's centre is from the safe area's, along the width.
+        let offCentre = (proxy.safeAreaInsets.trailing - proxy.safeAreaInsets.leading) / 2
+        let safeWidth = proxy.size.width
+        return VStack(spacing: 28) {
+            door
+                .frame(width: doorSize, height: doorSize)
+                .offset(x: offCentre)
+            details()
+                .modifier(CentredUnderTheDoor(
+                    offCentre: offCentre,
+                    safeWidth: safeWidth,
+                    minimumWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : Self.minimumWidthUnderTheDoor,
+                ))
+        }
+        .frame(maxWidth: .infinity)
+        // The door's centre a third of the way down.
+        .padding(.top, max(0, proxy.size.height / 3 - doorSize / 2))
+        .frame(maxHeight: .infinity, alignment: .top)
+        .overlay(alignment: .bottom) {
+            action()
+                .modifier(CentredUnderTheDoor(
+                    offCentre: offCentre,
+                    safeWidth: safeWidth,
+                    minimumWidth: Self.minimumWidthUnderTheDoor,
+                ))
+        }
+    }
+
+    /// Open like a book: the door and what's beneath it on the leading page, with the door's centre a third of the way
+    /// down as when unfolded, and the action in the middle of the trailing page.
+    private func book(_ split: CreaseSplit, in proxy: GeometryProxy) -> some View {
+        HStack(spacing: Crease.bandWidth) {
+            VStack(spacing: 28) {
+                door
+                    .frame(width: doorSize, height: doorSize)
+                details()
+            }
+            .frame(width: split.before)
+            .padding(.top, max(0, proxy.size.height / 3 - doorSize / 2))
+            .frame(maxHeight: .infinity, alignment: .top)
+
+            action()
+                .frame(width: split.after)
+                .frame(maxHeight: .infinity)
+        }
+    }
+
+    /// Stood on a table: the door and what's beneath it in the top half, with the door's centre a third of the way down
+    /// it, and the action in the middle of the bottom half. Across the screen, they're lined up as when unfolded.
+    private func tabletop(_ split: CreaseSplit, in proxy: GeometryProxy) -> some View {
+        let offCentre = (proxy.safeAreaInsets.trailing - proxy.safeAreaInsets.leading) / 2
+        let safeWidth = proxy.size.width
+        return VStack(spacing: Crease.bandWidth) {
             VStack(spacing: 28) {
                 door
                     .frame(width: doorSize, height: doorSize)
@@ -52,21 +126,29 @@ struct AppLockBackdrop<Details: View, Action: View>: View {
                     ))
             }
             .frame(maxWidth: .infinity)
-            // The door's centre a third of the way down.
-            .padding(.top, max(0, proxy.size.height / 3 - doorSize / 2))
-            .frame(maxHeight: .infinity, alignment: .top)
-            .overlay(alignment: .bottom) {
-                action()
-                    .modifier(CentredUnderTheDoor(
-                        offCentre: offCentre,
-                        safeWidth: safeWidth,
-                        minimumWidth: Self.minimumWidthUnderTheDoor,
-                    ))
-            }
+            .padding(.top, max(0, split.before / 3 - doorSize / 2))
+            .frame(height: split.before, alignment: .top)
+
+            action()
+                .modifier(CentredUnderTheDoor(
+                    offCentre: offCentre,
+                    safeWidth: safeWidth,
+                    minimumWidth: Self.minimumWidthUnderTheDoor,
+                ))
+                .frame(maxWidth: .infinity)
+                .frame(height: split.after)
         }
-        .background {
-            background
-                .ignoresSafeArea()
+    }
+
+    /// Where the glow behind the door is centred on a screen whose frame is `screen`: behind the door.
+    private func glowCentre(on screen: CGRect) -> UnitPoint {
+        switch Fold(crease?.split(screen)) {
+        case let .book(split):
+            UnitPoint(x: split.before / 2 / screen.width, y: 1 / 3)
+        case let .tabletop(split):
+            UnitPoint(x: 0.5, y: split.before / 3 / screen.height)
+        case nil:
+            UnitPoint(x: 0.5, y: 1 / 3)
         }
     }
 
@@ -101,12 +183,12 @@ struct AppLockBackdrop<Details: View, Action: View>: View {
     }
 
     /// A glow of the app icon's blue behind the door, fading into the system background.
-    private var background: some View {
+    private func background(glowCentre: UnitPoint) -> some View {
         ZStack {
             Color(uiColor: .systemGroupedBackground)
             RadialGradient(
                 colors: [Color.accentColor.opacity(colorScheme == .dark ? 0.22 : 0.14), .clear],
-                center: UnitPoint(x: 0.5, y: 1 / 3),
+                center: glowCentre,
                 startRadius: 0,
                 endRadius: 360,
             )
@@ -147,6 +229,28 @@ private struct CentredUnderTheDoor: ViewModifier {
     private var shift: Double {
         let room = max(0, (safeWidth - width) / 2)
         return min(max(offCentre, -room), room)
+    }
+}
+
+/// How the lock screen is laid out around a crease, if there's one with room for it on both sides.
+private enum Fold {
+    /// Open like a book, with a vertical crease.
+    case book(CreaseSplit)
+    /// Stood on a table, with a horizontal crease.
+    case tabletop(CreaseSplit)
+
+    init?(_ split: CreaseSplit?) {
+        guard let split else { return nil }
+        switch split.axis {
+        // Each page holds a line of words, or the Unlock button, at a readable width.
+        case .vertical where min(split.before, split.after) >= 200:
+            self = .book(split)
+        // The top half holds the door with room around it. The keyboard can leave the bottom half short.
+        case .horizontal where split.before >= 160:
+            self = .tabletop(split)
+        default:
+            return nil
+        }
     }
 }
 
