@@ -29,6 +29,9 @@ TEAM_ID = "442P244AFS" unless defined?(TEAM_ID)
 ASC_TEAM_ID = "127471357" unless defined?(ASC_TEAM_ID)
 APP_IDENTIFIER = "com.badbundle.vault" unless defined?(APP_IDENTIFIER)
 SHARED_KEYCHAIN_GROUP = "#{TEAM_ID}.com.badbundle.vault.shared" unless defined?(SHARED_KEYCHAIN_GROUP)
+# The Mac build's architectures: Intel, Apple silicon, and Apple silicon with pointer authentication (Enhanced
+# Security, docs/mac-app.md). Every Mac bundle's executable must have all three.
+MAC_ARCHS = %w[arm64 arm64e x86_64].freeze unless defined?(MAC_ARCHS)
 
 # The App Store build's bundles on each platform, and the App Groups and keychain access groups each must have
 # (docs/mac-app.md, and the entitlements checks in local-check.config.ts). nil is none at all.
@@ -104,7 +107,7 @@ end
 # Fails unless every bundle of an exported build has this version and build number, is signed for the App Store with
 # the team's Apple Distribution certificate, and has exactly its App Groups and keychain access groups, with nothing
 # only a development build has (get-task-allow) and no sandbox exception. The Mac's must also be sandboxed and have
-# the hardened runtime, and only one with the camera entitlement may use the camera.
+# the hardened runtime and every one of MAC_ARCHS, and only one with the camera entitlement may use the camera.
 def check_release_bundles(root, bundles, version:, build_number:, mac:)
   bundles.each do |relative_path, expected|
     path = File.join(root, relative_path)
@@ -122,6 +125,13 @@ def check_release_bundles(root, bundles, version:, build_number:, mac:)
     end
     if mac && !signature.match?(/flags=0x\h+\([^)]*runtime[^)]*\)/)
       UI.user_error!("#{relative_path} isn't signed with the hardened runtime:\n#{signature}")
+    end
+    if mac
+      executable = File.join(path, "Contents", "MacOS", info["CFBundleExecutable"])
+      archs = sh("lipo", "-archs", executable, log: false).split.sort
+      unless archs == MAC_ARCHS.sort
+        UI.user_error!("#{relative_path} is built for #{archs.join(', ')}, not #{MAC_ARCHS.join(', ')}")
+      end
     end
 
     entitlements_xml, = Open3.capture3("codesign", "--display", "--entitlements", "-", "--xml", path)
@@ -356,7 +366,11 @@ private_lane :build_mac_release do |options|
       clean: true,
       skip_package_pkg: true,
       output_directory: archive_output,
-      xcargs: "-allowProvisioningUpdates -skipPackagePluginValidation CURRENT_PROJECT_VERSION=#{build_number}"
+      # The targets build for MAC_ARCHS, arm64e for Enhanced Security among them, but Xcode builds the package's
+      # modules only for arm64 and arm64e unless told, and the x86_64 slices then can't find them. Set on the command
+      # line, it applies to the package's targets too.
+      xcargs: "-allowProvisioningUpdates -skipPackagePluginValidation CURRENT_PROJECT_VERSION=#{build_number} " \
+              "ARCHS='#{MAC_ARCHS.join(' ')}'"
     )
   end
   archive_path = lane_context[SharedValues::XCODEBUILD_ARCHIVE]
