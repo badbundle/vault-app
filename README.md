@@ -61,7 +61,7 @@ Every promise, the code that keeps it, the test that pins it, and its limits are
 
 - [x] **Tested**: high level of test coverage, mockolo for mocking, Swift Testing, snapshot tests and UI tests
 - [x] **Safe**: Swift 6 concurrency
-- [x] **Modern**: iOS 26, SwiftUI, Structured Concurrency
+- [x] **Modern**: iOS 27 and macOS 26, SwiftUI, Structured Concurrency
 - [x] **Availability**: iPhone & iPad Support
 - [x] **Modular**: Swift Package w/ multiple targets
 - [x] **Resilient**: everything should be versioned, we never need to break old clients, old backups should always be able to be restored
