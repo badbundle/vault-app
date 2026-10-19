@@ -18,6 +18,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 - With an App Lock Password, killphrases and search passphrases stopped working in a vault moved to another Mac with Migration Assistant or a Time Machine restore: the keys that check them were kept in the keychain, beside the vault rather than in it. Each vault now keeps its own inside its encryption, so they go wherever it goes, and a duress vault has keys of its own. A vault made before this takes its keys in the first time it's opened, so open each vault once before moving it. Without the password, the keys stay in the keychain, as the vault isn't encrypted
 - On a screen whose safe area is wider on one side than the other, such as the iPhone Duo's unfolded, the lock screen's vault door sat off-centre, as did the privacy and screen-capture covers'. The door is now in the middle of the screen, and the words and buttons beneath it move across to be under it as far as they can while staying clear of the screen's edges
+- On the iPhone Duo's outer screen, the lock screen's words and Unlock button sat to one side of the vault door, as its safe area is narrower on the camera's side. Everything beneath the door is now laid out across the middle of the screen, inside the safe area, so it's always lined up under the door
 
 ### Changed
 
