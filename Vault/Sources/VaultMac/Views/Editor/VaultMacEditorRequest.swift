@@ -44,7 +44,7 @@ extension EnvironmentValues {
 }
 
 extension FocusedValues {
-    /// Opens a new item's editor: New Code (⌘N), New Note, New Recovery Phrase and New Private Key.
+    /// Opens a new item's editor: New Recovery Phrase (⌘N), New Private Key, New Note (⇧⌘N) and New Code.
     @Entry var vaultMacNewItemAction: VaultMacEditAction?
 }
 

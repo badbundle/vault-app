@@ -34,6 +34,33 @@ struct VaultMacFeedSnapshotTests {
         )
     }
 
+    /// A vault with no items offers each kind of new item, recovery phrases and private keys first.
+    @Test(arguments: MacAppearance.allCases)
+    func emptyList_offersNewItems(appearance: MacAppearance) {
+        let view = VaultMacEmptyItemsView(isSearching: false, offersNewItems: true) { _ in }
+
+        assertSnapshot(
+            of: view,
+            as: .macWindow(width: 360, height: 420, appearance: appearance.name),
+            named: appearance.rawValue,
+        )
+    }
+
+    /// A tag filter that finds nothing says so, without offering to add an item.
+    @Test
+    func emptyList_filterFindingNothing_offersNothing() {
+        let view = VaultMacEmptyItemsView(isSearching: false, offersNewItems: false) { _ in }
+
+        assertSnapshot(of: view, as: .macWindow(width: 360, height: 420))
+    }
+
+    @Test
+    func emptyList_searchFindingNothing() {
+        let view = VaultMacEmptyItemsView(isSearching: true, offersNewItems: false) { _ in }
+
+        assertSnapshot(of: view, as: .macWindow(width: 360, height: 420))
+    }
+
     /// In a list as narrow as the main window gives it, the name and account truncate, and the code stays on one line.
     @Test
     func narrowList_keepsTheCodeOnOneLine() {

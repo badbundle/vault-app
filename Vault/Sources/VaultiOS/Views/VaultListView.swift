@@ -38,7 +38,8 @@ struct VaultListView<
 
     enum Modal: Hashable, IdentifiableSelf {
         case detail(Identifier<VaultItem>, VaultItem, DerivedEncryptionKey?)
-        case creatingItem
+        /// The new-item sheet, on the choice of what to make, or on making `CreatingItem` straight away.
+        case creatingItem(CreatingItem?)
     }
 
     var body: some View {
@@ -47,10 +48,12 @@ struct VaultListView<
             viewGenerator: interactableViewGenerator(),
             state: vaultItemFeedState,
         )
+        // An empty vault offers each kind of item, in the order of the new-item sheet, to start making.
+        .offeringToAddItems { modal = .creatingItem($0) }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    modal = .creatingItem
+                    modal = .creatingItem(nil)
                 } label: {
                     Label("Add Item", systemImage: "plus")
                 }
@@ -72,13 +75,14 @@ struct VaultListView<
                 }
                 // An item's page, filling a window held open like a book, is kept to one page of it.
                 .keepsToOnePageOfTheCrease()
-            case .creatingItem:
-                // Choosing the kind of item is the sheet's first step.
+            case let .creatingItem(item):
+                // Choosing the kind of item is the sheet's first step, unless it was chosen already.
                 NavigationStack(path: $navigationPath) {
                     CreateItemFlowView(
                         previewGenerator: viewGenerator,
                         copyActionHandler: copyActionHandler,
                         navigationPath: $navigationPath,
+                        flow: CreateItemFlow(creatingItem: item),
                     )
                 }
                 .keepsToOnePageOfTheCrease()

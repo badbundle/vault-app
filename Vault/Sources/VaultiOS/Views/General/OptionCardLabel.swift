@@ -58,6 +58,6 @@ struct OptionCardLabel: View {
 }
 
 #Preview(traits: .sizeThatFitsLayout) {
-    OptionCardLabel(title: "Code", subtitle: "2FA timer or counter based codes", systemImage: "qrcode")
+    OptionCardLabel(title: "Code", subtitle: "Two-factor codes for websites and apps", systemImage: "qrcode")
         .padding()
 }

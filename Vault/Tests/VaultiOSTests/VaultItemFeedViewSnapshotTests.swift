@@ -22,6 +22,56 @@ final class VaultItemFeedViewSnapshotTests {
         assertSnapshot(of: sut, as: .image)
     }
 
+    /// A vault with no items offers each kind to add, recovery phrases and private keys first.
+    @Test
+    func layout_noItems_offersToAddEachKind() async {
+        let dataModel = await makeEmptyDataModel()
+
+        for colorScheme in [ColorScheme.light, .dark] {
+            let sut = makeSUT(dataModel: dataModel, offersToAddItems: true)
+                .framedForTest()
+
+            assertSnapshot(of: sut, colorScheme: colorScheme, named: "\(colorScheme)")
+        }
+    }
+
+    /// At the accessibility text sizes the options are taller than the feed, which scrolls to them.
+    @Test
+    func layout_noItemsAtAccessibilitySize_offersToAddEachKind() async {
+        let dataModel = await makeEmptyDataModel()
+
+        let sut = makeSUT(dataModel: dataModel, offersToAddItems: true)
+            .dynamicTypeSize(.accessibility3)
+            .framedForTest()
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    @Test
+    func landscape_noItems_offersToAddEachKind() async {
+        let dataModel = await makeEmptyDataModel()
+
+        let sut = makeSUT(dataModel: dataModel, offersToAddItems: true)
+            .framedForLandscapeTest()
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
+    /// A search that finds nothing is not an empty vault, so it offers to add nothing.
+    @Test
+    func layout_searchFindingNothing_offersToAddNothing() async {
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in .empty() }
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: VaultTagStoreStub())
+        dataModel.itemsSearchQuery = "no such item"
+        await dataModel.reloadData()
+
+        let sut = makeSUT(dataModel: dataModel, offersToAddItems: true)
+            .framedForTest()
+
+        assertSnapshot(of: sut, as: .image)
+    }
+
     @Test
     func layout_singleCodeAtMediumSize() async {
         let store = VaultStoreStub()
@@ -703,11 +753,20 @@ extension VaultItemFeedViewSnapshotTests {
             .partlyFolded(.book)
     }
 
+    private func makeEmptyDataModel() async -> VaultDataModel {
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in .empty() }
+        let dataModel = anyVaultDataModel(vaultStore: store, vaultTagStore: VaultTagStoreStub())
+        await dataModel.reloadData()
+        return dataModel
+    }
+
     private func makeSUT(
         dataModel: VaultDataModel,
         state: VaultItemFeedState = VaultItemFeedState(),
         // swiftlint:disable:next force_try
         localSettings: LocalSettings = LocalSettings(defaults: try! .nonPersistent()),
+        offersToAddItems: Bool = false,
     ) -> some View {
         struct CodePlaceholderView: View {
             var behaviour: VaultItemViewBehaviour
@@ -734,22 +793,26 @@ extension VaultItemFeedViewSnapshotTests {
         let generator = VaultItemPreviewViewGeneratorMock.mockGenerating { _, _, behaviour in
             CodePlaceholderView(behaviour: behaviour)
         }
-        return VaultItemFeedView(
+        var feed = VaultItemFeedView(
             localSettings: localSettings,
             viewGenerator: generator,
             state: state,
         )
-        .environment(dataModel)
-        .environment(VaultInjector(
-            clock: EpochClockMock(currentTime: 30),
-            intervalTimer: IntervalTimerMock(),
-            backupEventLogger: BackupEventLoggerMock(),
-            vaultKeyDeriverFactory: VaultKeyDeriverFactoryMock(),
-            encryptedVaultDecoder: EncryptedVaultDecoderMock(),
-            autoBackupService: AutoBackupServiceMock(status: .disabled, configuration: .init()),
-            defaults: Defaults(userDefaults: .standard),
-            fileManager: FileManager(),
-        ))
-        .environment(\.drawsGlassSnapshotBackdrop, true)
+        if offersToAddItems {
+            feed = feed.offeringToAddItems { _ in }
+        }
+        return feed
+            .environment(dataModel)
+            .environment(VaultInjector(
+                clock: EpochClockMock(currentTime: 30),
+                intervalTimer: IntervalTimerMock(),
+                backupEventLogger: BackupEventLoggerMock(),
+                vaultKeyDeriverFactory: VaultKeyDeriverFactoryMock(),
+                encryptedVaultDecoder: EncryptedVaultDecoderMock(),
+                autoBackupService: AutoBackupServiceMock(status: .disabled, configuration: .init()),
+                defaults: Defaults(userDefaults: .standard),
+                fileManager: FileManager(),
+            ))
+            .environment(\.drawsGlassSnapshotBackdrop, true)
     }
 }

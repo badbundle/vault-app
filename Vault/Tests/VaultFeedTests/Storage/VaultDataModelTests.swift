@@ -338,6 +338,67 @@ final class VaultDataModelTests {
         }
     }
 
+    @Test
+    func looksEmpty_beforeTheItemsHaveLoaded_isFalse() {
+        let sut = makeSUT()
+
+        #expect(sut.itemsState == .base)
+        #expect(!sut.looksEmpty)
+    }
+
+    @Test
+    func looksEmpty_loadedWithNoItems_isTrue() async {
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in .empty() }
+        let sut = makeSUT(vaultStore: store)
+
+        await sut.reloadItems()
+
+        #expect(sut.itemsState == .loaded)
+        #expect(sut.looksEmpty)
+    }
+
+    @Test
+    func looksEmpty_loadedWithItems_isFalse() async {
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in .init(items: [uniqueVaultItem()]) }
+        let sut = makeSUT(vaultStore: store)
+
+        await sut.reloadItems()
+
+        #expect(!sut.looksEmpty)
+    }
+
+    /// A search or tag filter that finds nothing is not an empty vault, so the feed doesn't offer to add a first item.
+    @Test
+    func looksEmpty_searchOrFilterFindingNothing_isFalse() async {
+        let store = VaultStoreStub()
+        store.retrieveHandler = { _ in .empty() }
+        let sut = makeSUT(vaultStore: store)
+
+        sut.itemsSearchQuery = "no such item"
+        await sut.reloadItems()
+        #expect(!sut.looksEmpty)
+
+        sut.itemsSearchQuery = "   "
+        await sut.reloadItems()
+        #expect(sut.looksEmpty)
+
+        sut.itemsFilteringByTags = [Identifier<VaultItemTag>()]
+        await sut.reloadItems()
+        #expect(!sut.looksEmpty)
+    }
+
+    @Test
+    func looksEmpty_itemsCouldntBeLoaded_isFalse() async {
+        let sut = makeSUT(vaultStore: VaultStoreErroring(error: TestError()))
+
+        await sut.reloadItems()
+
+        #expect(sut.itemsRetrievalError != nil)
+        #expect(!sut.looksEmpty)
+    }
+
     /// An item that couldn't be read counts as one that shows.
     @Test
     func reloadItems_itemThatCouldntBeRead_countsAsShowing() async {

@@ -26,15 +26,16 @@ struct VaultMacCommands: Commands {
         }
         // There's only ever one main window, so New is for items.
         CommandGroup(replacing: .newItem) {
-            Button("New Code") { newItem?(.newCode) }
+            // In the order of the New Item menu: ⌘N makes what Vault is for, a recovery phrase.
+            Button("New Recovery Phrase") { newItem?(.newRecoveryPhrase) }
                 .keyboardShortcut("n")
+                .disabled(newItem == nil)
+            Button("New Private Key") { newItem?(.newPrivateKey) }
                 .disabled(newItem == nil)
             Button("New Note") { newItem?(.newNote) }
                 .keyboardShortcut("n", modifiers: [.shift, .command])
                 .disabled(newItem == nil)
-            Button("New Recovery Phrase") { newItem?(.newRecoveryPhrase) }
-                .disabled(newItem == nil)
-            Button("New Private Key") { newItem?(.newPrivateKey) }
+            Button("New Code") { newItem?(.newCode) }
                 .disabled(newItem == nil)
         }
         CommandGroup(replacing: .help) {
