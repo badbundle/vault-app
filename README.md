@@ -88,7 +88,7 @@ There is no hosted CI. Changes are validated on the developer's Mac, and the res
 1. Install [Bun](https://bun.com), then run `bun install` at the root of the repo, once per clone. It installs [local-check](https://github.com/badbundle/local-check), the tool that does the validating, and enables its pre-push hook.
 2. Commit your changes, then run `make validate` from `/Vault`.
 
-The checks are in [`local-check.config.ts`](./local-check.config.ts). local-check checks out the exact commit into a separate worktree, so uncommitted changes and your usual DerivedData can't affect the result. With Xcode 27.0, it then runs:
+The checks are in [`local-check.config.ts`](./local-check.config.ts). local-check checks out the exact commit into a separate worktree, so uncommitted changes and your usual DerivedData can't affect the result. With Xcode 27.1, it then runs:
 
 - `make lint`;
 - the Fastlane config check, which is skipped, and noted on the check, if the Ruby version in `.ruby-version` isn't installed;

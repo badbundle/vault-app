@@ -4,7 +4,7 @@ import type { ConfigFunction, Context } from "@badbundle/local-check";
 // "Validate (local)" check. See README.md#validation.
 export default (({ xcode }) => {
   const ios = xcode({
-    version: "27.0",
+    version: "27.1",
     // The snapshot tests check the device name, so the throwaway simulator
     // has to use exactly this one.
     simulator: {
