@@ -1,7 +1,9 @@
 Vault needs no account or sign-in, has no in-app purchases, and makes no network requests. Everything stays on the device, so there's no demo account.
 
+Vault is not a cryptocurrency wallet or exchange. It stores the text the user types, such as a wallet's recovery phrase or private key, encrypted on the device. It holds no funds, signs no transactions, shows no balances, and makes no network requests.
+
 TRYING IT
-- Tap + to add a 2FA code (scan a QR code, or enter a secret such as JBSWY3DPEHPK3PXP), a note, or a crypto recovery phrase.
+- Tap + to add a crypto recovery phrase, a private key (such as a wallet key, or a PGP or SSH private key), a note, or a 2FA code (scan a QR code, or enter a secret such as JBSWY3DPEHPK3PXP).
 - Tap a code to copy it. Touch and hold a code for Copy Code and Show Details.
 
 SECURITY FEATURES (all off by default)

@@ -1,1 +1,1 @@
-2FA Authenticator & Notes
+Seed Phrase & Private Key Safe

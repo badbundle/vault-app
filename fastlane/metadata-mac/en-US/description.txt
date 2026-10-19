@@ -1,17 +1,12 @@
-Vault keeps the secrets you can't afford to lose: two-factor codes, private notes and crypto recovery phrases. It has no servers, no accounts and no analytics, it makes no network requests, and it's open source.
+Vault keeps the secrets you can't afford to lose: seed phrases, private keys and private notes, and your two-factor codes too. It has no servers, no accounts and no analytics, it makes no network requests, and it's open source.
 
 It's also built for the moment someone makes you unlock it.
 
-2FA CODES
-• Add a code by scanning its QR code with your Mac's camera or Continuity Camera, reading it from an image, or typing in its secret. Time-based (TOTP) and counter-based (HOTP) codes both work.
-• Click a code to copy it. Copies are cleared from the clipboard after a minute by default, and only reach your other devices if you allow it.
-• Fill time-based codes into websites in Safari with AutoFill.
-• Add a widget to your desktop that shows a code while Vault is unlocked.
-
-NOTES AND RECOVERY PHRASES
-• Write notes in plain text or Markdown, tag them, and find anything with instant search.
-• Lock any item behind Touch ID or your Mac's password, and encrypt a note with a password of its own.
-• Recovery phrases for crypto wallets are always encrypted, checked against the BIP39, SLIP-39, Electrum and Monero word lists, masked until you click them, and can't be copied.
+RECOVERY PHRASES AND PRIVATE KEYS
+• Keep the seed phrases for your crypto wallets, checked against the BIP39, SLIP-39, Electrum and Monero word lists as you type.
+• Keep private keys: WIF and extended keys (xprv), raw hex keys and Nostr keys, checked where they have a checksum, and PGP and SSH private keys.
+• Phrases and keys are always encrypted and locked, masked until you click them, hidden whenever Vault isn't the active app, and can't be copied.
+• Vault keeps your keys, never your funds: it signs nothing and makes no network requests.
 
 IF YOU'RE MADE TO UNLOCK IT
 • An App Lock Password encrypts the whole vault on your Mac, and it's always on. Vault asks for it after Touch ID or your Mac's password, and makes you wait longer after each wrong one.
@@ -32,5 +27,13 @@ PRIVATE BY DESIGN
 • Hide While Recording keeps Vault's windows out of screenshots, screen recordings, screen sharing and AirPlay.
 • Secure Keyboard Entry is on while you type in Vault, and nothing you type there goes to autocorrect, predictions or Writing Tools.
 • Open source: the code is on GitHub, with a security model that lists every promise Vault makes, and its limits.
+
+NOTES AND 2FA CODES
+• Write notes in plain text or Markdown, tag them, and find anything with instant search.
+• Lock any item behind Touch ID or your Mac's password, and encrypt a note with a password of its own.
+• Add a code by scanning its QR code with your Mac's camera or Continuity Camera, reading it from an image, or typing in its secret. Time-based (TOTP) and counter-based (HOTP) codes both work.
+• Click a code to copy it. Copies are cleared from the clipboard after a minute by default, and only reach your other devices if you allow it.
+• Fill time-based codes into websites in Safari with AutoFill.
+• Add a widget to your desktop that shows a code while Vault is unlocked.
 
 Vault is free on the Mac, iPhone and iPad, with no ads and no in-app purchases.

@@ -1,1 +1,1 @@
-2FA codes, private notes and recovery phrases, fully offline. A duress password, hidden items and killphrases for when you're made to unlock it. Free and open source.
+Seed phrases, private keys, PGP and SSH keys, and secret notes, encrypted and fully offline. Built for when someone makes you unlock it. Free and open source.
