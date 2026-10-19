@@ -1,6 +1,7 @@
 import SwiftUI
 import VaultCore
 import VaultFeed
+import VaultMacShared
 import VaultSettings
 
 /// One item in the list: what it is, and for a code, its live code, which copies it when clicked.

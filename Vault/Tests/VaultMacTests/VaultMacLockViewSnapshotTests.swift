@@ -4,6 +4,7 @@ import TestHelpers
 import Testing
 import VaultFeed
 @testable import VaultMac
+@testable import VaultMacShared
 
 @MainActor
 struct VaultMacLockViewSnapshotTests {

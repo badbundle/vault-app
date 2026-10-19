@@ -1,3 +1,4 @@
+import { readdir } from "node:fs/promises";
 import type { ConfigFunction, Context } from "@badbundle/local-check";
 
 // The checks `make validate` runs on a commit before it posts the green
@@ -276,7 +277,26 @@ async function checkSignedEntitlements(
     throw new Error(`${name}'s keychain access groups aren't ${JSON.stringify(keychainGroups)}: ${keychain}`);
   }
   checkRequiredEntitlements(name, entitlements, required);
+  if (entitlements["com.apple.security.device.camera"] !== true) {
+    await checkNoCameraCode(ctx, bundle, name);
+  }
   ctx.log(`${name}'s entitlements: ${Object.keys(entitlements).join(", ")}`);
+}
+
+/**
+ * Fails if any of `bundle`'s executables uses the camera, which a bundle without the camera entitlement mustn't: App
+ * Review rejects the Mac app for it (guideline 2.4.5), as it did 2.1 for the AutoFill extension, which then linked the
+ * app's QR scanner.
+ */
+async function checkNoCameraCode(ctx: Context, bundle: string, name: string): Promise<void> {
+  const directory = `${bundle}/Contents/MacOS`;
+  for (const executable of await readdir(directory)) {
+    const { stdout } = await ctx.capture(["nm", "-u", "-j", `${directory}/${executable}`]);
+    const camera = stdout.split("\n").filter((symbol) => symbol.includes("AVCapture"));
+    if (camera.length > 0) {
+      throw new Error(`${name} uses the camera without the camera entitlement (${executable}): ${camera.join(", ")}`);
+    }
+  }
 }
 
 /** The iOS app's App Group, which every iOS target shares, as the widget extension reads the vault from it. */

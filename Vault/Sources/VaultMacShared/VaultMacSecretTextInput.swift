@@ -7,7 +7,7 @@ extension View {
     ///
     /// Every text input in the app's sources declares it, and `SecretTextInputDeclarationTests` fails for any that
     /// doesn't.
-    func secretTextInput() -> some View {
+    public func secretTextInput() -> some View {
         autocorrectionDisabled()
             .writingToolsBehavior(.disabled)
     }

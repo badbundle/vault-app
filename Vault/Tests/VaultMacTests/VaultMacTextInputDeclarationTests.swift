@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-/// Every text field in the Mac app edits with `VaultMacFieldEditor`, or is a `SecureField`.
+/// Every text field in the Mac app and its AutoFill sheet edits with `VaultMacFieldEditor`, or is a `SecureField`.
 ///
 /// SwiftUI's `TextField`, `TextEditor` and `searchable` edit with AppKit's shared field editor, which spell checks,
 /// completes and offers Services and Writing Tools to whatever's typed. So the Mac app's sources use
@@ -34,6 +34,7 @@ struct VaultMacTextInputDeclarationTests {
         #expect(lines.contains { $0.file == "VaultMacCodeEditor.swift" && $0.code.contains("VaultMacTextField(") })
         #expect(lines.contains { $0.file == "VaultMacNoteEditor.swift" && $0.code.contains("VaultMacTextEditor(") })
         #expect(lines.contains { $0.file == "VaultMacMainView.swift" && $0.code.contains("VaultMacSearchField(") })
+        #expect(lines.contains { $0.file == "VaultMacAutofillView.swift" && $0.code.contains("VaultMacSearchField(") })
     }
 
     @Test
@@ -62,9 +63,12 @@ extension VaultMacTextInputDeclarationTests {
             .deletingLastPathComponent() // VaultMacTests
             .deletingLastPathComponent() // Tests
             .deletingLastPathComponent() // Vault
-        let root = repository.appending(path: "Sources/VaultMac")
-        let files = try #require(FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil))
-        return files.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
+        // The app's own sources, and those it shares with its AutoFill extension.
+        return try ["VaultMac", "VaultMacShared", "VaultMacAutofill"].flatMap { module in
+            let root = repository.appending(path: "Sources/\(module)")
+            let files = try #require(FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil))
+            return files.compactMap { $0 as? URL }.filter { $0.pathExtension == "swift" }
+        }
     }
 
     /// Each line's code, without comments.

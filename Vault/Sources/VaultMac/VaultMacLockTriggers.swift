@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import VaultFeed
+import VaultMacShared
 
 /// Locks the Mac app when it should (docs/mac-app.md, "Locking").
 ///
@@ -19,19 +20,11 @@ import VaultFeed
 /// ask again, over and over. Another app coming to the front while the prompt is up is still leaving.
 @MainActor
 final class VaultMacLockTriggers {
-    /// The distributed notifications that mean the Mac is locking: the screen locking, and the screen saver starting.
-    nonisolated static let lockingDistributedNotifications = [
-        Notification.Name("com.apple.screenIsLocked"),
-        Notification.Name("com.apple.screensaver.didstart"),
-    ]
+    /// The distributed notifications that mean the Mac is locking (`VaultMacLockingEvents`).
+    nonisolated static let lockingDistributedNotifications = VaultMacLockingEvents.distributedNotifications
 
-    /// The workspace notifications that mean the Mac is locking: it sleeping, its displays sleeping, and another
-    /// account taking over the screen.
-    nonisolated static let lockingWorkspaceNotifications = [
-        NSWorkspace.willSleepNotification,
-        NSWorkspace.screensDidSleepNotification,
-        NSWorkspace.sessionDidResignActiveNotification,
-    ]
+    /// The workspace notifications that mean the Mac is locking (`VaultMacLockingEvents`).
+    nonisolated static let lockingWorkspaceNotifications = VaultMacLockingEvents.workspaceNotifications
 
     private let appLock: AppLockService
     private let authentication: DeviceAuthenticationService
@@ -119,12 +112,9 @@ final class VaultMacLockTriggers {
         NSWorkspace.shared.frontmostApplication
     }
 
-    /// Whether `application` coming to the front means the user left Vault: it's an ordinary app, with a Dock icon and
-    /// windows of its own, other than Vault. The agents that show Touch ID and the Mac's password aren't.
+    /// Whether `application` coming to the front means the user left Vault (`VaultMacLockingEvents`).
     static func isAnotherApp(_ application: NSRunningApplication?) -> Bool {
-        guard let application else { return false }
-        return application.activationPolicy == .regular
-            && application.processIdentifier != ProcessInfo.processInfo.processIdentifier
+        VaultMacLockingEvents.isAnotherApp(application)
     }
 
     private func deviceWillLock() {

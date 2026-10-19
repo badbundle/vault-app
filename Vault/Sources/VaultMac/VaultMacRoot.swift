@@ -3,6 +3,7 @@ import Foundation
 import FoundationExtensions
 import SwiftSecurity
 import VaultFeed
+import VaultMacShared
 import VaultSettings
 import WidgetKit
 

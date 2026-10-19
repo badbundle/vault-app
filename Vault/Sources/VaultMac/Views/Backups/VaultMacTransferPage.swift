@@ -1,5 +1,6 @@
 import SwiftUI
 import VaultFeed
+import VaultMacShared
 
 /// Move to Another Device: the whole vault, encrypted with the backup password, as QR codes for an iPhone or iPad
 /// to scan (G54). Nothing is saved. The codes stop, and are forgotten, when the page closes or Vault locks.

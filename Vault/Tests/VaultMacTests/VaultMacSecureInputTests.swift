@@ -1,5 +1,6 @@
 import Testing
 @testable import VaultMac
+@testable import VaultMacShared
 
 /// Secure Keyboard Entry is on while a field has focus and Vault is the active app, as AppKit's secure fields have it,
 /// and only then: it's for the whole Mac while it's on (docs/mac-app.md, decision 8).

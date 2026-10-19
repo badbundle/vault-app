@@ -17,7 +17,7 @@
 		1C58F2F32AE5764100962BAB /* VaultiOS in Frameworks */ = {isa = PBXBuildFile; productRef = 1C58F2F22AE5764100962BAB /* VaultiOS */; };
 		1C8B89F52CD3759400F3D340 /* VaultiOSAutofill in Frameworks */ = {isa = PBXBuildFile; productRef = 1C8B89F42CD3759400F3D340 /* VaultiOSAutofill */; };
 		1CAC00000000000000000010 /* VaultMac in Frameworks */ = {isa = PBXBuildFile; productRef = 1CAC00000000000000000011 /* VaultMac */; };
-		1CAC00000000000000000029 /* VaultMac in Frameworks */ = {isa = PBXBuildFile; productRef = 1CAC0000000000000000002A /* VaultMac */; };
+		1CAC00000000000000000029 /* VaultMacAutofill in Frameworks */ = {isa = PBXBuildFile; productRef = 1CAC0000000000000000002A /* VaultMacAutofill */; };
 		1CAC0000000000000000002F /* VaultMacAutofill.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1CAC00000000000000000022 /* VaultMacAutofill.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		1CAC00000000000000000039 /* VaultiOSWidgets in Frameworks */ = {isa = PBXBuildFile; productRef = 1CAC0000000000000000003A /* VaultiOSWidgets */; };
 		1CAC0000000000000000003E /* VaultMacWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 1CAC00000000000000000032 /* VaultMacWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -205,7 +205,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				1CAC00000000000000000029 /* VaultMac in Frameworks */,
+				1CAC00000000000000000029 /* VaultMacAutofill in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -424,7 +424,7 @@
 			);
 			name = VaultMacAutofill;
 			packageProductDependencies = (
-				1CAC0000000000000000002A /* VaultMac */,
+				1CAC0000000000000000002A /* VaultMacAutofill */,
 			);
 			productName = VaultMacAutofill;
 			productReference = 1CAC00000000000000000022 /* VaultMacAutofill.appex */;
@@ -987,6 +987,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.VaultAutofill;
+				PRODUCT_MODULE_NAME = VaultMacAutofillExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = macosx;
@@ -1015,6 +1016,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.badbundle.vault.VaultAutofill;
+				PRODUCT_MODULE_NAME = VaultMacAutofillExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SKIP_INSTALL = YES;
@@ -1485,9 +1487,9 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = VaultMac;
 		};
-		1CAC0000000000000000002A /* VaultMac */ = {
+		1CAC0000000000000000002A /* VaultMacAutofill */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = VaultMac;
+			productName = VaultMacAutofill;
 		};
 		1CAC0000000000000000003A /* VaultiOSWidgets */ = {
 			isa = XCSwiftPackageProductDependency;

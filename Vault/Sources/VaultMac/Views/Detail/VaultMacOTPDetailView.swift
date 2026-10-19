@@ -1,6 +1,7 @@
 import SwiftUI
 import VaultCore
 import VaultFeed
+import VaultMacShared
 
 /// A code's page: its site and account, its live code to copy, and for a counter-based code, Next Code.
 struct VaultMacOTPDetailView: View {

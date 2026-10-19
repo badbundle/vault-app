@@ -1,5 +1,6 @@
 import SwiftUI
 import VaultFeed
+import VaultMacShared
 
 /// Changes the App Lock Password, sets a duress password, or turns erasing after failed passwords on or off: each
 /// needs the current password, with the same rules, waits and refusals as on iOS (G18, G27). There's no Turn Off

@@ -1,11 +1,12 @@
 import AppKit
 import Foundation
+import VaultMacShared
 
 /// Tells the AutoFill sheet when to lock: when the Mac locks, sleeps or its screen saver starts, as the app locks
 /// (G29, G86), and when the user leaves the app the sheet is for, as the app locks when another comes to the front.
 ///
 /// The sheet's own Touch ID or password prompt comes to the front from a process of its own, which isn't the user
-/// leaving, as for the app (`VaultMacLockTriggers`): while it's up, only an ordinary app coming to the front is.
+/// leaving, as for the app (`VaultMacLockingEvents`): while it's up, only an ordinary app coming to the front is.
 @MainActor
 final class VaultMacAutofillLockObserver {
     private var observers: [(NotificationCenter, any NSObjectProtocol)] = []
@@ -23,15 +24,15 @@ final class VaultMacAutofillLockObserver {
         macWillLock: @escaping @MainActor () -> Void,
         userDidLeave: @escaping @MainActor () -> Void,
     ) {
-        for name in VaultMacLockTriggers.lockingDistributedNotifications {
+        for name in VaultMacLockingEvents.distributedNotifications {
             observe(name, in: distributedCenter) { _ in macWillLock() }
         }
-        for name in VaultMacLockTriggers.lockingWorkspaceNotifications {
+        for name in VaultMacLockingEvents.workspaceNotifications {
             observe(name, in: workspaceCenter) { _ in macWillLock() }
         }
         observe(NSWorkspace.didActivateApplicationNotification, in: workspaceCenter) { activated in
             guard let activated, activated.processIdentifier != hostProcess else { return }
-            if isAuthenticating(), !VaultMacLockTriggers.isAnotherApp(activated) {
+            if isAuthenticating(), !VaultMacLockingEvents.isAnotherApp(activated) {
                 return
             }
             userDidLeave()

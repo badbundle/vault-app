@@ -4,6 +4,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import VaultBackup
 import VaultFeed
+import VaultMacShared
 
 /// Restore: items from a backup PDF, or from another device's transfer codes, after Touch ID or the Mac's password
 /// (G31), with the backup's own password (G59). An empty vault imports; otherwise Merge or Replace, as on iOS.

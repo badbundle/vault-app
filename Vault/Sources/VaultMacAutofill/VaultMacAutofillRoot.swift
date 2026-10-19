@@ -3,6 +3,7 @@ import FoundationExtensions
 import SwiftSecurity
 import VaultCore
 import VaultFeed
+import VaultMacShared
 import VaultSettings
 
 /// What the AutoFill extension opens the vault with, in its own process: only what it needs to unlock the vault with
