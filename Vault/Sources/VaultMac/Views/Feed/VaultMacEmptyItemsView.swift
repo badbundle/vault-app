@@ -19,7 +19,11 @@ struct VaultMacEmptyItemsView: View {
             } description: {
                 Text("Add an item to get started.")
             } actions: {
-                VaultMacNewItemButtons(open: open)
+                // One above another: side by side, they're wider than the list.
+                VStack(spacing: 8) {
+                    VaultMacNewItemButtons(open: open)
+                }
+                .fixedSize()
             }
         } else {
             ContentUnavailableView("No Items", systemImage: "key.horizontal")
