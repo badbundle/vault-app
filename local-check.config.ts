@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import type { ConfigFunction, Context } from "@badbundle/local-check";
 
 // The checks `make validate` runs on a commit before it posts the green
@@ -201,6 +201,11 @@ const sharedKeychainGroup = "442P244AFS.com.badbundle.vault.shared";
  * the app hands them, is only the widget extension's and the app's.
  */
 async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promise<void> {
+  // The Mac UI tests' build signs the extensions with Xcode's testing exceptions, and a later plain build re-signs them
+  // in Build/Products but doesn't always copy them into the app again. So this build makes all three afresh.
+  for (const bundle of ["Vault.app", "VaultMacAutofill.appex", "VaultMacWidgets.appex"]) {
+    await rm(`${derivedData}/Build/Products/Debug/${bundle}`, { recursive: true, force: true });
+  }
   await ctx.exec([
     "xcodebuild",
     "build",
@@ -265,6 +270,8 @@ async function checkSignedEntitlements(
     throw new Error(`${name} isn't signed with the hardened runtime:\n${signature.stderr}`);
   }
   const plist = `${ctx.cacheDir}/${name}-entitlements.plist`;
+  // codesign appends to a file that's already there, and plutil would read the first plist in it, from an earlier run.
+  await rm(plist, { force: true });
   await ctx.exec(["codesign", "--display", "--xml", "--entitlements", plist, bundle]);
   const { stdout } = await ctx.capture(["plutil", "-convert", "json", "-o", "-", plist]);
   const entitlements = JSON.parse(stdout) as Record<string, unknown>;
@@ -401,6 +408,7 @@ async function checkSimulatorEntitlements(
   required: Record<string, unknown> = {},
 ): Promise<void> {
   const plist = `${ctx.cacheDir}/${name}-simulator-entitlements.plist`;
+  await rm(plist, { force: true });
   await ctx.exec(["xcrun", "segedit", executable, "-extract", "__TEXT", "__entitlements", plist]);
   const { stdout } = await ctx.capture(["plutil", "-convert", "json", "-o", "-", plist]);
   const entitlements = JSON.parse(stdout) as Record<string, unknown>;
