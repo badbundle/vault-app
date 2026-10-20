@@ -201,6 +201,11 @@ const sharedKeychainGroup = "442P244AFS.com.badbundle.vault.shared";
  * the app hands them, is only the widget extension's and the app's.
  */
 async function checkMacAppEntitlements(ctx: Context, derivedData: string): Promise<void> {
+  // The Mac UI tests' build signs the extensions with Xcode's testing exceptions, and a later plain build re-signs them
+  // in Build/Products but doesn't always copy them into the app again. So this build makes all three afresh.
+  for (const bundle of ["Vault.app", "VaultMacAutofill.appex", "VaultMacWidgets.appex"]) {
+    await rm(`${derivedData}/Build/Products/Debug/${bundle}`, { recursive: true, force: true });
+  }
   await ctx.exec([
     "xcodebuild",
     "build",
