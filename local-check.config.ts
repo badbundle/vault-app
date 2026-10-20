@@ -1,4 +1,4 @@
-import { readdir } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import type { ConfigFunction, Context } from "@badbundle/local-check";
 
 // The checks `make validate` runs on a commit before it posts the green
@@ -265,6 +265,8 @@ async function checkSignedEntitlements(
     throw new Error(`${name} isn't signed with the hardened runtime:\n${signature.stderr}`);
   }
   const plist = `${ctx.cacheDir}/${name}-entitlements.plist`;
+  // codesign appends to a file that's already there, and plutil would read the first plist in it, from an earlier run.
+  await rm(plist, { force: true });
   await ctx.exec(["codesign", "--display", "--xml", "--entitlements", plist, bundle]);
   const { stdout } = await ctx.capture(["plutil", "-convert", "json", "-o", "-", plist]);
   const entitlements = JSON.parse(stdout) as Record<string, unknown>;
@@ -401,6 +403,7 @@ async function checkSimulatorEntitlements(
   required: Record<string, unknown> = {},
 ): Promise<void> {
   const plist = `${ctx.cacheDir}/${name}-simulator-entitlements.plist`;
+  await rm(plist, { force: true });
   await ctx.exec(["xcrun", "segedit", executable, "-extract", "__TEXT", "__entitlements", plist]);
   const { stdout } = await ctx.capture(["plutil", "-convert", "json", "-o", "-", plist]);
   const entitlements = JSON.parse(stdout) as Record<string, unknown>;
