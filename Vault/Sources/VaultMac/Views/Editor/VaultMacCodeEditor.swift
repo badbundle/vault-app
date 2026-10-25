@@ -3,12 +3,11 @@ import VaultCore
 import VaultFeed
 
 /// Adds or edits a code, with the shared editor's model, as the iOS app's does: the same fields and the same checks
-/// before it's saved (G77). A new code's key is typed in, scanned with the camera, or read from an image file.
+/// before it's saved (G77). A new code's key is typed in, or read from an image of its QR code.
 struct VaultMacCodeEditor: View {
     @State var viewModel: OTPCodeDetailViewModel
     var close: () -> Void
 
-    @State private var isScanning = false
     @State private var scanProblem: String?
 
     var body: some View {
@@ -70,18 +69,12 @@ struct VaultMacCodeEditor: View {
         #endif
         .onReceive(viewModel.isFinishedPublisher()) { close() }
         .vaultMacEditorErrorAlert(viewModel.didEncounterErrorPublisher())
-        .sheet(isPresented: $isScanning) {
-            scanner
-        }
     }
 
     private var keySection: some View {
         Section {
-            HStack {
-                Button("Scan QR Code…") { isScanning = true }
-                Button("Choose Image…") {
-                    Task { await readImage() }
-                }
+            Button("Choose Image of QR Code…") {
+                Task { await readImage() }
             }
             if let scanProblem {
                 Text(scanProblem)
@@ -127,24 +120,6 @@ struct VaultMacCodeEditor: View {
         }
     }
 
-    private var scanner: some View {
-        VStack(spacing: 12) {
-            Text("Hold the QR code up to the camera.")
-                .font(.headline)
-            VaultMacQRCodeScanner { text in
-                apply(scanned: text)
-            } didFail: { failure in
-                scanProblem = failure.message
-                isScanning = false
-            }
-            .frame(width: 480, height: 360)
-            .clipShape(.rect(cornerRadius: 8))
-            Button("Cancel", role: .cancel) { isScanning = false }
-                .keyboardShortcut(.cancelAction)
-        }
-        .padding()
-    }
-
     private func readImage() async {
         guard let codes = await VaultMacQRCodeImageReader.chooseImage() else { return }
         guard let text = codes.first else {
@@ -167,7 +142,6 @@ struct VaultMacCodeEditor: View {
         if let code = Self.code(scanned: text) {
             viewModel.applyScannedCode(code)
             scanProblem = nil
-            isScanning = false
         } else {
             scanProblem = "That QR code isn't a code Vault can use."
         }

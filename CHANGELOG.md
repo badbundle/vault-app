@@ -26,6 +26,10 @@ Only app binary versions >2.0 should be used in production for this reason.
 - On the iPhone Duo's outer screen, the lock screen's words and Unlock button sat to one side of the vault door, as its safe area is narrower on the camera's side. Everything beneath the door is now laid out across the middle of the screen, inside the safe area, so it's always lined up under the door
 - App Review rejected the Mac app (guideline 2.4.5) as its AutoFill extension had the app's QR code scanner in it, which uses the camera, without the camera entitlement, which only the app has. The extension is now built from only what it needs, the lock screen, the codes and their search, so it has no camera code at all, and `make validate` and the release lane fail for any Mac bundle whose code uses the camera without the entitlement
 
+### Removed
+
+- The Mac app no longer uses the camera. App Review asked the Mac's 2.2 to say how it used the camera entitlement (guideline 2.4.5), and scanning with a Mac's camera is much less useful than with an iPhone's, so the scanner and the entitlement are gone. A code's QR code is read from an image of it instead, or its secret typed in. A vault comes to the Mac as a PDF backup, and the Mac still shows the QR transfer for an iPhone or iPad to scan
+
 ## [2.1] - 2026-10-13
 
 Released on iOS. App Review rejected the Mac app's 2.1, so the Mac app is first released with 2.2.

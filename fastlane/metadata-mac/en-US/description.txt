@@ -17,9 +17,9 @@ IF YOU'RE MADE TO UNLOCK IT
 • If you turn it on, 10 wrong passwords in a row erase every vault on the Mac.
 
 BACKUPS YOU CONTROL
-• Save an encrypted PDF backup to print or keep wherever you like. Restore it from the file, or by scanning its QR codes.
+• Save an encrypted PDF backup to print or keep wherever you like. Restore it from the file.
 • Or have Vault save a fresh encrypted backup whenever your items change, to a folder you choose, such as one in iCloud Drive.
-• Move your vault between your Mac and an iPhone or iPad by scanning QR codes, with no file saved.
+• Move your vault from your Mac to an iPhone or iPad by scanning QR codes on the iPhone or iPad, with no file saved.
 • Your vault is left out of Time Machine backups, unless you choose otherwise.
 
 PRIVATE BY DESIGN
@@ -31,7 +31,7 @@ PRIVATE BY DESIGN
 NOTES AND 2FA CODES
 • Write notes in plain text or Markdown, tag them, and find anything with instant search.
 • Lock any item behind Touch ID or your Mac's password, and encrypt a note with a password of its own.
-• Add a code by scanning its QR code with your Mac's camera or Continuity Camera, reading it from an image, or typing in its secret. Time-based (TOTP) and counter-based (HOTP) codes both work.
+• Add a code by reading its QR code from an image, or typing in its secret. Time-based (TOTP) and counter-based (HOTP) codes both work.
 • Click a code to copy it. Copies are cleared from the clipboard after a minute by default, and only reach your other devices if you allow it.
 • Fill time-based codes into websites in Safari with AutoFill.
 • Add a widget to your desktop that shows a code while Vault is unlocked.

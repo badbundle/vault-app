@@ -148,7 +148,6 @@ const macAppEntitlements = [
   "com.apple.developer.team-identifier",
   "com.apple.security.app-sandbox",
   "com.apple.security.application-groups",
-  "com.apple.security.device.camera",
   "com.apple.security.files.bookmarks.app-scope",
   "com.apple.security.files.user-selected.read-write",
   "com.apple.security.get-task-allow",
@@ -298,7 +297,8 @@ async function checkSignedEntitlements(
 /**
  * Fails if any of `bundle`'s executables uses the camera, which a bundle without the camera entitlement mustn't: App
  * Review rejects the Mac app for it (guideline 2.4.5), as it did 2.1 for the AutoFill extension, which then linked the
- * app's QR scanner.
+ * app's QR scanner. Since 2.2 no Mac bundle has the entitlement (docs/mac-app.md, decision 10), so none may have
+ * camera code.
  */
 async function checkNoCameraCode(ctx: Context, bundle: string, name: string): Promise<void> {
   const directory = `${bundle}/Contents/MacOS`;

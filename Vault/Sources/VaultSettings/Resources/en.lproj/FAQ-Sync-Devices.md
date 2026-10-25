@@ -9,7 +9,7 @@ To move items to another device, you create a backup on one device and restore i
 2. Get that backup file onto your new device. A few options:
     - Save it to **iCloud Drive** (or any other cloud storage you trust) and open it on the new device via the Files app.
     - Send it to yourself via **AirDrop**.
-    - Print the backup as a paper copy and **scan the QR code** on the new device.
+    - Print the backup as a paper copy and **scan its QR codes** on the new device, if it's an iPhone or iPad. Vault on the Mac doesn't use the camera, so open the PDF itself there.
 3. On the new device, open the backup from the Backups screen and enter the password you chose. Use **Import & Override** to replace anything already there with the backup's contents.
 
 ## Do killphrases and passphrases still work after restoring?

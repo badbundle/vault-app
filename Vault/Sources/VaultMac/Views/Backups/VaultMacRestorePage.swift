@@ -119,7 +119,7 @@ extension BackupImportContext {
     }
 }
 
-/// Imports a backup: choose its PDF or scan its codes, enter its password, then import it.
+/// Imports a backup: choose its PDF, enter its password, then import it.
 struct VaultMacImportSheet: View {
     @State var viewModel: BackupImportFlowViewModel
     var services: VaultMacBackupServices
@@ -129,7 +129,6 @@ struct VaultMacImportSheet: View {
 
     @State private var decryptedVaults = PassthroughSubject<VaultApplicationPayload, Never>()
     @State private var decryptor: BackupKeyDecryptorViewModel?
-    @State private var isScanning = false
     @State private var isImporting = false
 
     var body: some View {
@@ -164,14 +163,6 @@ struct VaultMacImportSheet: View {
                     encryptedVaultDecoder: services.encryptedVaultDecoder,
                     decryptedVaultSubject: decryptedVaults,
                 )
-            }
-        }
-        .sheet(isPresented: $isScanning) {
-            VaultMacTransferScanner(intervalTimer: services.intervalTimer) { vault in
-                isScanning = false
-                Task { await viewModel.handleImport(fromEncryptedVault: vault) }
-            } cancel: {
-                isScanning = false
             }
         }
     }
@@ -224,20 +215,13 @@ struct VaultMacImportSheet: View {
                 .font(.title2.bold())
             Text(viewModel.importContext == .override
                 ? "Everything in your vault will be replaced. You'll need the backup's password."
-                : "Choose a PDF backup, or scan another device's codes. You'll need the backup's password.")
+                : "Choose a PDF backup. You'll need the backup's password.")
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 380)
-            HStack {
-                Button("Choose PDF…") { choose() }
-                    .accessibilityIdentifier("backups.import.choose-pdf")
-                Button("Scan Codes…") {
-                    viewModel.clearError()
-                    isScanning = true
-                }
-                .accessibilityIdentifier("backups.import.scan")
-            }
-            .controlSize(.large)
+            Button("Choose PDF…") { choose() }
+                .accessibilityIdentifier("backups.import.choose-pdf")
+                .controlSize(.large)
             if case let .error(error) = viewModel.payloadState {
                 Text(error.userDescription ?? error.userTitle)
                     .foregroundStyle(.red)
@@ -338,62 +322,5 @@ struct VaultMacBackupDecryptView: View {
     private func decrypt() {
         guard viewModel.canAttemptDecryption, !viewModel.isDecrypting else { return }
         decryption = Task { await viewModel.attemptDecryption() }
-    }
-}
-
-/// Scans another device's transfer codes with the Mac's camera or Continuity Camera, until it has every one.
-struct VaultMacTransferScanner: View {
-    var didScanVault: (EncryptedVault) -> Void
-    var cancel: () -> Void
-
-    @State private var handler: BackupImportScanningHandler
-    @State private var manager: CodeScanningManager<BackupImportScanningHandler>
-    @State private var problem: String?
-
-    init(
-        intervalTimer: any IntervalTimer,
-        didScanVault: @escaping (EncryptedVault) -> Void,
-        cancel: @escaping () -> Void,
-    ) {
-        let handler = BackupImportScanningHandler()
-        _handler = State(initialValue: handler)
-        _manager = State(initialValue: CodeScanningManager(intervalTimer: intervalTimer, handler: handler))
-        self.didScanVault = didScanVault
-        self.cancel = cancel
-    }
-
-    var body: some View {
-        VStack(spacing: 12) {
-            Text("Hold the other device's codes up to the camera.")
-                .font(.headline)
-            VaultMacQRCodeScanner { text in
-                manager.scan(text: text)
-            } didFail: { failure in
-                problem = failure.message
-            }
-            .frame(width: 480, height: 360)
-            .clipShape(.rect(cornerRadius: 8))
-            Text(progress)
-                .font(.callout)
-                .foregroundStyle(problem == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.red))
-                .monospacedDigit()
-                .accessibilityIdentifier("backups.scan.progress")
-            Button("Cancel", role: .cancel, action: cancel)
-                .keyboardShortcut(.cancelAction)
-        }
-        .padding()
-        .onAppear { manager.startScanning() }
-        .onDisappear { manager.disable() }
-        .onReceive(manager.itemScannedPublisher()) { vault in
-            didScanVault(vault)
-        }
-    }
-
-    private var progress: String {
-        if let problem {
-            return problem
-        }
-        guard let state = handler.shardState else { return "No codes scanned yet." }
-        return "Scanned \(state.collectedShardIndexes.count) of \(state.totalNumberOfShards) codes."
     }
 }
