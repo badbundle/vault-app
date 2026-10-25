@@ -3,8 +3,8 @@ Vault needs no account or sign-in, has no in-app purchases, and makes no network
 Vault is not a cryptocurrency wallet or exchange. It stores the text the user types, such as a wallet's recovery phrase or private key, encrypted on the Mac. It holds no funds, signs no transactions, shows no balances, and makes no network requests.
 
 THE CAMERA (GUIDELINE 2.4.5)
-- Only Vault itself uses the camera, to scan QR codes, and it has the com.apple.security.device.camera entitlement and a camera usage description.
-- Version 2.1 was rejected because its AutoFill extension contained the app's camera code without that entitlement. The extension now contains no camera code at all, so it has no need for the entitlement and doesn't have it. The widget extension has none either.
+- This version no longer uses the camera. The com.apple.security.device.camera entitlement and the camera usage description are removed from the app, and none of its bundles contains any camera code.
+- QR codes are read from image files the user chooses (Vision barcode detection), which needs no camera.
 
 THE APP LOCK PASSWORD IS REQUIRED ON THE MAC
 - The first launch asks for an App Lock Password before anything else: at least 8 characters, not only numbers. It encrypts the vault on this Mac, and it can't be skipped, turned off or reset, so please keep a note of the one you set.
@@ -12,7 +12,7 @@ THE APP LOCK PASSWORD IS REQUIRED ON THE MAC
 - Vault locks as soon as another app comes to the front (Settings > Security > Require Unlock can delay that), when the Mac locks or sleeps, when its window closes or is minimised, and with Vault > Lock Vault (Control-Command-L).
 
 TRYING IT
-- Click + in the toolbar, or choose File > New Recovery Phrase, New Private Key (such as a wallet key, or a PGP or SSH private key), New Note or New Code. A 2FA code can be scanned with the Mac's camera or Continuity Camera, read from an image, or typed in as a secret such as JBSWY3DPEHPK3PXP.
+- Click + in the toolbar, or choose File > New Recovery Phrase, New Private Key (such as a wallet key, or a PGP or SSH private key), New Note or New Code. A 2FA code can be read from an image of its QR code, or typed in as a secret such as JBSWY3DPEHPK3PXP.
 - Click a code to copy it.
 - Help > Vault Help explains each feature.
 
@@ -23,7 +23,7 @@ SECURITY FEATURES
 - Hide While Recording (Settings > Security, on by default) keeps Vault's windows out of screenshots, screen recordings and screen sharing, so they show as empty there. Turn it off to capture them.
 
 BACKUPS
-- Backups, in the sidebar, saves the whole vault as an encrypted PDF once a backup password is set, and restores one from the file or by scanning its QR codes with the camera.
+- Backups, in the sidebar, saves the whole vault as an encrypted PDF once a backup password is set, and restores one from the file.
 
 AUTOFILL AND WIDGETS
 - In System Settings > General > AutoFill & Passwords, turn on Vault to fill one-time codes in Safari.

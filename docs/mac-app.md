@@ -36,7 +36,8 @@ Bradley's, on VAULT-101 (2026-09-29):
 Following from those, and from the manifesto:
 
 3. **Its own vault, with no sync** (G69). Items move between the Mac and other devices only as they do between
-   iPhones: a backup restored, or the QR transfer, scanned with the Mac's camera or Continuity Camera.
+   iPhones: a backup restored from its PDF. The Mac shows the QR transfer for an iPhone or iPad to scan, but has no
+   camera support, so it doesn't scan one (decision 10).
 4. **A native SwiftUI macOS app**, not Mac Catalyst and not the iPad app on Apple silicon. It has its own UI module,
    `VaultMac`, on the same shared modules as the iOS app.
 5. **The same App Store record and bundle ID** (`com.badbundle.vault`), with macOS added to it, for Universal
@@ -69,6 +70,10 @@ Mine, for Bradley to review:
    Mac, while Vault is unlocked, the app hands its widget extension the next few minutes of each code a widget may
    show, never a secret, and any lock takes them back, so the widgets show Vault locked. No secret ever leaves the
    encrypted vault (G33). See [Widgets](#widgets). iOS's widgets don't change.
+10. **No camera.** Bradley's, on 2026-10-25, after App Review asked 2.2 to say how the Mac app uses the camera
+    entitlement (guideline 2.4.5). Scanning with a Mac's camera is much less useful than with an iPhone's, so the
+    Mac app has no camera scanner and no camera entitlement. A code is read from an image of its QR code, or typed in. Another device's
+    vault comes to the Mac as a PDF backup, and the Mac can still show the QR transfer for an iPhone or iPad to scan.
 
 ## What the Mac app is
 
@@ -144,9 +149,8 @@ than iOS's steps, with the same fields and checks, on the same shared view model
 `SecureNoteDetailViewModel`, `RecoveryPhraseDetailViewModel` and `PrivateKeyDetailViewModel`) and
 `VaultDataModelEditorAdapter`:
 
-- **A code's key** is typed in, scanned with the Mac's camera or Continuity Camera (`AVCaptureSession`, only while the
-  scanner is open, with nothing kept), or read from an image the user chooses (Vision). Whichever it is, it's checked
-  as on iOS before it fills the form (G77).
+- **A code's key** is typed in, or read from an image of its QR code the user chooses (Vision). Either way, it's
+  checked as on iOS before it fills the form (G77). There's no camera scanner (decision 10).
 - **A note** can have a password of its own. It counts once it's typed the same twice, and is never stored (G42).
   Once a note or recovery phrase is saved, its page asks for the password again.
 - **A recovery phrase** is checked against its standard's word list and checksum as it's typed, each word in a secure
@@ -247,8 +251,8 @@ Vault, such as the Open panel, are drawn by macOS, not Vault, and show only file
 - **Accessibility:** apps the user has allowed to control the Mac (Privacy & Security → Accessibility) can read the
   text of any window, Vault's included. That's an accepted limit, as a screen reader needs it.
 - **Windows macOS draws for Vault** aren't Vault's to hide from capture: the Open panel's preview of an image chosen
-  to read a code from, an input method's candidate window, Hover Text and Zoom, the Touch ID prompt, and Control
-  Center's camera preview. An accepted limit.
+  to read a code from, an input method's candidate window, Hover Text and Zoom, and the Touch ID prompt. An
+  accepted limit.
 - **Look Up** (a force click, or ⌃⌘D) has nothing to show in Vault's fields, so no word goes to Apple's Look Up
   services.
 
@@ -504,12 +508,10 @@ is in the detail column.
   loaded, or Back Up Now, backs everything up. Vault keeps access to it across launches with a security-scoped bookmark (`.withSecurityScope`, made and
   read so on macOS by `iCloudDriveProvider`), as iOS keeps its folder. If the folder moves and the bookmark goes
   stale, the user chooses it again.
-- **Restore** reads a PDF the user picks, or scans a device's transfer codes with the Mac's camera or Continuity
-  Camera (`AVCaptureMetadataOutput`), until it has every one. It always asks for the backup's own password (G59),
+- **Restore** reads a PDF the user picks. It always asks for the backup's own password (G59),
   after Touch ID or the Mac's password (G31), and asks again once the page closes, or Vault stops being the active
   app with no import open. An empty vault imports; otherwise Merge or Replace, as on iOS.
 - **Adding a code** can also read a QR code from an image file the user picks, with Vision's barcode detection.
-- **The camera** isn't used while another app is using it, as that app would see the code too.
 
 ## Packaging
 
@@ -547,7 +549,6 @@ entitlements:
 | `com.apple.security.application-groups`: `442P244AFS.com.badbundle.vault` | The vault file and the settings the AutoFill extension shares, and a keychain access group. |
 | `com.apple.security.files.user-selected.read-write` | Saving a backup, choosing the auto-backup folder, and restoring or reading an image. |
 | `com.apple.security.files.bookmarks.app-scope` | Keeping the auto-backup folder across launches. VAULT-110 checks whether macOS 26 still needs it. |
-| `com.apple.security.device.camera` | Scanning QR codes, with `NSCameraUsageDescription`. The app's alone: neither extension links the scanner, as App Review rejects a bundle whose code uses the camera without the entitlement (guideline 2.4.5), as it did 2.1 for the AutoFill extension. `make validate` and the release lane fail for a bundle without it whose code uses `AVCapture`. |
 | `com.apple.security.print` | Printing a backup. |
 | `com.apple.security.hardened-process`, with `…hardened-heap`, `…checked-allocations`, `…checked-allocations.enforce-checked-pointer-arithmetic-overflow` and `…dyld-ro` on, and `…enhanced-security-version-string` and `…platform-restrictions-string` at `2` | Apple's Enhanced Security (`ENABLE_ENHANCED_SECURITY`), as on iOS: a hardened heap, checked allocations, and read-only dyld state, so a memory-safety bug in Vault or a library it uses is much harder to exploit (G101). `make validate` fails if any is missing or changed. |
 | `keychain-access-groups`: `442P244AFS.com.badbundle.vault.private`, then `442P244AFS.com.badbundle.vault`, then `442P244AFS.com.badbundle.vault.shared`, then `442P244AFS.com.badbundle.vault.widgets` | The app's own keychain items, which neither extension can read, then the App Group's, then those it shares with the AutoFill extension only, then the codes it hands its widgets. |
@@ -563,6 +564,9 @@ It never has:
   entitlements (G69);
 - temporary exceptions, file access beyond user-selected files (downloads, pictures and so on), Apple Events or
   scripting targets, or Mach lookup exceptions;
+- the camera (`com.apple.security.device.camera`), nor camera code in any of its bundles: App Review asked 2.2 to
+  justify it, and Bradley chose to remove camera support from the Mac (decision 10). `make validate` and the release
+  lane fail for any Mac bundle whose code uses `AVCapture`, now that none has the entitlement;
 - the hardened runtime's exceptions: no JIT, unsigned memory, DYLD environment variables, or disabled library
   validation;
 - `com.apple.security.get-task-allow` in release builds, so no other process can attach to Vault.
@@ -672,7 +676,7 @@ setting was off: an accepted limit.
 | VaultiOSShared, VaultiOSWidgets | yes | yes | The widgets, shared with the Mac's (VAULT-115): only where their codes come from differs (`OTPWidgetSource`). They keep their names, which the widgets' App Intents carry. |
 | `VaultMac` | no | yes | The Mac app's views, its composition root and the AppKit pieces, and handing the widgets their codes (in `Widgets/`). |
 | `VaultMacShared` | no | yes | What the app and its AutoFill extension share: the lock screen, a code's digits, the search field and the field editor it edits with, an item's live code, and what means the Mac is locking. |
-| `VaultMacAutofill` | no | yes | The AutoFill extension's, with a root of its own, which its target subclasses, as the iOS extension's does. It never links `VaultMac`, so the extension has none of the app's camera code (see [App Sandbox](#app-sandbox)). Its target's own module is `VaultMacAutofillExtension`, as the target has the same name. |
+| `VaultMacAutofill` | no | yes | The AutoFill extension's, with a root of its own, which its target subclasses, as the iOS extension's does. It never links `VaultMac`, so the extension has only what it needs. Its target's own module is `VaultMacAutofillExtension`, as the target has the same name. |
 
 `VaultMac` doesn't reuse VaultiOS's views: they're iOS views, full of UIKit and iOS-only modifiers, and making them
 build for both would change the iOS app. It reuses everything beneath them. The shared view models, the App Lock, the
