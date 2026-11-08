@@ -125,7 +125,7 @@ struct VaultMacImportSheet: View {
     var services: VaultMacBackupServices
     var close: () -> Void
     /// Chooses a PDF, as the Open panel does unless a test says otherwise.
-    var choosePDF: @MainActor () -> URL? = Self.runPDFPanel
+    var choosePDF: @MainActor () -> URL? = { Self.runPDFPanel() }
 
     @State private var decryptedVaults = PassthroughSubject<VaultApplicationPayload, Never>()
     @State private var decryptor: BackupKeyDecryptorViewModel?
@@ -241,7 +241,7 @@ struct VaultMacImportSheet: View {
     }
 
     /// Reads the file off the main actor: it could be large, or in iCloud Drive and not downloaded yet.
-    private nonisolated static func read(_ url: URL) async -> Result<Data, any Error> {
+    nonisolated static func read(_ url: URL) async -> Result<Data, any Error> {
         Result { try Data(contentsOf: url) }
     }
 
@@ -253,14 +253,14 @@ struct VaultMacImportSheet: View {
         }
     }
 
-    /// The Open panel, for choosing one PDF.
-    static func runPDFPanel() -> URL? {
+    /// The Open panel, for choosing one PDF, with `prompt` on its button.
+    static func runPDFPanel(prompt: String = "Import") -> URL? {
         let panel = NSOpenPanel()
         VaultMacPanels.prepare(panel)
         panel.allowedContentTypes = [.pdf]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.prompt = "Import"
+        panel.prompt = prompt
         panel.message = "Choose a Vault backup PDF."
         return panel.runModal() == .OK ? panel.url : nil
     }

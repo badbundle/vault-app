@@ -33,6 +33,7 @@ struct BackupHomeView: View {
             autoBackupSection
             exportSection
             restoreSection
+            checkSection
             passwordSection
         }
         .navigationTitle(Text("Backups"))
@@ -115,6 +116,24 @@ struct BackupHomeView: View {
             }
         } footer: {
             Text("Import items from a backup PDF or another device, with the password the backup was made with.")
+        }
+    }
+
+    // MARK: - Check Section
+
+    /// Checking a backup reads neither the vault nor the backup key, and changes nothing, so it needs no
+    /// authentication.
+    private var checkSection: some View {
+        Section {
+            NavigationLink {
+                BackupCheckView(viewModel: .init())
+            } label: {
+                FormRow(image: Image(systemName: "doc.text.magnifyingglass"), color: .accentColor) {
+                    Text("Check a Backup")
+                }
+            }
+        } footer: {
+            Text("Make sure a backup opens with its password, without restoring it.")
         }
     }
 

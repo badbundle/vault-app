@@ -1,6 +1,5 @@
 import Foundation
 import FoundationExtensions
-import PDFKit
 import VaultBackup
 import VaultCore
 import VaultKeygen
@@ -62,25 +61,8 @@ public final class BackupImportFlowViewModel {
     public func handleImport(fromPDF pdfDataResult: Result<Data, any Error>) async {
         importState = .notStarted
         await performImport {
-            let data = pdfDataResult.mapError { error in
-                PresentationError(
-                    userTitle: "File Error",
-                    userDescription: "There was an error with the file you selected. Please try again.",
-                    debugDescription: error.localizedDescription,
-                )
-            }
-            let pdfData = try data.get()
-            return try await Self.detachEncryptedVault(fromPDF: pdfData, using: backupPDFDetatcher)
+            try await BackupPDFReader.encryptedVault(fromPDF: pdfDataResult, using: backupPDFDetatcher)
         }
-    }
-
-    /// Reads the backup in a PDF off the main actor: a large vault's PDF takes a while to read.
-    private nonisolated static func detachEncryptedVault(
-        fromPDF pdfData: Data,
-        using backupPDFDetatcher: any VaultBackupPDFDetatcher,
-    ) async throws -> EncryptedVault {
-        guard let pdf = PDFDocument(data: pdfData) else { throw InvalidURLError() }
-        return try backupPDFDetatcher.detachEncryptedVault(fromPDF: pdf)
     }
 
     public func handleImport(fromEncryptedVault encryptedVault: EncryptedVault) async {
@@ -97,18 +79,11 @@ public final class BackupImportFlowViewModel {
 
             let encryptedVault = try await getEncryptedVault()
             payloadState = .needsPasswordEntry(encryptedVault)
-        } catch let error as any LocalizedError {
-            payloadState = .error(.init(localizedError: error))
         } catch {
-            payloadState = .error(PresentationError(
-                userTitle: "Document Error",
-                userDescription: "There was an error with the this Vault export document. Please check the document, your internet, and try again.",
-                debugDescription: error.localizedDescription,
-            ))
+            payloadState = .error(BackupPDFReader.presentationError(for: error))
         }
     }
 
-    struct InvalidURLError: Error {}
     enum PasswordError: Error, LocalizedError {
         case noPassword
 

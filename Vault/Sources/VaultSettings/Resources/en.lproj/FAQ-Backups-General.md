@@ -43,6 +43,15 @@ That's why the password needs to be a good one: Vault asks for at least 8 charac
 The PDF shows that it's a Vault backup, when it was made, how many pages and QR codes it has, and your password hint, if you wrote one.
 Nothing else in it can be read without the password.
 
+## How do I know a backup will restore?
+
+Use **Check a Backup** in Backups. Choose the backup's PDF, or on an iPhone or iPad scan its QR codes, then type its password.
+Vault opens the backup and reads everything in it, as a restore would, then tells you it opens and forgets what it read.
+Nothing on this device changes, and nothing in the backup is added to your vault.
+
+Vault keeps your backup password so it can make backups without asking, so you might not type it again for a long time.
+Check a backup now and then, so you find out you've forgotten its password while you can still make a new one.
+
 ## What happens to items I delete?
 
 They stay in any backup made before you deleted them, including items deleted by a killphrase, and on a Mac, in Time Machine's local snapshots, and its backups if you've let it back up Vault.

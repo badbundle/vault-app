@@ -42,6 +42,8 @@ struct VaultMacBackupsDetail: View {
                     services: services,
                     viewModel: BackupRestoreViewModel(authenticationService: services.authentication),
                 )
+            case .check:
+                VaultMacCheckPage(services: services)
             case .password:
                 VaultMacBackupPasswordPage(services: services, isShowingPasswordSheet: $isShowingPasswordSheet)
             case nil:

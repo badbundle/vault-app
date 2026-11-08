@@ -10,6 +10,7 @@ enum VaultMacBackupsPage: String, CaseIterable, Identifiable {
     case keepABackup
     case transfer
     case restore
+    case check
     case password
 
     var id: Self {
@@ -22,6 +23,7 @@ enum VaultMacBackupsPage: String, CaseIterable, Identifiable {
         case .keepABackup: "Keep a Backup"
         case .transfer: "Move to Another Device"
         case .restore: "Restore"
+        case .check: "Check a Backup"
         case .password: "Backup Password"
         }
     }
@@ -32,6 +34,7 @@ enum VaultMacBackupsPage: String, CaseIterable, Identifiable {
         case .keepABackup: "doc.badge.arrow.up"
         case .transfer: "qrcode"
         case .restore: "square.and.arrow.down"
+        case .check: "doc.text.magnifyingglass"
         case .password: "lock.shield"
         }
     }
