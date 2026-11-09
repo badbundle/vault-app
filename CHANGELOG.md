@@ -23,6 +23,7 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 ### Fixed
 
+- On iOS 27.2, in a vault without an App Lock Password, merging a backup could take a tag off an item the backup didn't have. It took the item editing, Import & Override giving it the tag, then a merge giving another item the same tag. A merge now starts from what's saved, staged on its own as Import & Override already was, so a failed merge also leaves nothing to undo
 - On the iPhone Duo's outer screen, the lock screen's words and Unlock button sat to one side of the vault door, as its safe area is narrower on the camera's side. Everything beneath the door is now laid out across the middle of the screen, inside the safe area, so it's always lined up under the door
 - App Review rejected the Mac app (guideline 2.4.5) as its AutoFill extension had the app's QR code scanner in it, which uses the camera, without the camera entitlement, which only the app has. The extension is now built from only what it needs, the lock screen, the codes and their search, so it has no camera code at all, and `make validate` and the release lane fail for any Mac bundle whose code uses the camera without the entitlement
 

@@ -469,38 +469,47 @@ extension PersistedLocalVaultStore: VaultTagStoreWriter {
 // MARK: - VaultStoreImporter
 
 extension PersistedLocalVaultStore: VaultStoreImporter {
+    /// Adds the payload's tags, and its items that are newer than the stored ones, all or nothing.
+    ///
+    /// The merge is staged in a context of its own, as the override is, and saved in one go. If an item doesn't
+    /// encode, or the save fails, the staged context is thrown away and the vault is left as it was.
     public func importAndMergeVault(payload: VaultApplicationPayload) async throws {
-        do {
-            let exported = try await exportVault(userDescription: "")
-            let itemUpdatedDates = exported.items
-                .reduce(into: [Identifier<VaultItem>: Date]()) { partialResult, nextItem in
-                    partialResult[nextItem.id] = nextItem.metadata.updated
-                }
-            let itemsToImport = payload.items.filter {
-                // Only import item if it was updated more recently.
-                $0.metadata.updated > itemUpdatedDates[$0.id, default: .distantPast]
+        let exported = try await exportVault(userDescription: "")
+        let itemUpdatedDates = exported.items
+            .reduce(into: [Identifier<VaultItem>: Date]()) { partialResult, nextItem in
+                partialResult[nextItem.id] = nextItem.metadata.updated
             }
-
-            let tagEncoder = PersistedVaultTagEncoder()
-            for tag in payload.tags {
-                let record = tagEncoder.encode(tag: tag.makeWritable(), writeUpdateContext: tag.makeImportingContext())
-                try modelContext.store(record: record)
-            }
-
-            let itemEncoder = PersistedVaultItemEncoder(currentDate: currentDate)
-            for item in itemsToImport {
-                let record = try itemEncoder.encode(
-                    item: item.makeWritable(),
-                    writeUpdateContext: item.makeImportingContext(),
-                )
-                try modelContext.store(record: record)
-            }
-
-            try modelContext.save()
-        } catch {
-            modelContext.rollback()
-            throw error
+        let itemsToImport = payload.items.filter {
+            // Only import item if it was updated more recently.
+            $0.metadata.updated > itemUpdatedDates[$0.id, default: .distantPast]
         }
+
+        // Staged away from `modelContext`, for two reasons:
+        //
+        // - A failure never has to roll it back. SwiftData can crash rolling back a context that has deleted some
+        //   models and then updated or inserted others, as a merge does when an item changes kind.
+        // - On macOS 27.2, a merge in `modelContext` could take a tag off an item the payload didn't have. It
+        //   happened once that context had updated the item and a restore had then given it the tag from its own
+        //   context: giving another item the same tag took it off this one (VAULT-159, seed 5 of
+        //   `VaultStoreDifferentialTests`). A fresh context starts from what's saved.
+        let context = ModelContext(modelContainer)
+
+        let tagEncoder = PersistedVaultTagEncoder()
+        for tag in payload.tags {
+            let record = tagEncoder.encode(tag: tag.makeWritable(), writeUpdateContext: tag.makeImportingContext())
+            try context.store(record: record)
+        }
+
+        let itemEncoder = PersistedVaultItemEncoder(currentDate: currentDate)
+        for item in itemsToImport {
+            let record = try itemEncoder.encode(
+                item: item.makeWritable(),
+                writeUpdateContext: item.makeImportingContext(),
+            )
+            try context.store(record: record)
+        }
+
+        try context.save()
     }
 
     /// Replaces the vault with the payload's items and tags, all or nothing.
