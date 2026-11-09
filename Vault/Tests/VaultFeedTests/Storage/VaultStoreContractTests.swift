@@ -1817,6 +1817,43 @@ struct VaultStoreContractTests {
         try await sut.assertStoreContains(exactlyTags: [tag])
     }
 
+    /// After a restore over the vault, tagging another item with a tag a restored item has leaves the restored item
+    /// with it: whether the other item is merged in, inserted or updated.
+    @Test(arguments: VaultStoreEngine.allCases, TaggingAfterRestore.allCases)
+    func importAndOverrideVault_thenTaggingAnotherItem_keepsTheTagOnTheRestoredItem(
+        engine: VaultStoreEngine,
+        tagging: TaggingAfterRestore,
+    ) async throws {
+        let sut = try await engine.makeStore()
+        let tag = try await sut.insertTag(item: anyVaultItemTag(name: "Work").makeWritable())
+        let restoredID = try await sut.insert(item: uniqueVaultItem().makeWritable())
+        let otherID = try await sut.insert(item: uniqueVaultItem().makeWritable())
+        try await sut.importAndOverrideVault(payload: .init(
+            userDescription: "",
+            items: [
+                uniqueVaultItem(id: restoredID, tags: [tag]),
+                uniqueVaultItem(id: otherID),
+            ],
+            tags: [anyVaultItemTag(id: tag.id, name: "Work")],
+        ))
+
+        switch tagging {
+        case .merge:
+            try await sut.importAndMergeVault(payload: .init(
+                userDescription: "",
+                items: [uniqueVaultItem(tags: [tag])],
+                tags: [],
+            ))
+        case .insert:
+            try await sut.insert(item: uniqueVaultItem(tags: [tag]).makeWritable())
+        case .update:
+            try await sut.update(id: otherID, item: uniqueVaultItem(tags: [tag]).makeWritable())
+        }
+
+        let restored = try await sut.allVaultItems().first { $0.id == restoredID }
+        #expect(restored?.metadata.tags == [tag])
+    }
+
     @Test(arguments: VaultStoreEngine.allCases)
     func importAndMergeVault_importsNonEmptyToEmptyVault(engine: VaultStoreEngine) async throws {
         let sut = try await engine.makeStore()
@@ -2302,4 +2339,12 @@ extension VaultStoreContractTests {
             tags: [newTag],
         )
     }
+}
+
+/// How another item gets a tag after a restore, in
+/// `importAndOverrideVault_thenTaggingAnotherItem_keepsTheTagOnTheRestoredItem`.
+enum TaggingAfterRestore: CaseIterable, Sendable {
+    case merge
+    case insert
+    case update
 }
