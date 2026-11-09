@@ -515,6 +515,10 @@ enum VaultMacRoot {
 
     /// Wires the app together at launch.
     static func setup() {
+        // Made now, outside any view's body, rather than when the first code's row is drawn: each registers itself
+        // with the data model as it's made (VAULT-137).
+        _ = totpPreviewRepository
+        _ = hotpPreviewRepository
         // At every launch, so the vault stays out of Time Machine unless the user lets it in, whenever it was made.
         vaultBackupExclusion.apply()
         // The keychain items an earlier version kept in the App Group's access group move to the one only the app and

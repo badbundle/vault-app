@@ -1,5 +1,6 @@
 import Foundation
 import FoundationExtensions
+import Observation
 import TestHelpers
 import Testing
 import VaultKeygen
@@ -759,6 +760,26 @@ final class VaultDataModelTests {
             .retrieve, // reload items
             .export, // export for payload hash
         ])
+    }
+
+    /// The apps register their preview repositories from lazy statics, which can first run inside a view's body. If
+    /// the caches were observed, the view that registered one would then observe them, and registering the next, inside
+    /// another view's body during a synchronous layout, would evaluate that first view again there and then. It could
+    /// read the second static again while it was still being made, and the app crashed (VAULT-137).
+    @Test
+    func itemCaches_registeringOneAfterAnotherWasRegisteredWhileObserved_invalidatesNothing() {
+        let sut = makeSUT()
+        let invalidated = SharedMutex(false)
+        withObservationTracking {
+            sut.itemCaches.append(VaultItemCacheMock())
+        } onChange: {
+            invalidated.modify { $0 = true }
+        }
+
+        sut.itemCaches.append(VaultItemCacheMock())
+
+        #expect(sut.itemCaches.count == 2)
+        #expect(invalidated.get { $0 } == false)
     }
 
     @Test
