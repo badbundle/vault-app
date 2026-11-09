@@ -56,7 +56,7 @@ struct VaultMacBackupsList: View {
             case .notSet: "Not Set"
             case .set: "Set"
             }
-        case .keepABackup, .transfer, .restore:
+        case .keepABackup, .transfer, .restore, .check:
             nil
         }
     }

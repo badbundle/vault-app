@@ -4,6 +4,7 @@ A backup in every format the app still has to restore, each made once and kept e
 [`../../GoldenFixtures`](../../GoldenFixtures) restore every one as the Backups page does: the PDF into the import
 flow, its password into the password screen, and what it decrypts into a vault. Each must give back exactly the vault
 it was made of, as its format carried it: the same items, tags, killphrases, search passphrases and lock states.
+Each also opens with its password in Check a Backup (`BackupCorpusCheckTests`).
 
 The same rule as the other golden fixtures applies (see [`../README.md`](../README.md)): **never make a backup here
 again to get a test to pass**, and **a format change adds a new backup and keeps every old one**. People restore

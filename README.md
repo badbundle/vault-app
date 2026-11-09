@@ -31,6 +31,7 @@ Vault is an open-source iPhone, iPad and Mac app for the secrets you can't affor
 - Encrypted PDF backups to print, or to save anywhere, restored from the file or by scanning their QR codes. In plain text, a backup shows only that it's a Vault backup, when it was made, and a hint if you write one.
 - Automatic encrypted backups to a folder you choose, such as one in iCloud Drive, whenever your items change.
 - Moving the vault to another iPhone, iPad or Mac with QR codes, with no file saved.
+- Check a Backup: make sure a backup opens with its password, without restoring it. Nothing on the device changes.
 - Every export is the whole vault, encrypted with its backup password. There's no unencrypted export.
 
 ### Privacy

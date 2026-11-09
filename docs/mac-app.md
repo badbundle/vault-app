@@ -91,7 +91,7 @@ One main window, as Passwords has. Opening another isn't offered (no ⌘N for wi
   while the whole search is their passphrase (G8), and a killphrase deletes its item at once, without saying so (G1,
   G2).
 - **Backups:** the same page as on iOS, in the window's content area: the backup password, Keep a Backup, Move to
-  Another Device, Auto-Backup and Restore.
+  Another Device, Auto-Backup, Restore and Check a Backup.
 
 While Vault is locked, every window shows only the lock screen. Sheets are closed, and each of the Settings window's tabs shows
 that Vault is locked, with a button that brings the main window forward to unlock it.
@@ -511,6 +511,8 @@ is in the detail column.
 - **Restore** reads a PDF the user picks. It always asks for the backup's own password (G59),
   after Touch ID or the Mac's password (G31), and asks again once the page closes, or Vault stops being the active
   app with no import open. An empty vault imports; otherwise Merge or Replace, as on iOS.
+- **Check a Backup** reads a PDF the user picks and asks for its password, as Restore does, then says only that it
+  opens (G106). It changes nothing, so it doesn't ask for Touch ID or the Mac's password first.
 - **Adding a code** can also read a QR code from an image file the user picks, with Vision's barcode detection.
 
 ## Packaging
