@@ -95,7 +95,13 @@ public final class VaultDataModel {
     /// `.loaded` once the items have been read since the vault was last purged.
     public private(set) var itemsState: State = .base
     public private(set) var itemsRetrievalError: PresentationError?
-    public var itemCaches: [any VaultItemCache]
+    /// The caches of what was read from items, such as codes' previews, cleared with the items. No view shows them, so
+    /// changing them invalidates no view. That matters because the apps register their preview repositories from lazy
+    /// statics, which can first run inside a view's body. Observed, the view that registered one would then observe
+    /// the caches, and registering the next during a synchronous layout, such as a window resize, could evaluate that
+    /// view again there and then, read the second static while it was still being made, and crash with a recursive
+    /// `dispatch_once` (VAULT-137).
+    @ObservationIgnored public var itemCaches: [any VaultItemCache]
 
     // MARK: Tags
 

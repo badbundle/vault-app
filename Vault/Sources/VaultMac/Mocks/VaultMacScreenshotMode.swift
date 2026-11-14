@@ -279,8 +279,7 @@ enum VaultMacScreenshotMode {
         log("opening the \(scene.rawValue) scene")
         // The app's, so every window and sheet takes it, whatever the Mac's own appearance.
         NSApp.appearance = NSAppearance(named: appearance)
-        // While it's still locked: resizing lays the window out again there and then, which mustn't be the first time
-        // a code's row is drawn.
+        // While it's still locked, so the window has its size before any item is drawn in it.
         window(VaultMacWindow.main.id)?.setContentSize(mainWindowSize)
         let seeded: DemoVault.SeededItems
         do {
