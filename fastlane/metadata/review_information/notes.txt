@@ -15,6 +15,7 @@ SECURITY FEATURES (all off by default)
 
 BACKUPS
 - Backups > Export saves the whole vault as an encrypted PDF once a backup password is set. Backups > Restore imports it from the file, or by scanning its QR codes.
+- Backups > Check a Backup (new in 2.3) opens a backup with its password, from the file or by scanning its QR codes, to confirm it would restore. It changes nothing in the vault.
 
 AUTOFILL
 - In iOS Settings > General > AutoFill & Passwords, turn on Vault to fill one-time codes.

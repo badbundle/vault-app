@@ -13,6 +13,18 @@ Only app binary versions >2.0 should be used in production for this reason.
 ### Added
 
 - Check a Backup, on iOS and the Mac, in Backups: choose a PDF backup or an auto-backup, or on iOS scan a printed backup's QR codes, and type its password. Vault opens the backup and reads all of it, as a restore would, then says it opens and forgets it. Nothing on the device changes, and it says nothing about what the backup holds. Vault keeps the backup password so it can make backups without asking, so this is how to find out that a backup's password is still remembered, before it's needed. About Backups in Help says how
+
+### Fixed
+
+- The Mac app could crash the first time a counter-based code's row was drawn while the window was being laid out, such as during a resize. Registering the codes' previews to be cleared when Vault locks could make the list draw itself again before the previews were ready. The previews are now made at launch, and registering them redraws nothing, on iOS too
+- On iOS 27.2, in a vault without an App Lock Password, merging a backup could take a tag off an item the backup didn't have. It took the item editing, Import & Override giving it the tag, then a merge giving another item the same tag. A merge now starts from what's saved, staged on its own as Import & Override already was, so a failed merge also leaves nothing to undo
+
+## [2.2] - 2026-10-21
+
+Released on iOS on 21 October 2026. The Mac app, with the camera removed, followed on 3 November 2026, as its first release.
+
+### Added
+
 - On the iPhone Duo's inner screen, partly folded, nothing sits across the crease. Held open like a book, the lock screen has the vault door and its words on one page and the Unlock button on the other, the sidebar meets the items at the crease, the items fill both pages either side of it when they fill the screen, and an item's page keeps to one page. Stood on a table, the lock screen has the door in the top half and the Unlock button in the bottom half. iOS says when the screen is partly folded but not where the crease is, so Vault takes it to run through the middle of the screen. Open flat, the screen keeps its usual layout
 - Private keys as a new item type, on iOS and the Mac: WIF keys, extended private keys (xprv, yprv, zprv, tprv and the other SLIP-132 versions), raw hex secp256k1 keys, Nostr nsec keys, and OpenPGP, OpenSSH and PEM private keys, or any other text. Vault says what it recognises a key as, such as "WIF · mainnet · compressed" or "OpenSSH · Ed25519", checks its checksum where it has one, and warns about a public key entered by mistake, but derives nothing from it: no public key or address. Like a recovery phrase, a private key is always encrypted with a password and locked, masked until tapped, hidden while Vault is in the background or the screen is captured, and never copied or shown as a QR code. Help has a new page, "About Private Keys"
 
@@ -24,8 +36,6 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 ### Fixed
 
-- The Mac app could crash the first time a counter-based code's row was drawn while the window was being laid out, such as during a resize. Registering the codes' previews to be cleared when Vault locks could make the list draw itself again before the previews were ready. The previews are now made at launch, and registering them redraws nothing, on iOS too
-- On iOS 27.2, in a vault without an App Lock Password, merging a backup could take a tag off an item the backup didn't have. It took the item editing, Import & Override giving it the tag, then a merge giving another item the same tag. A merge now starts from what's saved, staged on its own as Import & Override already was, so a failed merge also leaves nothing to undo
 - On the iPhone Duo's outer screen, the lock screen's words and Unlock button sat to one side of the vault door, as its safe area is narrower on the camera's side. Everything beneath the door is now laid out across the middle of the screen, inside the safe area, so it's always lined up under the door
 - App Review rejected the Mac app (guideline 2.4.5) as its AutoFill extension had the app's QR code scanner in it, which uses the camera, without the camera entitlement, which only the app has. The extension is now built from only what it needs, the lock screen, the codes and their search, so it has no camera code at all, and `make validate` and the release lane fail for any Mac bundle whose code uses the camera without the entitlement
 

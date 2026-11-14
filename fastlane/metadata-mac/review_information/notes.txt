@@ -3,7 +3,7 @@ Vault needs no account or sign-in, has no in-app purchases, and makes no network
 Vault is not a cryptocurrency wallet or exchange. It stores the text the user types, such as a wallet's recovery phrase or private key, encrypted on the Mac. It holds no funds, signs no transactions, shows no balances, and makes no network requests.
 
 THE CAMERA (GUIDELINE 2.4.5)
-- This version no longer uses the camera. The com.apple.security.device.camera entitlement and the camera usage description are removed from the app, and none of its bundles contains any camera code.
+- Since 2.2, Vault for Mac doesn't use the camera. The app has no com.apple.security.device.camera entitlement and no camera usage description, and none of its bundles contains any camera code.
 - QR codes are read from image files the user chooses (Vision barcode detection), which needs no camera.
 
 THE APP LOCK PASSWORD IS REQUIRED ON THE MAC
@@ -24,6 +24,7 @@ SECURITY FEATURES
 
 BACKUPS
 - Backups, in the sidebar, saves the whole vault as an encrypted PDF once a backup password is set, and restores one from the file.
+- Backups > Check a Backup (new in 2.3) opens a backup PDF with its password to confirm it would restore. It changes nothing in the vault.
 
 AUTOFILL AND WIDGETS
 - In System Settings > General > AutoFill & Passwords, turn on Vault to fill one-time codes in Safari.

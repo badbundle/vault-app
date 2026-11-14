@@ -36,7 +36,7 @@ configurations are based on that file, and no target sets a version of its
 own.
 
 - Change the version there, and only there, in the pull request that starts
-  the next version, such as 2.2.
+  the next version, such as 2.3.
 - Don't change it in a target's General tab in Xcode: that writes a setting
   into the target, and `make validate`'s **Versions** check fails on it. The
   check also fails if any of the six bundles the iOS and Mac builds make has
@@ -330,8 +330,8 @@ has its own folder:
 Every release updates What's New in both, from `CHANGELOG.md`. App Store
 Connect takes no What's New for a platform's first version, so deliver skipped
 the Mac's for 2.1, and again for 2.2: App Review rejected the Mac's 2.1, which
-was never released, so the release lane renamed that version 2.2 and it's still
-the Mac's first.
+was never released, so the release lane renamed that version 2.2, and that was
+the Mac's first. From 2.3 the Mac has a What's New of its own.
 
 The release lane uploads both listings with every build. To upload them
 without a build:
