@@ -24,9 +24,13 @@ struct OpenSourceView: View {
     private var linkSection: some View {
         Section {
             Link(destination: OpenSourceStrings.openSourceLink) {
-                ProminentActionLabel(OpenSourceStrings.viewOnGitHub, systemImage: "arrow.up.right")
+                FormActionRowLabel(
+                    OpenSourceStrings.viewOnGitHub,
+                    systemImage: "chevron.left.forwardslash.chevron.right",
+                    color: .purple,
+                    kind: .external,
+                )
             }
-            .prominentActionButton()
         }
     }
 }

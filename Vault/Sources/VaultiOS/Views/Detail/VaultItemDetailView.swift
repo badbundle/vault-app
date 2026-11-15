@@ -167,7 +167,7 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View, 
             }
 
             Section {
-                ProminentActionButton("Unlock", systemImage: "lock.open.fill") {
+                FormActionRow("Unlock", systemImage: "lock.open.fill") {
                     try await authenticationService.validateAuthentication(reason: "Unlock item")
                     if reduceMotion {
                         viewModel.isLocked = false
@@ -199,7 +199,7 @@ struct VaultItemDetailView<ChildViewModel: DetailViewModel, ContentsView: View, 
             }
 
             Section {
-                ProminentActionButton("Dismiss", systemImage: "xmark") {
+                FormActionRow("Dismiss", systemImage: "xmark", actionOptions: []) {
                     viewModel.isLocked = false
                 }
             }

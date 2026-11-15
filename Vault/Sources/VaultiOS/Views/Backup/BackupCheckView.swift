@@ -102,11 +102,13 @@ struct BackupCheckView: View {
     /// Where the backup comes from, as on the import sheet.
     private var sourcesSection: some View {
         Section {
-            BackupOptionRow(
-                title: "Choose a PDF Backup",
-                detail: "A PDF backup or an auto-backup, from Files.",
+            FormActionRow(
+                "Choose a PDF Backup",
+                subtitle: "A PDF backup or an auto-backup, from Files.",
                 systemImage: "doc.text.fill",
                 color: .accentColor,
+                kind: .disclosure,
+                actionOptions: [],
             ) {
                 viewModel.clearResult()
                 isChoosingPDF = true
@@ -121,11 +123,13 @@ struct BackupCheckView: View {
                 }
             }
 
-            BackupOptionRow(
-                title: "Scan QR Codes",
-                detail: "From a printed PDF backup.",
+            FormActionRow(
+                "Scan QR Codes",
+                subtitle: "From a printed PDF backup.",
                 systemImage: "qrcode.viewfinder",
                 color: .indigo,
+                kind: .disclosure,
+                actionOptions: [],
             ) {
                 viewModel.clearResult()
                 modal = .cameraScanning

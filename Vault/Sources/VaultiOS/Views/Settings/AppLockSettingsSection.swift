@@ -72,15 +72,17 @@ struct AppLockSettingsSection: View {
         Button {
             passwordSheet = PasswordSheet(startsWithPasswordSet: appLock.isPasswordSet)
         } label: {
-            SheetRowLabel(
-                title: "App Lock Password",
+            FormActionRowLabel(
+                "App Lock Password",
                 value: appLock.isPasswordSet ? "On" : "Off",
                 color: SettingsIconColor.security,
+                kind: .disclosure,
             ) {
                 AppLockPasswordMark.RowIcon()
             }
         }
-        .disabled(isChanging)
+        // Not disabled, which would fade the row for the moment a switch above it takes to change.
+        .allowsHitTesting(!isChanging)
         // What the sheet shows is fixed when it opens, so setting the password shows that it's set, rather than
         // swapping to the screen for a password that's on.
         .sheet(item: $passwordSheet) { sheet in

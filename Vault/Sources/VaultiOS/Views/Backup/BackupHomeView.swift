@@ -145,20 +145,8 @@ struct BackupHomeView: View {
         Section {
             BackupPasswordStatusRow(status: status)
 
-            Button {
+            FormActionRow(passwordActionTitle(for: status), systemImage: "lock.shield.fill", kind: .disclosure) {
                 isShowingPasswordSheet = true
-            } label: {
-                switch status {
-                case .unknown:
-                    // Without a status row above it, the button names the feature itself.
-                    FormRow(image: Image(systemName: "lock.shield.fill"), color: .accentColor) {
-                        Text("Backup Password")
-                    }
-                case .notSet:
-                    Text("Set Up Backup Password")
-                case .set:
-                    Text("Change Backup Password")
-                }
             }
         } footer: {
             switch status {
@@ -169,5 +157,14 @@ struct BackupHomeView: View {
             }
         }
         .animation(.default, value: status)
+    }
+
+    private func passwordActionTitle(for status: VaultDataModel.BackupPasswordStatus) -> String {
+        switch status {
+        // Without a status row above it, the row names the feature itself.
+        case .unknown: "Backup Password"
+        case .notSet: "Set Up Backup Password"
+        case .set: "Change Backup Password"
+        }
     }
 }

@@ -36,12 +36,16 @@ struct DetailEditorOverview: View {
 
         if let delete {
             Section {
-                ProminentActionButton(
-                    localized(key: "action.delete.title"),
-                    systemImage: "trash.fill",
-                    role: .destructive,
-                ) {
+                Button(role: .destructive) {
                     delete()
+                } label: {
+                    OptionCardLabel(
+                        title: localized(key: "action.delete.title"),
+                        subtitle: "You'll be asked to confirm.",
+                        systemImage: "trash.fill",
+                        color: .red,
+                    )
+                    .padding(.vertical, 6)
                 }
             }
         }

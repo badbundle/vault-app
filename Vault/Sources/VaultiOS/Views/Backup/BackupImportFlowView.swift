@@ -142,11 +142,13 @@ struct BackupImportFlowView: View {
     /// Where the backup comes from, as rows in the style of the Export page's options.
     private var sourcesSection: some View {
         Section {
-            BackupOptionRow(
-                title: "Choose a PDF Backup",
-                detail: "Pick the backup file from Files.",
+            FormActionRow(
+                "Choose a PDF Backup",
+                subtitle: "Pick the backup file from Files.",
                 systemImage: "doc.text.fill",
                 color: .accentColor,
+                kind: .disclosure,
+                actionOptions: [],
             ) {
                 viewModel.clearError()
                 isImporting = true
@@ -161,11 +163,13 @@ struct BackupImportFlowView: View {
                 }
             }
 
-            BackupOptionRow(
-                title: "Scan QR Codes",
-                detail: "From a PDF backup, or the Export screen on another device.",
+            FormActionRow(
+                "Scan QR Codes",
+                subtitle: "From a PDF backup, or the Export screen on another device.",
                 systemImage: "qrcode.viewfinder",
                 color: .indigo,
+                kind: .disclosure,
+                actionOptions: [],
             ) {
                 viewModel.clearError()
                 modal = .cameraScanning

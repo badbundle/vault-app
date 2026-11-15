@@ -93,17 +93,17 @@ struct VaultStoreFailureView: View {
     /// and can't be undone.
     private func eraseSection(_ missingVault: MissingVaultViewModel) -> some View {
         Section {
-            Button(role: .destructive) {
+            FormActionRow(
+                "Erase and Start Again",
+                systemImage: "trash.fill",
+                role: .destructive,
+                isLoading: missingVault.state == .erasing,
+                actionOptions: [],
+            ) {
                 isConfirmingErase = true
-            } label: {
-                ProminentActionLabel(
-                    "Erase and Start Again",
-                    systemImage: "trash.fill",
-                    isLoading: missingVault.state == .erasing,
-                )
             }
-            .prominentActionButton()
-            .disabled(missingVault.state == .erasing)
+            // Not disabled while erasing, which would grey it out under the spinner: a second tap is ignored.
+            .allowsHitTesting(missingVault.state != .erasing)
             .confirmationDialog("Erase and Start Again?", isPresented: $isConfirmingErase, titleVisibility: .visible) {
                 Button("Erase and Start Again", role: .destructive) {
                     Task { await missingVault.eraseAndStartAgain() }

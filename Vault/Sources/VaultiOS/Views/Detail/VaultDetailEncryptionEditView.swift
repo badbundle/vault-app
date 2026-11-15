@@ -92,7 +92,7 @@ struct VaultDetailEncryptionEditView: View {
 
         if newEncryptionPassword.isNotBlank {
             Section {
-                ProminentActionButton(actionTitle, systemImage: systemImage) {
+                FormActionRow(actionTitle, systemImage: systemImage, actionOptions: []) {
                     didSetNewEncryptionPassword(newEncryptionPassword)
                     dismiss()
                 }
@@ -130,7 +130,12 @@ struct VaultDetailEncryptionEditView: View {
         }
 
         Section {
-            ProminentActionButton("Remove Encryption", systemImage: "lock.slash.fill", role: .destructive) {
+            FormActionRow(
+                "Remove Encryption",
+                systemImage: "lock.slash.fill",
+                role: .destructive,
+                actionOptions: [],
+            ) {
                 didRemoveEncryption()
                 dismiss()
             }

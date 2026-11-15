@@ -144,10 +144,11 @@ struct VaultTagDetailView: View {
 
     private var deleteSection: some View {
         Section {
-            ProminentActionButton(
+            FormActionRow(
                 localized(key: "action.delete.title"),
                 systemImage: "trash.fill",
                 role: .destructive,
+                actionOptions: [],
             ) {
                 isShowingDeleteConfirmation = true
             }

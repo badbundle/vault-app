@@ -53,7 +53,7 @@ struct BackupCreatePDFView: View {
                         .tag(format)
                 }
             } label: {
-                FormRow(image: Image(systemName: "newspaper.fill"), color: .accentColor, style: .standard) {
+                FormRow(image: Image(systemName: "newspaper.fill"), color: .accentColor) {
                     Text("Paper Size")
                 }
             }
@@ -75,7 +75,7 @@ struct BackupCreatePDFView: View {
 
     private var createSection: some View {
         Section {
-            ProminentActionButton("Create PDF", systemImage: "doc.text.fill") {
+            FormActionRow("Create PDF", systemImage: "doc.text.fill") {
                 await viewModel.createPDF()
             }
         } footer: {
