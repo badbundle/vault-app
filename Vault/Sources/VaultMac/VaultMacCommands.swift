@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import VaultFeed
+import VaultSettings
 
 /// What the Mac app adds to, and takes out of, the standard menus.
 struct VaultMacCommands: Commands {
@@ -43,6 +44,8 @@ struct VaultMacCommands: Commands {
                 openWindow(id: VaultMacWindow.help.id)
             }
             .keyboardShortcut("?")
+            Divider()
+            Link("Rate Vault on the App Store", destination: VaultAppStore.writeReviewURL)
         }
         CommandMenu("Item") {
             Button("Edit Item") { itemActions?.edit() }
