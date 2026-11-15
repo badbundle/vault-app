@@ -224,17 +224,16 @@ search conversion was near the bottom of its peers').
 7. **2FA codes too:** a code's page, with its code and countdown lifted out.
 8. **Private by design:** Settings in light and dark, overlapping.
 
-The Mac still has the five from before, each a window (or two) on the same
-background. They take the new order once they're captured again, which needs
-the Mac unlocked (VAULT-161):
+The Mac tells the same story in five, each a window (or two) on the same
+background:
 
-1. **Your keys. Offline.** The "Cold storage" recovery phrase open beside the
-   list, with its masked words lifted out.
-2. **Forced to unlock it?:** the dark lock screen, with the Settings window's
+1. **Seed phrases, keys & 2FA:** a recovery phrase open beside the list, with
+   its masked words lifted out. The list shows phrases, keys and codes.
+2. **Backups you can hold:** Backups, with the last backup ("Exported to
+   PDF") lifted out, and Check a Backup in its list.
+3. **Forced to unlock it?:** the dark lock screen, with the Settings window's
    Security tab over it and Set Duress Password lifted out.
-3. **One search deletes it:** the editor sheet, with the killphrase lifted out.
-4. **Backups you can hold:** Backups, with the last backup ("Exported to
-   PDF") lifted out.
+4. **One search deletes it:** the editor sheet, with the killphrase lifted out.
 5. **Private by design:** the list, with Settings in dark over it and Hide
    While Recording lifted out.
 
