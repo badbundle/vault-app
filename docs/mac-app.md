@@ -114,6 +114,7 @@ The standard menus, with Vault's commands in them:
 | Settings… | ⌘, | Vault |
 | About Vault | | Vault |
 | Vault Help | ⌘? | Help (opens the Help window) |
+| Rate Vault on the App Store | | Help (opens Vault's page in the App Store) |
 
 There's no Undo for anything that changes the vault (C6). The Edit menu's Undo and Redo are only for text being typed.
 
@@ -137,8 +138,9 @@ always off with the password on (G49), and Show New Codes in QuickType, as there
 
 The Help window (⌘?) has the iOS app's FAQ pages, worded for either device, then the terms of use, the privacy
 policy, the libraries Vault uses and where its source is. The About window has the version, links to those pages,
-and the other Bad Bundle apps (`BadBundleApps`). Neither shows anything from the vault, so neither waits for it to be
-unlocked.
+Rate Vault on the App Store, which is in the Help menu too and opens Vault's page in the App Store, and the
+other Bad Bundle apps (`BadBundleApps`). The Mac app never asks for a rating itself (G107). Neither window shows
+anything from the vault, so neither waits for it to be unlocked.
 
 ### Adding and editing items
 

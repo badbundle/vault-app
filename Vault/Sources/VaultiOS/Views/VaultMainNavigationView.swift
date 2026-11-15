@@ -9,6 +9,10 @@ struct VaultMainNavigationView: View {
     @State var deviceAuthenticationService: DeviceAuthenticationService
     @State var vaultDataModel: VaultDataModel
     @State var injector: VaultInjector
+    /// Never asks while the App Store screenshots or the UI tests are running.
+    @State private var ratingRequestPolicy = RatingRequestPolicy(
+        isEnabled: !ScreenshotMode.isEnabled && UITestVaultStorage.current == nil,
+    )
     @Binding var pendingOpenItemDetail: Identifier<VaultItem>?
     @Environment(\.presentToast) private var presentToast
 
@@ -150,6 +154,7 @@ struct VaultMainNavigationView: View {
         .environment(deviceAuthenticationService)
         .environment(vaultDataModel)
         .environment(injector)
+        .environment(\.ratingRequestPolicy, ratingRequestPolicy)
         .environment(\.newItemDefaults, localSettings.state.newItemDefaults)
         .onChange(of: pendingOpenItemDetail) { _, newValue in
             if newValue != nil {

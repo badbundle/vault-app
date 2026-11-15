@@ -89,6 +89,7 @@ struct BackupSavePDFView: View {
         .sensoryFeedback(.success, trigger: viewModel.isSaved) { _, isSaved in
             isSaved
         }
+        .asksForRating(after: viewModel.isSaved)
         .fullScreenCover(item: Binding(
             get: { selectedPageIndex.map { PDFPageSelection(
                 index: $0,

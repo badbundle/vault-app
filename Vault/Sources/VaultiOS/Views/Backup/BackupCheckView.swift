@@ -38,6 +38,7 @@ struct BackupCheckView: View {
         .sensoryFeedback(.success, trigger: viewModel.state) { _, newValue in
             newValue.isOpened
         }
+        .asksForRating(after: viewModel.state.isOpened)
         .sheet(item: $modal, onDismiss: { viewModel.cancelPasswordEntry() }, content: { item in
             switch item {
             case let .enterPassword(encryptedVault):

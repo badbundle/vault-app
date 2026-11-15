@@ -1,6 +1,7 @@
 import BadBundleApps
 import SwiftUI
 import VaultAppIcon
+import VaultSettings
 
 /// The About window: the app's icon, name and version, its policies and libraries, where its source is, and the
 /// other Bad Bundle apps.
@@ -30,6 +31,9 @@ struct VaultMacAboutView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: 320)
             links
+            Link("Rate Vault on the App Store", destination: VaultAppStore.writeReviewURL)
+                .font(.callout)
+                .accessibilityIdentifier("about.rate")
             Divider()
             VStack(alignment: .leading, spacing: 8) {
                 Text("More Apps")
