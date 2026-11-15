@@ -9,10 +9,7 @@ struct VaultMainNavigationView: View {
     @State var deviceAuthenticationService: DeviceAuthenticationService
     @State var vaultDataModel: VaultDataModel
     @State var injector: VaultInjector
-    /// Never asks while the App Store screenshots or the UI tests are running.
-    @State private var ratingRequestPolicy = RatingRequestPolicy(
-        isEnabled: !ScreenshotMode.isEnabled && UITestVaultStorage.current == nil,
-    )
+    @State private var ratingRequestPolicy = RatingRequestPolicy(isEnabled: Self.asksForRatings)
     @Binding var pendingOpenItemDetail: Identifier<VaultItem>?
     @Environment(\.presentToast) private var presentToast
 
@@ -22,6 +19,15 @@ struct VaultMainNavigationView: View {
     @State private var frame: CGRect?
     @State private var isShowingCopyPaste = false
     @State private var selectedView: SidebarItem?
+
+    /// Never while the App Store screenshots or the UI tests are running, which only a debug build can do.
+    private static var asksForRatings: Bool {
+        #if DEBUG
+        !ScreenshotMode.isEnabled && UITestVaultStorage.current == nil
+        #else
+        true
+        #endif
+    }
 
     enum SidebarItem: Hashable {
         case items
