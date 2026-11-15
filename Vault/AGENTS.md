@@ -18,6 +18,15 @@ The UI tests are in `VaultApp/VaultAppUITests`, a target of the app's Xcode proj
 
 The Mac app's UI tests are in `VaultApp/VaultMacAppUITests`, with their own `VaultMacAppUITests` scheme, and its tests that run inside the launched app are in `VaultApp/VaultMacAppTests` (the `VaultMacApp` scheme). Run them with `-destination platform=macOS`. Development builds of the Mac app are signed with the team's Apple Development certificate and the "Vault Mac Development" provisioning profile, which the Mac's keychain needs (see Signing in [`../docs/mac-app.md`](../docs/mac-app.md)). They launch on a vault of their own with `-ui-test-vault fresh` (see `VaultMacUITestVault`).
 
+## Buttons in Forms (iOS)
+
+Every action in a `Form` on iOS is a `FormActionRow` (`Sources/VaultiOS/Views/General/FormActionRow.swift`): a row with a leading icon tile, like the rows that navigate. Use `FormActionRowLabel` as the label of a `Link`, or of a button with an icon that isn't a symbol.
+
+- Pass `kind: .disclosure` when the tap opens another screen, sheet or picker, and `.external` when it leaves Vault. The default, `.action`, is for a tap that acts where it is.
+- Pass `role: .destructive` for a row that deletes or replaces.
+- Don't add a filled capsule button, a text-only button or a row with a plain glyph to a form. `CapsuleActionLabel` is only for a screen with no form, such as the lock screen.
+- `FormActionRowSnapshotTests` pins every kind of row.
+
 ## Committing
 
 Before every commit, run `make format` and `make lint` from the `Vault/` directory to ensure code is properly formatted and passes linting.
