@@ -277,10 +277,13 @@ channel.
   page and the lock screen on iPhone. The title and the iPad are in the
   middle, so they still read when the image is cropped; the app's icon and
   name sit below it.
-- **Search results:** states the obvious with the real interface: "No
-  accounts. No tracking." and "Seed phrases, private keys and notes, fully
-  offline." over the dark iPad feed and a recovery phrase's page on iPhone.
-  Check it at about 600 pixels wide, the size of a search result.
+- **Search results:** says what Vault keeps, in the first screenshot's words,
+  with the real interface: "Seed phrases, keys & 2FA." and "Encrypted and
+  fully offline. No accounts, no tracking." over the dark iPad feed and a
+  recovery phrase's page on iPhone. On iOS 27 this is what a search result
+  shows, in place of the screenshots, so it's the first thing most people see
+  of Vault (VAULT-161). Check it at about 600 pixels wide, the size of a
+  search result.
 
 Apple's rules for them: short text, the focal point in the middle, and no
 claim we can't back (no prices, URLs, ©, awards or other platforms' logos).
