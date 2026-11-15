@@ -32,17 +32,17 @@
   "shadow": { "color": "#000000A6", "radius": 90, "offsetY": 36 },
   "screenshots": [
     {
-      "output": "mac-01-keys",
+      "output": "mac-01-vault",
       "path": "../.build/screenshots/raw/mac/02-detail.png",
-      "title": "Your keys. Offline.",
-      "accent": "Offline.",
-      "subtitle": "Seed phrases and private keys, encrypted on your Mac.",
+      "title": "Seed phrases, keys & 2FA",
+      "accent": "keys & 2FA",
+      "subtitle": "Encrypted on your Mac. Fully offline, and open source.",
       "devices": [
         { "x": 0.54, "y": 0.72, "width": 0.84, "rotation": -2 }
       ],
       "callouts": [
         {
-          "region": { "x": 1036, "y": 326, "width": 1120, "height": 480 },
+          "region": { "x": 1036, "y": 326, "width": 1120, "height": 540 },
           "scale": 1.08,
           "borderWidth": 0,
           "highlight": false,
@@ -51,7 +51,26 @@
       ]
     },
     {
-      "output": "mac-02-duress",
+      "output": "mac-02-backups",
+      "path": "../.build/screenshots/raw/mac/05-backups.png",
+      "title": "Backups you can hold",
+      "accent": "hold",
+      "subtitle": "Print to paper or save an encrypted file, and check that it opens.",
+      "devices": [
+        { "x": 0.5, "y": 0.72, "width": 0.84, "rotation": -2 }
+      ],
+      "callouts": [
+        {
+          "region": { "x": 448, "y": 136, "width": 480, "height": 156 },
+          "scale": 1.2,
+          "borderWidth": 0,
+          "highlight": false,
+          "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
+        }
+      ]
+    },
+    {
+      "output": "mac-03-duress",
       "title": "Forced to unlock it?",
       "accent": "Forced",
       "subtitle": "A duress password opens a separate vault instead of your real one.",
@@ -71,7 +90,7 @@
       ]
     },
     {
-      "output": "mac-03-killphrase",
+      "output": "mac-04-killphrase",
       "path": "../.build/screenshots/raw/mac/03-editor-dark.png",
       "title": "One search deletes it",
       "accent": "deletes",
@@ -81,27 +100,8 @@
       ],
       "callouts": [
         {
-          "region": { "x": 640, "y": 928, "width": 960, "height": 155 },
+          "region": { "x": 640, "y": 540, "width": 960, "height": 155 },
           "scale": 1.06,
-          "borderWidth": 0,
-          "highlight": false,
-          "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }
-        }
-      ]
-    },
-    {
-      "output": "mac-04-backups",
-      "path": "../.build/screenshots/raw/mac/05-backups.png",
-      "title": "Backups you can hold",
-      "accent": "hold",
-      "subtitle": "Print to paper or save an encrypted file.",
-      "devices": [
-        { "x": 0.5, "y": 0.72, "width": 0.84, "rotation": -2 }
-      ],
-      "callouts": [
-        {
-          "region": { "x": 448, "y": 136, "width": 480, "height": 156 },
-          "scale": 1.2,
           "borderWidth": 0,
           "highlight": false,
           "shadow": { "color": "#0A84FFB3", "radius": 110, "offsetY": 0 }

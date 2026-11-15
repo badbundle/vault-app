@@ -184,8 +184,7 @@ Every image shares one background, in the icon's colours: near-black,
 deepening to navy at the bottom, lit by soft glows of Vault's blue behind the
 devices, with the icon's vault door, very faint and oversized, behind the
 title (`assets/vault-door.png`, the dark icon's glyph rendered at 3072 pixels
-by `swift run vault-app-icon-generator -o <dir> --size 3072` and trimmed). A
-panorama has its own `background`, with a glow and a door per page. Every
+by `swift run vault-app-icon-generator -o <dir> --size 3072` and trimmed). Every
 title is the same size and sits the same distance from the top
 (`"anchor": "edge"`, `minScale` and `maxScale` 1), with one word in the
 accent blue (`accent`), and the devices start just below the text, large and
@@ -200,42 +199,41 @@ nothing shows half-covered at its edges; `offsetX` / `offsetY`, in the
 capture's pixels, nudge it to fit those gaps. The exception is the search
 field, which is moved up into the empty space below the search results.
 
-Each device class tells the same story in ten images, Apple's limit, the
-strongest first. The first three show in search results, so they sell Vault
-on their own: what it keeps, then what it does when someone makes you open it.
+The iPhone and the iPad tell the same story in eight images. The first three
+show in search results, so they say what Vault is before anything else: what
+it keeps, that it checks a phrase as it's typed, and that a backup is yours to
+hold. What it does when someone makes you open it comes after (VAULT-161: the
+order before led with the duress password and the killphrase, and Vault's
+search conversion was near the bottom of its peers').
 
-1. **Your keys. Offline.** The "Cold storage" recovery phrase's page, with
-   its checksum and masked words lifted out.
-2. A panorama of three, one canvas cut into `-1`, `-2` and `-3`, about being
-   made to unlock Vault:
-   - **Forced to unlock it?:** the App Lock Password's settings, with Set
-     Duress Password lifted out;
-   - **One search deletes it:** the editor's Privacy & Security step, with
-     the killphrase lifted out;
-   - **Erase after 10 wrong tries:** the same settings as the first page, in
-     dark, with the erase row lifted out.
-3. **Checked as you type:** the phrase editor on its words, with "Valid
+1. **Seed phrases, keys & 2FA:** the items, with a code's page in dark behind
+   them on the iPhone, so the first image shows both what Vault keeps and what
+   it looks like.
+2. **Checked as you type:** the phrase editor on its words, with "Valid
    BIP39 phrase" lifted out.
+3. **Backups you can hold:** the Backups page, with its last backup ("Exported
+   to PDF") lifted out, and Check a Backup in its list.
 4. **Locked with a password:** the dark lock screen, with its door and "Vault
    Locked" lifted out and most of the keyboard cropped off.
-5. **Hidden until you search:** the search for `blue heron` finding the
+5. **Forced to unlock it?:** the App Lock Password's settings, with Set
+   Duress Password lifted out.
+6. **Hidden until you search:** the search for `blue heron` finding the
    hidden "Savings wallet", with its search field lifted up under the results
-   (on iPhone, in front of the feed that doesn't show them).
-6. **Backups you can hold:** the Backups page, with its last backup ("Exported
-   to PDF") lifted out.
+   (on iPhone, in front of the feed that doesn't show them). Its subtitle
+   names the killphrase too.
 7. **2FA codes too:** a code's page, with its code and countdown lifted out.
 8. **Private by design:** Settings in light and dark, overlapping.
 
-The Mac tells the same story in five, in the same order, each a window (or
-two) on the same background:
+The Mac tells the same story in five, each a window (or two) on the same
+background:
 
-1. **Your keys. Offline.** The "Cold storage" recovery phrase open beside the
-   list, with its masked words lifted out.
-2. **Forced to unlock it?:** the dark lock screen, with the Settings window's
+1. **Seed phrases, keys & 2FA:** a recovery phrase open beside the list, with
+   its masked words lifted out. The list shows phrases, keys and codes.
+2. **Backups you can hold:** Backups, with the last backup ("Exported to
+   PDF") lifted out, and Check a Backup in its list.
+3. **Forced to unlock it?:** the dark lock screen, with the Settings window's
    Security tab over it and Set Duress Password lifted out.
-3. **One search deletes it:** the editor sheet, with the killphrase lifted out.
-4. **Backups you can hold:** Backups, with the last backup ("Exported to
-   PDF") lifted out.
+4. **One search deletes it:** the editor sheet, with the killphrase lifted out.
 5. **Private by design:** the list, with Settings in dark over it and Hide
    While Recording lifted out.
 

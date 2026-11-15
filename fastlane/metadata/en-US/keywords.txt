@@ -1,1 +1,1 @@
-2fa,authenticator,pgp,crypto,bitcoin,secret,notes,passphrase,mnemonic,recovery,duress,offline,ssh
+2fa,authenticator,pgp,crypto,bitcoin,secret,notes,passphrase,secure,recovery,duress,offline,ssh
