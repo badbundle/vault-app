@@ -31,9 +31,9 @@
   "screenshots": [
     {
       "output": "search-results",
-      "title": "No accounts. No tracking.",
-      "accent": "No tracking.",
-      "subtitle": "Seed phrases, private keys and notes, fully offline.",
+      "title": "Seed phrases, keys & 2FA.",
+      "accent": "keys & 2FA.",
+      "subtitle": "Encrypted and fully offline. No accounts, no tracking.",
       "devices": [
         {
           "path": "../.build/screenshots/raw/ipad/01-feed-dark.png",
