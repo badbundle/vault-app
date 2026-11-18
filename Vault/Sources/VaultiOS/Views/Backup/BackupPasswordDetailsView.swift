@@ -73,12 +73,8 @@ struct BackupPasswordDetailsView: View {
     #if DEBUG
     private var debugSection: some View {
         Section {
-            AsyncButton {
+            FormActionRow("Fetch Existing Password", systemImage: "ladybug.fill", color: .gray) {
                 await viewModel.loadExistingPassword()
-            } label: {
-                Text("Fetch Existing Password")
-            } loading: {
-                ProgressView()
             }
         } header: {
             Text("Debug")

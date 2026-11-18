@@ -75,7 +75,7 @@ struct AutoBackupView: View {
 
     private func authenticateSection(isError: Bool) -> some View {
         Section {
-            ProminentActionButton("Authenticate", systemImage: "key.horizontal.fill") {
+            FormActionRow("Authenticate", systemImage: "key.horizontal.fill") {
                 await dataModel.loadBackupPassword()
             }
         } header: {
@@ -94,12 +94,8 @@ struct AutoBackupView: View {
 
     private var createPasswordSection: some View {
         Section {
-            Button {
+            FormActionRow("Create Backup Password", systemImage: "lock.shield.fill", kind: .disclosure) {
                 isShowingCreatePassword = true
-            } label: {
-                FormRow(image: Image(systemName: "lock.shield.fill"), color: .accentColor) {
-                    Text("Create Backup Password")
-                }
             }
         } header: {
             Text("Backup Password")
@@ -170,7 +166,7 @@ struct AutoBackupView: View {
 
     private var chooseFolderSection: some View {
         Section {
-            ProminentActionButton("Choose Folder", systemImage: "folder.fill", actionOptions: []) {
+            FormActionRow("Choose Folder", systemImage: "folder.fill", kind: .disclosure, actionOptions: []) {
                 changeDestination()
             }
         } footer: {
@@ -189,24 +185,16 @@ struct AutoBackupView: View {
     private var settingsSection: some View {
         Section {
             if let provider = viewModel.activeProvider {
-                Button {
+                FormActionRow(
+                    "Save To",
+                    value: provider.folderSummary ?? provider.displayName,
+                    systemImage: provider.iconSystemName,
+                    color: .blue,
+                    kind: .disclosure,
+                    actionOptions: [],
+                ) {
                     changeDestination()
-                } label: {
-                    FormRow(image: Image(systemName: provider.iconSystemName), color: .blue) {
-                        LabeledContent {
-                            HStack(spacing: 6) {
-                                Text(provider.folderSummary ?? provider.displayName)
-                                Image(systemName: "chevron.right")
-                                    .font(.footnote.weight(.semibold))
-                                    .foregroundStyle(.tertiary)
-                                    .accessibilityHidden(true)
-                            }
-                        } label: {
-                            Text("Save To")
-                        }
-                    }
                 }
-                .tint(.primary)
                 .accessibilityHint(Text("Choose a different folder"))
             }
 
@@ -317,8 +305,8 @@ struct AutoBackupView: View {
             } else if !viewModel.isBackingUp {
                 Section {
                     // Only disable while the tap is in flight: the activity section takes over as soon as
-                    // the service reports progress, so the button's own spinner would only flash.
-                    ProminentActionButton(
+                    // the service reports progress, so the row's own spinner would only flash.
+                    FormActionRow(
                         "Back Up Now",
                         systemImage: "arrow.clockwise.icloud",
                         actionOptions: [.disableButton],

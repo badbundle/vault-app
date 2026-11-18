@@ -95,7 +95,7 @@ extension BackupRestoreView {
 
     private func authenticateSection(isError: Bool) -> some View {
         Section {
-            ProminentActionButton("Authenticate", systemImage: "key.horizontal.fill") {
+            FormActionRow("Authenticate", systemImage: "key.horizontal.fill") {
                 await viewModel.authenticate()
             }
         } header: {
@@ -112,10 +112,7 @@ extension BackupRestoreView {
 
     private var emptyVaultImportSection: some View {
         Section {
-            importButton(
-                title: "Import Backup",
-                icon: BackupImportContext.toEmptyVault.systemImage,
-            ) {
+            importRow(title: "Import Backup", context: .toEmptyVault) {
                 modal = .importToCurrentlyEmpty
             }
         } footer: {
@@ -125,10 +122,7 @@ extension BackupRestoreView {
 
     private var mergeImportSection: some View {
         Section {
-            importButton(
-                title: "Import & Merge",
-                icon: BackupImportContext.merge.systemImage,
-            ) {
+            importRow(title: "Import & Merge", context: .merge) {
                 modal = .importAndMerge
             }
         } header: {
@@ -142,11 +136,7 @@ extension BackupRestoreView {
 
     private var overrideImportSection: some View {
         Section {
-            importButton(
-                title: "Import & Override",
-                icon: BackupImportContext.override.systemImage,
-                isDestructive: true,
-            ) {
+            importRow(title: "Import & Override", context: .override) {
                 modal = .importAndOverride
             }
         } footer: {
@@ -156,17 +146,24 @@ extension BackupRestoreView {
         }
     }
 
-    /// A single import action row.
+    /// A single import action row, with the symbol and color of the import sheet it opens. Replacing the vault is
+    /// destructive.
     ///
     /// The import asks for the backup's own password, whatever backup password this device has, so nothing is loaded
     /// first.
-    private func importButton(
+    private func importRow(
         title: String,
-        icon: String,
-        isDestructive: Bool = false,
+        context: BackupImportContext,
         presentModal: @escaping () -> Void,
     ) -> some View {
-        ProminentActionButton(title, systemImage: icon, role: isDestructive ? .destructive : nil) {
+        FormActionRow(
+            title,
+            systemImage: context.systemImage,
+            color: context.color,
+            kind: .disclosure,
+            role: context == .override ? .destructive : nil,
+            actionOptions: [],
+        ) {
             presentModal()
         }
     }

@@ -107,7 +107,7 @@ struct BackupKeyChangeView: View {
 
     private func authenticateSection(isError: Bool) -> some View {
         Section {
-            ProminentActionButton("Authenticate", systemImage: "key.horizontal.fill") {
+            FormActionRow("Authenticate", systemImage: "key.horizontal.fill") {
                 await viewModel.onAppear()
             }
         } header: {
@@ -221,7 +221,7 @@ struct BackupKeyChangeView: View {
     private var setPasswordSection: some View {
         if viewModel.newlyEnteredPassword.isNotEmpty {
             Section {
-                ProminentActionButton(
+                FormActionRow(
                     isChangingPassword ? "Change Backup Password" : "Set Backup Password",
                     systemImage: "checkmark.shield.fill",
                 ) {
@@ -312,13 +312,13 @@ struct BackupKeyChangeView: View {
 
     // MARK: - Details Section
 
-    /// One quiet row, so the explanations don't compete with the password fields.
+    /// One row, last, so the explanations don't compete with the password fields.
     private var detailsSection: some View {
         Section {
             NavigationLink {
                 BackupPasswordDetailsView(viewModel: viewModel)
             } label: {
-                FormRow(image: Image(systemName: "info.circle"), color: .accentColor, style: .standard) {
+                FormRow(image: Image(systemName: "info"), color: .accentColor) {
                     Text("About Backup Passwords")
                 }
             }

@@ -20,10 +20,13 @@ struct SetAsideVaultsSection: View {
                 }
                 .accessibilityElement(children: .combine)
 
-                Button(role: .destructive) {
+                FormActionRow(
+                    isPlural ? "Delete Set-Aside Vaults" : "Delete Set-Aside Vault",
+                    systemImage: "trash.fill",
+                    role: .destructive,
+                    actionOptions: [],
+                ) {
                     isConfirmingDelete = true
-                } label: {
-                    Text(isPlural ? "Delete Set-Aside Vaults" : "Delete Set-Aside Vault")
                 }
                 .disabled(viewModel.isDeleting || viewModel.needsPasscode)
                 .confirmationDialog(

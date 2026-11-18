@@ -113,7 +113,7 @@ struct BackupKeyDecryptorView: View {
 
     private var decryptSection: some View {
         Section {
-            ProminentActionButton("Decrypt", systemImage: "lock.open.fill") {
+            FormActionRow("Decrypt", systemImage: "lock.open.fill") {
                 decrypt()
             }
             .disabled(!viewModel.canAttemptDecryption || viewModel.isDecrypting || isDecrypted)

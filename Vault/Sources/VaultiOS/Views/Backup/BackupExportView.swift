@@ -114,7 +114,7 @@ struct BackupExportView: View {
 
     private func authenticateSection(isError: Bool) -> some View {
         Section {
-            ProminentActionButton("Authenticate", systemImage: "key.horizontal.fill") {
+            FormActionRow("Authenticate", systemImage: "key.horizontal.fill") {
                 await dataModel.loadBackupPassword()
             }
         } header: {
@@ -133,12 +133,8 @@ struct BackupExportView: View {
 
     private var passwordNotCreatedSection: some View {
         Section {
-            Button {
+            FormActionRow("Create Backup Password", systemImage: "lock.shield.fill", kind: .disclosure) {
                 modal = .updatePassword
-            } label: {
-                FormRow(image: Image(systemName: "lock.shield.fill"), color: .accentColor) {
-                    Text("Create Backup Password")
-                }
             }
         } header: {
             Text("Backup Password")
@@ -152,11 +148,13 @@ struct BackupExportView: View {
     /// A backup to keep: a file that outlasts this device.
     private func pdfBackupSection(password: DerivedEncryptionKey) -> some View {
         Section {
-            BackupOptionRow(
-                title: "PDF Backup",
-                detail: "An encrypted file you can save or print.",
+            FormActionRow(
+                "PDF Backup",
+                subtitle: "An encrypted file you can save or print.",
                 systemImage: "doc.text.fill",
                 color: .accentColor,
+                kind: .disclosure,
+                actionOptions: [],
             ) {
                 modal = .pdfBackup(password)
             }
@@ -174,11 +172,13 @@ struct BackupExportView: View {
     /// A move, not a backup: the codes only exist while this screen shows them.
     private func deviceTransferSection(password: DerivedEncryptionKey) -> some View {
         Section {
-            BackupOptionRow(
-                title: "Transfer with QR Codes",
-                detail: "Show codes for another device to scan, without saving a file.",
+            FormActionRow(
+                "Transfer with QR Codes",
+                subtitle: "Show codes for another device to scan, without saving a file.",
                 systemImage: "qrcode",
                 color: .indigo,
+                kind: .disclosure,
+                actionOptions: [],
             ) {
                 modal = .deviceTransfer(password)
             }

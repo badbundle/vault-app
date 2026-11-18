@@ -60,22 +60,9 @@ struct VaultAboutView: View {
             }
 
             Link(destination: VaultAppStore.writeReviewURL) {
-                FormRow(
-                    image: Image(systemName: "star.fill"),
-                    color: .orange,
-                ) {
-                    HStack {
-                        Text("Rate Vault")
-                        Spacer()
-                        // As the More Apps rows have: it leaves Vault for the App Store.
-                        Image(systemName: "arrow.up.right")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(.tertiary)
-                            .accessibilityHidden(true)
-                    }
-                }
+                // As the More Apps rows have: it leaves Vault for the App Store.
+                FormActionRowLabel("Rate Vault", systemImage: "star.fill", color: .orange, kind: .external)
             }
-            .foregroundStyle(.primary)
             .accessibilityIdentifier("about.rate")
         }
     }

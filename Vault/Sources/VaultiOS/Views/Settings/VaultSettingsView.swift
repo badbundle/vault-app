@@ -70,11 +70,12 @@ struct VaultSettingsView: View {
             Button {
                 modal = .universalClipboard
             } label: {
-                SheetRowLabel(
-                    title: "Universal Clipboard",
+                FormActionRowLabel(
+                    "Universal Clipboard",
                     value: universalClipboardSummary,
                     systemImage: "iphone.and.arrow.right.outward",
                     color: SettingsIconColor.clipboard,
+                    kind: .disclosure,
                 )
             }
         } header: {
@@ -96,14 +97,15 @@ struct VaultSettingsView: View {
 
     private var dangerSection: some View {
         Section {
-            Button {
+            FormActionRow(
+                "Delete All Data",
+                systemImage: "trash.fill",
+                kind: .disclosure,
+                role: .destructive,
+                actionOptions: [],
+            ) {
                 modal = .danger
-            } label: {
-                FormRow(image: Image(systemName: "trash.fill"), color: SettingsIconColor.danger) {
-                    Text("Delete All Data")
-                }
             }
-            .tint(.red)
         } header: {
             Text("Danger Zone")
         } footer: {
@@ -119,49 +121,6 @@ extension PasteboardContentType {
         case .otp: "Codes"
         case .note: "Notes"
         case .detail: "Details"
-        }
-    }
-}
-
-/// The label of a Settings row that opens a sheet: the setting's name, a summary of its value and a chevron, so it
-/// reads like the rows around it rather than as a tinted button.
-struct SheetRowLabel<Icon: View>: View {
-    var title: String
-    var value: String
-    var color: Color
-    var icon: Icon
-
-    init(title: String, value: String, color: Color, @ViewBuilder icon: () -> Icon) {
-        self.title = title
-        self.value = value
-        self.color = color
-        self.icon = icon()
-    }
-
-    init(title: String, value: String, systemImage: String, color: Color) where Icon == Image {
-        self.init(title: title, value: value, color: color) {
-            Image(systemName: systemImage)
-        }
-    }
-
-    var body: some View {
-        FormRow(color: color) {
-            icon
-        } content: {
-            LabeledContent {
-                HStack(spacing: 8) {
-                    Text(value)
-                        .foregroundStyle(Color(uiColor: .secondaryLabel))
-                    Image(systemName: "chevron.forward")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Color(uiColor: .tertiaryLabel))
-                        .accessibilityHidden(true)
-                }
-            } label: {
-                // Explicit, so the button doesn't tint it.
-                Text(title)
-                    .foregroundStyle(Color(uiColor: .label))
-            }
         }
     }
 }

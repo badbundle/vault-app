@@ -450,7 +450,13 @@ struct AppLockPasswordFormView: View {
 
     private func actionSection(passwordWait: Duration?) -> some View {
         Section {
-            ProminentActionButton(actionTitle, systemImage: actionSystemImage, role: actionRole) {
+            // The footer says it's saving, so the row only stops a second tap.
+            FormActionRow(
+                actionTitle,
+                systemImage: actionSystemImage,
+                role: actionRole,
+                actionOptions: [.disableButton],
+            ) {
                 focusedField = nil
                 await viewModel.submit()
             }

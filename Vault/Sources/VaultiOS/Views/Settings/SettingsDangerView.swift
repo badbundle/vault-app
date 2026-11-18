@@ -245,10 +245,10 @@ private struct ConfirmationActions: View {
             }
 
             Button(role: .destructive, action: delete) {
-                ProminentActionLabel("Delete Everything", systemImage: "trash.fill", isLoading: isDeleting)
+                CapsuleActionLabel("Delete Everything", systemImage: "trash.fill", isLoading: isDeleting)
                     .frame(minHeight: buttonHeight - 16)
             }
-            .prominentActionButton()
+            .capsuleActionButton()
             // Not disabled while deleting, which would grey it out: the view model ignores a second tap.
             .allowsHitTesting(!isDeleting)
             // The label hides under the spinner while deleting, so say what's happening instead.

@@ -144,9 +144,9 @@ struct AppLockView: View {
                 Task { await unlock() }
             }
         } label: {
-            ProminentActionLabel("Unlock", systemImage: "lock.open.fill", isLoading: state.isInProgress)
+            CapsuleActionLabel("Unlock", systemImage: "lock.open.fill", isLoading: state.isInProgress)
         }
-        .prominentActionButton()
+        .capsuleActionButton()
         .buttonBorderShape(.capsule)
         .disabled(state.step == .password && !isBusy && (password.isEmpty || isWaiting || needsTheApp))
         // Stays in its colors while busy, for the spinner to show up on: `unlock` ignores a second tap anyway.

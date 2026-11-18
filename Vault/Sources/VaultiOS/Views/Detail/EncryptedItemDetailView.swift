@@ -216,7 +216,7 @@ struct EncryptedItemDetailView: View {
         }
 
         Section {
-            ProminentActionButton("Decrypt", systemImage: "lock.open.fill") {
+            FormActionRow("Decrypt", systemImage: "lock.open.fill") {
                 await viewModel.startDecryption()
             }
             .disabled(!viewModel.canStartDecryption)

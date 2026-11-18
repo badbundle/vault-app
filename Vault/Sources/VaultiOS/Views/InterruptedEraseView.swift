@@ -28,7 +28,7 @@ struct InterruptedEraseView: View {
                 }
 
                 Section {
-                    ProminentActionButton("Try Again", systemImage: "arrow.clockwise", actionOptions: []) {
+                    FormActionRow("Try Again", systemImage: "arrow.clockwise", actionOptions: []) {
                         await viewModel.finish()
                     }
                 } footer: {

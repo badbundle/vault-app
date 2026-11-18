@@ -164,29 +164,31 @@ struct BackupSavePDFView: View {
     private var saveSection: some View {
         if viewModel.isSaved {
             Section {
-                ProminentActionButton("Done", systemImage: "checkmark", actionOptions: []) {
+                FormActionRow("Done", systemImage: "checkmark", actionOptions: []) {
                     dismiss()
                 }
             }
 
             Section {
-                Button {
+                FormActionRow(
+                    "Save Another Copy",
+                    systemImage: "square.and.arrow.up",
+                    kind: .disclosure,
+                    actionOptions: [],
+                ) {
                     viewModel.share()
-                } label: {
-                    FormRow(
-                        image: Image(systemName: "square.and.arrow.up"),
-                        color: .accentColor,
-                        style: .standard,
-                    ) {
-                        Text("Save Another Copy")
-                    }
                 }
             } footer: {
                 saveFooter("Keeping copies in two places, like Files and on paper, protects you if one is lost.")
             }
         } else {
             Section {
-                ProminentActionButton("Save or Print Backup", systemImage: "square.and.arrow.up", actionOptions: []) {
+                FormActionRow(
+                    "Save or Print Backup",
+                    systemImage: "square.and.arrow.up",
+                    kind: .disclosure,
+                    actionOptions: [],
+                ) {
                     viewModel.share()
                 }
             } footer: {

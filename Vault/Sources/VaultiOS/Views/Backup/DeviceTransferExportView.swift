@@ -121,7 +121,7 @@ struct DeviceTransferExportView: View {
         }
 
         Section {
-            ProminentActionButton("Try Again", systemImage: "arrow.clockwise") {
+            FormActionRow("Try Again", systemImage: "arrow.clockwise") {
                 await viewModel.generateShards()
             }
         }

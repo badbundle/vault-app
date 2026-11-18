@@ -64,10 +64,13 @@ struct BackupImportReadyView: View {
     /// Named for what it does to the vault. Replacing the vault is destructive, as on the Restore page's row.
     private var importSection: some View {
         Section {
-            ProminentActionButton(
+            // The footer says it's importing, so the row only stops a second tap.
+            FormActionRow(
                 context.importActionTitle,
                 systemImage: context.systemImage,
+                color: context.color,
                 role: context == .override ? .destructive : nil,
+                actionOptions: [.disableButton],
             ) {
                 isImporting = true
                 defer { isImporting = false }
