@@ -7,7 +7,7 @@ import VaultBackup
 
 @MainActor
 struct BackupSealViewSnapshotTests {
-    /// Eight backups' seals and the label with a seal's code. Each seal's color, edge and rosettes come from its
+    /// Eight backups' seals and the label with a seal's code. Each seal's color and dial come from its
     /// backup, so these are the same every run.
     @Test(arguments: [ColorScheme.light, .dark])
     func seals(colorScheme: ColorScheme) {

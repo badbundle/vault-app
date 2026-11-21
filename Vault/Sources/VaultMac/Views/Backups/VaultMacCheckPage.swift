@@ -102,6 +102,7 @@ struct VaultMacCheckPage: View {
                 Text(detail)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         } icon: {
             Image(systemName: systemImage)

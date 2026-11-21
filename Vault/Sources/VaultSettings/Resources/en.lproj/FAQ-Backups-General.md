@@ -54,7 +54,7 @@ Check a backup now and then, so you find out you've forgotten its password while
 
 ## What is a backup's seal?
 
-Every backup has a seal: a round picture with a code under it, such as SMHX-9FFR.
+Every backup has a seal: a colored badge with a dial on it, and a code such as SMHX-9FFR.
 It's printed on the backup's PDF, and the code is at the top of every page, so a page that comes loose can be matched to its backup.
 Vault shows the same seal when you check or restore that backup, so you can see it's the one you meant.
 

@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-/// A backup's seal: a picture (`BackupSealArtwork`) and a short code, both worked out from the backup's encrypted
+/// A backup's seal: a badge (`BackupSealArtwork`) and a short code, both worked out from the backup's encrypted
 /// bytes.
 ///
 /// Every copy of a backup has the same seal, and two backups almost never do, so the seal printed on a PDF backup

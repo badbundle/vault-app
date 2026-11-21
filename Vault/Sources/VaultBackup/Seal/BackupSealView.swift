@@ -10,8 +10,8 @@ public struct BackupSealView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hasAppeared = false
 
-    /// - Parameter stampsOnAppear: Lifts the seal and presses it down once when it first appears, as a seal is pressed
-    ///   into wax, to mark a backup saved or checked. Not with Reduce Motion.
+    /// - Parameter stampsOnAppear: Lifts the seal and presses it down once when it first appears, as a seal is
+    ///   stamped, to mark a backup saved or checked. Not with Reduce Motion.
     public init(seal: BackupSeal, stampsOnAppear: Bool = false) {
         self.seal = seal
         self.stampsOnAppear = stampsOnAppear
@@ -24,7 +24,6 @@ public struct BackupSealView: View {
             }
         }
         .aspectRatio(1, contentMode: .fit)
-        .shadow(color: .black.opacity(0.22), radius: 5, y: 3)
         // The press starts and ends at rest, so the seal is always drawn where it ends up: before it's stamped, if it
         // never is, and in the first frame, which is all a snapshot sees.
         .keyframeAnimator(initialValue: Stamp.rest, trigger: hasAppeared) { content, stamp in
@@ -33,14 +32,13 @@ public struct BackupSealView: View {
                 .rotationEffect(.degrees(stamp.rotation))
         } keyframes: { _ in
             KeyframeTrack(\.scale) {
-                CubicKeyframe(1.14, duration: 0.16)
-                CubicKeyframe(0.9, duration: 0.1)
-                SpringKeyframe(1, duration: 0.45, spring: .bouncy(duration: 0.45, extraBounce: 0.2))
+                CubicKeyframe(1.12, duration: 0.15)
+                CubicKeyframe(0.93, duration: 0.1)
+                SpringKeyframe(1, duration: 0.4, spring: .bouncy(duration: 0.4, extraBounce: 0.15))
             }
             KeyframeTrack(\.rotation) {
-                CubicKeyframe(-8, duration: 0.16)
-                CubicKeyframe(2, duration: 0.1)
-                SpringKeyframe(0, duration: 0.45)
+                CubicKeyframe(-6, duration: 0.15)
+                CubicKeyframe(0, duration: 0.1)
             }
         }
         .onAppear {

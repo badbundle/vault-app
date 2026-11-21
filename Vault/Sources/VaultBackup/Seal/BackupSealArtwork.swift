@@ -1,13 +1,13 @@
 import CoreGraphics
 import Foundation
 
-/// The picture of a `BackupSeal`: a disc of wax with a wavy edge, two rings, and two white guilloche rosettes pressed
-/// into it, as on a banknote.
+/// The picture of a `BackupSeal`, drawn in the style of an SF Symbol: an eight-pointed badge in one of Apple's system
+/// colors, with a white dial on it, like the dial on Vault's door.
 ///
-/// Every part comes from the seal's digest: the wax's color, the number of waves in its edge, and each rosette's
-/// lobes, ripple and twist. So two seals look different at a glance, and the same seal looks the same everywhere it's
-/// drawn: on a PDF backup, and on screen on iOS and the Mac. Which byte drives what never changes, as printed seals
-/// have to keep matching.
+/// The dial is two rings, each with a gap, and a dot in the middle. The badge's color, and where each ring's gap is
+/// and how wide, come from the seal's digest, so two seals look different at a glance, and the same seal looks the
+/// same everywhere it's drawn: on a PDF backup, and on screen on iOS and the Mac. Which byte drives what never changes,
+/// as printed seals have to keep matching.
 public struct BackupSealArtwork: Sendable {
     public let seal: BackupSeal
 
@@ -15,8 +15,8 @@ public struct BackupSealArtwork: Sendable {
         self.seal = seal
     }
 
-    /// The wax's color, in sRGB.
-    public var waxColor: CGColor {
+    /// The badge's color, in sRGB.
+    public var color: CGColor {
         let (red, green, blue) = Self.palette[Int(seal.digest[0]) % Self.palette.count]
         return CGColor(srgbRed: red, green: green, blue: blue, alpha: 1)
     }
@@ -29,106 +29,90 @@ public struct BackupSealArtwork: Sendable {
         let radius = min(rect.width, rect.height) / 2
         guard radius > 0 else { return }
         let center = CGPoint(x: rect.midX, y: rect.midY)
-        // Line widths were chosen at a radius of 120 points, and scale with the seal.
-        let scale = radius / 120
-        let samples = max(240, min(900, Int(radius * 8)))
 
         context.saveGState()
         defer { context.restoreGState() }
 
-        context.addPath(edge(center: center, radius: radius, samples: samples))
-        context.setFillColor(waxColor)
+        context.addPath(badge(center: center, radius: radius))
+        context.setFillColor(color)
         context.fillPath()
 
-        let rim = lightened(waxColor, by: 0.55).copy(alpha: 0.8) ?? waxColor
-        context.setStrokeColor(rim)
-        for (fraction, width) in [(0.84, 2.5), (0.80, 1.0)] {
-            let ring = radius * fraction
-            context.setLineWidth(width * scale)
-            context.strokeEllipse(in: CGRect(x: center.x - ring, y: center.y - ring, width: ring * 2, height: ring * 2))
-        }
-
-        context.setLineWidth(scale)
-        context.setLineJoin(.round)
-        let layers: [(Rosette, CGFloat)] = [
-            (Rosette(digest: seal.digest, offset: 4, base: 0.60, strands: 22), 0.55),
-            (Rosette(digest: seal.digest, offset: 10, base: 0.30, strands: 14), 0.8),
-        ]
-        for (rosette, alpha) in layers {
-            for path in rosette.paths(center: center, radius: radius, samples: samples) {
-                context.addPath(path)
-            }
-            context.setStrokeColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: alpha))
+        let white = CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
+        context.setStrokeColor(white)
+        context.setLineWidth(radius * 0.09)
+        context.setLineCap(.round)
+        for ring in rings {
+            // The gap is centred on `ring.gapAngle`: the ring runs from one side of it the long way round to the other.
+            context.addArc(
+                center: center,
+                radius: radius * ring.radius,
+                startAngle: ring.gapAngle + ring.gapWidth / 2,
+                endAngle: ring.gapAngle + 2 * .pi - ring.gapWidth / 2,
+                clockwise: false,
+            )
             context.strokePath()
         }
+
+        let dot = radius * 0.14
+        context.setFillColor(white)
+        context.fillEllipse(in: CGRect(x: center.x - dot / 2, y: center.y - dot / 2, width: dot, height: dot))
     }
 
-    /// The wax's outline: a circle with waves around it, and a slower wobble so no two edges are alike.
-    private func edge(center: CGPoint, radius: CGFloat, samples: Int) -> CGPath {
-        let digest = seal.digest
-        let waves = CGFloat(16 + Int(digest[1] % 8))
-        let wobble = CGFloat(3 + Int(digest[2] % 3))
-        let wobblePhase = CGFloat(digest[3]) / 40
+    /// An eight-pointed star with every corner rounded, outer and inner, as SF Symbols' seal is.
+    private func badge(center: CGPoint, radius: CGFloat) -> CGPath {
+        // Where two squares, one turned 45°, would cross.
+        let inner = radius * cos(.pi / 4) / cos(.pi / 8)
+        let points = (0 ..< 16).map { index -> CGPoint in
+            let angle = -CGFloat.pi / 2 + CGFloat(index) * .pi / 8
+            let distance = index.isMultiple(of: 2) ? radius : inner
+            return CGPoint(x: center.x + distance * cos(angle), y: center.y + distance * sin(angle))
+        }
         let path = CGMutablePath()
-        for step in 0 ... samples {
-            let angle = CGFloat(step) / CGFloat(samples) * 2 * .pi
-            let distance = radius * (0.97 + 0.03 * sin(waves * angle) + 0.012 * sin(wobble * angle + wobblePhase))
-            let point = CGPoint(x: center.x + distance * cos(angle), y: center.y + distance * sin(angle))
-            step == 0 ? path.move(to: point) : path.addLine(to: point)
+        path.move(to: CGPoint(x: (points[15].x + points[0].x) / 2, y: (points[15].y + points[0].y) / 2))
+        for index in 0 ..< 16 {
+            path.addArc(
+                tangent1End: points[index],
+                tangent2End: points[(index + 1) % 16],
+                radius: radius * (index.isMultiple(of: 2) ? 0.16 : 0.12),
+            )
         }
         path.closeSubpath()
         return path
     }
 
-    private func lightened(_ color: CGColor, by fraction: CGFloat) -> CGColor {
-        let components = color.components ?? [0, 0, 0, 1]
-        let mixed = components.prefix(3).map { $0 + (1 - $0) * fraction }
-        return CGColor(srgbRed: mixed[0], green: mixed[1], blue: mixed[2], alpha: 1)
+    private struct Ring {
+        /// As a fraction of the seal's radius.
+        var radius: CGFloat
+        /// Where the gap is, in radians: one of the eight directions the badge's points face.
+        var gapAngle: CGFloat
+        /// How wide the gap is, in radians: 60°, 90° or 120°.
+        var gapWidth: CGFloat
     }
 
-    /// Wax colors, spread around the color wheel and dark enough for white lines on them.
+    /// The outer ring from the digest's second and fourth bytes, the inner one from its third and fifth.
+    private var rings: [Ring] {
+        [ring(radius: 0.52, byte: 1), ring(radius: 0.30, byte: 2)]
+    }
+
+    private func ring(radius: CGFloat, byte: Int) -> Ring {
+        let digest = seal.digest
+        let direction = CGFloat(digest[byte] % 8)
+        let width = CGFloat(2 + Int(digest[byte + 2] % 3))
+        return Ring(radius: radius, gapAngle: -.pi / 2 + direction * .pi / 4, gapWidth: width * .pi / 6)
+    }
+
+    /// Apple's system colors in their light appearance, but yellow, which white can't be read on.
     private static let palette: [(CGFloat, CGFloat, CGFloat)] = [
-        (0.72, 0.11, 0.16), (0.80, 0.33, 0.10), (0.72, 0.53, 0.08), (0.20, 0.45, 0.18),
-        (0.04, 0.47, 0.45), (0.10, 0.45, 0.70), (0.12, 0.22, 0.52), (0.33, 0.20, 0.62),
-        (0.53, 0.16, 0.55), (0.70, 0.15, 0.42), (0.42, 0.24, 0.15), (0.27, 0.31, 0.38),
+        (0.0, 0.478, 1.0), // blue
+        (0.345, 0.337, 0.839), // indigo
+        (0.686, 0.322, 0.871), // purple
+        (1.0, 0.176, 0.333), // pink
+        (1.0, 0.231, 0.188), // red
+        (1.0, 0.584, 0.0), // orange
+        (0.204, 0.780, 0.349), // green
+        (0.0, 0.780, 0.745), // mint
+        (0.188, 0.690, 0.780), // teal
+        (0.635, 0.518, 0.369), // brown
+        (0.557, 0.557, 0.576), // gray
     ]
-}
-
-/// A band of closed curves around the center, each a circle with two ripples on it, turned a little from the last:
-/// the guilloche pattern.
-private struct Rosette {
-    var lobes: CGFloat
-    var ripple: CGFloat
-    var lobeDepth: CGFloat
-    var rippleDepth: CGFloat
-    var twist: CGFloat
-    var base: CGFloat
-    var strands: Int
-
-    init(digest: [UInt8], offset: Int, base: CGFloat, strands: Int) {
-        lobes = CGFloat(5 + Int(digest[offset] % 8))
-        ripple = CGFloat(2 + Int(digest[offset + 1] % 4))
-        lobeDepth = 0.07 + CGFloat(digest[offset + 2]) / 255 * 0.05
-        rippleDepth = 0.02 + CGFloat(digest[offset + 3]) / 255 * 0.03
-        twist = CGFloat(digest[offset + 4]) / 255 * 2 * .pi
-        self.base = base
-        self.strands = strands
-    }
-
-    func paths(center: CGPoint, radius: CGFloat, samples: Int) -> [CGPath] {
-        (0 ..< strands).map { strand in
-            let phase = CGFloat(strand) / CGFloat(strands) * 2 * .pi / lobes + twist
-            let path = CGMutablePath()
-            for step in 0 ... samples {
-                let angle = CGFloat(step) / CGFloat(samples) * 2 * .pi
-                let distance = radius * (
-                    base + lobeDepth * sin(lobes * angle + phase) + rippleDepth * sin(ripple * angle - 2 * phase)
-                )
-                let point = CGPoint(x: center.x + distance * cos(angle), y: center.y + distance * sin(angle))
-                step == 0 ? path.move(to: point) : path.addLine(to: point)
-            }
-            path.closeSubpath()
-            return path
-        }
-    }
 }
