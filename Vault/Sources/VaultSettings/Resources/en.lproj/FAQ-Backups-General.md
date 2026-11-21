@@ -52,6 +52,15 @@ Nothing on this device changes, and nothing in the backup is added to your vault
 Vault keeps your backup password so it can make backups without asking, so you might not type it again for a long time.
 Check a backup now and then, so you find out you've forgotten its password while you can still make a new one.
 
+## What is a backup's seal?
+
+Every backup has a seal: a colored badge with a dial on it, and a code such as SMHX-9FFR.
+It's printed on the backup's PDF, and the code is at the top of every page, so a page that comes loose can be matched to its backup.
+Vault shows the same seal when you check or restore that backup, so you can see it's the one you meant.
+
+Every copy of a backup has the same seal, and two backups almost never do, even of the same items.
+The seal is worked out from the backup's encrypted contents, so it says nothing about what's in it, and Vault doesn't keep a record of it.
+
 ## What happens to items I delete?
 
 They stay in any backup made before you deleted them, including items deleted by a killphrase, and on a Mac, in Time Machine's local snapshots, and its backups if you've let it back up Vault.

@@ -76,7 +76,8 @@ struct BackupKeyDecryptorView: View {
 
     // MARK: - Header Section
 
-    /// The backup password's shield, as on the screen that sets it, which opens once the backup is decrypted.
+    /// The backup password's shield, as on the screen that sets it, which opens once the backup is decrypted, and the
+    /// backup's seal, so the user can see it's the backup they meant.
     private var headerSection: some View {
         Section {
             BackupHeroHeader(
@@ -85,7 +86,9 @@ struct BackupKeyDecryptorView: View {
                 systemImage: isDecrypted ? "lock.open.fill" : "lock.shield.fill",
                 color: isDecrypted ? .green : .accentColor,
                 iconSize: 56,
-            )
+            ) {
+                BackupSealLabel(seal: viewModel.seal)
+            }
             .contentTransition(reduceMotion ? .opacity : .symbolEffect(.replace))
         }
     }

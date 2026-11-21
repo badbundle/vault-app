@@ -60,6 +60,12 @@ public final class BackupKeyDecryptorViewModel {
         }
     }
 
+    /// The seal of the backup being opened, so the user can see it's the one they meant: it matches the seal printed
+    /// on its PDF. It comes from the encrypted backup only (`BackupSeal`).
+    public var seal: BackupSeal {
+        BackupSeal(encryptedVault: encryptedVault)
+    }
+
     public var canAttemptDecryption: Bool {
         enteredPassword.isNotEmpty
     }

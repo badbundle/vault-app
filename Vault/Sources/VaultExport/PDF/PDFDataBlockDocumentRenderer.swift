@@ -50,6 +50,8 @@ public struct PDFDataBlockDocumentRenderer<
                     switch content {
                     case let .title(label):
                         try drawer.draw(label: label)
+                    case let .figure(figure):
+                        try drawer.draw(figure: figure)
                     case let .dataBlock(imageData):
                         try drawer.draw(
                             images: imageData,
@@ -123,6 +125,39 @@ private final class PDFDocumentDrawerHelper<Layout: PageLayout> {
             if currentLayoutEngine.isFullyWithinBounds(rect: rect) {
                 attributedString.draw(in: rect)
                 contentArea.didDrawContent(at: rect)
+                return .success(.didDrawToDocument)
+            } else {
+                return .failure(.insufficientSpace)
+            }
+        } makeNewPage: { [self] in
+            startNextPage()
+        }
+
+        try drawerer.drawContent()
+    }
+
+    /// Throws if unable to draw.
+    func draw(figure: DataBlockFigure) throws(PDFContentDrawerer.DrawError) {
+        let drawerer = PDFContentDrawerer { [self] in
+            let currentLayoutEngine = pageLayout(contentArea.currentBounds)
+            let rect = CGRect(
+                x: contentArea.currentBounds.minX + figure.padding.left,
+                y: contentArea.currentBounds.minY + figure.padding.top,
+                width: contentArea.currentBounds.width - figure.padding.horizontalTotal,
+                height: figure.height,
+            )
+            // The padding below counts as drawn, as a label's does.
+            let occupied = CGRect(
+                x: rect.minX,
+                y: rect.minY,
+                width: rect.width,
+                height: rect.height + figure.padding.bottom,
+            )
+            if currentLayoutEngine.isFullyWithinBounds(rect: occupied) {
+                context.cgContext.saveGState()
+                figure.draw(context.cgContext, rect)
+                context.cgContext.restoreGState()
+                contentArea.didDrawContent(at: occupied)
                 return .success(.didDrawToDocument)
             } else {
                 return .failure(.insufficientSpace)
@@ -209,7 +244,7 @@ extension DataBlockDocument {
     fileprivate var totalImageCount: Int {
         content.reduce(0) { count, item in
             switch item {
-            case .title: count
+            case .title, .figure: count
             case let .dataBlock(images): count + images.count
             }
         }

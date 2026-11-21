@@ -97,6 +97,7 @@ struct BackupCheckViewModelTests {
     @Test @LeakTracked
     func backupDidOpen_againIsAChangeTheUISees() throws {
         let sut = makeSUT()
+        sut.check(encryptedVault: anyEncryptedVault())
         sut.backupDidOpen()
         let first = sut.state
 
@@ -146,9 +147,69 @@ struct BackupCheckViewModelTests {
     @Test @LeakTracked
     func clearResult_afterTheBackupOpened_goesBackToAskingForABackup() throws {
         let sut = makeSUT()
+        sut.check(encryptedVault: anyEncryptedVault())
         sut.backupDidOpen()
 
         sut.clearResult()
+
+        #expect(sut.state == .none)
+    }
+
+    /// What the check shows comes from the encrypted backup: its seal, which matches the one on its PDF, and how its
+    /// key was made.
+    @Test @LeakTracked
+    func backupDidOpen_saysTheBackupsSealAndHowItsKeyWasMade() throws {
+        let sut = makeSUT()
+        var encryptedVault = anyEncryptedVault()
+        encryptedVault.keygenSignature = VaultKeyDeriver.Signature.backupSecureV2.rawValue
+        sut.check(encryptedVault: encryptedVault)
+
+        sut.backupDidOpen()
+
+        guard case let .opened(checked) = sut.state else {
+            Issue.record("Expected the backup to have opened")
+            return
+        }
+        #expect(checked.seal == BackupSeal(encryptedVault: encryptedVault))
+        #expect(checked.keyDerivation == "Argon2id, 512 MiB, 32 passes, 4 lanes")
+        #expect(checked.formatVersion == "1.0.0")
+    }
+
+    /// Closing the scanner's sheet can clear the password prompt before the backup opens: it still says which backup
+    /// opened.
+    @Test @LeakTracked
+    func backupDidOpen_afterThePromptWasCleared_stillHasTheBackupsSeal() throws {
+        let sut = makeSUT()
+        let encryptedVault = anyEncryptedVault()
+        sut.check(encryptedVault: encryptedVault)
+        sut.cancelPasswordEntry()
+
+        sut.backupDidOpen()
+
+        guard case let .opened(checked) = sut.state else {
+            Issue.record("Expected the backup to have opened")
+            return
+        }
+        #expect(checked.seal == BackupSeal(encryptedVault: encryptedVault))
+    }
+
+    @Test @LeakTracked
+    func backupDidOpen_withNoBackupBeingChecked_changesNothing() throws {
+        let sut = makeSUT()
+
+        sut.backupDidOpen()
+
+        #expect(sut.state == .none)
+    }
+
+    @Test @LeakTracked
+    func clearResult_forgetsTheBackup() throws {
+        let sut = makeSUT()
+        sut.check(encryptedVault: anyEncryptedVault())
+        sut.backupDidOpen()
+        sut.clearResult()
+
+        sut.backupDidOpen()
 
         #expect(sut.state == .none)
     }

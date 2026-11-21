@@ -1,5 +1,6 @@
 import Foundation
 import VaultBackup
+import VaultKeygen
 
 /// Checks that a backup opens with its password, so it could be restored, without restoring it.
 ///
@@ -21,9 +22,7 @@ public final class BackupCheckViewModel {
         case needsPasswordEntry(EncryptedVault)
         case error(PresentationError)
         /// The backup opened with the password typed for it, and everything in it could be read.
-        ///
-        /// We need the UUID so checking the same backup again is a change the UI sees.
-        case opened(UUID)
+        case opened(CheckedBackup)
 
         public var isError: Bool {
             switch self {
@@ -40,7 +39,33 @@ public final class BackupCheckViewModel {
         }
     }
 
+    /// What the check can say about a backup that opened: its seal and how it was protected. All of it comes from the
+    /// encrypted backup, which anyone with its file can read, never from what the backup holds.
+    public struct CheckedBackup: Equatable, Sendable {
+        /// New for each check, so checking the same backup again is a change the UI sees.
+        public let id: UUID
+        /// Matches the seal printed on the backup's PDF.
+        public let seal: BackupSeal
+        /// How its key was derived from the password, such as "Argon2id, 512 MiB, 32 passes, 4 lanes".
+        public let keyDerivation: String?
+        /// The version of the encrypted backup's format, such as "1.0.0".
+        public let formatVersion: String
+
+        public init(id: UUID = UUID(), encryptedVault: EncryptedVault) {
+            self.id = id
+            seal = BackupSeal(encryptedVault: encryptedVault)
+            keyDerivation = (try? VaultKeyDeriver.Signature(tryFromString: encryptedVault.keygenSignature))?
+                .derivationDescription
+            let version = encryptedVault.version
+            formatVersion = "\(version.major).\(version.minor).\(version.patch)"
+        }
+    }
+
     public private(set) var state: State = .none
+
+    /// The backup waiting for its password, kept apart from `state`: closing the scanner's sheet can clear the prompt
+    /// before the backup opens (`backupDidOpen()`).
+    private var backupBeingChecked: EncryptedVault?
 
     private let backupPDFDetatcher: any VaultBackupPDFDetatcher
 
@@ -55,6 +80,7 @@ public final class BackupCheckViewModel {
                 fromPDF: pdfDataResult,
                 using: backupPDFDetatcher,
             )
+            backupBeingChecked = encryptedVault
             state = .needsPasswordEntry(encryptedVault)
         } catch {
             state = .error(BackupPDFReader.presentationError(for: error))
@@ -63,6 +89,7 @@ public final class BackupCheckViewModel {
 
     /// Asks for the password of a backup read from its QR codes.
     public func check(encryptedVault: EncryptedVault) {
+        backupBeingChecked = encryptedVault
         state = .needsPasswordEntry(encryptedVault)
     }
 
@@ -71,7 +98,8 @@ public final class BackupCheckViewModel {
     /// Not guarded on the password prompt: closing the scanner's sheet as the password's opens can clear the prompt
     /// first, as `cancelPasswordEntry()`.
     public func backupDidOpen() {
-        state = .opened(UUID())
+        guard let backupBeingChecked else { return }
+        state = .opened(CheckedBackup(encryptedVault: backupBeingChecked))
     }
 
     /// Clears the pending password prompt when the user abandons it, so the same backup can be checked again.
@@ -86,7 +114,9 @@ public final class BackupCheckViewModel {
     /// again, and the same error again is a change the UI sees.
     public func clearResult() {
         switch state {
-        case .error, .opened: state = .none
+        case .error, .opened:
+            state = .none
+            backupBeingChecked = nil
         case .none, .needsPasswordEntry: break
         }
     }

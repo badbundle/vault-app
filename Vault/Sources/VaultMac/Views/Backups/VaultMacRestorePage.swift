@@ -276,6 +276,12 @@ struct VaultMacBackupDecryptView: View {
     var body: some View {
         Form {
             Section {
+                VaultMacBackupSealRow(
+                    seal: viewModel.seal,
+                    caption: "It should match the seal printed on this backup's PDF.",
+                )
+            }
+            Section {
                 VaultMacSecureField(
                     "Backup Password",
                     text: $viewModel.enteredPassword,

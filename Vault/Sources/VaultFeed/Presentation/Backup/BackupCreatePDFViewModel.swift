@@ -77,6 +77,8 @@ public final class BackupCreatePDFViewModel {
         public let createdDate: Date
         /// The vault exported into this PDF (`BackupEventLogger.vaultToken`), which saving it is logged into.
         public let vaultToken: Int
+        /// The seal printed on this PDF, shown once it's saved. Always there for a PDF this view model made.
+        public let seal: BackupSeal?
 
         public init(
             document: PDFDocument,
@@ -84,12 +86,14 @@ public final class BackupCreatePDFViewModel {
             dataHash: Digest<VaultApplicationPayload>.SHA256,
             createdDate: Date,
             vaultToken: Int,
+            seal: BackupSeal? = nil,
         ) {
             self.document = document
             self.size = size
             self.dataHash = dataHash
             self.createdDate = createdDate
             self.vaultToken = vaultToken
+            self.seal = seal
         }
 
         public static func == (lhs: Self, rhs: Self) -> Bool {
@@ -169,6 +173,7 @@ public final class BackupCreatePDFViewModel {
                 dataHash: rendered.hash,
                 createdDate: currentDate,
                 vaultToken: vaultToken,
+                seal: rendered.seal,
             ))
 
             // The backup event is logged once the PDF is saved (see `BackupGeneratedPDFViewModel`), not
@@ -201,10 +206,11 @@ extension BackupCreatePDFViewModel {
         size: Size,
         authorName: String,
         userHint: String,
-    ) async throws -> sending (document: PDFDocument, hash: Digest<VaultApplicationPayload>.SHA256) {
+    ) async throws -> sending (document: PDFDocument, hash: Digest<VaultApplicationPayload>.SHA256, seal: BackupSeal) {
         let backupExporter = EncryptedVaultEncoder(clock: clock, backupPassword: backupPassword)
-        let exportPayload = try VaultExportPayload(
-            encryptedVault: backupExporter.encryptAndEncode(payload: payload),
+        let encryptedVault = try backupExporter.encryptAndEncode(payload: payload)
+        let exportPayload = VaultExportPayload(
+            encryptedVault: encryptedVault,
             userDescription: userHint,
             created: clock.currentDate,
         )
@@ -216,6 +222,6 @@ extension BackupCreatePDFViewModel {
         )
         let document = try pdfCreator.makePDF(payload: exportPayload)
         let hash = try DigestHasher().sha256(value: payload)
-        return (document, hash)
+        return (document, hash, BackupSeal(encryptedVault: encryptedVault))
     }
 }

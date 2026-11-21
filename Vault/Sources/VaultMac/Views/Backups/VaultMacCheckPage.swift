@@ -37,14 +37,9 @@ struct VaultMacCheckPage: View {
 
     @ViewBuilder
     private var content: some View {
-        if viewModel.state.isOpened {
-            VaultMacBackupNotice(
-                systemImage: "checkmark.circle.fill",
-                title: "This Backup Opens",
-                message: "Its password is right, and everything in it can be restored. Nothing on this Mac was changed.",
-                action: ("Check Another Backup…", choose),
-            )
-            .accessibilityIdentifier("backups.check.opened")
+        if case let .opened(checked) = viewModel.state {
+            opened(checked)
+                .accessibilityIdentifier("backups.check.opened")
         } else if let decryptor {
             VaultMacBackupDecryptView(viewModel: decryptor) {
                 self.decryptor = nil
@@ -53,6 +48,67 @@ struct VaultMacCheckPage: View {
         } else {
             sources
         }
+    }
+
+    /// The backup opened: its seal, stamped in, then what opening it proved, as on iOS.
+    private func opened(_ checked: BackupCheckViewModel.CheckedBackup) -> some View {
+        VStack(spacing: 14) {
+            BackupSealView(seal: checked.seal, stampsOnAppear: true)
+                .frame(width: 96)
+                .id(checked.id)
+            Text("This Backup Opens")
+                .font(.title2.bold())
+            Text("Its password is right, and everything in it can be restored. Nothing on this Mac was changed.")
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 380)
+            Text(verbatim: "Seal \(checked.seal.code)")
+                .font(.body.monospaced().weight(.semibold))
+                .accessibilityLabel(Text("Backup Seal"))
+                .accessibilityValue(Text(checked.seal.spokenCode))
+            VStack(alignment: .leading, spacing: 10) {
+                checkedStep(
+                    "key.horizontal.fill",
+                    "Key made from its password",
+                    checked.keyDerivation.map { "\($0), slow on purpose, so guessing is slow too." }
+                        ?? "Slow on purpose, so guessing is slow too.",
+                )
+                checkedStep(
+                    "checkmark.seal.fill",
+                    "Unchanged since it was made",
+                    "AES-256-GCM checked every byte against its authentication tag.",
+                )
+                checkedStep(
+                    "square.stack.3d.up.fill",
+                    "Everything in it can be restored",
+                    "It decoded in full, as a restore would. Vault kept none of it.",
+                )
+            }
+            .frame(maxWidth: 380, alignment: .leading)
+            .padding(.top, 4)
+            Button("Check Another Backup…", action: choose)
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("backups.notice-action")
+                .padding(.top, 4)
+        }
+        .padding(28)
+    }
+
+    private func checkedStep(_ systemImage: String, _ title: String, _ detail: String) -> some View {
+        Label {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                Text(detail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } icon: {
+            Image(systemName: systemImage)
+                .foregroundStyle(.green)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var sources: some View {

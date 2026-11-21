@@ -13,11 +13,14 @@ public struct DataBlockDocument {
         /// A series of data blobs, which should be rendered in a user-visible format to the document.
         /// A QR code for each data item might be a good idea :)
         case dataBlock([Data])
+        /// A drawing as wide as the page's content, which draws itself.
+        case figure(DataBlockFigure)
 
         public var debugDescription: String {
             switch self {
             case let .title(label): "TITLE: \(label.text)"
             case let .dataBlock(data): "DATA BLOCK: count:\(data.count)"
+            case let .figure(figure): "FIGURE: \(figure.name)"
             }
         }
     }

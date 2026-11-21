@@ -1,5 +1,10 @@
 import Foundation
 import VaultExport
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
 
 /// Helper for creating the data block document from an exported vault.
 struct VaultExportDataBlockGenerator {
@@ -16,10 +21,12 @@ struct VaultExportDataBlockGenerator {
             headerGenerator: VaultExportDataBlockHeaderGenerator(
                 dateCreated: payload.created,
                 totalNumberOfPages: knownPageCount,
+                sealCode: seal.code,
             ),
             content: [],
         )
         document.content.append(.title(makeTitle()))
+        document.content.append(.figure(makeSealFigure()))
         for descriptionLabel in makeUserDescriptionLabels() {
             document.content.append(.title(descriptionLabel))
         }
@@ -37,6 +44,57 @@ extension VaultExportDataBlockGenerator {
             font: .systemFont(ofSize: 26, weight: .heavy),
             padding: .init(top: 8, left: 0, bottom: 8, right: 0),
         )
+    }
+
+    private var seal: BackupSeal {
+        BackupSeal(encryptedVault: payload.encryptedVault)
+    }
+
+    /// The backup's seal, and what it's for, so a PDF and the seal Check a Backup shows can be matched.
+    private func makeSealFigure() -> DataBlockFigure {
+        let seal = seal
+        let sealSize: CGFloat = 64
+        return DataBlockFigure(
+            name: "Seal \(seal.code)",
+            height: sealSize,
+            padding: .init(top: 4, left: 0, bottom: 8, right: 0),
+        ) { context, rect in
+            let sealRect = CGRect(x: rect.minX, y: rect.minY, width: sealSize, height: sealSize)
+            BackupSealArtwork(seal: seal).draw(in: context, rect: sealRect)
+
+            let textX = sealRect.maxX + 14
+            let textWidth = rect.maxX - textX
+            let code = NSAttributedString(
+                string: localized(key: "Seal \(seal.code)"),
+                attributes: [
+                    .font: PlatformFont.monospacedSystemFont(ofSize: 15, weight: .semibold),
+                    .foregroundColor: PlatformColor.black,
+                ],
+            )
+            let caption = NSAttributedString(
+                string: localized(
+                    key: "Every copy of this backup has this seal. When Vault checks or restores it, the seal it shows should match.",
+                ),
+                attributes: [
+                    .font: PlatformFont.systemFont(ofSize: 8),
+                    .foregroundColor: PlatformColor.gray,
+                ],
+            )
+            let codeHeight = code.boundingRect(
+                with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
+                options: .usesLineFragmentOrigin,
+                context: nil,
+            ).height
+            let captionHeight = caption.boundingRect(
+                with: CGSize(width: textWidth, height: .greatestFiniteMagnitude),
+                options: .usesLineFragmentOrigin,
+                context: nil,
+            ).height
+            let gap: CGFloat = 3
+            let top = rect.minY + (sealSize - codeHeight - gap - captionHeight) / 2
+            code.draw(in: CGRect(x: textX, y: top, width: textWidth, height: codeHeight))
+            caption.draw(in: CGRect(x: textX, y: top + codeHeight + gap, width: textWidth, height: captionHeight))
+        }
     }
 
     private func makeUserDescriptionLabels() -> [DataBlockLabel] {
