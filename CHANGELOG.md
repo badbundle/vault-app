@@ -10,14 +10,18 @@ Only app binary versions >2.0 should be used in production for this reason.
 
 ## [Unreleased]
 
+### Changed
+
+- On the iPhone and iPad, every action in a form is now a row with an icon, like the rows around it, in place of the filled capsule buttons and the plain text buttons: Authenticate, Back Up Now, Choose Folder, Create PDF, Save or Print Backup, the Import rows, Decrypt, Unlock, Delete, Set Backup Password and the rest. A row that opens another screen has a chevron. A row that acts where it is has a tinted title, and a spinner while it works. A row that deletes or replaces is red. Backups is where it shows most: its pages had four kinds of button between them. The lock screen's Unlock button, and the bars along the bottom of the item editor and the Danger Zone, are as they were
+
+## [2.3] - 2026-11-21
+
+Released on iOS and the Mac on 21 November 2026.
+
 ### Added
 
 - Rate Vault, in About on iOS and in the Mac's About window and Help menu, opens Vault's App Store page to write a review. On the iPhone and iPad, Vault may also ask for a rating with Apple's own prompt, a moment after a backup is saved or Check a Backup opens one, at most once each time the app is opened, and Apple decides whether the prompt shows. Vault keeps no record of asking, so a copy of its files says nothing of it and it's the same in every vault, and the AutoFill extension and the widgets never ask
 - Check a Backup, on iOS and the Mac, in Backups: choose a PDF backup or an auto-backup, or on iOS scan a printed backup's QR codes, and type its password. Vault opens the backup and reads all of it, as a restore would, then says it opens and forgets it. Nothing on the device changes, and it says nothing about what the backup holds. Vault keeps the backup password so it can make backups without asking, so this is how to find out that a backup's password is still remembered, before it's needed. About Backups in Help says how
-
-### Changed
-
-- On the iPhone and iPad, every action in a form is now a row with an icon, like the rows around it, in place of the filled capsule buttons and the plain text buttons: Authenticate, Back Up Now, Choose Folder, Create PDF, Save or Print Backup, the Import rows, Decrypt, Unlock, Delete, Set Backup Password and the rest. A row that opens another screen has a chevron. A row that acts where it is has a tinted title, and a spinner while it works. A row that deletes or replaces is red. Backups is where it shows most: its pages had four kinds of button between them. The lock screen's Unlock button, and the bars along the bottom of the item editor and the Danger Zone, are as they were
 
 ### Fixed
 
