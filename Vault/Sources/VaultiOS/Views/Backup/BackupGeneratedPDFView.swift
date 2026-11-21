@@ -2,6 +2,7 @@ import Foundation
 import PDFKit
 import SwiftUI
 import UIKit
+import VaultBackup
 import VaultFeed
 
 /// Step two of a PDF backup: save the PDF that was just created.
@@ -132,16 +133,21 @@ struct BackupSavePDFView: View {
     private var headerSection: some View {
         Section {
             if viewModel.isSaved {
+                // The seal printed on the PDF is stamped in: the same one Check a Backup shows when it opens.
                 BackupHeroHeader(
                     title: "Backup Saved",
                     subtitle: "Keep it somewhere safe. You'll need your backup password to restore it.",
-                    systemImage: "checkmark.circle.fill",
-                    color: .green,
+                    icon: pdf.seal.map { .seal($0) } ?? .symbol("checkmark.circle.fill", color: .green),
                     iconSize: 56,
                     bouncesOnAppear: true,
                 ) {
-                    PDFBackupStepsView(progress: .done)
-                        .padding(.top, 4)
+                    VStack(spacing: 12) {
+                        if let seal = pdf.seal {
+                            BackupSealLabel(seal: seal)
+                        }
+                        PDFBackupStepsView(progress: .done)
+                    }
+                    .padding(.top, 4)
                 }
             } else {
                 BackupHeroHeader(

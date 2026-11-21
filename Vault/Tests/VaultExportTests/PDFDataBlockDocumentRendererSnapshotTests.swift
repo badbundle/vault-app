@@ -463,3 +463,69 @@ private class PageNumberHeaderGenerator: DataBlockHeaderGenerator {
         DataBlockHeader(left: "L: Page \(pageNumber)", right: "R: Page \(pageNumber)")
     }
 }
+
+// MARK: - Figures
+
+struct PDFDataBlockFigureTests {
+    /// A figure is drawn once, inside the page's margins and padding, as wide as the content and as tall as it says.
+    @Test
+    func render_drawsTheFigureInItsRect() throws {
+        let size = USLetterDocumentSize()
+        var drawnRects = [CGRect]()
+        let figure = DataBlockFigure(
+            name: "Test",
+            height: 64,
+            padding: .init(top: 4, left: 10, bottom: 8, right: 6),
+        ) { _, rect in
+            drawnRects.append(rect)
+        }
+
+        _ = try makeSUT(size: size).render(document: DataBlockDocument(content: [.figure(figure)]))
+
+        let margins = size.pointMargins
+        let pageWidth = size.inchDimensions.width * 72
+        #expect(drawnRects == [CGRect(
+            x: margins.left + 10,
+            y: margins.top + 4,
+            width: pageWidth - margins.left - margins.right - 16,
+            height: 64,
+        )])
+    }
+
+    /// Like a label, a figure that doesn't fit at the bottom of a page moves to the next one.
+    @Test
+    func render_figureThatDoesntFit_goesOnTheNextPage() throws {
+        let size = USLetterDocumentSize()
+        let pageHeight = size.inchDimensions.height * 72
+        let filler = DataBlockFigure(
+            name: "Filler",
+            height: pageHeight - size.pointMargins.top - size.pointMargins.bottom - 40,
+            padding: .init(top: 0, left: 0, bottom: 0, right: 0),
+        ) { _, _ in }
+        var drawnY: CGFloat?
+        let figure = DataBlockFigure(name: "Seal", height: 64, padding: .init(top: 0, left: 0, bottom: 0, right: 0)) {
+            _, rect in drawnY = rect.minY
+        }
+
+        let pdf = try makeSUT(size: size).render(document: DataBlockDocument(content: [
+            .figure(filler),
+            .figure(figure),
+        ]))
+
+        #expect(pdf.pageCount == 2)
+        #expect(drawnY == size.pointMargins.top)
+    }
+}
+
+extension PDFDataBlockFigureTests {
+    private func makeSUT(size: some PDFDocumentSize) -> some PDFDocumentRenderer<DataBlockDocument> {
+        PDFDataBlockDocumentRenderer(
+            documentSize: size,
+            rendererFactory: StubPDFRendererFactory(),
+            imageRenderer: PlainBlackColorImageRenderer(),
+            blockLayout: { bounds in
+                VerticalTilingDataBlockLayout(bounds: bounds, tilesPerRow: 5, spacing: 5)
+            },
+        )
+    }
+}

@@ -3,6 +3,7 @@ import Foundation
 import SwiftUI
 import TestHelpers
 import Testing
+import VaultBackup
 import VaultFeed
 import VaultKeygen
 @testable import VaultMac
@@ -25,6 +26,14 @@ struct VaultMacCheckPageSnapshotTests {
     @Test(arguments: MacAppearance.allCases)
     func opened(appearance: MacAppearance) throws {
         let viewModel = BackupCheckViewModel()
+        viewModel.check(encryptedVault: EncryptedVault(
+            version: "1.0.0",
+            data: Data(0 ..< 64),
+            authentication: Data(repeating: 0x11, count: 16),
+            encryptionIV: Data(repeating: 0x22, count: 12),
+            keygenSalt: Data(repeating: 0x33, count: 32),
+            keygenSignature: VaultKeyDeriver.Signature.backupSecureV2.rawValue,
+        ))
         viewModel.backupDidOpen()
         let view = try VaultMacCheckPage(services: Self.services(), viewModel: viewModel)
 

@@ -27,11 +27,12 @@ final class BackupCheckViewSnapshotTests {
         }
     }
 
-    /// The backup opened: the header says so in green, and nothing about what's in it.
+    /// The backup opened: its seal, how Vault checked it, and nothing about what's in it.
     @Test
     func layoutOpened() async {
         await snapshotScenarios {
             let viewModel = BackupCheckViewModel()
+            viewModel.check(encryptedVault: fixedEncryptedVault())
             viewModel.backupDidOpen()
             return BackupCheckView(viewModel: viewModel)
         }

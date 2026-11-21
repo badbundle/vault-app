@@ -3,6 +3,7 @@ import PDFKit
 import SwiftUI
 import TestHelpers
 import Testing
+import VaultBackup
 import VaultKeygen
 @testable import VaultFeed
 @testable import VaultiOS
@@ -104,6 +105,7 @@ extension BackupPDFViewSnapshotTests {
             dataHash: .init(value: Data(repeating: 0xAB, count: 32)),
             createdDate: Date(timeIntervalSince1970: 100),
             vaultToken: 0,
+            seal: BackupSeal(encryptedVault: fixedEncryptedVault()),
         )
     }
 }

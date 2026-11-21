@@ -4,7 +4,16 @@
     "Created %@" : {
       "extractionState" : "manual"
     },
+    "Created %@ · Seal %@" : {
+      "extractionState" : "manual"
+    },
+    "Every copy of this backup has this seal. When Vault checks or restores it, the seal it shows should match." : {
+      "extractionState" : "manual"
+    },
     "Page %lld of %lld" : {
+      "extractionState" : "manual"
+    },
+    "Seal %@" : {
       "extractionState" : "manual"
     },
     "Vault Export" : {

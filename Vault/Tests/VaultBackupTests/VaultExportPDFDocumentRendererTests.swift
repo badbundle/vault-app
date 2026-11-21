@@ -40,7 +40,7 @@ struct VaultExportPDFDocumentRendererTests {
             "Document should be returned from the block renderer",
         )
         #expect(renderer.renderCallCount == 2, "Renders twice, first pass and final render")
-        #expect(renderer.renderArgValues.last?.content.count == 4)
+        #expect(renderer.renderArgValues.last?.content.count == 5)
     }
 
     @Test

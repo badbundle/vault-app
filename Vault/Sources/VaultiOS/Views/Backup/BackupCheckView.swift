@@ -17,6 +17,7 @@ struct BackupCheckView: View {
     @State private var isChoosingPDF = false
     @State private var modal: Modal?
     @State private var decryptedVaultSubject = PassthroughSubject<VaultApplicationPayload, Never>()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(viewModel: BackupCheckViewModel) {
         _viewModel = .init(wrappedValue: viewModel)
@@ -29,7 +30,12 @@ struct BackupCheckView: View {
 
     var body: some View {
         Form {
-            headerSection
+            if case let .opened(checked) = viewModel.state {
+                openedHeaderSection(checked)
+                howCheckedSection(checked)
+            } else {
+                headerSection
+            }
             sourcesSection
         }
         .navigationTitle(Text("Check a Backup"))
@@ -77,17 +83,88 @@ struct BackupCheckView: View {
 
     // MARK: - Header Section
 
-    /// What the check does, then that the backup opened, or why it couldn't be read, in the same place.
+    /// What the check does, or why the backup couldn't be read, in the same place.
     private var headerSection: some View {
         BackupImportHeaderSection(
-            title: viewModel.state.isOpened ? "This Backup Opens" : "Check a Backup",
-            subtitle: viewModel.state.isOpened
-                ? "Its password is right, and everything in it can be restored. Nothing on this device was changed."
-                : "Make sure a backup opens with its password, without restoring it. Nothing on this device changes.",
-            systemImage: viewModel.state.isOpened ? "checkmark.circle.fill" : "doc.text.magnifyingglass",
-            color: viewModel.state.isOpened ? .green : .accentColor,
+            title: "Check a Backup",
+            subtitle: "Make sure a backup opens with its password, without restoring it. Nothing on this device changes.",
+            systemImage: "doc.text.magnifyingglass",
+            color: .accentColor,
             error: error,
         )
+    }
+
+    /// The backup opened: its seal is stamped in, to match against the one printed on its PDF.
+    private func openedHeaderSection(_ checked: BackupCheckViewModel.CheckedBackup) -> some View {
+        Section {
+            BackupHeroHeader(
+                title: "This Backup Opens",
+                subtitle: "Its password is right, and everything in it can be restored. Nothing on this device was changed.",
+                icon: .seal(checked.seal),
+                iconSize: 56,
+                bouncesOnAppear: true,
+            ) {
+                BackupSealLabel(seal: checked.seal)
+            }
+            // A new check stamps the seal again.
+            .id(checked.id)
+        }
+    }
+
+    // MARK: - How Checked Section
+
+    /// What opening the backup proved, one step at a time, as the password screen did it. It says how the backup is
+    /// protected, which anyone with its file can read, and nothing about what it holds.
+    private func howCheckedSection(_ checked: BackupCheckViewModel.CheckedBackup) -> some View {
+        Section {
+            ForEach(Array(Self.steps(for: checked).enumerated()), id: \.offset) { index, step in
+                FormRow(image: Image(systemName: step.systemImage), color: .green) {
+                    TextAndSubtitle(title: step.title, subtitle: step.detail)
+                }
+                .accessibilityElement(children: .combine)
+                // Each step comes in after the one before, once the seal has been stamped.
+                .transition(
+                    reduceMotion
+                        ? .opacity
+                        : .asymmetric(
+                            insertion: .opacity.combined(with: .offset(y: 12))
+                                .animation(.snappy.delay(0.4 + Double(index) * 0.25)),
+                            removal: .opacity,
+                        ),
+                )
+            }
+        } header: {
+            Text("How Vault Checked It")
+        } footer: {
+            Text("Encrypted backup format \(checked.formatVersion).")
+        }
+    }
+
+    private struct Step {
+        var systemImage: String
+        var title: String
+        var detail: String
+    }
+
+    private static func steps(for checked: BackupCheckViewModel.CheckedBackup) -> [Step] {
+        [
+            Step(
+                systemImage: "key.horizontal.fill",
+                title: "Key Made From Its Password",
+                detail: checked.keyDerivation.map { "\($0), slow on purpose, so guessing is slow too." }
+                    ?? "Slow on purpose, so guessing is slow too.",
+            ),
+            Step(
+                systemImage: "checkmark.seal.fill",
+                title: "Unchanged Since It Was Made",
+                detail: "AES-256-GCM checked every byte against the backup's authentication tag.",
+            ),
+            Step(
+                systemImage: "square.stack.3d.up.fill",
+                title: "Everything in It Can Be Restored",
+                detail: "It decoded in full, as a restore would. Vault kept none of it.",
+            ),
+        ]
     }
 
     private var error: PresentationError? {

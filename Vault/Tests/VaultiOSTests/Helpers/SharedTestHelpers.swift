@@ -1,8 +1,10 @@
 import Foundation
 import FoundationExtensions
 import SwiftUI
+import VaultBackup
 import VaultCore
 import VaultFeed
+import VaultKeygen
 import VaultSettings
 @testable import VaultiOS
 
@@ -232,4 +234,16 @@ func uniqueMetadata(id: Identifier<VaultItem> = Identifier<VaultItem>()) -> Vaul
 
 func forceRunLoopAdvance() {
     RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+}
+
+/// A backup with fixed bytes, so its seal is the same in every snapshot. Its key is made as a real backup's is.
+func fixedEncryptedVault() -> EncryptedVault {
+    EncryptedVault(
+        version: "1.0.0",
+        data: Data(0 ..< 64),
+        authentication: Data(repeating: 0x11, count: 16),
+        encryptionIV: Data(repeating: 0x22, count: 12),
+        keygenSalt: Data(repeating: 0x33, count: 32),
+        keygenSignature: VaultKeyDeriver.Signature.backupSecureV2.rawValue,
+    )
 }

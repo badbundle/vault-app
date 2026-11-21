@@ -2,6 +2,7 @@ import AppKit
 import PDFKit
 import SwiftUI
 import UniformTypeIdentifiers
+import VaultBackup
 import VaultFeed
 
 /// Keep a Backup: the whole vault, encrypted with the backup password and padded, as a PDF (G54, G57), saved where
@@ -60,6 +61,15 @@ struct VaultMacKeepABackupPage: View {
                     Text("The PDF is ready. Save it somewhere safe, or print it, then keep it away from this Mac.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+                }
+            }
+            if let seal = pdf?.seal {
+                Section {
+                    VaultMacBackupSealRow(
+                        seal: seal,
+                        caption: "Printed on the PDF. Check a Backup shows the same seal when this backup opens.",
+                    )
+                    .id(seal)
                 }
             }
         }

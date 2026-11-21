@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import VaultBackup
 
 /// Centered headline for a backup screen: a large symbol, a title, a subtitle and an optional
 /// accessory underneath.
@@ -11,6 +12,8 @@ struct BackupHeroHeader<Accessory: View>: View {
         case symbol(String, color: Color)
         /// The vault door from the lock screen, for the App Lock Password (see `AppLockPasswordMark`).
         case appLockPassword
+        /// A backup's seal, a little larger than a symbol, as it's a picture to look at. `bouncesOnAppear` stamps it.
+        case seal(BackupSeal)
     }
 
     var title: String
@@ -74,6 +77,8 @@ struct BackupHeroHeader<Accessory: View>: View {
                 Text(subtitle)
                     .font(.body)
                     .foregroundStyle(.secondary)
+                    // Wraps rather than truncating, whatever the icon above it measures as.
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
             accessory()
@@ -102,6 +107,9 @@ struct BackupHeroHeader<Accessory: View>: View {
                 .symbolEffect(.bounce, value: hasAppeared)
         case .appLockPassword:
             AppLockPasswordMark.Hero(size: iconSize * iconScale)
+        case let .seal(seal):
+            BackupSealView(seal: seal, stampsOnAppear: bouncesOnAppear)
+                .frame(width: iconSize * iconScale * 1.6, height: iconSize * iconScale * 1.6)
         }
     }
 }
